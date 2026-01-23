@@ -4,7 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -13,6 +15,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,10 +27,22 @@ fun QuickAddBottomSheet(
     val focus = LocalFocusManager.current
     val state by vm.state.collectAsState()
 
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true
+    )
+
+    val scrollState = rememberScrollState()
+
     ModalBottomSheet(
-        onDismissRequest = onDismiss
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
     ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .navigationBarsPadding()
+        ) {
             Text("Quick Add", style = MaterialTheme.typography.titleLarge)
 
             Spacer(Modifier.height(12.dp))
@@ -43,31 +58,49 @@ fun QuickAddBottomSheet(
             Spacer(Modifier.height(12.dp))
 
             if (state.selectedFood == null) {
-                FoodSearchResults(
-                    results = state.results,
-                    onPick = {
-                        focus.clearFocus()
-                        vm.onFoodSelected(it)
-                    }
-                )
+                // Search results: keep LazyColumn, but cap its height so the sheet layout is stable
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                ) {
+                    FoodSearchResults(
+                        results = state.results,
+                        onPick = {
+                            focus.clearFocus()
+                            vm.onFoodSelected(it)
+                        }
+                    )
+                }
             } else {
-                SelectedFoodPanel(
-                    food = state.selectedFood!!,
-                    servings = state.servings,
-                    servingUnitAmount = state.servingUnitAmount ?: (state.selectedFood!!.servingSize),
-                    gramsAmount = state.gramsAmount,
-                    onBack = vm::clearSelection,
-                    onServingsChanged = vm::onServingsChanged,
-                    onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
-                    onGramsChanged = vm::onGramsChanged,
-                    onPackage = vm::onPackageClicked,
-                    onSave = { vm.save(onDone = onDismiss) }
-                )
+                // Selected food: scroll this section so the Log button is reachable
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    SelectedFoodPanel(
+                        food = state.selectedFood!!,
+                        servings = state.servings,
+                        servingUnitAmount = state.servingUnitAmount ?: state.selectedFood!!.servingSize,
+                        gramsAmount = state.gramsAmount,
+                        onBack = vm::clearSelection,
+                        onServingsChanged = vm::onServingsChanged,
+                        onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
+                        onGramsChanged = vm::onGramsChanged,
+                        onPackage = vm::onPackageClicked,
+                        onSave = { vm.save(onDone = onDismiss) }
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
         }
     }
+
 }
 
 @Composable
@@ -94,7 +127,7 @@ private fun FoodSearchResults(
                     val subtitle = buildString {
                         if (!food.brand.isNullOrBlank()) append(food.brand).append(" • ")
                         append("${food.servingSize.clean()} ${food.servingUnit}")
-                        food.gramsPerServing?.let { append(" (${it.clean()} g)") }
+                        food.gramsPerServingResolved()?.let { append(" (${it.clean()} g)") }
                     }
                     Text(subtitle)
                 },
@@ -125,7 +158,7 @@ private fun SelectedFoodPanel(
             Text(food.name, style = MaterialTheme.typography.titleMedium)
             Text(
                 "${food.servingSize.clean()} ${food.servingUnit}" +
-                        (food.gramsPerServing?.let { " (${it.clean()} g)" } ?: ""),
+                        (food.gramsPerServingResolved()?.let { " (${it.clean()} g)" } ?: ""),
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -155,13 +188,13 @@ private fun SelectedFoodPanel(
     Spacer(Modifier.height(10.dp))
 
     // Grams input if available
-    if (food.gramsPerServing != null) {
+    val canLogGrams = food.gramsPerServingResolved() != null
+    if (canLogGrams) {
         NumberField(
             label = "Grams (g)",
-            value = gramsAmount ?: (servings * food.gramsPerServing),
+            value = gramsAmount ?: (servings * (food.gramsPerServingResolved()!!)),
             onValue = onGramsChanged
         )
-        Spacer(Modifier.height(10.dp))
     }
 
     // Package buttons
@@ -181,7 +214,9 @@ private fun SelectedFoodPanel(
 
     Button(
         onClick = onSave,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
     ) {
         Text("Log")
     }

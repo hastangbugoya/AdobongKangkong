@@ -1,8 +1,10 @@
 package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
+import com.example.adobongkangkong.data.local.db.dao.TodayLogRow
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
 import com.example.adobongkangkong.domain.model.LogEntry
+import com.example.adobongkangkong.domain.model.TodayLogItem
 import com.example.adobongkangkong.domain.repository.LogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,6 +25,28 @@ class LogRepositoryImpl @Inject constructor(
     ): Flow<List<LogEntry>> =
         dao.observeRange(startInclusive, endExclusive)
             .map { list -> list.map { it.toDomain() } }
+
+
+    override fun observeTodayItems(
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): Flow<List<TodayLogItem>> =
+        dao.observeTodayLogRows(startInclusive, endExclusive)
+            .map { rows -> rows.map { it.toDomain() } }
+
+    override suspend fun deleteById(logId: Long) {
+        dao.deleteById(logId)
+    }
+
+    private fun TodayLogRow.toDomain(): TodayLogItem =
+        TodayLogItem(
+            logId = logId,
+            timestamp = timestamp,
+            foodName = foodName,
+            servings = servings,
+            caloriesKcal = caloriesKcal ?: 0.0
+        )
+
 }
 
 private fun LogEntry.toEntity() =
@@ -40,3 +64,4 @@ private fun LogEntryEntity.toDomain() =
         servings = servings,
         timestamp = timestamp
     )
+

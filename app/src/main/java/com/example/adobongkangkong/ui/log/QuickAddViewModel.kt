@@ -36,7 +36,7 @@ class QuickAddViewModel @Inject constructor(
     ) { query, results, selected, servings ->
 
         val servingUnitAmount = selected?.let { servings * it.servingSize }
-        val gramsAmount = selected?.gramsPerServing?.let { g -> servings * g }
+        val gramsAmount = selected?.gramsPerServingResolved()?.let { g -> servings * g }
 
         QuickAddState(
             query = query,
