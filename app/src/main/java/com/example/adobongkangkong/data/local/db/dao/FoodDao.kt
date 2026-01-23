@@ -1,0 +1,30 @@
+package com.example.adobongkangkong.data.local.db.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import com.example.adobongkangkong.data.local.db.entity.FoodEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface FoodDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<FoodEntity>)
+
+    @Query("SELECT * FROM foods WHERE id = :id")
+    suspend fun getById(id: Long): FoodEntity?
+
+    @Query("""
+        SELECT * FROM foods
+        WHERE name LIKE '%' || :query || '%'
+        ORDER BY isRecipe DESC, name ASC
+        LIMIT :limit
+    """)
+    fun search(query: String, limit: Int = 50): Flow<List<FoodEntity>>
+
+    @Query("SELECT COUNT(*) FROM foods")
+    suspend fun countFoods(): Int
+
+}

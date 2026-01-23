@@ -1,0 +1,29 @@
+package com.example.adobongkangkong.data.repository
+
+import com.example.adobongkangkong.data.local.db.dao.FoodDao
+import com.example.adobongkangkong.data.local.db.entity.FoodEntity
+import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.repository.FoodRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import javax.inject.Inject
+
+class FoodRepositoryImpl @Inject constructor(
+    private val foodDao: FoodDao
+) : FoodRepository {
+
+    override fun search(query: String, limit: Int): Flow<List<Food>> =
+        foodDao.search(query = query, limit = limit).map { list -> list.map { it.toDomain() } }
+}
+
+private fun FoodEntity.toDomain(): Food =
+    Food(
+        id = id,
+        name = name,
+        brand = brand,
+        servingSize = servingSize,
+        servingUnit = servingUnit,
+        gramsPerServing = gramsPerServing,
+        servingsPerPackage = servingsPerPackage,
+        isRecipe = isRecipe
+    )
