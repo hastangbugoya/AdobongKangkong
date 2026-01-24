@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.domain.model.AliasAddResult
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
@@ -25,6 +26,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 @HiltViewModel
 class FoodEditorViewModel @Inject constructor(
@@ -37,6 +42,25 @@ class FoodEditorViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(FoodEditorState())
     val state: StateFlow<FoodEditorState> = _state
+
+    @OptIn(FlowPreview::class)
+    private val nutrientQueryFlow = MutableStateFlow("")
+
+    private val aliasSheetMessageFlow = MutableStateFlow<String?>(null)
+
+    val aliasSheetMessage: StateFlow<String?> = aliasSheetMessageFlow
+
+    @OptIn(FlowPreview::class)
+    private val nutrientResultsFlow =
+        nutrientQueryFlow
+            .map { it.trim() }
+            .debounce(150)
+            .distinctUntilChanged()
+            .flatMapLatest { q ->
+                if (q.isBlank()) flowOf(emptyList())
+                else searchNutrients(q, limit = 80) // MUST be Flow<List<Nutrient>>
+            }
+
 
     private val aliasSheetNutrientIdFlow = MutableStateFlow<Long?>(null)
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
@@ -107,25 +131,10 @@ class FoodEditorViewModel @Inject constructor(
 
     fun onNutrientSearchQueryChange(v: String) {
         update { it.copy(nutrientSearchQuery = v) }
-        viewModelScope.launch {
-            val q = v.trim()
-            if (q.isBlank()) {
-                update { it.copy(nutrientSearchResults = emptyList()) }
-            } else {
-                val results = searchNutrients(q, limit = 80)
-                update {
-                    it.copy(
-                        nutrientSearchResults = results.map { n ->
-                            NutrientSearchResultUi(
-                                id = n.id,
-                                name = n.displayName,
-                                unit = n.unit,
-                                category = n.category
-                            )
-                        }
-                    )
-                }
-            }
+        nutrientQueryFlow.value = v
+
+        if (v.isBlank()) {
+            update { it.copy(nutrientSearchResults = emptyList()) }
         }
     }
 
@@ -216,15 +225,27 @@ class FoodEditorViewModel @Inject constructor(
     fun closeAliasSheet() {
         aliasSheetNutrientIdFlow.value = null
         aliasSheetNutrientNameFlow.value = null
+        aliasSheetMessageFlow.value = null
     }
 
 
     fun addAlias(alias: String) {
         val id = aliasSheetNutrientIdFlow.value ?: return
         viewModelScope.launch {
-            nutrientAliasRepo.addAlias(id, alias)
+            when (nutrientAliasRepo.addAlias(id, alias)) {
+                AliasAddResult.Added -> {
+                    aliasSheetMessageFlow.value = null
+                }
+                AliasAddResult.IgnoredEmpty -> {
+                    aliasSheetMessageFlow.value = "Alias is empty."
+                }
+                AliasAddResult.IgnoredDuplicate -> {
+                    aliasSheetMessageFlow.value = "Alias already exists."
+                }
+            }
         }
     }
+
 
     fun deleteAlias(alias: String) {
         val id = aliasSheetNutrientIdFlow.value ?: return
@@ -232,6 +253,26 @@ class FoodEditorViewModel @Inject constructor(
             nutrientAliasRepo.deleteAlias(id, alias)
         }
     }
+
+    init {
+        viewModelScope.launch {
+            nutrientResultsFlow.collect { results ->
+                update {
+                    it.copy(
+                        nutrientSearchResults = results.map { n ->
+                            NutrientSearchResultUi(
+                                id = n.id,
+                                name = n.displayName,
+                                unit = n.unit,
+                                category = n.category
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
 
 }
 

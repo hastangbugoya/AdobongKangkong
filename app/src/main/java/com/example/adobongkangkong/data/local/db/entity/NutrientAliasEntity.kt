@@ -13,15 +13,13 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "nutrient_aliases",
-    primaryKeys = ["nutrientId", "alias"],
+    primaryKeys = ["nutrientId", "aliasKey"],
     indices = [
-        Index(value = ["alias"]),
+        Index(value = ["aliasKey"]),
         Index(value = ["nutrientId"])
     ]
 )
 data class NutrientAliasEntity(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
     val nutrientId: Long,
     val aliasDisplay: String,   // what user typed (nice display)
     val aliasKey: String        // normalized (lowercase/trimmed), unique across all nutrients

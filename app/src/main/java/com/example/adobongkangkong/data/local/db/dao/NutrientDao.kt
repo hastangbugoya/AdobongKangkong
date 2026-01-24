@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NutrientDao {
@@ -36,10 +37,10 @@ interface NutrientDao {
     WHERE
         lower(n.displayName) LIKE :q
         OR lower(n.code) LIKE :q
-        OR lower(a.aliasKey ) LIKE :q
+        OR a.aliasKey LIKE :q
     ORDER BY n.category ASC, n.displayName ASC
     LIMIT :limit
     """
     )
-    suspend fun searchWithAliases(q: String, limit: Int): List<NutrientEntity>
+    fun searchWithAliases(q: String, limit: Int): Flow<List<NutrientEntity>>
 }
