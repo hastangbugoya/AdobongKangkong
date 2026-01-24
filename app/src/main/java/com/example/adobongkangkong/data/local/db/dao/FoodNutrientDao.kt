@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 
 data class MacroNutrientRow(
@@ -15,8 +16,6 @@ data class FoodNutrientWithMetaRow(
     val foodId: Long,
     val nutrientId: Long,
     val amount: Double,
-    val basisType: String,
-    val basisGrams: Double?,
     val code: String,
     val displayName: String,
     val unit: String,
@@ -25,8 +24,8 @@ data class FoodNutrientWithMetaRow(
 @Dao
 interface FoodNutrientDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(items: List<FoodNutrientEntity>)
+    @Upsert
+    suspend fun upsertAll(rows: List<FoodNutrientEntity>)
 
     @Query("SELECT * FROM food_nutrients WHERE foodId = :foodId")
     suspend fun getForFood(foodId: Long): List<FoodNutrientEntity>
@@ -49,8 +48,6 @@ interface FoodNutrientDao {
       fn.foodId AS foodId,
       fn.nutrientId AS nutrientId,
       fn.nutrientAmountPerBasis AS amount,
-      fn.basisType AS basisType,
-      fn.basisGrams AS basisGrams,
       n.code AS code,
       n.displayName AS displayName,
       n.unit AS unit,

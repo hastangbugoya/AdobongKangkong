@@ -49,7 +49,7 @@ class LogRepositoryImpl @Inject constructor(
 
 }
 
-private fun LogEntry.toEntity() =
+internal fun LogEntry.toEntity() =
     LogEntryEntity(
         id = id,
         foodId = foodId,

@@ -6,6 +6,7 @@ import androidx.room.TypeConverters
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
+import com.example.adobongkangkong.data.local.db.dao.NutrientAliasDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
@@ -16,6 +17,7 @@ import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
+import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
 
 @Database(
     entities = [
@@ -24,7 +26,8 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
         FoodNutrientEntity::class,
         LogEntryEntity::class,
         RecipeIngredientEntity::class,
-        RecipeEntity::class
+        RecipeEntity::class,
+        NutrientAliasEntity::class
     ],
     version = 1,
     exportSchema = true
@@ -38,4 +41,6 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun recipeDao(): RecipeDao
     abstract fun summaryDao(): SummaryDao
     abstract fun recipeIngredientDao(): RecipeIngredientDao
+
+    abstract fun nutrientAliasDao(): NutrientAliasDao
 }

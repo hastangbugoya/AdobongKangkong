@@ -8,8 +8,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
+import com.example.adobongkangkong.ui.food.editor.FoodEditorScreen
+import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
-import com.example.adobongkangkong.ui.food.FoodEditorScreen
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 @Composable
 fun AppNavHost(modifier: Modifier = Modifier) {
@@ -17,44 +20,95 @@ fun AppNavHost(modifier: Modifier = Modifier) {
 
     NavHost(
         navController = navController,
-        startDestination = NavRoutes.DASHBOARD,
+        startDestination = NavRoutes.Dashboard.route,
         modifier = modifier
     ) {
 
-        composable(NavRoutes.DASHBOARD) {
+        // -----------------------------
+        // Dashboard
+        // -----------------------------
+        composable(NavRoutes.Dashboard.route) {
             DashboardScreen(
-                onCreateRecipe = { navController.navigate(NavRoutes.RECIPE_NEW) },
-                onCreateFood = { navController.navigate(NavRoutes.FOOD_NEW) }
+                onCreateRecipe = { navController.navigate(NavRoutes.Recipes.new) },
+                onCreateFood = { navController.navigate(NavRoutes.Foods.new()) },
+                onOpenFoods = { navController.navigate(NavRoutes.Foods.list) }
             )
         }
 
-        composable(NavRoutes.RECIPE_NEW) {
-            RecipeBuilderScreen(onBack = { navController.popBackStack() })
+        // -----------------------------
+        // Foods list
+        // -----------------------------
+        composable(NavRoutes.Foods.list) {
+            FoodsListScreen(
+                onBack = { navController.popBackStack() },
+                onEditFood = { id -> navController.navigate(NavRoutes.Foods.edit(id)) },
+                onEditRecipe = { id -> navController.navigate(NavRoutes.Recipes.edit(id)) },
+                onCreateFood = { navController.navigate(NavRoutes.Foods.new()) }
+            )
         }
 
-        composable(NavRoutes.FOOD_NEW) {
+        // -----------------------------
+        // Create new food
+        // -----------------------------
+        composable(
+            route = NavRoutes.Foods.new,
+            arguments = listOf(navArgument("name") {
+                type = NavType.StringType
+                defaultValue = ""
+            })
+        ) { entry ->
+
+            val raw = entry.arguments?.getString("name").orEmpty()
+            val initialName = URLDecoder
+                .decode(raw, StandardCharsets.UTF_8.name())
+                .takeIf { it.isNotBlank() }
+
             FoodEditorScreen(
                 foodId = null,
+                initialName = initialName,
                 onBack = { navController.popBackStack() }
             )
         }
 
+        // -----------------------------
+        // Edit existing food
+        // -----------------------------
         composable(
-            NavRoutes.FOOD_EDIT,
-            arguments = listOf(navArgument("foodId") { type = NavType.LongType })
-        ) {
-            val foodId = it.arguments!!.getLong("foodId")
+            route = NavRoutes.Foods.edit,
+            arguments = listOf(navArgument("foodId") {
+                type = NavType.LongType
+            })
+        ) { entry ->
+            val foodId = entry.arguments!!.getLong("foodId")
+
             FoodEditorScreen(
                 foodId = foodId,
+                initialName = null,
                 onBack = { navController.popBackStack() }
             )
         }
 
+        // -----------------------------
+        // Create new recipe
+        // -----------------------------
+        composable(NavRoutes.Recipes.new) {
+            RecipeBuilderScreen(
+                editFoodId = null,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // -----------------------------
+        // Edit existing recipe
+        // -----------------------------
         composable(
-            route = NavRoutes.RECIPE_EDIT,
-            arguments = listOf(navArgument("foodId") { type = NavType.LongType })
-        ) {
-            val foodId = it.arguments!!.getLong("foodId")
+            route = NavRoutes.Recipes.edit,
+            arguments = listOf(navArgument("foodId") {
+                type = NavType.LongType
+            })
+        ) { entry ->
+            val foodId = entry.arguments!!.getLong("foodId")
+
             RecipeBuilderScreen(
                 editFoodId = foodId,
                 onBack = { navController.popBackStack() }

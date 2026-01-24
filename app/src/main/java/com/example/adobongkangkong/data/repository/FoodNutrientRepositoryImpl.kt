@@ -2,6 +2,12 @@ package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
+import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
+import com.example.adobongkangkong.domain.model.FoodNutrientRow
+import com.example.adobongkangkong.domain.model.Nutrient
+import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.nutrition.NutrientCodes
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
@@ -52,5 +58,45 @@ class FoodNutrientRepositoryImpl @Inject constructor(
             totalCarbsG = totalCarbs,
             totalFatG = totalFat
         )
+    }
+
+    override suspend fun getForFood(foodId: Long): List<FoodNutrientRow> {
+        return foodNutrientDao.getForFoodWithMeta(foodId).map { row ->
+            FoodNutrientRow(
+                nutrient = Nutrient(
+                    id = row.nutrientId,
+                    code = row.code,
+                    displayName = row.displayName,
+                    unit = NutrientUnit.valueOf(row.unit),
+                    category = NutrientCategory.fromDb(row.category)
+                ),
+                amount = row.amount,
+                basisType = BasisType.PER_SERVING,
+                basisGrams = null
+            )
+        }
+    }
+
+    override suspend fun replaceForFood(
+        foodId: Long,
+        rows: List<FoodNutrientRow>
+    ) {
+        foodNutrientDao.deleteForFood(foodId)
+
+        if (rows.isEmpty()) return
+
+        foodNutrientDao.upsertAll(
+            rows.map { row ->
+                FoodNutrientEntity(
+                    foodId = foodId,
+                    nutrientId = row.nutrient.id,
+                    nutrientAmountPerBasis = row.amount,
+                )
+            }
+        )
+    }
+
+    override suspend fun deleteOne(foodId: Long, nutrientId: Long) {
+        foodNutrientDao.deleteOne(foodId = foodId, nutrientId = nutrientId)
     }
 }

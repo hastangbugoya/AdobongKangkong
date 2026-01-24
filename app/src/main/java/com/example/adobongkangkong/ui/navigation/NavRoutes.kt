@@ -1,18 +1,48 @@
 package com.example.adobongkangkong.ui.navigation
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+
 object NavRoutes {
-    const val DASHBOARD = "dashboard"
-    const val RECIPE_NEW = "recipe/new"
-    const val FOOD_NEW = "food/new"
 
-    const val FOOD_DETAILS = "food/{foodId}"
-    const val FOOD_EDIT = "food/edit/{foodId}"
+    // --- Dashboard ---
+    object Dashboard {
+        const val route: String = "dashboard"
+    }
 
-    const val RECIPE_EDIT = "recipe/edit/{foodId}"
+    // --- Foods ---
+    object Foods {
+        private const val BASE = "food"
 
-    fun recipeEdit(foodId: Long) = "recipe/edit/$foodId"
+        // Patterns (NavHost routes)
+        const val list: String = BASE
+        const val details: String = "$BASE/{foodId}"
+        const val edit: String = "$BASE/edit/{foodId}"
+        const val new: String = "$BASE/new?name={name}"
 
-    fun foodDetails(foodId: Long) = "food/$foodId"
+        // Builders (NavController.navigate destinations)
+        fun details(foodId: Long): String = "$BASE/$foodId"
+        fun edit(foodId: Long): String = "$BASE/edit/$foodId"
 
-    fun foodEdit(foodId: Long) = "food/edit/$foodId"
+        /**
+         * Optional prefill name for "Create Food".
+         * Uses URL encoding so you can safely pass spaces/quotes/etc.
+         */
+        fun new(prefillName: String? = null): String {
+            val encoded = URLEncoder.encode(prefillName.orEmpty(), StandardCharsets.UTF_8.toString())
+            return "$BASE/new?name=$encoded"
+        }
+    }
+
+    // --- Recipes ---
+    object Recipes {
+        private const val BASE = "recipe"
+
+        // Patterns
+        const val new: String = "$BASE/new"
+        const val edit: String = "$BASE/edit/{foodId}" // recipes are foods (isRecipe=true)
+
+        // Builders
+        fun edit(foodId: Long): String = "$BASE/edit/$foodId"
+    }
 }

@@ -21,7 +21,8 @@ import kotlin.math.max
 @Composable
 fun DashboardScreen(
     onCreateRecipe: () -> Unit,
-    onCreateFood: (String) -> Unit
+    onCreateFood: (String) -> Unit,
+    onOpenFoods: () -> Unit
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state = vm.state.collectAsState().value

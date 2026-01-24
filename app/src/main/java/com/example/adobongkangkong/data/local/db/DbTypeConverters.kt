@@ -28,9 +28,21 @@ class DbTypeConverters {
     @TypeConverter fun fromDb(value: String): NutrientUnit =
         runCatching { NutrientUnit.valueOf(value) }.getOrDefault(NutrientUnit.OTHER)
 
+    // ---- NutrientCategory (uses dbValue) ----
     @TypeConverter
-    fun toDb(value: NutrientCategory): String = value.dbValue
+    fun nutrientCategoryToDb(value: NutrientCategory?): String? =
+        value?.dbValue
 
     @TypeConverter
-    fun toDb(value: BasisType): String = value.name
+    fun nutrientCategoryFromDb(value: String?): NutrientCategory =
+        NutrientCategory.fromDb(value?.trim()?.lowercase().orEmpty())
+
+    // ---- (Optional) BasisType if you store it as enum ----
+    @TypeConverter
+    fun basisTypeToDb(value: BasisType?): String? =
+        value?.name
+
+    @TypeConverter
+    fun basisTypeFromDb(value: String?): BasisType =
+        runCatching { BasisType.valueOf(value ?: "") }.getOrDefault(BasisType.PER_SERVING)
 }

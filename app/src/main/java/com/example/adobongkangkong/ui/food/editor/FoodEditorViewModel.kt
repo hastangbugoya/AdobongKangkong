@@ -1,5 +1,9 @@
 package com.example.adobongkangkong.ui.food.editor
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,12 +12,17 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,11 +31,26 @@ class FoodEditorViewModel @Inject constructor(
     private val getData: GetFoodEditorDataUseCase,
     private val searchNutrients: SearchNutrientsUseCase,
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
+    private val nutrientAliasRepo: NutrientAliasRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FoodEditorState())
     val state: StateFlow<FoodEditorState> = _state
+
+    private val aliasSheetNutrientIdFlow = MutableStateFlow<Long?>(null)
+    private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
+
+    val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
+        private set
+
+    val selectedAliases: StateFlow<List<String>> =
+        aliasSheetNutrientIdFlow
+            .flatMapLatest { id: Long? ->
+                if (id == null) flowOf(emptyList())
+                else nutrientAliasRepo.observeAliases(id)
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun load(foodId: Long?, initialName: String?) {
         // idempotent-ish: only load once
@@ -184,4 +208,31 @@ class FoodEditorViewModel @Inject constructor(
     private fun update(block: (FoodEditorState) -> FoodEditorState) {
         _state.value = block(_state.value)
     }
+
+    fun openAliasSheet(nutrientId: Long, nutrientName: String) {
+        aliasSheetNutrientIdFlow.value = nutrientId
+        aliasSheetNutrientNameFlow.value = nutrientName
+    }
+
+    fun closeAliasSheet() {
+        aliasSheetNutrientIdFlow.value = null
+        aliasSheetNutrientNameFlow.value = null
+    }
+
+
+    fun addAlias(alias: String) {
+        val id = aliasSheetNutrientIdFlow.value ?: return
+        viewModelScope.launch {
+            nutrientAliasRepo.addAlias(id, alias)
+        }
+    }
+
+    fun deleteAlias(alias: String) {
+        val id = aliasSheetNutrientIdFlow.value ?: return
+        viewModelScope.launch {
+            nutrientAliasRepo.deleteAlias(id, alias)
+        }
+    }
+
 }
+
