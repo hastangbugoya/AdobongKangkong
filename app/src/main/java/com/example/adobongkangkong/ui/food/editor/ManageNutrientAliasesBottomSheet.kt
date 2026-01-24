@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.ui.food.editor
 
-import android.os.Message
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -89,10 +88,6 @@ fun ManageNutrientAliasesBottomSheet(
                     singleLine = true,
                     label = { Text("Add alias (e.g. pyridoxine)") }
                 )
-                message?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error)
-                }
                 Spacer(Modifier.width(8.dp))
                 Button(
                     enabled = newAlias.trim().isNotBlank(),
@@ -105,7 +100,10 @@ fun ManageNutrientAliasesBottomSheet(
                     Text("Add")
                 }
             }
-
+            message?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
