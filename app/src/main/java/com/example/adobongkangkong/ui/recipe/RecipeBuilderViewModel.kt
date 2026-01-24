@@ -7,7 +7,6 @@ import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
-import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -65,50 +64,62 @@ class RecipeBuilderViewModel @Inject constructor(
             ingredientsFlow.map { list -> list.map { it.foodId to it.servings } }
         )
 
+    // ✅ Typed combine fixes the "unchecked cast Any? to List<...>" warning you saw.
     val state: StateFlow<RecipeBuilderState> =
         combine(
             nameFlow,
             yieldFlow,
             queryFlow,
             resultsFlow,
-            pickedFoodFlow,
-            pickedServingsFlow,
-            ingredientsFlow,
-            previewFlow,
-            isSavingFlow,
-            errorFlow,
-        ) { arr: Array<Any?> ->
-            val name = arr[0] as String
-            val servingsYield = arr[1] as Double
-            val query = arr[2] as String
-            val results = arr[3] as List<Food>
-            val pickedFood = arr[4] as Food?
-            val pickedServings = arr[5] as Double
-            val ingredients = arr[6] as List<RecipeIngredientUi>
-            val preview = arr[7] as RecipeMacroPreview
-            val isSaving = arr[8] as Boolean
-            val error = arr[9] as String?
-
-            val pickedGrams = pickedFood?.gramsPerServingResolved()?.let { g -> pickedServings * g }
-
-            RecipeBuilderState(
+            pickedFoodFlow
+        ) { name, servingsYield, query, results, pickedFood ->
+            Left(
                 name = name,
                 servingsYield = servingsYield,
                 query = query,
                 results = results,
-                pickedFood = pickedFood,
-                pickedServings = pickedServings,
+                pickedFood = pickedFood
+            )
+        }.combine(
+            combine(
+                pickedServingsFlow,
+                ingredientsFlow,
+                previewFlow,
+                isSavingFlow,
+                errorFlow
+            ) { pickedServings, ingredients, preview, isSaving, error ->
+                Right(
+                    pickedServings = pickedServings,
+                    ingredients = ingredients,
+                    preview = preview,
+                    isSaving = isSaving,
+                    error = error
+                )
+            }
+        ) { left, right ->
+
+            val pickedGrams =
+                left.pickedFood?.gramsPerServingResolved()?.let { g -> right.pickedServings * g }
+
+            RecipeBuilderState(
+                name = left.name,
+                servingsYield = left.servingsYield,
+                query = left.query,
+                results = left.results,
+                pickedFood = left.pickedFood,
+                pickedServings = right.pickedServings,
                 pickedGrams = pickedGrams,
-                ingredients = ingredients,
-                preview = preview,
-                isSaving = isSaving,
-                errorMessage = error
+                ingredients = right.ingredients,
+                preview = right.preview,
+                isSaving = right.isSaving,
+                errorMessage = right.error
             )
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
             RecipeBuilderState()
         )
+
 
     fun onNameChange(v: String) {
         nameFlow.value = v
@@ -179,8 +190,6 @@ class RecipeBuilderViewModel @Inject constructor(
         ingredientsFlow.value = list
     }
 
-
-// set this inside loadForEdit(foodId): editFoodId = foodId
     fun save(onDone: () -> Unit) {
         val name = nameFlow.value.trim()
         val yield = yieldFlow.value
@@ -232,8 +241,7 @@ class RecipeBuilderViewModel @Inject constructor(
                         }
                     )
 
-                    // Optional but recommended: keep the recipe "Food" name in sync.
-                    // If you already do this elsewhere, delete this block.
+                    // Keep the recipe "Food" name in sync.
                     foodRepo.getById(editingFoodId)?.let { food ->
                         foodRepo.upsert(food.copy(name = name, isRecipe = true))
                     }
@@ -248,24 +256,24 @@ class RecipeBuilderViewModel @Inject constructor(
         }
     }
 
-
     fun loadForEdit(foodId: Long?) {
-
         if (foodId == null) return
 
-        this.editFoodId = foodId
+        // ✅ sets the *property* used by save()
+        editFoodId = foodId
 
-        val editFoodId = foodId
+        // Optional: reset "add ingredient" UI state
+        pickedFoodFlow.value = null
+        pickedServingsFlow.value = 1.0
+        queryFlow.value = ""
+
         viewModelScope.launch {
-            // Load recipe row by foodId
             val recipe = recipeRepo.getRecipeByFoodId(foodId) ?: return@launch
             val ingredients = recipeRepo.getIngredients(recipe.recipeId)
 
-            // Load the food name (source of truth for display)
             val food = foodRepo.getById(foodId)
 
             val ids = ingredients.map { it.ingredientFoodId }.distinct()
-
             val nameById: Map<Long, String> =
                 ids.associateWith { id ->
                     foodRepo.getById(id)?.name ?: "Food $id"
@@ -285,3 +293,18 @@ class RecipeBuilderViewModel @Inject constructor(
     }
 }
 
+private data class Left(
+    val name: String,
+    val servingsYield: Double,
+    val query: String,
+    val results: List<Food>,
+    val pickedFood: Food?
+)
+
+private data class Right(
+    val pickedServings: Double,
+    val ingredients: List<RecipeIngredientUi>,
+    val preview: RecipeMacroPreview,
+    val isSaving: Boolean,
+    val error: String?
+)
