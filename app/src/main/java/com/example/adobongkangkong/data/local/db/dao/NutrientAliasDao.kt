@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -26,4 +27,7 @@ interface NutrientAliasDao {
 
     @Query("DELETE FROM nutrient_aliases WHERE nutrientId = :nutrientId AND aliasKey = :aliasKey")
     suspend fun deleteAlias(nutrientId: Long, aliasKey: String)
+
+    @Upsert
+    suspend fun upsert(entity: NutrientAliasEntity)
 }

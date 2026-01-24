@@ -10,11 +10,13 @@ import androidx.room.PrimaryKey
  *
  * We store a normalized key for fast + consistent search and uniqueness.
  */
+
 @Entity(
     tableName = "nutrient_aliases",
+    primaryKeys = ["nutrientId", "alias"],
     indices = [
-        Index(value = ["nutrientId"]),
-        Index(value = ["aliasKey"], unique = true)
+        Index(value = ["alias"]),
+        Index(value = ["nutrientId"])
     ]
 )
 data class NutrientAliasEntity(

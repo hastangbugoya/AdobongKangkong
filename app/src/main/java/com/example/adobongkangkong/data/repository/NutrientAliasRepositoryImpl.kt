@@ -19,9 +19,15 @@ class NutrientAliasRepositoryImpl @Inject constructor(
     }
 
     override suspend fun addAlias(nutrientId: Long, alias: String) {
-        insertNormalized(nutrientId, listOf(alias))
+        val key =  normalizeAlias((alias.trim()))
+        dao.upsert(
+            NutrientAliasEntity(
+                nutrientId = nutrientId,
+                aliasDisplay = alias.trim(),
+                aliasKey = key
+            )
+        )
     }
-
     private suspend fun insertNormalized(nutrientId: Long, aliases: List<String>) {
         val entities = aliases
             .map { it.trim() }
@@ -41,6 +47,13 @@ class NutrientAliasRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteAlias(nutrientId: Long, alias: String) {
-        dao.deleteAlias(nutrientId, alias.trim().lowercase())
+        val key = normalizeAlias(alias)
+        dao.deleteAlias(nutrientId, key)
     }
+
+    private fun normalizeAlias(s: String): String =
+        s.lowercase()
+            .replace("-", "")
+            .replace("_", "")
+            .replace(" ", "")
 }
