@@ -8,11 +8,13 @@ import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.dao.SummaryDao
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
 
 @Database(
@@ -21,7 +23,8 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
         NutrientEntity::class,
         FoodNutrientEntity::class,
         LogEntryEntity::class,
-        RecipeIngredientEntity::class
+        RecipeIngredientEntity::class,
+        RecipeEntity::class
     ],
     version = 1,
     exportSchema = true
@@ -34,4 +37,5 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun logEntryDao(): LogEntryDao
     abstract fun recipeDao(): RecipeDao
     abstract fun summaryDao(): SummaryDao
+    abstract fun recipeIngredientDao(): RecipeIngredientDao
 }

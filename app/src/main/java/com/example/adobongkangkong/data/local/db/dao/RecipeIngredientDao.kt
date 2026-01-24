@@ -4,15 +4,14 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
-import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface RecipeDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(recipe: RecipeEntity): Long
+interface RecipeIngredientDao {
 
-    @Query("SELECT * FROM recipes ORDER BY createdAt DESC")
-    fun observeAll(): Flow<List<RecipeEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<RecipeIngredientEntity>)
+
+    @Query("SELECT * FROM recipe_ingredients WHERE recipeId = :recipeId")
+    suspend fun getForRecipe(recipeId: Long): List<RecipeIngredientEntity>
 }

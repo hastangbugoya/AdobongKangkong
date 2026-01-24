@@ -13,8 +13,8 @@ import com.example.adobongkangkong.domain.model.ServingUnit
     ]
 )
 data class FoodEntity(
-    @PrimaryKey(autoGenerate = false)
-    val id: Long, // from CSV; stable ID
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0, // auto-generated primary key
 
     val name: String,
     val brand: String? = null,

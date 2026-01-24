@@ -30,4 +30,5 @@ object DatabaseModule {
     @Provides fun provideLogEntryDao(db: NutriDatabase): LogEntryDao = db.logEntryDao()
     @Provides fun provideRecipeDao(db: NutriDatabase): RecipeDao = db.recipeDao()
     @Provides fun provideSummaryDao(db: NutriDatabase): SummaryDao = db.summaryDao()
+    @Provides fun provideRecipeIngredientDao(db: NutriDatabase): RecipeIngredientDao = db.recipeIngredientDao()
 }
