@@ -25,11 +25,15 @@ import kotlin.math.max
 @Composable
 fun RecipeBuilderScreen(
     onBack: () -> Unit,
+    editFoodId: Long? = null,
     vm: RecipeBuilderViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
     val state by vm.state.collectAsState()
 
+    LaunchedEffect(editFoodId) {
+        vm.loadForEdit(editFoodId)
+    }
 
     Scaffold(
         topBar = {

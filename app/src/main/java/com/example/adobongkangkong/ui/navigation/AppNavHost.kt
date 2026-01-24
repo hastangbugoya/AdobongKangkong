@@ -49,6 +49,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onBack = { navController.popBackStack() }
             )
         }
+
+        composable(
+            route = NavRoutes.RECIPE_EDIT,
+            arguments = listOf(navArgument("foodId") { type = NavType.LongType })
+        ) {
+            val foodId = it.arguments!!.getLong("foodId")
+            RecipeBuilderScreen(
+                editFoodId = foodId,
+                onBack = { navController.popBackStack() }
+            )
+        }
     }
 }
 

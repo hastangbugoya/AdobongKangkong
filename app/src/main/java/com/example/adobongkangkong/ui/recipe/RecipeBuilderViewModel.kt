@@ -7,6 +7,10 @@ import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
+import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
+import com.example.adobongkangkong.domain.repository.RecipeRepository
 import com.example.adobongkangkong.domain.usecase.CreateRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveRecipeMacroPreviewUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
@@ -30,7 +34,9 @@ import kotlin.math.max
 class RecipeBuilderViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
     private val createRecipe: CreateRecipeUseCase,
-    private val observeRecipeMacroPreview: ObserveRecipeMacroPreviewUseCase
+    observeRecipeMacroPreview: ObserveRecipeMacroPreviewUseCase,
+    private val recipeRepo: RecipeRepository,
+    private val foodRepo: FoodRepository,
 ) : ViewModel() {
 
     private val nameFlow = MutableStateFlow("")
@@ -43,6 +49,8 @@ class RecipeBuilderViewModel @Inject constructor(
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
+
+    private var editFoodId: Long? = null
 
     private val resultsFlow: Flow<List<Food>> =
         queryFlow
@@ -171,6 +179,8 @@ class RecipeBuilderViewModel @Inject constructor(
         ingredientsFlow.value = list
     }
 
+
+// set this inside loadForEdit(foodId): editFoodId = foodId
     fun save(onDone: () -> Unit) {
         val name = nameFlow.value.trim()
         val yield = yieldFlow.value
@@ -193,18 +203,42 @@ class RecipeBuilderViewModel @Inject constructor(
             isSavingFlow.value = true
             errorFlow.value = null
             try {
-                createRecipe(
-                    RecipeDraft(
-                        name = name,
+                val editingFoodId = editFoodId
+
+                if (editingFoodId == null) {
+                    // ---- Create ----
+                    createRecipe(
+                        RecipeDraft(
+                            name = name,
+                            servingsYield = yield,
+                            ingredients = ingredients.map {
+                                RecipeIngredientDraft(
+                                    foodId = it.foodId,
+                                    ingredientServings = it.servings
+                                )
+                            }
+                        )
+                    )
+                } else {
+                    // ---- Edit ----
+                    recipeRepo.updateRecipeByFoodId(
+                        foodId = editingFoodId,
                         servingsYield = yield,
                         ingredients = ingredients.map {
-                            RecipeIngredientDraft(
-                                foodId = it.foodId,
+                            RecipeIngredientLine(
+                                ingredientFoodId = it.foodId,
                                 ingredientServings = it.servings
                             )
                         }
                     )
-                )
+
+                    // Optional but recommended: keep the recipe "Food" name in sync.
+                    // If you already do this elsewhere, delete this block.
+                    foodRepo.getById(editingFoodId)?.let { food ->
+                        foodRepo.upsert(food.copy(name = name, isRecipe = true))
+                    }
+                }
+
                 onDone()
             } catch (t: Throwable) {
                 errorFlow.value = t.message ?: "Failed to save recipe."
@@ -213,4 +247,41 @@ class RecipeBuilderViewModel @Inject constructor(
             }
         }
     }
+
+
+    fun loadForEdit(foodId: Long?) {
+
+        if (foodId == null) return
+
+        this.editFoodId = foodId
+
+        val editFoodId = foodId
+        viewModelScope.launch {
+            // Load recipe row by foodId
+            val recipe = recipeRepo.getRecipeByFoodId(foodId) ?: return@launch
+            val ingredients = recipeRepo.getIngredients(recipe.recipeId)
+
+            // Load the food name (source of truth for display)
+            val food = foodRepo.getById(foodId)
+
+            val ids = ingredients.map { it.ingredientFoodId }.distinct()
+
+            val nameById: Map<Long, String> =
+                ids.associateWith { id ->
+                    foodRepo.getById(id)?.name ?: "Food $id"
+                }
+
+            nameFlow.value = food?.name ?: nameFlow.value
+            yieldFlow.value = recipe.servingsYield
+
+            ingredientsFlow.value = ingredients.map {
+                RecipeIngredientUi(
+                    foodId = it.ingredientFoodId,
+                    foodName = nameById[it.ingredientFoodId] ?: "Food ${it.ingredientFoodId}",
+                    servings = it.ingredientServings
+                )
+            }
+        }
+    }
 }
+
