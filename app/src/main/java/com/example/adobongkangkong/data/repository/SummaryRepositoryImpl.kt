@@ -24,9 +24,9 @@ class SummaryRepositoryImpl @Inject constructor(
 
                 MacroTotals(
                     caloriesKcal = amount(NutrientCodes.CALORIES),
-                    proteinG = amount(NutrientCodes.PROTEIN),
-                    carbsG = amount(NutrientCodes.CARBS),
-                    fatG = amount(NutrientCodes.FAT)
+                    proteinG = amount(NutrientCodes.PROTEIN_G),
+                    carbsG = amount(NutrientCodes.CARBS_G),
+                    fatG = amount(NutrientCodes.FAT_G)
                 )
             }
     }

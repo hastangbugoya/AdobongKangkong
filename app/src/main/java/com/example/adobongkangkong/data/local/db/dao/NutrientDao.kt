@@ -14,4 +14,7 @@ interface NutrientDao {
 
     @Query("SELECT * FROM nutrients ORDER BY category ASC, displayName ASC")
     suspend fun getAll(): List<NutrientEntity>
+
+    @Query("SELECT id FROM nutrients WHERE code = :code LIMIT 1")
+    suspend fun getIdByCode(code: String): Long?
 }

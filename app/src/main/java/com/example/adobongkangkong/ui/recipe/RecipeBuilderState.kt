@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.recipe
 
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 
 data class RecipeIngredientUi(
     val foodId: Long,
@@ -22,6 +23,8 @@ data class RecipeBuilderState(
     val ingredients: List<RecipeIngredientUi> = emptyList(),
 
     val isSaving: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+
+    val preview: RecipeMacroPreview = RecipeMacroPreview()
 )
 

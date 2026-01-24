@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.ui.dashboard.round0
 import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +29,7 @@ fun RecipeBuilderScreen(
 ) {
     val focus = LocalFocusManager.current
     val state by vm.state.collectAsState()
+
 
     Scaffold(
         topBar = {
@@ -40,13 +42,27 @@ fun RecipeBuilderScreen(
             // Sticky action
             Surface(tonalElevation = 2.dp) {
                 Column(Modifier.navigationBarsPadding()) {
+                    val preview = state.preview
+                    val per = preview.perServing(state.servingsYield)
+                    Card {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Preview", style = MaterialTheme.typography.titleMedium)
+                            Text("Batch: ${preview.totalCalories.round0()} kcal • P ${preview.totalProteinG.round0()}g • C ${preview.totalCarbsG.round0()}g • F ${preview.totalFatG.round0()}g")
+                            val per = preview.perServing(state.servingsYield)
+                            Text("Per serving: ${per.totalCalories.round0()} kcal • P ${per.totalProteinG.round0()}g • C ${per.totalCarbsG.round0()}g • F ${per.totalFatG.round0()}g")
+                        }
+                    }
                     HorizontalDivider()
+                    val canSave = state.name.trim().isNotEmpty()
+                            && state.servingsYield > 0.0
+                            && state.ingredients.isNotEmpty()
+                            && !state.isSaving
                     Button(
                         onClick = { vm.save(onDone = onBack) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        enabled = !state.isSaving
+                        enabled = canSave && !state.isSaving
                     ) {
                         Text(if (state.isSaving) "Saving…" else "Save recipe")
                     }

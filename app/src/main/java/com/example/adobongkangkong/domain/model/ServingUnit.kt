@@ -2,6 +2,7 @@ package com.example.adobongkangkong.domain.model
 
 enum class ServingUnit(val display: String) {
     G("g"),
+    MG("mg"),
     ML("ml"),
     TBSP("tbsp"),
     TSP("tsp"),

@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
@@ -22,6 +23,7 @@ import kotlin.math.max
 @Composable
 fun QuickAddBottomSheet(
     onDismiss: () -> Unit,
+    onCreateFood: (String) -> Unit,
     vm: QuickAddViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
@@ -58,12 +60,34 @@ fun QuickAddBottomSheet(
             Spacer(Modifier.height(12.dp))
 
             if (state.selectedFood == null) {
-                // Search results: keep LazyColumn, but cap its height so the sheet layout is stable
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                ) {
+
+                if (state.query.isNotBlank() && state.results.isEmpty()) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+
+                        Text(
+                            text = "No matching foods",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        TextButton(
+                            onClick = {
+                                onDismiss()
+                                onCreateFood(state.query)
+                            }
+                        ) {
+                            Text("Create food \"${state.query}\"")
+                        }
+                    }
+
+                } else {
                     FoodSearchResults(
                         results = state.results,
                         onPick = {
@@ -72,6 +96,7 @@ fun QuickAddBottomSheet(
                         }
                     )
                 }
+
             } else {
                 // Selected food: scroll this section so the Log button is reachable
                 Column(

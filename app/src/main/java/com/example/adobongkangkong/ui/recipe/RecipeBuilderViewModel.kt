@@ -2,13 +2,26 @@ package com.example.adobongkangkong.ui.recipe
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
+import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.usecase.CreateRecipeUseCase
+import com.example.adobongkangkong.domain.usecase.ObserveRecipeMacroPreviewUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.max
@@ -16,27 +29,33 @@ import kotlin.math.max
 @HiltViewModel
 class RecipeBuilderViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
-    private val createRecipe: CreateRecipeUseCase
+    private val createRecipe: CreateRecipeUseCase,
+    private val observeRecipeMacroPreview: ObserveRecipeMacroPreviewUseCase
 ) : ViewModel() {
 
     private val nameFlow = MutableStateFlow("")
     private val yieldFlow = MutableStateFlow(4.0)
 
     private val queryFlow = MutableStateFlow("")
-    private val pickedFoodFlow = MutableStateFlow<com.example.adobongkangkong.domain.model.Food?>(null)
+    private val pickedFoodFlow = MutableStateFlow<Food?>(null)
     private val pickedServingsFlow = MutableStateFlow(1.0)
 
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
 
-    private val resultsFlow: Flow<List<com.example.adobongkangkong.domain.model.Food>> =
+    private val resultsFlow: Flow<List<Food>> =
         queryFlow
             .debounce(150)
             .distinctUntilChanged()
             .flatMapLatest { q ->
                 if (q.isBlank()) flowOf(emptyList()) else searchFoods(q, limit = 50)
             }
+
+    private val previewFlow: Flow<RecipeMacroPreview> =
+        observeRecipeMacroPreview(
+            ingredientsFlow.map { list -> list.map { it.foodId to it.servings } }
+        )
 
     val state: StateFlow<RecipeBuilderState> =
         combine(
@@ -47,18 +66,20 @@ class RecipeBuilderViewModel @Inject constructor(
             pickedFoodFlow,
             pickedServingsFlow,
             ingredientsFlow,
+            previewFlow,
             isSavingFlow,
-            errorFlow
+            errorFlow,
         ) { arr: Array<Any?> ->
             val name = arr[0] as String
             val servingsYield = arr[1] as Double
             val query = arr[2] as String
-            val results = arr[3] as List<com.example.adobongkangkong.domain.model.Food>
-            val pickedFood = arr[4] as com.example.adobongkangkong.domain.model.Food?
+            val results = arr[3] as List<Food>
+            val pickedFood = arr[4] as Food?
             val pickedServings = arr[5] as Double
             val ingredients = arr[6] as List<RecipeIngredientUi>
-            val isSaving = arr[7] as Boolean
-            val error = arr[8] as String?
+            val preview = arr[7] as RecipeMacroPreview
+            val isSaving = arr[8] as Boolean
+            val error = arr[9] as String?
 
             val pickedGrams = pickedFood?.gramsPerServingResolved()?.let { g -> pickedServings * g }
 
@@ -71,6 +92,7 @@ class RecipeBuilderViewModel @Inject constructor(
                 pickedServings = pickedServings,
                 pickedGrams = pickedGrams,
                 ingredients = ingredients,
+                preview = preview,
                 isSaving = isSaving,
                 errorMessage = error
             )
@@ -80,14 +102,23 @@ class RecipeBuilderViewModel @Inject constructor(
             RecipeBuilderState()
         )
 
+    fun onNameChange(v: String) {
+        nameFlow.value = v
+    }
 
-    fun onNameChange(v: String) { nameFlow.value = v }
-    fun onYieldChange(v: Double) { yieldFlow.value = v.coerceAtLeast(0.1) }
+    fun onYieldChange(v: Double) {
+        yieldFlow.value = v.coerceAtLeast(0.1)
+    }
 
-    fun onQueryChange(v: String) { queryFlow.value = v }
-    fun clearError() { errorFlow.value = null }
+    fun onQueryChange(v: String) {
+        queryFlow.value = v
+    }
 
-    fun pickFood(food: com.example.adobongkangkong.domain.model.Food) {
+    fun clearError() {
+        errorFlow.value = null
+    }
+
+    fun pickFood(food: Food) {
         pickedFoodFlow.value = food
         pickedServingsFlow.value = 1.0
         errorFlow.value = null

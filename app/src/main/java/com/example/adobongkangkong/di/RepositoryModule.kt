@@ -1,9 +1,11 @@
 package com.example.adobongkangkong.di
 
 
+import com.example.adobongkangkong.data.repository.FoodNutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodRepositoryImpl
 import com.example.adobongkangkong.data.repository.LogRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
+import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -40,5 +42,11 @@ abstract class RepositoryModule {
     abstract fun bindRecipeRepository(
         impl: RecipeRepositoryImpl
     ): RecipeRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFoodNutrientRepository(
+        impl: FoodNutrientRepositoryImpl
+    ): FoodNutrientRepository
 
 }

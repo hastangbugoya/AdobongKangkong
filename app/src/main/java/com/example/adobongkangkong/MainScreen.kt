@@ -17,43 +17,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
+import com.example.adobongkangkong.ui.navigation.AppNavHost
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
+import com.example.adobongkangkong.ui.theme.AdobongKangkongTheme
 
 private enum class RootScreen { DASHBOARD, RECIPE_BUILDER }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
-    var showQuickAdd by remember { mutableStateOf(false) }
-    var rootScreen by remember { mutableStateOf(RootScreen.DASHBOARD) }
-
-    when (rootScreen) {
-        RootScreen.DASHBOARD -> {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text("AdobongKangkong") },
-                        actions = {
-                            TextButton(onClick = { rootScreen = RootScreen.RECIPE_BUILDER }) {
-                                Text("Recipes")
-                            }
-                        }
-                    )
-                },
-                floatingActionButton = {
-                    FloatingActionButton(onClick = { showQuickAdd = true }) { Text("+") }
-                }
-            ) { padding ->
-                DashboardScreen(modifier = Modifier.padding(padding))
-
-                if (showQuickAdd) {
-                    QuickAddBottomSheet(onDismiss = { showQuickAdd = false })
-                }
-            }
-        }
-
-        RootScreen.RECIPE_BUILDER -> {
-            RecipeBuilderScreen(onBack = { rootScreen = RootScreen.DASHBOARD })
-        }
-    }
+    AppNavHost()
 }
