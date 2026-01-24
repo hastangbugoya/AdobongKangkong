@@ -3,6 +3,7 @@ package com.example.adobongkangkong.data.local.db.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 
@@ -19,5 +20,5 @@ data class NutrientEntity(
     val code: String, // e.g. "CALORIES", "PROTEIN", "VITAMIN_C"
     val displayName: String, // e.g. "Calories", "Protein", "Vitamin C"
     val unit: NutrientUnit = NutrientUnit.G, // "kcal", "g", "mg", "µg"
-    val category: String // "macro", "vitamin", "mineral", "other"
+    val category: NutrientCategory = NutrientCategory.MACRO // "macro", "vitamin", "mineral", "other"
 )

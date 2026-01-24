@@ -15,4 +15,12 @@ interface RecipeDao {
 
     @Query("SELECT * FROM recipes ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<RecipeEntity>>
+
+    // Edit Recipe
+
+    @Query("SELECT * FROM recipes WHERE id = :recipeId LIMIT 1")
+    suspend fun getById(recipeId: Long): RecipeEntity?
+
+    @Query("SELECT * FROM recipes WHERE foodId = :foodId LIMIT 1")
+    suspend fun getByFoodId(foodId: Long): RecipeEntity?
 }

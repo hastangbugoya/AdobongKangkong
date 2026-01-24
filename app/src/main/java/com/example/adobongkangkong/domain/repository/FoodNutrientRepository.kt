@@ -7,6 +7,15 @@ import com.example.adobongkangkong.domain.model.RecipeMacroPreview
  */
 interface FoodNutrientRepository {
 
+    suspend fun getForFood(foodId: Long): List<com.example.adobongkangkong.domain.model.FoodNutrientRow>
+
+    suspend fun replaceForFood(
+        foodId: Long,
+        rows: List<com.example.adobongkangkong.domain.model.FoodNutrientRow>
+    )
+
+    suspend fun deleteOne(foodId: Long, nutrientId: Long)
+
     /**
      * Compute macro totals for a set of ingredients expressed in ingredient servings.
      *

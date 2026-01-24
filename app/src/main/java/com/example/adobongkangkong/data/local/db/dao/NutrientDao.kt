@@ -17,4 +17,13 @@ interface NutrientDao {
 
     @Query("SELECT id FROM nutrients WHERE code = :code LIMIT 1")
     suspend fun getIdByCode(code: String): Long?
+
+    @Query("""
+    SELECT * FROM nutrients
+    WHERE displayName LIKE '%' || :query || '%'
+       OR code LIKE '%' || :query || '%'
+    ORDER BY category ASC, displayName ASC
+    LIMIT :limit
+""")
+    suspend fun search(query: String, limit: Int = 50): List<NutrientEntity>
 }
