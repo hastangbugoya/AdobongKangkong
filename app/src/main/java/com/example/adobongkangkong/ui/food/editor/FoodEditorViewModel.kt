@@ -42,7 +42,6 @@ class FoodEditorViewModel @Inject constructor(
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
 
     val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
-        private set
 
     val selectedAliases: StateFlow<List<String>> =
         aliasSheetNutrientIdFlow

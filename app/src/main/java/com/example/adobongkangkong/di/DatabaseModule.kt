@@ -31,4 +31,7 @@ object DatabaseModule {
     @Provides fun provideRecipeDao(db: NutriDatabase): RecipeDao = db.recipeDao()
     @Provides fun provideSummaryDao(db: NutriDatabase): SummaryDao = db.summaryDao()
     @Provides fun provideRecipeIngredientDao(db: NutriDatabase): RecipeIngredientDao = db.recipeIngredientDao()
+
+    @Provides fun provideNutrientAliasDao(db: NutriDatabase): NutrientAliasDao = db.nutrientAliasDao()
+
 }

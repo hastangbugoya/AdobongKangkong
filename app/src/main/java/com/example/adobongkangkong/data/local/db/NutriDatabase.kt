@@ -41,6 +41,5 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun recipeDao(): RecipeDao
     abstract fun summaryDao(): SummaryDao
     abstract fun recipeIngredientDao(): RecipeIngredientDao
-
     abstract fun nutrientAliasDao(): NutrientAliasDao
 }
