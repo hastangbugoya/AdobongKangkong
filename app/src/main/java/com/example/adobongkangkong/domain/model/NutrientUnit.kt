@@ -15,4 +15,9 @@ enum class NutrientUnit(val symbol: String) {
     MG_NE("mg NE"),      // niacin equivalents
     MG_RAE("µg RAE"),    // vitamin A retinol activity equivalents (often µg RAE)
     OTHER("");           // fallback
+    companion object {
+        fun fromDb(raw: String): NutrientUnit =
+            entries.firstOrNull { it.symbol.equals(raw, ignoreCase = true) }
+                ?: G
+    }
 }

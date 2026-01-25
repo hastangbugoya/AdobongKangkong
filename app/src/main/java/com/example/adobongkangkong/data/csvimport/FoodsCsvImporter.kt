@@ -1,0 +1,310 @@
+package com.example.adobongkangkong.data.csvimport
+
+import android.content.res.AssetManager
+import androidx.room.withTransaction
+import com.example.adobongkangkong.data.local.db.NutriDatabase
+import com.example.adobongkangkong.data.local.db.entity.FoodEntity
+import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
+import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
+import com.example.adobongkangkong.domain.importing.model.ImportIssueCode
+import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.domain.model.NutrientUnit
+import com.example.adobongkangkong.domain.model.ServingUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
+import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
+
+class FoodsCsvImporter @Inject constructor(
+    private val assets: AssetManager,
+    private val db: NutriDatabase
+) {
+    data class Report(
+        val runId: Long,
+        val foodsInserted: Int,
+        val nutrientsInserted: Int,
+        val foodNutrientsInserted: Int,
+        val skippedRows: Int,
+        val warningCount: Int,
+        val errorCount: Int,
+        val notes: List<String>
+    )
+
+    suspend fun importFromAssets(
+        assetFileName: String,
+        skipIfFoodsExist: Boolean = true
+    ): Report = withContext(Dispatchers.IO) {
+        val foodDao = db.foodDao()
+        val nutrientDao = db.nutrientDao()
+        val foodNutrientDao = db.foodNutrientDao()
+
+        val importRunDao = db.importRunDao()
+        val importIssueDao = db.importIssueDao()
+
+        if (skipIfFoodsExist) {
+            val count = foodDao.countFoods()
+            if (count > 0) {
+                return@withContext Report(
+                    runId = -1L,
+                    foodsInserted = 0,
+                    nutrientsInserted = 0,
+                    foodNutrientsInserted = 0,
+                    skippedRows = 0,
+                    warningCount = 0,
+                    errorCount = 0,
+                    notes = listOf("Skipped import because foods table already has $count rows.")
+                )
+            }
+        }
+
+        val lines = assets.open(assetFileName).bufferedReader().use { it.readLines() }
+            .filter { it.isNotBlank() }
+
+        val totalRows = (lines.size - 1).coerceAtLeast(0)
+        val startedAt = System.currentTimeMillis()
+
+        val runId = importRunDao.insert(
+            ImportRunEntity(
+                startedAt = startedAt,
+                finishedAt = null,
+                source = "assets:$assetFileName",
+                totalRows = totalRows,
+                foodsInserted = 0,
+                nutrientsUpserted = 0,
+                foodNutrientsUpserted = 0,
+                skippedRows = 0,
+                warningCount = 0,
+                errorCount = 0
+            )
+        )
+
+        if (lines.isEmpty()) {
+            // mark finished
+            val finishedAt = System.currentTimeMillis()
+            importRunDao.update(
+                ImportRunEntity(
+                    id = runId,
+                    startedAt = startedAt,
+                    finishedAt = finishedAt,
+                    source = "assets:$assetFileName",
+                    totalRows = totalRows,
+                    foodsInserted = 0,
+                    nutrientsUpserted = 0,
+                    foodNutrientsUpserted = 0,
+                    skippedRows = 0,
+                    warningCount = 0,
+                    errorCount = 0
+                )
+            )
+            return@withContext Report(
+                runId = runId,
+                foodsInserted = 0,
+                nutrientsInserted = 0,
+                foodNutrientsInserted = 0,
+                skippedRows = 0,
+                warningCount = 0,
+                errorCount = 0,
+                notes = listOf("CSV was empty.")
+            )
+        }
+
+        val header = CsvParser.parseLine(lines.first())
+        val headerIndex: Map<String, Int> =
+            header.mapIndexed { idx, h -> h.trim() to idx }.toMap()
+
+        fun cell(row: List<String>, col: String): String? {
+            val idx = headerIndex[col] ?: return null
+            return row.getOrNull(idx)
+        }
+
+        // 1) Upsert nutrients for any headers we recognize
+        val nutrientDefsByHeader = CsvNutrientCatalog.defs.associateBy { it.csvHeader }
+
+        val nutrientsToUpsert = header.mapNotNull { h ->
+            val def = nutrientDefsByHeader[h.trim()] ?: return@mapNotNull null
+            NutrientEntity(
+                code = def.code,
+                displayName = def.displayName,
+                unit = NutrientUnit.fromDb(def.unit),
+                category = NutrientCategory.fromDb(def.categoryDbValue)
+            )
+        }
+
+        nutrientDao.upsertAll(nutrientsToUpsert)
+
+        // Resolve nutrient ids by code
+        val nutrientIdByHeader: Map<String, Long> = buildMap {
+            for (def in CsvNutrientCatalog.defs) {
+                if (!headerIndex.containsKey(def.csvHeader)) continue
+                val id = nutrientDao.getIdByCode(def.code)
+                if (id != null) put(def.csvHeader, id)
+            }
+        }
+
+        val notes = mutableListOf<String>()
+
+        // 2) Parse foods + food_nutrients
+        val foods = ArrayList<FoodEntity>(lines.size)
+        val foodNutrients = ArrayList<FoodNutrientEntity>(lines.size * 10)
+        var skipped = 0
+
+        // Copper duplicate handling
+        val cuPositions = header.mapIndexedNotNull { idx, h -> if (h.trim() == "Cu") idx else null }
+        val hasCuDuplicate = cuPositions.size >= 2
+        if (hasCuDuplicate) {
+            notes += "Detected duplicate 'Cu' column in CSV; importer will take the FIRST non-empty Cu value."
+        }
+
+        // Keep issues as (rowIndex -> code) for minimal change
+        val issues = mutableListOf<Pair<Int, ImportIssueCode>>() // rowIndex -> code
+        var warnMissingGrams = 0
+        var errorCount = 0 // reserved for later; currently we mostly warn
+
+        fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
+            ServingUnit.G,
+            ServingUnit.MG,
+            ServingUnit.OZ,
+            ServingUnit.LB -> false
+            else -> true
+        }
+
+        for (i in 1 until lines.size) {
+            val row = CsvParser.parseLine(lines[i])
+            val name = cell(row, "food")?.trim().orEmpty()
+            if (name.isBlank()) {
+                skipped++
+                // You can record this later as an ERROR if you want:
+                // issues += (i to ImportIssueCode.MISSING_FOOD_NAME)
+                continue
+            }
+
+            val servRaw = cell(row, "serv")
+            val weightRaw = cell(row, "Weight")
+
+            val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
+            val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
+
+            // DO NOT SKIP — keep gramsPerServing = null, record warning issue
+            if (servingUnit.requiresGramsPerServing() && parsedWeight.grams == null) {
+                issues += (i to ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
+                warnMissingGrams++
+            }
+
+            val servingSize = 1.0
+            val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
+
+            val foodEntity = FoodEntity(
+                id = foodId,
+                name = name,
+                brand = null,
+                servingSize = servingSize,
+                servingUnit = servingUnit,
+                servingsPerPackage = null,
+                gramsPerServing = parsedWeight.grams, // may be null
+                isRecipe = false
+            )
+            foods.add(foodEntity)
+
+            for ((csvHeader, nutrientId) in nutrientIdByHeader) {
+                val amountStr = when {
+                    csvHeader == "Cu" && hasCuDuplicate -> {
+                        val values = cuPositions.mapNotNull { pos -> row.getOrNull(pos)?.trim() }
+                        values.firstOrNull { it.isNotEmpty() }
+                    }
+                    else -> cell(row, csvHeader)?.trim()
+                }
+
+                val amt = amountStr?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+                if (amt == null) continue
+
+                foodNutrients.add(
+                    FoodNutrientEntity(
+                        foodId = foodId,
+                        nutrientId = nutrientId,
+                        nutrientAmountPerBasis = amt,
+                    )
+                )
+            }
+        }
+
+        if (warnMissingGrams > 0) {
+            notes += "Imported $warnMissingGrams foods missing grams-per-serving for a non-weight serving unit. These foods will be BLOCKED when logging/recipes by servings until you set grams-per-serving."
+            val sampleRows = issues
+                .filter { it.second == ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT }
+                .take(5)
+                .joinToString { "row ${it.first}" }
+            if (sampleRows.isNotBlank()) {
+                notes += "Missing grams-per-serving sample: $sampleRows"
+            }
+        }
+
+        val finishedAt = System.currentTimeMillis()
+
+        db.withTransaction {
+            foodDao.upsertAll(foods)
+            foodNutrientDao.upsertAll(foodNutrients)
+
+            // Persist issues for this run
+            if (issues.isNotEmpty()) {
+                val issueEntities = issues.map { (rowIndex, code) ->
+                    ImportIssueEntity(
+                        runId = runId,
+                        severity = "WARNING",
+                        code = code.name,
+                        rowIndex = rowIndex,
+                        field = when (code) {
+                            ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT -> "Weight"
+                            else -> null
+                        },
+                        message = when (code) {
+                            ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT ->
+                                "Serving unit requires grams-per-serving but Weight was missing/invalid. Food imported with gramsPerServing=null."
+                            else -> code.name
+                        },
+                        rawValue = null, // we can improve this later by capturing the actual cell value
+                        foodId = null    // we can improve this later by attaching the computed foodId
+                    )
+                }
+                importIssueDao.insertAll(issueEntities)
+            }
+
+            // Finish run summary
+            importRunDao.update(
+                ImportRunEntity(
+                    id = runId,
+                    startedAt = startedAt,
+                    finishedAt = finishedAt,
+                    source = "assets:$assetFileName",
+                    totalRows = totalRows,
+                    foodsInserted = foods.size,
+                    nutrientsUpserted = nutrientsToUpsert.size,
+                    foodNutrientsUpserted = foodNutrients.size,
+                    skippedRows = skipped,
+                    warningCount = warnMissingGrams,
+                    errorCount = errorCount
+                )
+            )
+        }
+
+        Report(
+            runId = runId,
+            foodsInserted = foods.size,
+            nutrientsInserted = nutrientsToUpsert.size,
+            foodNutrientsInserted = foodNutrients.size,
+            skippedRows = skipped,
+            warningCount = warnMissingGrams,
+            errorCount = errorCount,
+            notes = notes
+        )
+    }
+
+    suspend fun peekRowCount(assetFileName: String): Int = withContext(Dispatchers.IO) {
+        val lines = assets.open(assetFileName)
+            .bufferedReader()
+            .use { it.readLines() }
+            .filter { it.isNotBlank() }
+
+        (lines.size - 1).coerceAtLeast(0) // subtract header
+    }
+}

@@ -1,321 +1,204 @@
 package com.example.adobongkangkong.ui.recipe
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.adobongkangkong.domain.model.Food
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
-import com.example.adobongkangkong.ui.dashboard.round0
-import kotlin.math.max
+import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 
+/**
+ * Recipe builder / editor screen.
+ *
+ * ## Important architecture points
+ *
+ * ### Point-of-use enforcement (data integrity)
+ * The importer may allow foods with missing grams-per-serving (nullable). That’s OK.
+ * We enforce correctness **right when the user tries to use the food by servings**
+ * (adding an ingredient in the recipe builder).
+ *
+ * The ViewModel signals this condition by setting [RecipeBuilderState.blockingSheet].
+ * The UI displays a modal blocking sheet that offers a primary action to edit the food.
+ *
+ * ### Navigation request pattern (Compose-safe)
+ * The ViewModel does NOT navigate directly. Instead it sets a one-shot
+ * [RecipeBuilderState.navigateToEditFoodId]. The UI consumes it via [LaunchedEffect],
+ * calls [onEditFood], then tells the VM the navigation has been handled so it won’t re-trigger.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipeBuilderScreen(
+    editFoodId: Long?,
     onBack: () -> Unit,
-    editFoodId: Long? = null,
-    vm: RecipeBuilderViewModel = hiltViewModel()
+    onEditFood: (Long) -> Unit
 ) {
-    val focus = LocalFocusManager.current
+    val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
 
+    // --- Edit-mode load -------------------------------------------------------
     LaunchedEffect(editFoodId) {
         vm.loadForEdit(editFoodId)
     }
 
+    // --- One-shot navigation request -----------------------------------------
+    LaunchedEffect(state.navigateToEditFoodId) {
+        val id = state.navigateToEditFoodId ?: return@LaunchedEffect
+        onEditFood(id)
+        vm.onEditFoodNavigationHandled()
+    }
+
+    // --- Blocking sheet UI ----------------------------------------------------
+    /**
+     * The sheet content is fully driven by the ViewModel via [BlockingSheetModel].
+     * This keeps the UI simple: render model, provide only dismissal wiring.
+     */
+    val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    state.blockingSheet?.let { sheetModel ->
+        ModalBottomSheet(
+            onDismissRequest = { vm.dismissBlockingSheet() },
+            sheetState = blockingSheetState
+        ) {
+            BlockingBottomSheet(
+                model = sheetModel,
+                onDismiss = { vm.dismissBlockingSheet() }
+            )
+        }
+    }
+
+    // --- Screen UI ------------------------------------------------------------
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Recipe") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }
-            )
-        },
-        bottomBar = {
-            // Sticky action
-            Surface(tonalElevation = 2.dp) {
-                Column(Modifier.navigationBarsPadding()) {
-                    val preview = state.preview
-                    val per = preview.perServing(state.servingsYield)
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text("Preview", style = MaterialTheme.typography.titleMedium)
-                            Text("Batch: ${preview.totalCalories.round0()} kcal • P ${preview.totalProteinG.round0()}g • C ${preview.totalCarbsG.round0()}g • F ${preview.totalFatG.round0()}g")
-                            val per = preview.perServing(state.servingsYield)
-                            Text("Per serving: ${per.totalCalories.round0()} kcal • P ${per.totalProteinG.round0()}g • C ${per.totalCarbsG.round0()}g • F ${per.totalFatG.round0()}g")
-                        }
-                    }
-                    HorizontalDivider()
-                    val canSave = state.name.trim().isNotEmpty()
-                            && state.servingsYield > 0.0
-                            && state.ingredients.isNotEmpty()
-                            && !state.isSaving
-                    Button(
+                title = { Text(if (editFoodId == null) "New Recipe" else "Edit Recipe") },
+                navigationIcon = {
+                    TextButton(onClick = onBack) { Text("Back") }
+                },
+                actions = {
+                    TextButton(
                         onClick = { vm.save(onDone = onBack) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        enabled = canSave && !state.isSaving
-                    ) {
-                        Text(if (state.isSaving) "Saving…" else "Save recipe")
-                    }
+                        enabled = !state.isSaving
+                    ) { Text("Save") }
                 }
-            }
+            )
         }
     ) { padding ->
         Column(
-            Modifier
-                .fillMaxSize()
+            modifier = Modifier
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Scrollable content area
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = 16.dp, bottom = 16.dp)
-            ) {
-                // --- everything except the Save button goes here ---
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = vm::onNameChange,
+                label = { Text("Recipe name") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
 
-                if (state.errorMessage != null) {
-                    AssistChip(
-                        onClick = vm::clearError,
-                        label = { Text(state.errorMessage!!) }
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
+            OutlinedTextField(
+                value = state.servingsYield.toString(),
+                onValueChange = { raw -> raw.toDoubleOrNull()?.let(vm::onYieldChange) },
+                label = { Text("Servings yield") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
 
-                OutlinedTextField(
-                    value = state.name,
-                    onValueChange = vm::onNameChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Recipe name") },
-                    singleLine = true
+            state.errorMessage?.let { err ->
+                Text(
+                    text = err,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
                 )
+                TextButton(onClick = vm::clearError) { Text("Dismiss") }
+            }
 
-                Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(4.dp))
+            Text("Add ingredient", style = MaterialTheme.typography.titleMedium)
 
-                NumberField(
-                    label = "Servings yield (batch)",
-                    value = state.servingsYield,
-                    onValue = vm::onYieldChange
-                )
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = vm::onQueryChange,
+                label = { Text("Search foods") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
 
-                Spacer(Modifier.height(16.dp))
-
-                Text("Ingredients", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-
-                IngredientsList(
-                    items = state.ingredients,
-                    onRemove = vm::removeIngredientAt
-                )
-
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
-
-                Text("Add ingredient", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = vm::onQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Search foods") },
-                    singleLine = true
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                if (state.pickedFood == null) {
-                    FoodSearchResults(
-                        results = state.results,
-                        onPick = { vm.pickFood(it) }
-                    )
-                } else {
-                    PickedIngredientPanel(
-                        food = state.pickedFood!!,
-                        servings = state.pickedServings,
-                        grams = state.pickedGrams,
-                        onChangeFood = vm::clearPickedFood,
-                        onServingsChange = vm::onPickedServingsChange,
-                        onGramsChange = vm::onPickedGramsChange,
-                        onAdd = vm::addPickedIngredient
-                    )
+            if (state.results.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    state.results.take(8).forEach { food ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(food.name, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { vm.pickFood(food) }) { Text("Pick") }
+                        }
+                    }
                 }
             }
-        }
-    }
 
-}
+            state.pickedFood?.let { picked ->
+                Spacer(Modifier.height(4.dp))
+                Text("Picked: ${picked.name}", style = MaterialTheme.typography.titleSmall)
 
-@Composable
-private fun IngredientsList(
-    items: List<RecipeIngredientUi>,
-    onRemove: (Int) -> Unit
-) {
-    if (items.isEmpty()) {
-        Text("No ingredients yet.", style = MaterialTheme.typography.bodyMedium)
-        return
-    }
+                OutlinedTextField(
+                    value = state.pickedServings.toString(),
+                    onValueChange = { raw -> raw.toDoubleOrNull()?.let(vm::onPickedServingsChange) },
+                    label = { Text("Servings") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 220.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        itemsIndexed(items) { index, item ->
-            ListItem(
-                headlineContent = {
-                    Text(item.foodName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
-                supportingContent = {
-                    Text("${item.servings.clean()} servings")
-                },
-                trailingContent = {
-                    TextButton(onClick = { onRemove(index) }) { Text("Remove") }
+                state.pickedGrams?.let { grams ->
+                    Text("≈ ${"%,.1f".format(grams)} g", style = MaterialTheme.typography.bodySmall)
                 }
-            )
-            HorizontalDivider()
-        }
-    }
-}
 
-@Composable
-private fun FoodSearchResults(
-    results: List<Food>,
-    onPick: (Food) -> Unit
-) {
-    if (results.isEmpty()) {
-        Text("Type to search…", style = MaterialTheme.typography.bodyMedium)
-        return
-    }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = vm::addPickedIngredient, enabled = !state.isSaving) { Text("Add") }
+                    TextButton(onClick = vm::clearPickedFood) { Text("Cancel") }
+                }
+            }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 260.dp),
-        contentPadding = PaddingValues(vertical = 6.dp)
-    ) {
-        items(items = results, key = { it.id }) { food ->
-            ListItem(
-                headlineContent = { Text(food.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = {
-                    val grams = food.gramsPerServingResolved()
-                    val subtitle = buildString {
-                        append("${food.servingSize.clean()} ${food.servingUnit.display}")
-                        if (grams != null && food.servingUnit.display != "g") append(" (${grams.clean()} g)")
+            Spacer(Modifier.height(8.dp))
+            Text("Ingredients", style = MaterialTheme.typography.titleMedium)
+
+            if (state.ingredients.isEmpty()) {
+                Text("No ingredients yet.")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.ingredients.forEachIndexed { index, ing ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("${ing.foodName} • ${"%,.2f".format(ing.servings)} servings")
+                            IconButton(onClick = { vm.removeIngredientAt(index) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove")
+                            }
+                        }
                     }
-                    Text(subtitle)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onPick(food) }
-            )
-            HorizontalDivider()
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text("Preview", style = MaterialTheme.typography.titleMedium)
+            Text("Calories: ${"%,.0f".format(state.preview.totalCalories)} kcal")
+            Text("Protein: ${"%,.1f".format(state.preview.totalProteinG)} g")
+            Text("Carbs: ${"%,.1f".format(state.preview.totalCarbsG)} g")
+            Text("Fat: ${"%,.1f".format(state.preview.totalFatG)} g")
+
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
-
-@Composable
-private fun PickedIngredientPanel(
-    food: Food,
-    servings: Double,
-    grams: Double?,
-    onChangeFood: () -> Unit,
-    onServingsChange: (Double) -> Unit,
-    onGramsChange: (Double) -> Unit,
-    onAdd: () -> Unit
-) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column(Modifier.weight(1f)) {
-            Text(food.name, style = MaterialTheme.typography.titleSmall)
-            Text("${food.servingSize.clean()} ${food.servingUnit.display}", style = MaterialTheme.typography.bodySmall)
-        }
-        TextButton(onClick = onChangeFood) { Text("Change") }
-    }
-
-    Spacer(Modifier.height(10.dp))
-
-    AmountRow(
-        label = "Servings",
-        value = servings,
-        onMinus = { onServingsChange(max(0.0, servings - 0.5)) },
-        onPlus = { onServingsChange(servings + 0.5) }
-    )
-
-    Spacer(Modifier.height(10.dp))
-
-    // Optional grams input if we can resolve grams per serving (including gram-unit foods)
-    if (food.gramsPerServingResolved() != null) {
-        NumberField(
-            label = "Grams (g)",
-            value = grams ?: (servings * food.gramsPerServingResolved()!!),
-            onValue = onGramsChange
-        )
-        Spacer(Modifier.height(10.dp))
-    }
-
-    Button(
-        onClick = onAdd,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text("Add ingredient")
-    }
-}
-
-@Composable
-private fun AmountRow(
-    label: String,
-    value: Double,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit
-) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onMinus) { Text("–") }
-            Text(value.clean(), style = MaterialTheme.typography.titleMedium)
-            OutlinedButton(onClick = onPlus) { Text("+") }
-        }
-    }
-}
-
-@Composable
-private fun NumberField(
-    label: String,
-    value: Double,
-    onValue: (Double) -> Unit
-) {
-    var text by remember(value) { mutableStateOf(value.clean()) }
-
-    OutlinedTextField(
-        value = text,
-        onValueChange = {
-            text = it
-            it.toDoubleOrNull()?.let(onValue)
-        },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true
-    )
-}
-
-private fun Double.clean(): String =
-    if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this).trimEnd('0').trimEnd('.')
-

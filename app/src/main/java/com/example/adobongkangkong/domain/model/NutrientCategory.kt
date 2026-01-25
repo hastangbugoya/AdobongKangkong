@@ -39,6 +39,7 @@ enum class NutrientCategory(
 
     companion object {
         fun fromDb(value: String): NutrientCategory =
-            entries.firstOrNull { it.dbValue == value } ?: OTHER
+            entries.firstOrNull { it.dbValue == value.lowercase() }
+                ?: OTHER
     }
 }

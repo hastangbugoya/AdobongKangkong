@@ -9,13 +9,21 @@ enum class ServingUnit(val display: String) {
     CUP("cup"),
     OZ("oz"),
     LB("lb"),
+    BUNCH("bch"),
+    BOX("box"),
+
     SCOOP("scoop"),
 
+    RCCUP("rc cup"),
+    BAG("bag"),
+    PACKET("pkt"),
+
     CAN("can"),
-    PIECE("piece"),
+    PIECE("pc"),
     SLICE("slice"),
     PACK("pack"),
     BOTTLE("bottle"),
     JAR("jar"),
-    SERVING("serving")
+    SERVING("serving"),
+    OTHER("other")
 }

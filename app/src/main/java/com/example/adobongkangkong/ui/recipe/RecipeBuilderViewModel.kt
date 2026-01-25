@@ -6,6 +6,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
+import com.example.adobongkangkong.domain.nutrition.ServingPolicy
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
@@ -13,6 +14,7 @@ import com.example.adobongkangkong.domain.repository.RecipeRepository
 import com.example.adobongkangkong.domain.usecase.CreateRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveRecipeMacroPreviewUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
+import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +53,11 @@ class RecipeBuilderViewModel @Inject constructor(
 
     private var editFoodId: Long? = null
 
+    // Overlay
+    private val blockingSheetFlow = MutableStateFlow<BlockingSheetModel?>(null)
+    private val blockedFoodIdFlow = MutableStateFlow<Long?>(null)
+    private val navigateToEditFoodIdFlow = MutableStateFlow<Long?>(null)
+
     private val resultsFlow: Flow<List<Food>> =
         queryFlow
             .debounce(150)
@@ -64,62 +71,86 @@ class RecipeBuilderViewModel @Inject constructor(
             ingredientsFlow.map { list -> list.map { it.foodId to it.servings } }
         )
 
-    // ✅ Typed combine fixes the "unchecked cast Any? to List<...>" warning you saw.
     val state: StateFlow<RecipeBuilderState> =
-        combine(
-            nameFlow,
-            yieldFlow,
-            queryFlow,
-            resultsFlow,
-            pickedFoodFlow
-        ) { name, servingsYield, query, results, pickedFood ->
-            Left(
-                name = name,
-                servingsYield = servingsYield,
-                query = query,
-                results = results,
-                pickedFood = pickedFood
-            )
-        }.combine(
-            combine(
-                pickedServingsFlow,
-                ingredientsFlow,
-                previewFlow,
-                isSavingFlow,
-                errorFlow
-            ) { pickedServings, ingredients, preview, isSaving, error ->
-                Right(
-                    pickedServings = pickedServings,
-                    ingredients = ingredients,
-                    preview = preview,
-                    isSaving = isSaving,
-                    error = error
+        run {
+            val leftFlow: Flow<Left> =
+                combine(
+                    nameFlow,
+                    yieldFlow,
+                    queryFlow,
+                    resultsFlow,
+                    pickedFoodFlow
+                ) { name, servingsYield, query, results, pickedFood ->
+                    Left(
+                        name = name,
+                        servingsYield = servingsYield,
+                        query = query,
+                        results = results,
+                        pickedFood = pickedFood
+                    )
+                }
+
+            val rightFlow: Flow<RightBase> =
+                combine(
+                    pickedServingsFlow,
+                    ingredientsFlow,
+                    previewFlow,
+                    isSavingFlow,
+                    errorFlow
+                ) { pickedServings, ingredients, preview, isSaving, error ->
+                    RightBase(
+                        pickedServings = pickedServings,
+                        ingredients = ingredients,
+                        preview = preview,
+                        isSaving = isSaving,
+                        error = error
+                    )
+                }
+
+            val overlayFlow: Flow<Overlay> =
+                combine(
+                    blockingSheetFlow,
+                    blockedFoodIdFlow,
+                    navigateToEditFoodIdFlow
+                ) { blockingSheet, blockedFoodId, navFoodId ->
+                    Overlay(
+                        blockingSheet = blockingSheet,
+                        blockedFoodId = blockedFoodId,
+                        navigateToEditFoodId = navFoodId
+                    )
+                }
+
+            combine(leftFlow, rightFlow, overlayFlow) { left, right, overlay ->
+                val pickedGrams =
+                    left.pickedFood?.gramsPerServingResolved()?.let { g -> right.pickedServings * g }
+
+                RecipeBuilderState(
+                    name = left.name,
+                    servingsYield = left.servingsYield,
+
+                    query = left.query,
+                    results = left.results,
+                    pickedFood = left.pickedFood,
+                    pickedServings = right.pickedServings,
+                    pickedGrams = pickedGrams,
+
+                    ingredients = right.ingredients,
+
+                    isSaving = right.isSaving,
+                    errorMessage = right.error,
+
+                    preview = right.preview,
+
+                    blockingSheet = overlay.blockingSheet,
+                    blockedFoodId = overlay.blockedFoodId,
+                    navigateToEditFoodId = overlay.navigateToEditFoodId
                 )
-            }
-        ) { left, right ->
-
-            val pickedGrams =
-                left.pickedFood?.gramsPerServingResolved()?.let { g -> right.pickedServings * g }
-
-            RecipeBuilderState(
-                name = left.name,
-                servingsYield = left.servingsYield,
-                query = left.query,
-                results = left.results,
-                pickedFood = left.pickedFood,
-                pickedServings = right.pickedServings,
-                pickedGrams = pickedGrams,
-                ingredients = right.ingredients,
-                preview = right.preview,
-                isSaving = right.isSaving,
-                errorMessage = right.error
+            }.stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                RecipeBuilderState()
             )
-        }.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5_000),
-            RecipeBuilderState()
-        )
-
+        }
 
     fun onNameChange(v: String) {
         nameFlow.value = v
@@ -159,6 +190,15 @@ class RecipeBuilderViewModel @Inject constructor(
         pickedServingsFlow.value = (grams / g).coerceAtLeast(0.0)
     }
 
+    fun dismissBlockingSheet() {
+        blockingSheetFlow.value = null
+        blockedFoodIdFlow.value = null
+    }
+
+    fun onEditFoodNavigationHandled() {
+        navigateToEditFoodIdFlow.value = null
+    }
+
     fun addPickedIngredient() {
         val food = pickedFoodFlow.value ?: return
         val servings = pickedServingsFlow.value
@@ -167,20 +207,40 @@ class RecipeBuilderViewModel @Inject constructor(
             return
         }
 
-        val current = ingredientsFlow.value.toMutableList()
-        current.add(
+        // 🔒 Point-of-use enforcement: servings require grams-per-serving for volume units.
+        val gramsPerServing = ServingPolicy.gramsPerServing(food)!!
+        if (!ServingPolicy.canUseServings(food)) {
+            blockedFoodIdFlow.value = food.id
+            blockingSheetFlow.value = BlockingSheetModel(
+                title = "Needs grams-per-serving",
+                message = ServingPolicy.blockingReason(food),
+                primaryButtonText = "Edit food",
+                secondaryButtonText = "Dismiss",
+                onPrimary = {
+                    navigateToEditFoodIdFlow.value = food.id
+                    blockingSheetFlow.value = null
+                },
+                onSecondary = { dismissBlockingSheet() }
+            )
+            return
+        }
+
+        // ✅ Actually add the ingredient
+        val next = ingredientsFlow.value.toMutableList()
+        next.add(
             RecipeIngredientUi(
                 foodId = food.id,
                 foodName = food.name,
                 servings = servings
             )
         )
-        ingredientsFlow.value = current
+        ingredientsFlow.value = next
 
-        // reset add flow
+        // Reset add-ingredient UI
         pickedFoodFlow.value = null
         pickedServingsFlow.value = 1.0
         queryFlow.value = ""
+        errorFlow.value = null
     }
 
     fun removeIngredientAt(index: Int) {
@@ -259,10 +319,9 @@ class RecipeBuilderViewModel @Inject constructor(
     fun loadForEdit(foodId: Long?) {
         if (foodId == null) return
 
-        // ✅ sets the *property* used by save()
         editFoodId = foodId
 
-        // Optional: reset "add ingredient" UI state
+        // Reset "add ingredient" UI state
         pickedFoodFlow.value = null
         pickedServingsFlow.value = 1.0
         queryFlow.value = ""
@@ -301,10 +360,16 @@ private data class Left(
     val pickedFood: Food?
 )
 
-private data class Right(
+private data class RightBase(
     val pickedServings: Double,
     val ingredients: List<RecipeIngredientUi>,
     val preview: RecipeMacroPreview,
     val isSaving: Boolean,
     val error: String?
+)
+
+private data class Overlay(
+    val blockingSheet: BlockingSheetModel?,
+    val blockedFoodId: Long?,
+    val navigateToEditFoodId: Long?
 )

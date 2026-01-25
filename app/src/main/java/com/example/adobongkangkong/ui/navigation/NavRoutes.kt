@@ -8,6 +8,11 @@ object NavRoutes {
     // --- Dashboard ---
     object Dashboard {
         const val route: String = "dashboard"
+
+
+        const val STARTUP: String = "startup"
+
+
     }
 
     // --- Foods ---
@@ -19,6 +24,7 @@ object NavRoutes {
         const val details: String = "$BASE/{foodId}"
         const val edit: String = "$BASE/edit/{foodId}"
         const val new: String = "$BASE/new?name={name}"
+
 
         // Builders (NavController.navigate destinations)
         fun details(foodId: Long): String = "$BASE/$foodId"

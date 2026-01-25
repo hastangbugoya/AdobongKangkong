@@ -11,6 +11,7 @@ import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
+import com.example.adobongkangkong.ui.startup.StartupScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -20,18 +21,30 @@ fun AppNavHost(modifier: Modifier = Modifier) {
 
     NavHost(
         navController = navController,
-        startDestination = NavRoutes.Dashboard.route,
+        startDestination = NavRoutes.Dashboard.STARTUP,
         modifier = modifier
     ) {
 
         // -----------------------------
         // Dashboard
         // -----------------------------
+        composable(NavRoutes.Dashboard.STARTUP) {
+            StartupScreen(
+                onDone = {
+                    navController.navigate(NavRoutes.Dashboard.route) {
+                        popUpTo(NavRoutes.Dashboard.STARTUP) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
         composable(NavRoutes.Dashboard.route) {
             DashboardScreen(
                 onCreateRecipe = { navController.navigate(NavRoutes.Recipes.new) },
                 onCreateFood = { navController.navigate(NavRoutes.Foods.new()) },
-                onOpenFoods = { navController.navigate(NavRoutes.Foods.list) }
+                onOpenFoods = { navController.navigate(NavRoutes.Foods.list) },
+                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) }
             )
         }
 
@@ -43,7 +56,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onBack = { navController.popBackStack() },
                 onEditFood = { id -> navController.navigate(NavRoutes.Foods.edit(id)) },
                 onEditRecipe = { id -> navController.navigate(NavRoutes.Recipes.edit(id)) },
-                onCreateFood = { navController.navigate(NavRoutes.Foods.new()) }
+                onCreateFood = { navController.navigate(NavRoutes.Foods.new()) },
+
             )
         }
 
@@ -94,7 +108,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         composable(NavRoutes.Recipes.new) {
             RecipeBuilderScreen(
                 editFoodId = null,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onEditFood = { foodId ->
+                    navController.navigate(NavRoutes.Foods.edit(foodId)) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 
@@ -111,7 +130,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
 
             RecipeBuilderScreen(
                 editFoodId = foodId,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onEditFood = { foodId ->
+                    navController.navigate(NavRoutes.Foods.edit(foodId)) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
     }

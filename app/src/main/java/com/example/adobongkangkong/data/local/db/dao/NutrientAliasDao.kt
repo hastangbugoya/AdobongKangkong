@@ -33,4 +33,13 @@ interface NutrientAliasDao {
 
     @Query("SELECT aliasKey FROM nutrient_aliases WHERE nutrientId = :nutrientId")
     fun observeAliasKeys(nutrientId: Long): kotlinx.coroutines.flow.Flow<List<String>>
+
+    @Query(
+        """
+    SELECT *
+    FROM nutrient_aliases
+    WHERE nutrientId IN (:nutrientIds)
+    """
+    )
+    suspend fun getForNutrients(nutrientIds: List<Long>): List<NutrientAliasEntity>
 }
