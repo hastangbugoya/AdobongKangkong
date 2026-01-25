@@ -5,6 +5,8 @@ import androidx.room.withTransaction
 import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
+import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
+import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.domain.importing.model.ImportIssueCode
 import com.example.adobongkangkong.domain.model.NutrientCategory
@@ -13,8 +15,6 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
-import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
 
 class FoodsCsvImporter @Inject constructor(
     private val assets: AssetManager,
@@ -30,6 +30,31 @@ class FoodsCsvImporter @Inject constructor(
         val errorCount: Int,
         val notes: List<String>
     )
+
+    /**
+     * Returns true if this serving unit is NOT already a weight unit.
+     *
+     * Layman: if the serving unit is "cup/tbsp/serving/etc", we need a grams-per-serving value
+     * to convert servings into grams. If the serving unit is already grams/oz/lb/mg, we don’t.
+     */
+    private fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
+        ServingUnit.G,
+        ServingUnit.MG,
+        ServingUnit.OZ,
+        ServingUnit.LB -> false
+        else -> true
+    }
+
+    /**
+     * Helper to record a warning in a minimal way (rowIndex + code).
+     *
+     * We keep this minimal because your existing run/reporting already expects:
+     * - a list of (rowIndex -> issueCode)
+     * - a few counters (like warnMissingGrams)
+     */
+    private fun MutableList<Pair<Int, ImportIssueCode>>.warn(rowIndex: Int, code: ImportIssueCode) {
+        add(rowIndex to code)
+    }
 
     suspend fun importFromAssets(
         assetFileName: String,
@@ -80,7 +105,6 @@ class FoodsCsvImporter @Inject constructor(
         )
 
         if (lines.isEmpty()) {
-            // mark finished
             val finishedAt = System.currentTimeMillis()
             importRunDao.update(
                 ImportRunEntity(
@@ -158,37 +182,72 @@ class FoodsCsvImporter @Inject constructor(
 
         // Keep issues as (rowIndex -> code) for minimal change
         val issues = mutableListOf<Pair<Int, ImportIssueCode>>() // rowIndex -> code
-        var warnMissingGrams = 0
-        var errorCount = 0 // reserved for later; currently we mostly warn
 
-        fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
-            ServingUnit.G,
-            ServingUnit.MG,
-            ServingUnit.OZ,
-            ServingUnit.LB -> false
-            else -> true
-        }
+        /**
+         * WARNING CONDITION:
+         * Some foods use a serving unit that is NOT a weight unit (ex: cup, tbsp, serving).
+         * If grams-per-serving is missing, we still import the food but mark it as incomplete.
+         *
+         * Layman: "We imported the food, but you must set its weight before you can log/recipe it by servings."
+         */
+        var warnMissingGrams = 0
+
+        /**
+         * ERROR CONDITION (reserved):
+         * You currently skip missing food names (row dropped), but you are not counting it as an error yet.
+         * If you later want to count it as an error, increment errorCount and persist an ImportIssue.
+         */
+        var errorCount = 0
+
+        /**
+         * WARNING CONDITION:
+         * Duplicate Cu columns exist in the CSV and the importer must pick one.
+         *
+         * Layman: "The file had two Copper columns; we chose one value."
+         */
+        var warnDuplicateCuResolved = 0
 
         for (i in 1 until lines.size) {
             val row = CsvParser.parseLine(lines[i])
+
+            /**
+             * ERROR CONDITION:
+             * Missing food name.
+             *
+             * Layman: "This row has no food name, so we can't import it."
+             *
+             * Current behavior: skip the row (no import).
+             * (You can optionally record an ImportIssue later if you want.)
+             */
             val name = cell(row, "food")?.trim().orEmpty()
             if (name.isBlank()) {
                 skipped++
-                // You can record this later as an ERROR if you want:
-                // issues += (i to ImportIssueCode.MISSING_FOOD_NAME)
+                // Optional future: issues.warn(i, ImportIssueCode.MISSING_FOOD_NAME)
+                // Optional future: errorCount++
                 continue
             }
 
             val servRaw = cell(row, "serv")
             val weightRaw = cell(row, "Weight")
 
+            // Serving unit parse (CsvUnits decides default/fallback behavior)
             val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
+
+            // Weight parse: parsedWeight.grams may be null if missing/invalid
             val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
 
-            // DO NOT SKIP — keep gramsPerServing = null, record warning issue
+            /**
+             * WARNING CONDITION (the one you were looking for):
+             * Non-weight serving unit requires grams-per-serving, but Weight is missing/invalid.
+             *
+             * Layman: "We imported the food, but it doesn't know how many grams are in one serving."
+             *
+             * IMPORTANT: we DO NOT skip the row.
+             * We keep gramsPerServing = null and rely on point-of-use blocking (ServingPolicy).
+             */
             if (servingUnit.requiresGramsPerServing() && parsedWeight.grams == null) {
-                issues += (i to ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
-                warnMissingGrams++
+                issues.warn(i, ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
+                warnMissingGrams++ // keep your counter exactly as requested
             }
 
             val servingSize = 1.0
@@ -209,12 +268,34 @@ class FoodsCsvImporter @Inject constructor(
             for ((csvHeader, nutrientId) in nutrientIdByHeader) {
                 val amountStr = when {
                     csvHeader == "Cu" && hasCuDuplicate -> {
-                        val values = cuPositions.mapNotNull { pos -> row.getOrNull(pos)?.trim() }
-                        values.firstOrNull { it.isNotEmpty() }
+                        val rawValues = cuPositions.mapNotNull { pos -> row.getOrNull(pos)?.trim() }
+                        val nonEmpty = rawValues.filter { it.isNotEmpty() }
+
+                        /**
+                         * WARNING CONDITION:
+                         * Two Copper columns existed. If both are non-empty and differ, we pick the first.
+                         *
+                         * Layman: "The file had two Copper values. We picked one."
+                         */
+                        if (nonEmpty.size >= 2 && nonEmpty[0] != nonEmpty[1]) {
+                            issues.warn(i, ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED)
+                            warnDuplicateCuResolved++
+                        }
+
+                        nonEmpty.firstOrNull()
                     }
                     else -> cell(row, csvHeader)?.trim()
                 }
 
+                /**
+                 * WARNING CONDITION (soft):
+                 * Nutrient cell isn't a valid number (blank or not parseable).
+                 *
+                 * Layman: "This nutrient value was missing or invalid, so it wasn't imported for this food."
+                 *
+                 * Current behavior: silently skip the nutrient for that row.
+                 * (We can promote this to a recorded warning later if you want.)
+                 */
                 val amt = amountStr?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
                 if (amt == null) continue
 
@@ -239,6 +320,10 @@ class FoodsCsvImporter @Inject constructor(
             }
         }
 
+        if (warnDuplicateCuResolved > 0) {
+            notes += "Resolved duplicate Copper (Cu) values on $warnDuplicateCuResolved rows by choosing the first non-empty value."
+        }
+
         val finishedAt = System.currentTimeMillis()
 
         db.withTransaction {
@@ -255,15 +340,22 @@ class FoodsCsvImporter @Inject constructor(
                         rowIndex = rowIndex,
                         field = when (code) {
                             ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT -> "Weight"
+                            ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED -> "Cu"
                             else -> null
                         },
+                        /**
+                         * Layman message per condition:
+                         * keep these friendly and action-oriented.
+                         */
                         message = when (code) {
                             ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT ->
-                                "Serving unit requires grams-per-serving but Weight was missing/invalid. Food imported with gramsPerServing=null."
+                                "This food uses a serving unit like cup/tbsp/serving, but its Weight (grams per serving) was missing or invalid. The food was imported, but you must set grams-per-serving before you can log or use it in recipes by servings."
+                            ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED ->
+                                "The CSV had two Copper (Cu) columns with different values. The importer chose the first non-empty Copper value."
                             else -> code.name
                         },
-                        rawValue = null, // we can improve this later by capturing the actual cell value
-                        foodId = null    // we can improve this later by attaching the computed foodId
+                        rawValue = null, // future: store the raw cell text
+                        foodId = null    // future: store computed foodId for easier UI linking
                     )
                 }
                 importIssueDao.insertAll(issueEntities)
@@ -281,6 +373,7 @@ class FoodsCsvImporter @Inject constructor(
                     nutrientsUpserted = nutrientsToUpsert.size,
                     foodNutrientsUpserted = foodNutrients.size,
                     skippedRows = skipped,
+                    // keep behavior: run warningCount currently equals warnMissingGrams
                     warningCount = warnMissingGrams,
                     errorCount = errorCount
                 )

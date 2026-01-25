@@ -43,4 +43,22 @@ interface NutrientDao {
     """
     )
     fun searchWithAliases(q: String, limit: Int): Flow<List<NutrientEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnore(items: List<NutrientEntity>): List<Long>
+
+    @Query("""
+        UPDATE nutrients
+        SET displayName = :displayName,
+            unit = :unit,
+            category = :category
+        WHERE code = :code
+    """)
+    suspend fun updateByCode(
+        code: String,
+        displayName: String,
+        unit: String,
+        category: String
+    )
+
 }

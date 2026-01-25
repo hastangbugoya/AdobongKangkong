@@ -21,7 +21,9 @@ data class DashboardState(
     val blockedFoodId: Long? = null,
 
     // One-shot navigation request consumed by DashboardScreen
-    val navigateToEditFoodId: Long? = null
+    val navigateToEditFoodId: Long? = null,
+
+    val snackbarMessage: String? = null
 )
 
 

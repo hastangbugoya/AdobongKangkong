@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
+import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
@@ -12,6 +13,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -24,8 +26,18 @@ class DashboardViewModel @Inject constructor(
     observeTodayMacrosUseCase: ObserveTodayMacrosUseCase,
     observeTodayLogItemsUseCase: ObserveTodayLogItemsUseCase,
     private val deleteLogEntry: DeleteLogEntryUseCase,
-    private val createLogEntry: CreateLogEntryUseCase
+    private val createLogEntry: CreateLogEntryUseCase,
+    private val syncNutrientCatalog: SyncNutrientCatalogUseCase
 ) : ViewModel() {
+    private val _snackbar = MutableStateFlow<String?>(null)
+    val snackbar = _snackbar.asStateFlow()
+
+    fun devSyncNutrients() {
+        viewModelScope.launch {
+            val r = syncNutrientCatalog()
+            _snackbar.value = "Synced nutrients: +${r.inserted} inserted, ${r.updated} updated, ${r.aliasesUpserted} aliases"
+        }
+    }
 
     private val _overlay = MutableStateFlow(DashboardOverlay())
 
@@ -47,6 +59,10 @@ class DashboardViewModel @Inject constructor(
             SharingStarted.WhileSubscribed(5_000),
             DashboardState()
         )
+
+    fun snackbarShown() {
+        _snackbar.value = null
+    }
 
     fun delete(logId: Long) {
         viewModelScope.launch { deleteLogEntry(logId) }

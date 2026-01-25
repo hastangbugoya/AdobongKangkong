@@ -1,5 +1,7 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,8 +46,10 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     onEditFood: (foodID: Long) -> Unit,
@@ -59,11 +63,20 @@ fun DashboardScreen(
     var showQuickAdd by remember { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
+
     // One-shot navigation request
     LaunchedEffect(state.navigateToEditFoodId) {
         val id = state.navigateToEditFoodId ?: return@LaunchedEffect
         onEditFood(id)
         vm.onEditFoodNavigationHandled()
+    }
+
+    LaunchedEffect(state.snackbarMessage) {
+        val msg = state.snackbarMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        vm.snackbarShown()
     }
 
     // Blocking sheet (shown when CreateLogEntryUseCase.Result.Blocked)
@@ -84,14 +97,10 @@ fun DashboardScreen(
     val targets = state.targets
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("AdobongKangkong") },
-                actions = {
-                    TextButton(onClick = onCreateRecipe) { Text("Recipes") }
-                    TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
-                    TextButton(onClick = onOpenFoods) { Text("Foods") }
-                }
             )
         },
         floatingActionButton = {
@@ -103,7 +112,21 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
+                .combinedClickable(
+                    onClick = {},
+                onLongClick = { vm.devSyncNutrients() }
+            )
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TextButton(onClick = onCreateRecipe) { Text("Recipes") }
+                TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
+                TextButton(onClick = onOpenFoods) { Text("Foods") }
+            }
             Text("Today", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(16.dp))
 
