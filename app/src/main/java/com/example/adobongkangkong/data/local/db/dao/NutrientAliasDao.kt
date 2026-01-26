@@ -45,4 +45,8 @@ interface NutrientAliasDao {
     """
     )
     suspend fun getForNutrients(nutrientIds: List<Long>): List<NutrientAliasEntity>
+
+    @Query("UPDATE nutrient_aliases SET nutrientId = :newId WHERE nutrientId = :oldId")
+    suspend fun reassignAliases(oldId: Long, newId: Long)
+
 }

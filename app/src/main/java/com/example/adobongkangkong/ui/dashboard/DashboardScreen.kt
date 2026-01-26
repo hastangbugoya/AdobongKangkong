@@ -64,7 +64,7 @@ fun DashboardScreen(
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val snackbarHostState = remember { SnackbarHostState() }
-
+    val snackbarMsg by vm.snackbar.collectAsState()
 
     // One-shot navigation request
     LaunchedEffect(state.navigateToEditFoodId) {
@@ -73,8 +73,8 @@ fun DashboardScreen(
         vm.onEditFoodNavigationHandled()
     }
 
-    LaunchedEffect(state.snackbarMessage) {
-        val msg = state.snackbarMessage ?: return@LaunchedEffect
+    LaunchedEffect(snackbarMsg) {
+        val msg = snackbarMsg ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
         vm.snackbarShown()
     }
@@ -112,10 +112,6 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
-                .combinedClickable(
-                    onClick = {},
-                onLongClick = { vm.devSyncNutrients() }
-            )
         ) {
             Row(
                 modifier = Modifier
@@ -127,7 +123,14 @@ fun DashboardScreen(
                 TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
                 TextButton(onClick = onOpenFoods) { Text("Foods") }
             }
-            Text("Today", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Today",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = { vm.devSyncNutrients() }
+                )
+            )
             Spacer(Modifier.height(16.dp))
 
             MacroRow("Calories", totals.caloriesKcal, targets.caloriesKcal, "kcal")

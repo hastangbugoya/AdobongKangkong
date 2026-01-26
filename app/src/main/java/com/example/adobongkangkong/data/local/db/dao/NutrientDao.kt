@@ -61,4 +61,7 @@ interface NutrientDao {
         category: String
     )
 
+    @Query("DELETE FROM nutrients WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
 }

@@ -13,8 +13,9 @@ import javax.inject.Inject
  * - Add missing nutrients
  * - Update existing nutrients by code WITHOUT changing IDs
  * - Ensure built-in aliases exist (for search)
+ * - Self-heal historical code changes via [legacyCodeRedirects]
  *
- * This is intended as a dev tool + safety net during early development.
+ * Intended as a dev tool + safety net during early development.
  */
 class SyncNutrientCatalogUseCase @Inject constructor(
     private val db: NutriDatabase
@@ -25,6 +26,18 @@ class SyncNutrientCatalogUseCase @Inject constructor(
         val aliasesUpserted: Int
     )
 
+    /**
+     * Legacy nutrient code redirects (oldCode -> canonicalCode).
+     *
+     * Example: "VITAMIN_C_MG" -> "VITAMIN_C"
+     *
+     * If both exist, we merge references (food nutrients + aliases) onto the canonical nutrient
+     * and delete the legacy nutrient row.
+     */
+    private val legacyCodeRedirects: Map<String, String> = mapOf(
+        "VITAMIN_C_MG" to "VITAMIN_C"
+    )
+
     suspend operator fun invoke(
         overrideDisplayName: Boolean = true,
         overrideUnit: Boolean = true,
@@ -32,18 +45,21 @@ class SyncNutrientCatalogUseCase @Inject constructor(
     ): Result {
         val nutrientDao = db.nutrientDao()
         val aliasDao = db.nutrientAliasDao()
+        val foodNutrientDao = db.foodNutrientDao()
 
         var inserted = 0
         var updated = 0
         var aliasesUpserted = 0
 
         db.withTransaction {
-            val existing = nutrientDao.getAll()
-            val existingByCode = existing.associateBy { it.code }
 
-            // 1) Insert missing (IGNORE so we don’t replace existing IDs)
+            // 1) Read current state
+            val existingBefore = nutrientDao.getAll()
+            val existingByCodeBefore = existingBefore.associateBy { it.code }
+
+            // 2) Insert missing catalog nutrients FIRST (so canonical codes exist)
             val missing = NutrientCatalog.entries
-                .filter { it.code !in existingByCode }
+                .filter { it.code !in existingByCodeBefore }
                 .map {
                     NutrientEntity(
                         code = it.code,
@@ -58,7 +74,23 @@ class SyncNutrientCatalogUseCase @Inject constructor(
                 inserted += results.count { it != -1L }
             }
 
-            // 2) Update existing rows by code (preserve IDs)
+            // 3) Merge legacy nutrient codes into canonical ones (now canonical rows exist)
+            for ((oldCode, newCode) in legacyCodeRedirects) {
+                val oldId = nutrientDao.getIdByCode(oldCode)
+                val newId = nutrientDao.getIdByCode(newCode)
+
+                if (oldId != null && newId != null && oldId != newId) {
+                    foodNutrientDao.reassignFoodNutrients(oldId, newId)
+                    aliasDao.reassignAliases(oldId, newId)
+                    nutrientDao.deleteById(oldId)
+                }
+            }
+
+            // 4) Re-read after merges so we don't work with stale data
+            val existing = nutrientDao.getAll()
+            val existingByCode = existing.associateBy { it.code }
+
+            // 5) Update existing rows by code (preserve IDs)
             for (entry in NutrientCatalog.entries) {
                 val curr = existingByCode[entry.code] ?: continue
 
@@ -77,7 +109,7 @@ class SyncNutrientCatalogUseCase @Inject constructor(
                 }
             }
 
-            // 3) Upsert aliases (need nutrientId; fetch by code)
+            // 6) Upsert aliases (need nutrientId; fetch by code)
             val aliasEntities = mutableListOf<NutrientAliasEntity>()
             for (entry in NutrientCatalog.entries) {
                 val id = nutrientDao.getIdByCode(entry.code) ?: continue
@@ -97,6 +129,7 @@ class SyncNutrientCatalogUseCase @Inject constructor(
                 aliasesUpserted = aliasEntities.size
             }
         }
+
 
         return Result(inserted, updated, aliasesUpserted)
     }

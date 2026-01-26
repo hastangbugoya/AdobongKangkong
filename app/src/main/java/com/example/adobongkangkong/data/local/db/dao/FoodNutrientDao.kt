@@ -61,4 +61,8 @@ interface FoodNutrientDao {
 
     @Query("DELETE FROM food_nutrients WHERE foodId = :foodId AND nutrientId = :nutrientId")
     suspend fun deleteOne(foodId: Long, nutrientId: Long)
+
+    @Query("UPDATE food_nutrients SET nutrientId = :newId WHERE nutrientId = :oldId")
+    suspend fun reassignFoodNutrients(oldId: Long, newId: Long)
+
 }
