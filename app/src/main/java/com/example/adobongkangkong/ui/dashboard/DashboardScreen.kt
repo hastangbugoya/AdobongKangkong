@@ -1,6 +1,10 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +29,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,8 +53,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -65,6 +71,34 @@ fun DashboardScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarMsg by vm.snackbar.collectAsState()
+
+    val context = LocalContext.current
+    var showDevTransferSheet by remember { mutableStateOf(false) }
+
+    val exportLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/zip")
+        ) { uri: Uri? ->
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    vm.exportTo(out)
+                } ?: run {
+                    // keep it simple: VM snackbar handles messaging
+                    // but we can also show a local snackbar if you want
+                }
+            }
+        }
+
+    val importLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri: Uri? ->
+            if (uri != null) {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    vm.importFrom(input)
+                }
+            }
+        }
 
     // One-shot navigation request
     LaunchedEffect(state.navigateToEditFoodId) {
@@ -93,6 +127,44 @@ fun DashboardScreen(
         }
     }
 
+    val devSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    if (showDevTransferSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showDevTransferSheet = false },
+            sheetState = devSheetState
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("Data Transfer", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(12.dp))
+
+                ListItem(
+                    headlineContent = { Text("Export foods + recipes") },
+                    supportingContent = { Text("Writes a ZIP you can import later.") },
+                    modifier = Modifier.clickable {
+                        showDevTransferSheet = false
+                        exportLauncher.launch("adobongkangkong_export.zip")
+                    }
+                )
+                HorizontalDivider()
+
+                ListItem(
+                    headlineContent = { Text("Import foods + recipes") },
+                    supportingContent = { Text("Imports a ZIP created by this app.") },
+                    modifier = Modifier.clickable {
+                        showDevTransferSheet = false
+                        importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                    }
+                )
+
+                Spacer(Modifier.height(16.dp))
+            }
+        }
+    }
+
+
+
+
     val totals = state.totals
     val targets = state.targets
 
@@ -100,8 +172,19 @@ fun DashboardScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("AdobongKangkong") },
+                title = {
+                    Text(
+                        text = "AdobongKangkong",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = { showDevTransferSheet = true }
+                        )
+                    )
+                }
             )
+
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showQuickAdd = true }) { Text("+") }

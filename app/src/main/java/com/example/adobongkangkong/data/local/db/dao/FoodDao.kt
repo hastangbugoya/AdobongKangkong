@@ -33,4 +33,32 @@ interface FoodDao {
     @Query("SELECT COUNT(*) FROM foods")
     suspend fun countFoods(): Int
 
+    @Query("SELECT * FROM foods ORDER BY isRecipe DESC, name ASC")
+    suspend fun getAll(): List<FoodEntity>
+
+    // Import
+    @Query("SELECT id FROM foods WHERE stableId = :stableId LIMIT 1")
+    suspend fun getIdByStableId(stableId: String): Long?
+
+
+    @Query("""
+        UPDATE foods SET
+          name = :name,
+          brand = :brand,
+          servingSize = :servingSize,
+          servingUnit = :servingUnit,
+          gramsPerServing = :gramsPerServing,
+          isRecipe = :isRecipe
+        WHERE id = :id
+        """)
+    suspend fun updateCore(
+        id: Long,
+        name: String,
+        brand: String?,
+        servingSize: Double,
+        servingUnit: String,
+        gramsPerServing: Double?,
+        isRecipe: Boolean
+    )
+
 }

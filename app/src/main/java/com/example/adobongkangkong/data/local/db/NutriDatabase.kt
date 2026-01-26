@@ -35,7 +35,7 @@ import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
         ImportIssueEntity::class,
         ImportRunEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(DbTypeConverters::class)

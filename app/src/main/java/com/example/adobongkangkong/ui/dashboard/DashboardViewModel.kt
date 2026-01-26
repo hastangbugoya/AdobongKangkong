@@ -2,6 +2,8 @@ package com.example.adobongkangkong.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
+import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
@@ -18,6 +20,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.InputStream
+import java.io.OutputStream
 import java.time.Instant
 import javax.inject.Inject
 
@@ -27,7 +31,9 @@ class DashboardViewModel @Inject constructor(
     observeTodayLogItemsUseCase: ObserveTodayLogItemsUseCase,
     private val deleteLogEntry: DeleteLogEntryUseCase,
     private val createLogEntry: CreateLogEntryUseCase,
-    private val syncNutrientCatalog: SyncNutrientCatalogUseCase
+    private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
+    private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
+    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase
 ) : ViewModel() {
     private val _snackbar = MutableStateFlow<String?>(null)
     val snackbar = _snackbar.asStateFlow()
@@ -120,6 +126,31 @@ class DashboardViewModel @Inject constructor(
                     onSecondary = { dismissBlockingSheet() }
                 )
             )
+        }
+    }
+
+    fun importFrom(input: InputStream) {
+        viewModelScope.launch {
+            try {
+                val r = importFoodsAndRecipes(input)
+                val warnSuffix = if (r.warnings.isNotEmpty()) " (${r.warnings.size} warnings)" else ""
+                _snackbar.value =
+                    "Imported: ${r.foodsInserted} foods (+${r.foodsUpdated} updated), " +
+                            "${r.recipesInserted} recipes (+${r.recipesUpdated} updated)$warnSuffix"
+            } catch (e: Exception) {
+                _snackbar.value = "Import failed: ${e.message ?: "unknown error"}"
+            }
+        }
+    }
+
+    fun exportTo(out: OutputStream) {
+        viewModelScope.launch {
+            try {
+                val r = exportFoodsAndRecipes(out)
+                _snackbar.value = "Exported ${r.foodsExported} foods, ${r.recipesExported} recipes"
+            } catch (e: Exception) {
+                _snackbar.value = "Export failed: ${e.message ?: "unknown error"}"
+            }
         }
     }
 

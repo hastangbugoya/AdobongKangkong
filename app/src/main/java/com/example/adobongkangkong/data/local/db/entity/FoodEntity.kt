@@ -4,10 +4,12 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.adobongkangkong.domain.model.ServingUnit
+import java.util.UUID
 
 @Entity(
     tableName = "foods",
     indices = [
+        Index(value = ["stableId"], unique = true),
         Index(value = ["name"]),
         Index(value = ["isRecipe"]),
     ]
@@ -15,6 +17,12 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 data class FoodEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0, // auto-generated primary key
+
+    /**
+     * Stable identifier used for export/import reconciliation.
+     * This must never change once created.
+     */
+    val stableId: String = UUID.randomUUID().toString(),
 
     val name: String,
     val brand: String? = null,
