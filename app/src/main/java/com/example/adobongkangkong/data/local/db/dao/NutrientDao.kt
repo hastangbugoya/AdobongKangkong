@@ -4,15 +4,14 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
+import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.domain.model.NutrientUnit
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NutrientDao {
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(items: List<NutrientEntity>)
-
     @Query("SELECT * FROM nutrients ORDER BY category ASC, displayName ASC")
     suspend fun getAll(): List<NutrientEntity>
 
@@ -57,11 +56,32 @@ interface NutrientDao {
     suspend fun updateByCode(
         code: String,
         displayName: String,
-        unit: String,
-        category: String
+        unit: NutrientUnit,
+        category: NutrientCategory
     )
 
     @Query("DELETE FROM nutrients WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("SELECT id, code FROM nutrients")
+    suspend fun getIdCodePairs(): List<NutrientIdCodeRow>
+
+    data class NutrientIdCodeRow(val id: Long, val code: String)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnoreAll(items: List<NutrientEntity>): List<Long>
+
+    @Transaction
+    suspend fun upsertAll(items: List<NutrientEntity>) {
+        for (it in items) {
+            updateByCode(
+                code = it.code,
+                displayName = it.displayName,
+                unit = it.unit,
+                category = it.category
+            )
+        }
+        insertIgnoreAll(items)
+    }
 
 }

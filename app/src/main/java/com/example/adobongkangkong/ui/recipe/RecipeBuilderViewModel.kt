@@ -40,30 +40,54 @@ class RecipeBuilderViewModel @Inject constructor(
     private val foodRepo: FoodRepository,
 ) : ViewModel() {
 
+
+    // -----------------------------
+    // Recipe fields (edit/create)
+    // -----------------------------
+
     private val nameFlow = MutableStateFlow("")
-    private val yieldFlow = MutableStateFlow(4.0)
+    private val servingsYieldFlow = MutableStateFlow(4.0)
+
+    /**
+     * Final cooked batch weight in grams (optional).
+     * Used for gram-based logging and "per 100g" preview.
+     */
+    private val totalYieldGramsFlow = MutableStateFlow<Double?>(null)
+
+    // -----------------------------
+    // Add-ingredient flow
+    // -----------------------------
 
     private val queryFlow = MutableStateFlow("")
     private val pickedFoodFlow = MutableStateFlow<Food?>(null)
     private val pickedServingsFlow = MutableStateFlow(1.0)
 
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
+
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
 
     private var editFoodId: Long? = null
 
-    // Overlay
+    // -----------------------------
+    // Overlay (blocking sheet + navigation)
+    // -----------------------------
+
     private val blockingSheetFlow = MutableStateFlow<BlockingSheetModel?>(null)
     private val blockedFoodIdFlow = MutableStateFlow<Long?>(null)
     private val navigateToEditFoodIdFlow = MutableStateFlow<Long?>(null)
+
+    // -----------------------------
+    // Search results + preview
+    // -----------------------------
 
     private val resultsFlow: Flow<List<Food>> =
         queryFlow
             .debounce(150)
             .distinctUntilChanged()
             .flatMapLatest { q ->
-                if (q.isBlank()) flowOf(emptyList()) else searchFoods(q, limit = 50)
+                if (q.isBlank()) flowOf(emptyList())
+                else searchFoods(q, limit = 50)
             }
 
     private val previewFlow: Flow<RecipeMacroPreview> =
@@ -71,19 +95,33 @@ class RecipeBuilderViewModel @Inject constructor(
             ingredientsFlow.map { list -> list.map { it.foodId to it.servings } }
         )
 
+    // -----------------------------
+    // UI state
+    // -----------------------------
+
     val state: StateFlow<RecipeBuilderState> =
         run {
             val leftFlow: Flow<Left> =
                 combine(
                     nameFlow,
-                    yieldFlow,
+                    servingsYieldFlow,
+                    totalYieldGramsFlow,
                     queryFlow,
                     resultsFlow,
                     pickedFoodFlow
-                ) { name, servingsYield, query, results, pickedFood ->
+                ) { arr: Array<Any?> ->
+                    val name = arr[0] as String
+                    val servingsYield = arr[1] as Double
+                    val totalYieldGrams = arr[2] as Double?
+                    val query = arr[3] as String
+                    @Suppress("UNCHECKED_CAST")
+                    val results = arr[4] as List<Food>
+                    val pickedFood = arr[5] as Food?
+
                     Left(
                         name = name,
                         servingsYield = servingsYield,
+                        totalYieldGrams = totalYieldGrams,
                         query = query,
                         results = results,
                         pickedFood = pickedFood
@@ -127,6 +165,7 @@ class RecipeBuilderViewModel @Inject constructor(
                 RecipeBuilderState(
                     name = left.name,
                     servingsYield = left.servingsYield,
+                    totalYieldGrams = left.totalYieldGrams,
 
                     query = left.query,
                     results = left.results,
@@ -152,12 +191,21 @@ class RecipeBuilderViewModel @Inject constructor(
             )
         }
 
+    // -----------------------------
+    // Events
+    // -----------------------------
+
     fun onNameChange(v: String) {
         nameFlow.value = v
     }
 
     fun onYieldChange(v: Double) {
-        yieldFlow.value = v.coerceAtLeast(0.1)
+        servingsYieldFlow.value = v.coerceAtLeast(0.1)
+    }
+
+    fun onTotalYieldGramsChanged(value: Double?) {
+        // Lax: allow null/blank. Clamp negatives to null.
+        totalYieldGramsFlow.value = value?.takeIf { it > 0.0 }
     }
 
     fun onQueryChange(v: String) {
@@ -199,16 +247,20 @@ class RecipeBuilderViewModel @Inject constructor(
         navigateToEditFoodIdFlow.value = null
     }
 
+    /**
+     * Point-of-use enforcement:
+     * If the user is trying to add an ingredient using servings/volume units but the food lacks
+     * grams-per-serving, we block and send them to Food Editor instead of guessing.
+     */
     fun addPickedIngredient() {
         val food = pickedFoodFlow.value ?: return
         val servings = pickedServingsFlow.value
+
         if (servings <= 0.0) {
             errorFlow.value = "Ingredient amount must be > 0."
             return
         }
 
-        // 🔒 Point-of-use enforcement: servings require grams-per-serving for volume units.
-        val gramsPerServing = ServingPolicy.gramsPerServing(food)!!
         if (!ServingPolicy.canUseServings(food)) {
             blockedFoodIdFlow.value = food.id
             blockingSheetFlow.value = BlockingSheetModel(
@@ -252,14 +304,15 @@ class RecipeBuilderViewModel @Inject constructor(
 
     fun save(onDone: () -> Unit) {
         val name = nameFlow.value.trim()
-        val yield = yieldFlow.value
+        val servingsYield = servingsYieldFlow.value
+        val totalYieldGrams = totalYieldGramsFlow.value
         val ingredients = ingredientsFlow.value
 
         if (name.isBlank()) {
             errorFlow.value = "Recipe name is required."
             return
         }
-        if (yield <= 0.0) {
+        if (servingsYield <= 0.0) {
             errorFlow.value = "Servings yield must be > 0."
             return
         }
@@ -279,7 +332,8 @@ class RecipeBuilderViewModel @Inject constructor(
                     createRecipe(
                         RecipeDraft(
                             name = name,
-                            servingsYield = yield,
+                            servingsYield = servingsYield,
+                            totalYieldGrams = totalYieldGrams,
                             ingredients = ingredients.map {
                                 RecipeIngredientDraft(
                                     foodId = it.foodId,
@@ -292,7 +346,8 @@ class RecipeBuilderViewModel @Inject constructor(
                     // ---- Edit ----
                     recipeRepo.updateRecipeByFoodId(
                         foodId = editingFoodId,
-                        servingsYield = yield,
+                        servingsYield = servingsYield,
+                        totalYieldGrams = totalYieldGrams,
                         ingredients = ingredients.map {
                             RecipeIngredientLine(
                                 ingredientFoodId = it.foodId,
@@ -339,7 +394,8 @@ class RecipeBuilderViewModel @Inject constructor(
                 }
 
             nameFlow.value = food?.name ?: nameFlow.value
-            yieldFlow.value = recipe.servingsYield
+            servingsYieldFlow.value = recipe.servingsYield
+            totalYieldGramsFlow.value = recipe.totalYieldGrams
 
             ingredientsFlow.value = ingredients.map {
                 RecipeIngredientUi(
@@ -355,6 +411,7 @@ class RecipeBuilderViewModel @Inject constructor(
 private data class Left(
     val name: String,
     val servingsYield: Double,
+    val totalYieldGrams: Double?,
     val query: String,
     val results: List<Food>,
     val pickedFood: Food?

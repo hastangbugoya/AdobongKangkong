@@ -13,22 +13,19 @@ data class RecipeIngredientUi(
 data class RecipeBuilderState(
     val name: String = "",
     val servingsYield: Double = 4.0,
-
-    // add-ingredient flow
     val query: String = "",
     val results: List<Food> = emptyList(),
     val pickedFood: Food? = null,
     val pickedServings: Double = 1.0,
     val pickedGrams: Double? = null,
-
     val ingredients: List<RecipeIngredientUi> = emptyList(),
+
+    // ✅ add default
+    val totalYieldGrams: Double? = null,
 
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
-
     val preview: RecipeMacroPreview = RecipeMacroPreview(),
-
-    // ✅ overlay / blocking + navigation
     val blockingSheet: BlockingSheetModel? = null,
     val blockedFoodId: Long? = null,
     val navigateToEditFoodId: Long? = null

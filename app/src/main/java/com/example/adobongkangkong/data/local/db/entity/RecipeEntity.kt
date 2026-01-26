@@ -28,8 +28,14 @@ data class RecipeEntity(
 
     val name: String,
 
-    // how many servings this batch yields
+    // how many servings this batch yields (portions)
     val servingsYield: Double,
+
+    /**
+     * Final cooked batch weight in grams.
+     * Used to support logging by grams.
+     */
+    val totalYieldGrams: Double? = null,
 
     val createdAt: Instant = Instant.now()
 )

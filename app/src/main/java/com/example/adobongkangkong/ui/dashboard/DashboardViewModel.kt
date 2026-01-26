@@ -1,12 +1,18 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
+import com.example.adobongkangkong.data.local.db.dao.NutrientDao
+import com.example.adobongkangkong.data.repository.FoodNutritionSnapshotRepositoryImpl
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
+import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
@@ -33,10 +39,55 @@ class DashboardViewModel @Inject constructor(
     private val createLogEntry: CreateLogEntryUseCase,
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
     private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
-    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase
+    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase,
+    private val snapshotRepo: FoodNutritionSnapshotRepository,
+    private val foodNutrientDao: FoodNutrientDao,
+    private val nutrientDao: NutrientDao
 ) : ViewModel() {
     private val _snackbar = MutableStateFlow<String?>(null)
     val snackbar = _snackbar.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val chicken = snapshotRepo.getSnapshot(1001L)
+            val yogurt = snapshotRepo.getSnapshot(1005L)
+
+            val chickenCalPerG = chicken?.nutrientsPerGram?.get(NutrientKey("CALORIES"))
+            val yogurtProteinPerG = yogurt?.nutrientsPerGram?.get(NutrientKey("PROTEIN_G"))
+
+            Log.d("NUTRI_DEBUG", "Chicken CAL per gram = $chickenCalPerG")
+            Log.d("NUTRI_DEBUG", "Yogurt PRO per gram = $yogurtProteinPerG")
+
+            val chicken2 = snapshotRepo.getSnapshot(1001L)
+            Log.d("NUTRI_DEBUG", "chicken exists=${chicken2 != null} gramsPerServing=${chicken2?.gramsPerServing}")
+
+            val keys = chicken2?.nutrientsPerGram?.keys()?.take(20)
+            Log.d("NUTRI_DEBUG", "chicken keys (first 20)=$keys")
+
+            val caloriesKey = NutrientKey("CALORIES")
+            Log.d("NUTRI_DEBUG", "CALORIES per g = ${chicken2?.nutrientsPerGram?.get(caloriesKey)}")
+
+            val codes =
+                (snapshotRepo as? FoodNutritionSnapshotRepositoryImpl)
+                    ?.debugListNutrientCodes()
+
+            Log.d("NUTRI_DEBUG", "nutrient codes = $codes")
+
+            val chickenRows = snapshotRepo.getSnapshot(1001L)
+            Log.d("NUTRI_DEBUG", "chicken full keys = ${chickenRows?.nutrientsPerGram?.keys()}")
+
+            val rows = foodNutrientDao.debugRowsForFood(1001L)
+            Log.d("NUTRI_DEBUG", "Food 1001 DB nutrients = ${rows.joinToString { "${it.code}=${it.amount}(${it.basisType})" }}")
+
+            val caloriesId = nutrientDao.getIdByCode("CALORIES")
+            Log.d("NUTRI_DEBUG", "CALORIES nutrientId=$caloriesId")
+
+            val yogurt2 = snapshotRepo.getSnapshot(1005L)
+            Log.d("NUTRI_DEBUG", "yogurt keys=${yogurt2?.nutrientsPerGram?.keys()}")
+            Log.d("NUTRI_DEBUG", "Yogurt PRO per gram = ${yogurt2?.nutrientsPerGram?.get(NutrientKey("PROTEIN"))}")
+        }
+    }
+
 
     fun devSyncNutrients() {
         viewModelScope.launch {

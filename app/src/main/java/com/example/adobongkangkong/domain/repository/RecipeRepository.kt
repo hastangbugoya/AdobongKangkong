@@ -6,7 +6,8 @@ import com.example.adobongkangkong.domain.model.RecipeDraft
 data class RecipeHeader(
     val recipeId: Long,
     val foodId: Long,
-    val servingsYield: Double
+    val servingsYield: Double,
+    val totalYieldGrams: Double?
 )
 
 data class RecipeIngredientLine(
@@ -23,6 +24,7 @@ interface RecipeRepository {
     suspend fun updateRecipeByFoodId(
         foodId: Long,
         servingsYield: Double,
+        totalYieldGrams: Double?,
         ingredients: List<RecipeIngredientLine>
     )
 }

@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 
 data class MacroNutrientRow(
@@ -21,6 +22,12 @@ data class FoodNutrientWithMetaRow(
     val unit: String,
     val category: String
 )
+
+data class FoodNutrientDebugRow(
+    val code: String,
+    val amount: Double,
+    val basisType: BasisType
+)
 @Dao
 interface FoodNutrientDao {
 
@@ -30,6 +37,8 @@ interface FoodNutrientDao {
     @Query("SELECT * FROM food_nutrients WHERE foodId = :foodId")
     suspend fun getForFood(foodId: Long): List<FoodNutrientEntity>
 
+    @Query("SELECT * FROM food_nutrients WHERE foodId IN (:foodIds)")
+    suspend fun getForFoods(foodIds: List<Long>): List<FoodNutrientEntity>
 
     @Query("DELETE FROM food_nutrients WHERE foodId = :foodId")
     suspend fun deleteForFood(foodId: Long)
@@ -64,5 +73,19 @@ interface FoodNutrientDao {
 
     @Query("UPDATE food_nutrients SET nutrientId = :newId WHERE nutrientId = :oldId")
     suspend fun reassignFoodNutrients(oldId: Long, newId: Long)
+
+
+    @Query(
+        """
+    SELECT n.code AS code,
+           fn.nutrientAmountPerBasis AS amount,
+           fn.basisType AS basisType
+    FROM food_nutrients fn
+    JOIN nutrients n ON n.id = fn.nutrientId
+    WHERE fn.foodId = :foodId
+    ORDER BY n.code
+    """
+    )
+    suspend fun debugRowsForFood(foodId: Long): List<FoodNutrientDebugRow>
 
 }

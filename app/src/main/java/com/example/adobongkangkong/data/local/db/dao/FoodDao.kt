@@ -22,6 +22,9 @@ interface FoodDao {
     @Query("SELECT * FROM foods WHERE id = :id")
     suspend fun getById(id: Long): FoodEntity?
 
+    @Query("SELECT * FROM foods WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<FoodEntity>
+
     @Query("""
         SELECT * FROM foods
         WHERE name LIKE '%' || :query || '%'

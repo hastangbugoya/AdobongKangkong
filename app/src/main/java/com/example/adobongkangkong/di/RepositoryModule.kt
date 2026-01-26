@@ -2,12 +2,14 @@ package com.example.adobongkangkong.di
 
 
 import com.example.adobongkangkong.data.repository.FoodNutrientRepositoryImpl
+import com.example.adobongkangkong.data.repository.FoodNutritionSnapshotRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodRepositoryImpl
 import com.example.adobongkangkong.data.repository.LogRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientAliasRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
+import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
@@ -62,5 +64,11 @@ abstract class RepositoryModule {
     @Binds abstract fun bindNutrientAliasRepository(
         impl: NutrientAliasRepositoryImpl
     ): NutrientAliasRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFoodNutritionSnapshotRepository(
+        impl: FoodNutritionSnapshotRepositoryImpl
+    ): FoodNutritionSnapshotRepository
 
 }

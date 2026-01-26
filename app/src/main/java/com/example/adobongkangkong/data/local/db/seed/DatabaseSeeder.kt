@@ -3,6 +3,7 @@ package com.example.adobongkangkong.data.local.db.seed
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
@@ -141,76 +142,93 @@ class DatabaseSeeder @Inject constructor(
 
         val fn = mutableListOf<FoodNutrientEntity>()
 
-        fun add(foodId: Long, nutrientId: Long, perServing: Double) {
+        fun add(foodId: Long, nutrientId: Long, perServing: Double, basisType: BasisType) {
             fn += FoodNutrientEntity(
                 foodId = foodId, nutrientId = nutrientId, nutrientAmountPerBasis = perServing,
+                basisType = basisType,
             )
         }
 
-        // Chicken breast cooked, per 100g
-        add(1001, CAL, 165.0)
-        add(1001, PRO, 31.0)
-        add(1001, CARB, 0.0)
-        add(1001, FAT, 3.6)
-        add(1001, SOD, 74.0)
+        // -------------------------------
+// Chicken breast cooked, per 100g
+// -------------------------------
+        add(1001, CAL, 165.0, BasisType.PER_100G)
+        add(1001, PRO, 31.0,  BasisType.PER_100G)
+        add(1001, CARB, 0.0,  BasisType.PER_100G)
+        add(1001, FAT, 3.6,   BasisType.PER_100G)
+        add(1001, SOD, 74.0,  BasisType.PER_100G)
 
-        // Jasmine rice cooked, per 1 cup
-        add(1002, CAL, 205.0)
-        add(1002, PRO, 4.3)
-        add(1002, CARB, 44.5)
-        add(1002, FAT, 0.4)
-        add(1002, FIB, 0.6)
-        add(1002, SUG, 0.1)
-        add(1002, SOD, 2.0)
+// -------------------------------
+// Jasmine rice cooked, per 1 cup
+// -------------------------------
+        add(1002, CAL, 205.0, BasisType.PER_SERVING)
+        add(1002, PRO, 4.3,   BasisType.PER_SERVING)
+        add(1002, CARB, 44.5, BasisType.PER_SERVING)
+        add(1002, FAT, 0.4,   BasisType.PER_SERVING)
+        add(1002, FIB, 0.6,   BasisType.PER_SERVING)
+        add(1002, SUG, 0.1,   BasisType.PER_SERVING)
+        add(1002, SOD, 2.0,   BasisType.PER_SERVING)
 
-        // Olive oil, per 1 tbsp
-        add(1003, CAL, 119.0)
-        add(1003, PRO, 0.0)
-        add(1003, CARB, 0.0)
-        add(1003, FAT, 13.5)
-        add(1003, SOD, 0.0)
+// -------------------------------
+// Olive oil, per 1 tbsp
+// -------------------------------
+        add(1003, CAL, 119.0, BasisType.PER_SERVING)
+        add(1003, PRO, 0.0,   BasisType.PER_SERVING)
+        add(1003, CARB, 0.0,  BasisType.PER_SERVING)
+        add(1003, FAT, 13.5,  BasisType.PER_SERVING)
+        add(1003, SOD, 0.0,   BasisType.PER_SERVING)
 
-        // Spaghetti sauce, per 1/2 cup
-        add(1004, CAL, 70.0)
-        add(1004, PRO, 2.0)
-        add(1004, CARB, 12.0)
-        add(1004, FAT, 2.0)
-        add(1004, FIB, 3.0)
-        add(1004, SUG, 7.0)
-        add(1004, SOD, 480.0)
+// -------------------------------
+// Spaghetti sauce, per 1/2 cup
+// -------------------------------
+        add(1004, CAL, 70.0,  BasisType.PER_SERVING)
+        add(1004, PRO, 2.0,   BasisType.PER_SERVING)
+        add(1004, CARB, 12.0, BasisType.PER_SERVING)
+        add(1004, FAT, 2.0,   BasisType.PER_SERVING)
+        add(1004, FIB, 3.0,   BasisType.PER_SERVING)
+        add(1004, SUG, 7.0,   BasisType.PER_SERVING)
+        add(1004, SOD, 480.0, BasisType.PER_SERVING)
 
-        // Greek yogurt nonfat, per 170g
-        add(1005, CAL, 100.0)
-        add(1005, PRO, 17.0)
-        add(1005, CARB, 6.0)
-        add(1005, FAT, 0.0)
-        add(1005, SUG, 6.0)
-        add(1005, SOD, 60.0)
+// -------------------------------
+// Greek yogurt nonfat, per 170g
+// -------------------------------
+        add(1005, CAL, 100.0, BasisType.PER_SERVING)
+        add(1005, PRO, 17.0,  BasisType.PER_SERVING)
+        add(1005, CARB, 6.0,  BasisType.PER_SERVING)
+        add(1005, FAT, 0.0,   BasisType.PER_SERVING)
+        add(1005, SUG, 6.0,   BasisType.PER_SERVING)
+        add(1005, SOD, 60.0,  BasisType.PER_SERVING)
 
-        // Banana, per 1 medium
-        add(1006, CAL, 105.0)
-        add(1006, PRO, 1.3)
-        add(1006, CARB, 27.0)
-        add(1006, FAT, 0.4)
-        add(1006, FIB, 3.1)
-        add(1006, SUG, 14.0)
-        add(1006, SOD, 1.0)
+// -------------------------------
+// Banana, per 1 medium
+// -------------------------------
+        add(1006, CAL, 105.0, BasisType.PER_SERVING)
+        add(1006, PRO, 1.3,   BasisType.PER_SERVING)
+        add(1006, CARB, 27.0, BasisType.PER_SERVING)
+        add(1006, FAT, 0.4,   BasisType.PER_SERVING)
+        add(1006, FIB, 3.1,   BasisType.PER_SERVING)
+        add(1006, SUG, 14.0,  BasisType.PER_SERVING)
+        add(1006, SOD, 1.0,   BasisType.PER_SERVING)
 
-        // Egg, per 1 large
-        add(1007, CAL, 72.0)
-        add(1007, PRO, 6.3)
-        add(1007, CARB, 0.4)
-        add(1007, FAT, 4.8)
-        add(1007, SOD, 71.0)
+// -------------------------------
+// Egg, per 1 large
+// -------------------------------
+        add(1007, CAL, 72.0, BasisType.PER_SERVING)
+        add(1007, PRO, 6.3,  BasisType.PER_SERVING)
+        add(1007, CARB, 0.4, BasisType.PER_SERVING)
+        add(1007, FAT, 4.8,  BasisType.PER_SERVING)
+        add(1007, SOD, 71.0, BasisType.PER_SERVING)
 
-        // Adobong Kangkong (simple) – example per serving
-        add(2001, CAL, 140.0)
-        add(2001, PRO, 4.0)
-        add(2001, CARB, 10.0)
-        add(2001, FAT, 9.0)
-        add(2001, FIB, 4.0)
-        add(2001, SUG, 2.0)
-        add(2001, SOD, 900.0)
+// ----------------------------------------
+// Adobong Kangkong (example), per serving
+// ----------------------------------------
+        add(2001, CAL, 140.0, BasisType.PER_SERVING)
+        add(2001, PRO, 4.0,   BasisType.PER_SERVING)
+        add(2001, CARB, 10.0, BasisType.PER_SERVING)
+        add(2001, FAT, 9.0,   BasisType.PER_SERVING)
+        add(2001, FIB, 4.0,   BasisType.PER_SERVING)
+        add(2001, SUG, 2.0,   BasisType.PER_SERVING)
+        add(2001, SOD, 900.0, BasisType.PER_SERVING)
 
         foodNutrientDao.upsertAll(fn)
     }

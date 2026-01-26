@@ -2,6 +2,7 @@ package com.example.adobongkangkong.domain.export
 
 import androidx.room.withTransaction
 import com.example.adobongkangkong.data.local.db.NutriDatabase
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
@@ -117,11 +118,25 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
             }
 
             // B) Upsert food nutrients (replace per-food for simplicity)
+// B) Upsert food nutrients (replace per-food for simplicity)
             for (f in foods) {
                 val foodId = stableIdToFoodId[f.stableId] ?: continue
 
                 // Replace nutrients for this food (keeps import deterministic)
                 foodNutrientDao.deleteForFood(foodId)
+
+                val gramsPerServing = f.gramsPerServing?.takeIf { it > 0 }
+
+                val basisType = when {
+                    gramsPerServing != null -> BasisType.PER_SERVING
+                    else -> BasisType.PER_100G
+                }
+
+                // Optional warning (preserves your lax import philosophy)
+                if (f.servingUnit != null && gramsPerServing == null) {
+                    warnings +=
+                        "Food '${f.name}' uses serving unit '${f.servingUnit}' but has no grams-per-serving; assuming PER_100G."
+                }
 
                 val rows = mutableListOf<FoodNutrientEntity>()
                 for ((code, amount) in f.nutrientsByCode) {
@@ -133,15 +148,14 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
                     rows += FoodNutrientEntity(
                         foodId = foodId,
                         nutrientId = nutrientId,
-                        nutrientAmountPerBasis = amount
+                        nutrientAmountPerBasis = amount,
+                        basisType = basisType        // ✅ this is the key line
                     )
                 }
 
-                if (rows.isNotEmpty()) {
-                    foodNutrientDao.upsertAll(rows)
-                    foodNutrientsUpserted += rows.size
-                }
+                foodNutrientDao.upsertAll(rows)
             }
+
 
             // C) Upsert recipes, then replace ingredients
             for (r in recipes) {

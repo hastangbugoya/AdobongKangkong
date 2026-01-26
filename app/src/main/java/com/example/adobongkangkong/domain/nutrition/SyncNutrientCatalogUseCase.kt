@@ -102,8 +102,8 @@ class SyncNutrientCatalogUseCase @Inject constructor(
                     nutrientDao.updateByCode(
                         code = entry.code,
                         displayName = newDisplay,
-                        unit = newUnit.name,
-                        category = newCat.name
+                        unit = newUnit,
+                        category = newCat
                     )
                     updated++
                 }

@@ -91,6 +91,7 @@ class FoodNutrientRepositoryImpl @Inject constructor(
                     foodId = foodId,
                     nutrientId = row.nutrient.id,
                     nutrientAmountPerBasis = row.amount,
+                    basisType = row.basisType
                 )
             }
         )
