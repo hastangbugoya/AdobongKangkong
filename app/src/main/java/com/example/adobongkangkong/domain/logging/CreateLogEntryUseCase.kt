@@ -2,6 +2,7 @@ package com.example.adobongkangkong.domain.logging
 
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.model.LogEntry
+import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
@@ -12,6 +13,7 @@ import javax.inject.Inject
 
 class CreateLogEntryUseCase @Inject constructor(
     private val foodRepository: FoodRepository,
+    private val snapshotRepository: FoodNutritionSnapshotRepository,
     private val logRepository: LogRepository,
     private val checkFoodUsable: CheckFoodUsableUseCase
 ) {
@@ -30,7 +32,7 @@ class CreateLogEntryUseCase @Inject constructor(
         val food = foodRepository.getById(foodId)
             ?: return Result.Error("Food not found")
 
-        // Block serving-based usage for volume/container units missing gramsPerServing
+        // Enforce logging rules (volume → grams-per-serving)
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
             gramsPerServing = food.gramsPerServing,
@@ -41,29 +43,33 @@ class CreateLogEntryUseCase @Inject constructor(
             is FoodUsageCheck.Blocked -> return Result.Blocked(check.message)
         }
 
-        val servingsToPersist = when (amountInput) {
-            is AmountInput.ByServings -> amountInput.servings
-            is AmountInput.ByGrams -> {
-                when (food.servingUnit) {
-                    com.example.adobongkangkong.domain.model.ServingUnit.G -> amountInput.grams
-                    else -> {
-                        val gps = food.gramsPerServing
-                            ?: return Result.Blocked("Set grams-per-serving before logging by grams for this unit.")
-                        amountInput.grams / gps
-                    }
-                }
+        // Resolve grams eaten
+        val grams = when (amountInput) {
+            is AmountInput.ByGrams -> amountInput.grams
+            is AmountInput.ByServings -> {
+                val gps = food.gramsPerServing
+                    ?: return Result.Blocked("Set grams-per-serving before logging by servings.")
+                amountInput.servings * gps
             }
         }
 
+        // Load snapshot (per-gram nutrition)
+        val snapshot = snapshotRepository.getSnapshot(food.id)
+            ?: return Result.Error("Nutrition snapshot unavailable")
+
+        // Scale snapshot → actual totals
+        val nutrients = snapshot.nutrientsPerGram
+            ?.scaledBy(grams)
+            ?: return Result.Error("Food nutrition incomplete")
+
+        // Build immutable log entry
         val entry = LogEntry(
-            id = 0L, // assuming Room autogen; adjust if your domain model differs
-            foodId = foodId,
-            servings = servingsToPersist,
-            timestamp = timestamp
+            timestamp = timestamp,
+            foodStableId = food.stableId,
+            itemName = food.name,
+            nutrients = nutrients
         )
 
-        // Your LogRepository.insert returns Unit today :contentReference[oaicite:3]{index=3},
-        // so we can’t return the new row id without adding it.
         logRepository.insert(entry)
 
         return Result.Success(id = 0L)

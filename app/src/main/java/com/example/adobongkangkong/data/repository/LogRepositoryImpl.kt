@@ -1,10 +1,13 @@
 package com.example.adobongkangkong.data.repository
 
+import com.example.adobongkangkong.data.local.db.DbTypeConverters
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
 import com.example.adobongkangkong.data.local.db.dao.TodayLogRow
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
 import com.example.adobongkangkong.domain.model.LogEntry
 import com.example.adobongkangkong.domain.model.TodayLogItem
+import com.example.adobongkangkong.domain.nutrition.MacroKeys
+import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.repository.LogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -12,11 +15,12 @@ import java.time.Instant
 import javax.inject.Inject
 
 class LogRepositoryImpl @Inject constructor(
-    private val dao: LogEntryDao
+    private val dao: LogEntryDao,
+    private val converters: DbTypeConverters
 ) : LogRepository {
 
     override suspend fun insert(entry: LogEntry) {
-        dao.insert(entry.toEntity())
+        dao.insert(entry.toEntity(converters))
     }
 
     override fun observeRange(
@@ -24,44 +28,49 @@ class LogRepositoryImpl @Inject constructor(
         endExclusive: Instant
     ): Flow<List<LogEntry>> =
         dao.observeRange(startInclusive, endExclusive)
-            .map { list -> list.map { it.toDomain() } }
-
+            .map { entities -> entities.map { it.toDomain(converters) } }
 
     override fun observeTodayItems(
         startInclusive: Instant,
         endExclusive: Instant
     ): Flow<List<TodayLogItem>> =
         dao.observeTodayLogRows(startInclusive, endExclusive)
-            .map { rows -> rows.map { it.toDomain() } }
+            .map { rows -> rows.map { it.toDomain(converters) } }
 
     override suspend fun deleteById(logId: Long) {
         dao.deleteById(logId)
     }
-
-    private fun TodayLogRow.toDomain(): TodayLogItem =
-        TodayLogItem(
-            logId = logId,
-            timestamp = timestamp,
-            foodName = foodName,
-            servings = servings,
-            caloriesKcal = caloriesKcal ?: 0.0
-        )
-
 }
 
-internal fun LogEntry.toEntity() =
+private fun TodayLogRow.toDomain(converters: DbTypeConverters): TodayLogItem {
+    // TodayLogRow stores snapshot totals as JSON
+    val nutrients: NutrientMap = converters.nutrientMapFromJson(nutrientsJson)
+
+    return TodayLogItem(
+        logId = logId,
+        timestamp = timestamp,
+        itemName = itemName,
+        caloriesKcal = nutrients[MacroKeys.CALORIES],
+        proteinG = nutrients[MacroKeys.PROTEIN],
+        carbsG = nutrients[MacroKeys.CARBS],
+        fatG = nutrients[MacroKeys.FAT],
+    )
+}
+
+private fun LogEntry.toEntity(converters: DbTypeConverters): LogEntryEntity =
     LogEntryEntity(
         id = id,
-        foodId = foodId,
-        servings = servings,
         timestamp = timestamp,
+        itemName = itemName,
+        foodStableId = foodStableId,
+        nutrientsJson = converters.nutrientMapToJson(nutrients),
     )
 
-private fun LogEntryEntity.toDomain() =
+private fun LogEntryEntity.toDomain(converters: DbTypeConverters): LogEntry =
     LogEntry(
         id = id,
-        foodId = foodId,
-        servings = servings,
-        timestamp = timestamp
+        timestamp = timestamp,
+        itemName = itemName,
+        foodStableId = foodStableId,
+        nutrients = converters.nutrientMapFromJson(nutrientsJson),
     )
-

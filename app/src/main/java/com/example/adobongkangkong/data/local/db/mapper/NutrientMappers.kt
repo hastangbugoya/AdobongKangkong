@@ -2,19 +2,23 @@ package com.example.adobongkangkong.data.local.db.mapper
 
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.domain.model.Nutrient
-import com.example.adobongkangkong.domain.model.NutrientCategory
-import com.example.adobongkangkong.domain.model.NutrientUnit
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.nutrition.NutrientMap
 
-/**
- * Maps database NutrientEntity → domain Nutrient.
- */
+
+fun NutrientMap.toCodeMap(): Map<String, Double> =
+    entries().associate { (k, v) -> k.value to v }
+
+fun NutrientMap.Companion.fromCodeMap(map: Map<String, Double>): NutrientMap =
+    NutrientMap(map.mapKeys { NutrientKey(it.key) })
+
 fun NutrientEntity.toDomain(): Nutrient =
     Nutrient(
         id = id,
         code = code,
         displayName = displayName,
-        unit = NutrientUnit.fromDb(unit.name),
-        category = NutrientCategory.fromDb(category.name)
+        unit = unit,
+        category = category
     )
 
 fun Nutrient.toEntity(): NutrientEntity =
@@ -25,4 +29,3 @@ fun Nutrient.toEntity(): NutrientEntity =
         unit = unit,
         category = category
     )
-

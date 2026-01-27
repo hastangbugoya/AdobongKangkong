@@ -14,7 +14,7 @@ data class NutrientRowUi(
 
 data class FoodEditorState(
     val foodId: Long? = null,
-
+    val stableId: String? = null,
     val name: String = "",
     val brand: String = "",
     val servingSize: String = "1.0",

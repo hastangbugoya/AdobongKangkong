@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.NutrientAliasDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
+import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.data.local.db.mapper.toDomain
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.repository.NutrientRepository
@@ -21,21 +22,29 @@ class NutrientRepositoryImpl @Inject constructor(
 
         return nutrientDao.searchWithAliases(qLike, limit = 200)
             .mapLatest { entities ->
-                val nutrients = entities.map { it.toDomain() }
-                val ids = nutrients.map { it.id }
-                val aliases = if (ids.isEmpty()) emptyList() else aliasDao.getForNutrients(ids)
 
-                val aliasesById: Map<Long, List<String>> =
+                val nutrients = entities.map { it.toDomain() }
+
+                val ids = nutrients.map { it.id }
+
+                val aliases =
+                    if (ids.isEmpty()) emptyList()
+                    else aliasDao.getForNutrients(ids)
+
+                val aliasesById =
                     aliases.groupBy { it.nutrientId }
                         .mapValues { (_, list) ->
-                            // Use aliasDisplay for scoring (or aliasKey; both are fine)
                             list.map { it.aliasDisplay }
                         }
 
                 nutrients
-                    .map { n ->
+                    .map { n: Nutrient ->
                         val a = aliasesById[n.id].orEmpty()
-                        val score = NutrientSearchScorer.score(query, n, a)
+                        val score = NutrientSearchScorer.score(
+                            query = query,
+                            nutrient = n,
+                            aliases = a
+                        )
                         n to score
                     }
                     .filter { (_, score) -> score > 0 }

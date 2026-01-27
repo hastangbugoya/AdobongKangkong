@@ -1,24 +1,30 @@
 package com.example.adobongkangkong.domain.usecase
 
-import com.example.adobongkangkong.domain.model.LogEntry
-import com.example.adobongkangkong.domain.repository.LogRepository
+import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
+import com.example.adobongkangkong.domain.logging.model.AmountInput
 import java.time.Instant
 import javax.inject.Inject
 
+/**
+ * Legacy-friendly wrapper for logging a food by servings.
+ *
+ * Uses [CreateLogEntryUseCase] so logs are persisted as immutable snapshot totals
+ * (name + stableId + nutrients), not recomputed later.
+ */
 class LogFoodUseCase @Inject constructor(
-    private val repository: LogRepository
+    private val createLogEntry: CreateLogEntryUseCase
 ) {
+
     suspend operator fun invoke(
         foodId: Long,
         servings: Double,
         timestamp: Instant = Instant.now()
     ) {
-        repository.insert(
-            LogEntry(
-                foodId = foodId,
-                servings = servings,
-                timestamp = timestamp
-            )
+        createLogEntry.execute(
+            foodId = foodId,
+            timestamp = timestamp,
+            amountInput = AmountInput.ByServings(servings)
         )
+        // If you want to surface warnings/errors, change return type and bubble up Result.
     }
 }

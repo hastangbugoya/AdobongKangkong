@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.local.db.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 
@@ -15,17 +16,12 @@ data class NutrientTotalRow(
 interface SummaryDao {
 
     @Query("""
-        SELECT n.code AS nutrientCode,
-               n.unit AS unit,
-               SUM(fn.nutrientAmountPerBasis * le.servings) AS totalAmount
-        FROM log_entries le
-        JOIN food_nutrients fn ON fn.foodId = le.foodId
-        JOIN nutrients n ON n.id = fn.nutrientId
-        WHERE le.timestamp >= :startInclusive AND le.timestamp < :endExclusive
-        GROUP BY n.code, n.unit
-    """)
-    fun observeTotalsByNutrientCode(
+  SELECT * FROM log_entries
+  WHERE timestamp >= :startInclusive AND timestamp < :endExclusive
+  ORDER BY timestamp DESC
+""")
+    fun observeRange(
         startInclusive: Instant,
         endExclusive: Instant
-    ): Flow<List<NutrientTotalRow>>
+    ): Flow<List<LogEntryEntity>>
 }

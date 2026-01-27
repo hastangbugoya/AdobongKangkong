@@ -14,10 +14,8 @@ import java.time.Instant
 data class TodayLogRow(
     val logId: Long,
     val timestamp: Instant,
-    val foodId: Long,
-    val foodName: String,
-    val servings: Double,
-    val caloriesKcal: Double?
+    val itemName: String,
+    val nutrientsJson: String
 )
 
 @Dao
@@ -38,25 +36,20 @@ interface LogEntryDao {
 
     /**
      * Optimized projection for dashboard list.
+     *
+     * NOTE: no joins. This stays valid even if foods/food_nutrients change or are deleted.
      */
     @Query("""
-        SELECT 
-            le.id AS logId,
-            le.timestamp AS timestamp,
-            le.foodId AS foodId,
-            f.name AS foodName,
-            le.servings AS servings,
-            (fn.nutrientAmountPerBasis * le.servings) AS caloriesKcal
-        FROM log_entries le
-        JOIN foods f ON f.id = le.foodId
-        LEFT JOIN nutrients n ON n.code = 'CALORIES'
-        LEFT JOIN food_nutrients fn 
-            ON fn.foodId = le.foodId 
-           AND fn.nutrientId = n.id
-        WHERE le.timestamp >= :startInclusive 
-          AND le.timestamp < :endExclusive
-        ORDER BY le.timestamp DESC
-    """)
+    SELECT
+        le.id AS logId,
+        le.timestamp AS timestamp,
+        le.itemName AS itemName,
+        le.nutrientsJson AS nutrientsJson
+    FROM log_entries le
+    WHERE le.timestamp >= :startInclusive
+      AND le.timestamp < :endExclusive
+    ORDER BY le.timestamp DESC
+""")
     fun observeTodayLogRows(
         startInclusive: Instant,
         endExclusive: Instant

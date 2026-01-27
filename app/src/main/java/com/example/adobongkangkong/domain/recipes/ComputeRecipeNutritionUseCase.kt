@@ -6,38 +6,37 @@ import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotReposi
 import javax.inject.Inject
 
 /**
- * Computes recipe nutrition from ingredient servings using food nutrition snapshots.
+ * Computes recipe nutrition using domain nutrition snapshots.
  *
- * Import is lax:
- * - Missing foods, grams-per-serving, or nutrients become warnings.
- * - Computation continues using 0 for missing pieces.
- *
- * Correctness is enforced at point-of-use:
- * - perServing is only produced if servingsYield is valid.
- * - perCookedGram is only produced if totalYieldGrams is valid.
+ * Design principles:
+ * - Import is lax → warn instead of failing.
+ * - Enforce correctness at point-of-use.
+ * - All math is done using per-gram normalized snapshots.
  */
 class ComputeRecipeNutritionUseCase @Inject constructor(
     private val snapshotRepo: FoodNutritionSnapshotRepository
 ) {
 
     /**
-     * Loads snapshots for all ingredient foods and computes recipe totals + derived views.
-     *
-     * Warnings are returned for any missing or invalid data.
+     * Loads food snapshots in batch and computes full recipe nutrition.
      */
     suspend operator fun invoke(recipe: Recipe): RecipeNutritionResult {
-        // Batch load snapshots for all food IDs referenced by ingredients.
-        val foodIds = recipe.ingredients.map { it.foodId }.distinct()
-        val foodsById: Map<Long, FoodNutritionSnapshot> = snapshotRepo.getSnapshots(foodIds.toSet())
+        val foodIds = recipe.ingredients.map { it.foodId }.toSet()
+        val foodsById = snapshotRepo.getSnapshots(foodIds)
 
-        return computeWithSnapshots(recipe = recipe, foodsById = foodsById)
+        return computeWithSnapshots(
+            recipe = recipe,
+            foodsById = foodsById
+        )
     }
 
     /**
-     * Pure computation step that keeps the existing warning behavior.
+     * Pure computation step.
      *
-     * This is useful for tests (you can pass a fake foodsById map),
-     * while [invoke] remains the production path that loads snapshots.
+     * This is split out for:
+     * - unit testing
+     * - preview / simulation
+     * - reuse by other flows (import validation, etc.)
      */
     internal fun computeWithSnapshots(
         recipe: Recipe,
@@ -55,26 +54,26 @@ class ComputeRecipeNutritionUseCase @Inject constructor(
                 return@fold acc
             }
 
-            val food = foodsById[foodId]
-            if (food == null) {
+            val snapshot = foodsById[foodId]
+            if (snapshot == null) {
                 warnings += RecipeNutritionWarning.MissingFood(foodId)
                 return@fold acc
             }
 
-            val gramsPerServing = food.gramsPerServing
+            val gramsPerServing = snapshot.gramsPerServing
             if (gramsPerServing == null || gramsPerServing <= 0.0) {
                 warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
                 return@fold acc
             }
 
-            val nutrientsPerGram = food.nutrientsPerGram
+            val nutrientsPerGram = snapshot.nutrientsPerGram
             if (nutrientsPerGram == null) {
                 warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
                 return@fold acc
             }
 
-            val ingredientGrams = servings * gramsPerServing
-            acc + nutrientsPerGram.scaledBy(ingredientGrams)
+            val grams = servings * gramsPerServing
+            acc + nutrientsPerGram.scaledBy(grams)
         }
 
         val servingsYield = recipe.servingsYield

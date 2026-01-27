@@ -1,18 +1,12 @@
 package com.example.adobongkangkong.ui.dashboard
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
-import com.example.adobongkangkong.data.local.db.dao.NutrientDao
-import com.example.adobongkangkong.data.repository.FoodNutritionSnapshotRepositoryImpl
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
-import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
-import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
@@ -31,6 +25,18 @@ import java.io.OutputStream
 import java.time.Instant
 import javax.inject.Inject
 
+/**
+ * Dashboard screen state holder.
+ *
+ * Responsibilities:
+ * - Exposes today's macro totals and logged items as a single [DashboardState] stream.
+ * - Handles user intents for logging/deleting entries.
+ * - Runs dev-only actions (nutrient sync) and import/export flows, reporting results via snackbar text.
+ *
+ * Domain rules honored here:
+ * - Import is lax (warnings returned), but correctness is enforced at point-of-use.
+ * - Logging by servings can be blocked when a food requires grams-per-serving (volume-based entry).
+ */
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     observeTodayMacrosUseCase: ObserveTodayMacrosUseCase,
@@ -39,62 +45,11 @@ class DashboardViewModel @Inject constructor(
     private val createLogEntry: CreateLogEntryUseCase,
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
     private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
-    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase,
-    private val snapshotRepo: FoodNutritionSnapshotRepository,
-    private val foodNutrientDao: FoodNutrientDao,
-    private val nutrientDao: NutrientDao
+    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase
 ) : ViewModel() {
+
     private val _snackbar = MutableStateFlow<String?>(null)
     val snackbar = _snackbar.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            val chicken = snapshotRepo.getSnapshot(1001L)
-            val yogurt = snapshotRepo.getSnapshot(1005L)
-
-            val chickenCalPerG = chicken?.nutrientsPerGram?.get(NutrientKey("CALORIES"))
-            val yogurtProteinPerG = yogurt?.nutrientsPerGram?.get(NutrientKey("PROTEIN_G"))
-
-            Log.d("NUTRI_DEBUG", "Chicken CAL per gram = $chickenCalPerG")
-            Log.d("NUTRI_DEBUG", "Yogurt PRO per gram = $yogurtProteinPerG")
-
-            val chicken2 = snapshotRepo.getSnapshot(1001L)
-            Log.d("NUTRI_DEBUG", "chicken exists=${chicken2 != null} gramsPerServing=${chicken2?.gramsPerServing}")
-
-            val keys = chicken2?.nutrientsPerGram?.keys()?.take(20)
-            Log.d("NUTRI_DEBUG", "chicken keys (first 20)=$keys")
-
-            val caloriesKey = NutrientKey("CALORIES")
-            Log.d("NUTRI_DEBUG", "CALORIES per g = ${chicken2?.nutrientsPerGram?.get(caloriesKey)}")
-
-            val codes =
-                (snapshotRepo as? FoodNutritionSnapshotRepositoryImpl)
-                    ?.debugListNutrientCodes()
-
-            Log.d("NUTRI_DEBUG", "nutrient codes = $codes")
-
-            val chickenRows = snapshotRepo.getSnapshot(1001L)
-            Log.d("NUTRI_DEBUG", "chicken full keys = ${chickenRows?.nutrientsPerGram?.keys()}")
-
-            val rows = foodNutrientDao.debugRowsForFood(1001L)
-            Log.d("NUTRI_DEBUG", "Food 1001 DB nutrients = ${rows.joinToString { "${it.code}=${it.amount}(${it.basisType})" }}")
-
-            val caloriesId = nutrientDao.getIdByCode("CALORIES")
-            Log.d("NUTRI_DEBUG", "CALORIES nutrientId=$caloriesId")
-
-            val yogurt2 = snapshotRepo.getSnapshot(1005L)
-            Log.d("NUTRI_DEBUG", "yogurt keys=${yogurt2?.nutrientsPerGram?.keys()}")
-            Log.d("NUTRI_DEBUG", "Yogurt PRO per gram = ${yogurt2?.nutrientsPerGram?.get(NutrientKey("PROTEIN"))}")
-        }
-    }
-
-
-    fun devSyncNutrients() {
-        viewModelScope.launch {
-            val r = syncNutrientCatalog()
-            _snackbar.value = "Synced nutrients: +${r.inserted} inserted, ${r.updated} updated, ${r.aliasesUpserted} aliases"
-        }
-    }
 
     private val _overlay = MutableStateFlow(DashboardOverlay())
 
@@ -134,9 +89,21 @@ class DashboardViewModel @Inject constructor(
     }
 
     /**
-     * Called by your Quick Add / Log UI when user confirms logging by servings.
+     * Dev-only: sync nutrient catalog + aliases (triggered via long press).
+     */
+    fun devSyncNutrients() {
+        viewModelScope.launch {
+            val r = syncNutrientCatalog()
+            _snackbar.value =
+                "Synced nutrients: +${r.inserted} inserted, ${r.updated} updated, ${r.aliasesUpserted} aliases"
+        }
+    }
+
+    /**
+     * Called when user confirms logging by servings.
+     *
      * If the food is blocked (missing grams-per-serving for volume units),
-     * we show a blocking sheet instead of creating a log entry.
+     * shows a blocking sheet that routes the user to edit the food.
      */
     fun logFoodByServings(foodId: Long, servings: Double) {
         viewModelScope.launch {
@@ -151,7 +118,7 @@ class DashboardViewModel @Inject constructor(
                 is CreateLogEntryUseCase.Result.Blocked ->
                     showMissingGramsSheet(foodId = foodId, message = result.message)
                 is CreateLogEntryUseCase.Result.Error -> {
-                    // TODO: snackbar/toast if you have an app-level message system
+                    _snackbar.value = "Log failed: ${result.message}"
                 }
             }
         }
@@ -204,7 +171,6 @@ class DashboardViewModel @Inject constructor(
             }
         }
     }
-
 }
 
 private data class DashboardOverlay(

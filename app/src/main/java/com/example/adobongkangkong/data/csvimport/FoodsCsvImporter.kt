@@ -272,17 +272,26 @@ class FoodsCsvImporter @Inject constructor(
         var warnDuplicateCuResolved = 0 // for notes only (run warningCount remains warnMissingGrams)
         var errorCount = 0
 
+
+
+
+
+
+
+
+
+
         for (i in 1 until lines.size) {
             val row = CsvParser.parseLine(lines[i])
 
-            val name = cell(row, headerIndex, "food")?.trim().orEmpty()
+            val name = cellNormalized(row, headerIndex, "food")?.trim().orEmpty()
             if (name.isBlank()) {
                 skipped++
                 continue
             }
 
-            val servRaw = cell(row, headerIndex, "serv")
-            val weightRaw = cell(row, headerIndex, "Weight")
+            val servRaw = cellNormalized(row, headerIndex, "serv")
+            val weightRaw = cellNormalized(row, headerIndex, "weight")
 
             val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
             val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
@@ -303,53 +312,136 @@ class FoodsCsvImporter @Inject constructor(
                 servingSize = servingSize,
                 servingUnit = servingUnit,
                 servingsPerPackage = null,
-                gramsPerServing = parsedWeight.grams, // may be null
+                gramsPerServing = parsedWeight.grams, // ✅ Strawberry "144g" becomes 144.0 now
                 isRecipe = false
             )
 
-            // Decide basis once per row; apply to all nutrient cells
             val basisType = decideBasisType(parsedWeight.grams)
 
-            for ((csvHeader, nutrientId) in nutrientIdByHeader) {
-                val raw = cellNormalized(row, headerIndex, csvHeader) ?: continue
-                val amount =parseAmount(raw) ?: continue
-                if (csvHeader == "cal" && name.contains("chicken", ignoreCase = true)) {
-                    Log.d("NUTRI_DEBUG", "Chicken cal raw='$raw' parsed=${raw.toDoubleOrNull()}")
-                }
-                val amountStr = when {
-                    csvHeader == "Cu" && hasCuDuplicate -> {
-                        val chosen = pickCuValue(row, cuPositions, i, issues)
-                        // Track note count only when a warning was actually added for this row.
-                        // (We treat this as a separate note; not part of run.warningCount.)
-                        if (issues.lastOrNull()?.first == i &&
-                            issues.lastOrNull()?.second == ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED
-                        ) {
-                            warnDuplicateCuResolved++
-                        }
-                        chosen
+            for ((headerKey, nutrientId) in nutrientIdByHeader) {
+                val raw = cellNormalized(row, headerIndex, headerKey) ?: continue
+                val amount = parseAmount(raw) ?: continue
+
+                // Handle duplicate Cu columns by choosing the first non-empty Cu value
+                val finalAmount = if (headerKey == "cu" && hasCuDuplicate) {
+                    val chosen = pickCuValue(row, cuPositions, i, issues)
+                    if (
+                        issues.lastOrNull()?.first == i &&
+                        issues.lastOrNull()?.second == ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED
+                    ) {
+                        warnDuplicateCuResolved++
                     }
-                    else -> cellNormalized(row, headerIndex, csvHeader)?.trim()
-                }
-
-                val amt = amountStr?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
-
-                if (csvHeader == "cal" && name.contains("chicken", ignoreCase = true)) {
-                    android.util.Log.d(
-                        "CSV_DEBUG",
-                        "Chicken cal debug: raw='$raw' parsed=$amount headerIndex(cal)=${headerIndex["cal"]}"
-                    )
-                }
-
-                if (amt == null) continue
+                    parseAmount(chosen ?: "") // chosen is a string, parse it
+                } else {
+                    amount
+                } ?: continue
 
                 foodNutrients += FoodNutrientEntity(
                     foodId = foodId,
                     nutrientId = nutrientId,
-                    nutrientAmountPerBasis = amt,
+                    nutrientAmountPerBasis = finalAmount,
                     basisType = basisType
                 )
             }
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//        for (i in 1 until lines.size) {
+//            val row = CsvParser.parseLine(lines[i])
+//
+//            val name = cell(row, headerIndex, "food")?.trim().orEmpty()
+//            if (name.isBlank()) {
+//                skipped++
+//                continue
+//            }
+//
+//            val servRaw = cell(row, headerIndex, "serv")
+//            val weightRaw = cell(row, headerIndex, "Weight")
+//
+//            val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
+//            val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
+//
+//            // Warn but import anyway if volume-like serving unit requires grams-per-serving and it is missing.
+//            if (servingUnit.requiresGramsPerServing() && parsedWeight.grams == null) {
+//                issues.warn(i, ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
+//                warnMissingGrams++
+//            }
+//
+//            val servingSize = 1.0
+//            val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
+//
+//            foods += FoodEntity(
+//                id = foodId,
+//                name = name,
+//                brand = null,
+//                servingSize = servingSize,
+//                servingUnit = servingUnit,
+//                servingsPerPackage = null,
+//                gramsPerServing = parsedWeight.grams, // may be null
+//                isRecipe = false
+//            )
+//
+//            // Decide basis once per row; apply to all nutrient cells
+//            val basisType = decideBasisType(parsedWeight.grams)
+//
+//            for ((csvHeader, nutrientId) in nutrientIdByHeader) {
+//                val raw = cellNormalized(row, headerIndex, csvHeader) ?: continue
+//                val amount =parseAmount(raw) ?: continue
+//                if (csvHeader == "cal" && name.contains("chicken", ignoreCase = true)) {
+//                    Log.d("NUTRI_DEBUG", "Chicken cal raw='$raw' parsed=${raw.toDoubleOrNull()}")
+//                }
+//                val amountStr = when {
+//                    csvHeader == "Cu" && hasCuDuplicate -> {
+//                        val chosen = pickCuValue(row, cuPositions, i, issues)
+//                        // Track note count only when a warning was actually added for this row.
+//                        // (We treat this as a separate note; not part of run.warningCount.)
+//                        if (issues.lastOrNull()?.first == i &&
+//                            issues.lastOrNull()?.second == ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED
+//                        ) {
+//                            warnDuplicateCuResolved++
+//                        }
+//                        chosen
+//                    }
+//                    else -> cellNormalized(row, headerIndex, csvHeader)?.trim()
+//                }
+//
+//                val amt = amountStr?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+//
+//                if (csvHeader == "cal" && name.contains("chicken", ignoreCase = true)) {
+//                    android.util.Log.d(
+//                        "CSV_DEBUG",
+//                        "Chicken cal debug: raw='$raw' parsed=$amount headerIndex(cal)=${headerIndex["cal"]}"
+//                    )
+//                }
+//
+//                if (amt == null) continue
+//
+//                foodNutrients += FoodNutrientEntity(
+//                    foodId = foodId,
+//                    nutrientId = nutrientId,
+//                    nutrientAmountPerBasis = amt,
+//                    basisType = basisType
+//                )
+//            }
+//        }
 
         if (warnMissingGrams > 0) {
             notes += "Imported $warnMissingGrams foods missing grams-per-serving for a non-weight serving unit. These foods will be BLOCKED when logging/recipes by servings until you set grams-per-serving."

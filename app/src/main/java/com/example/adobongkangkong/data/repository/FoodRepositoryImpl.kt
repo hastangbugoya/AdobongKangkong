@@ -35,5 +35,6 @@ private fun FoodEntity.toDomain(): Food =
         servingUnit = servingUnit,
         gramsPerServing = gramsPerServing,
         servingsPerPackage = servingsPerPackage,
-        isRecipe = isRecipe
+        isRecipe = isRecipe,
+        stableId = stableId
     )

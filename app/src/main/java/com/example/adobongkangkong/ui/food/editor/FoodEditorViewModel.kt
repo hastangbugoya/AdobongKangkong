@@ -1,9 +1,5 @@
 package com.example.adobongkangkong.ui.food.editor
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,26 +14,33 @@ import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import java.util.UUID
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import javax.inject.Inject
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
+/**
+ * Food editor state holder.
+ *
+ * Key rule: Food.stableId is generated ONCE for new foods and then persists forever.
+ * This allows logs/import/export to remain stable even if Room primary keys change.
+ */
 @HiltViewModel
 class FoodEditorViewModel @Inject constructor(
     private val getData: GetFoodEditorDataUseCase,
     private val searchNutrients: SearchNutrientsUseCase,
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
     private val nutrientAliasRepo: NutrientAliasRepository,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FoodEditorState())
@@ -47,8 +50,11 @@ class FoodEditorViewModel @Inject constructor(
     private val nutrientQueryFlow = MutableStateFlow("")
 
     private val aliasSheetMessageFlow = MutableStateFlow<String?>(null)
-
     val aliasSheetMessage: StateFlow<String?> = aliasSheetMessageFlow
+
+    private val aliasSheetNutrientIdFlow = MutableStateFlow<Long?>(null)
+    private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
+    val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
 
     @OptIn(FlowPreview::class)
     private val nutrientResultsFlow =
@@ -58,37 +64,39 @@ class FoodEditorViewModel @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { q ->
                 if (q.isBlank()) flowOf(emptyList())
-                else searchNutrients(q, limit = 80) // MUST be Flow<List<Nutrient>>
+                else searchNutrients(q, limit = 80) // Flow<List<Nutrient>>
             }
-
-
-    private val aliasSheetNutrientIdFlow = MutableStateFlow<Long?>(null)
-    private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
-
-    val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
 
     val selectedAliases: StateFlow<List<String>> =
         aliasSheetNutrientIdFlow
-            .flatMapLatest { id: Long? ->
+            .flatMapLatest { id ->
                 if (id == null) flowOf(emptyList())
                 else nutrientAliasRepo.observeAliases(id)
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * Loads editor data for an existing food, or initializes defaults for a new food.
+     * For new foods, a stableId is generated once and stored in state.
+     */
     fun load(foodId: Long?, initialName: String?) {
-        // idempotent-ish: only load once
-        if (_state.value.foodId != null || (_state.value.name.isNotBlank()) || foodId == null && initialName != null) {
-            // allow new food to prefill name once
-        }
+        // If already loaded for this foodId, do nothing.
+        val current = _state.value
+        if (current.foodId == foodId && (foodId != null)) return
+
         viewModelScope.launch {
             val data = getData(foodId)
-            val s = _state.value
-
             val food = data.food
             val rows = data.nutrients
 
-            _state.value = s.copy(
+            val stableId =
+                food?.stableId
+                    ?: current.stableId
+                    ?: UUID.randomUUID().toString()
+
+            _state.value = current.copy(
                 foodId = foodId,
+                stableId = stableId,
                 name = food?.name ?: (initialName ?: ""),
                 brand = food?.brand.orEmpty(),
                 servingSize = food?.servingSize?.toString() ?: "1.0",
@@ -161,15 +169,18 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
-        fun parseDoubleOrNull(x: String): Double? = x.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+        fun parseDoubleOrNull(x: String): Double? =
+            x.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
 
         val servingSize = parseDoubleOrNull(s.servingSize) ?: 1.0
         val gramsPerServing = parseDoubleOrNull(s.gramsPerServing)
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
-        // New custom food id policy:
-        // If foodId is null, generate with currentTimeMillis().
-        val id = s.foodId ?: System.currentTimeMillis()
+        // IMPORTANT:
+        // - For new foods: id = 0L so Room auto-generates.
+        // - stableId must be generated once and persisted.
+        val id = s.foodId ?: 0L
+        val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
         val food = Food(
             id = id,
@@ -179,7 +190,8 @@ class FoodEditorViewModel @Inject constructor(
             servingUnit = s.servingUnit,
             gramsPerServing = gramsPerServing,
             servingsPerPackage = servingsPerPackage,
-            isRecipe = false
+            isRecipe = false,
+            stableId = stableId
         )
 
         val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->
@@ -189,7 +201,7 @@ class FoodEditorViewModel @Inject constructor(
             FoodNutrientRow(
                 nutrient = Nutrient(
                     id = ui.nutrientId,
-                    code = "", // not needed for editor save
+                    code = "", // editor doesn’t need code to save
                     displayName = ui.name,
                     unit = ui.unit,
                     category = ui.category
@@ -201,7 +213,7 @@ class FoodEditorViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            update { it.copy(isSaving = true, errorMessage = null) }
+            update { it.copy(isSaving = true, errorMessage = null, stableId = stableId) }
             try {
                 val savedId = saveFoodWithNutrients(food, rows)
                 onDone(savedId)
@@ -211,10 +223,6 @@ class FoodEditorViewModel @Inject constructor(
                 update { it.copy(isSaving = false) }
             }
         }
-    }
-
-    private fun update(block: (FoodEditorState) -> FoodEditorState) {
-        _state.value = block(_state.value)
     }
 
     fun openAliasSheet(nutrientId: Long, nutrientName: String) {
@@ -228,30 +236,26 @@ class FoodEditorViewModel @Inject constructor(
         aliasSheetMessageFlow.value = null
     }
 
-
     fun addAlias(alias: String) {
         val id = aliasSheetNutrientIdFlow.value ?: return
         viewModelScope.launch {
             when (nutrientAliasRepo.addAlias(id, alias)) {
-                AliasAddResult.Added -> {
-                    aliasSheetMessageFlow.value = null
-                }
-                AliasAddResult.IgnoredEmpty -> {
-                    aliasSheetMessageFlow.value = "Alias is empty."
-                }
-                AliasAddResult.IgnoredDuplicate -> {
-                    aliasSheetMessageFlow.value = "Alias already exists."
-                }
+                AliasAddResult.Added -> aliasSheetMessageFlow.value = null
+                AliasAddResult.IgnoredEmpty -> aliasSheetMessageFlow.value = "Alias is empty."
+                AliasAddResult.IgnoredDuplicate -> aliasSheetMessageFlow.value = "Alias already exists."
             }
         }
     }
-
 
     fun deleteAlias(alias: String) {
         val id = aliasSheetNutrientIdFlow.value ?: return
         viewModelScope.launch {
             nutrientAliasRepo.deleteAlias(id, alias)
         }
+    }
+
+    private fun update(block: (FoodEditorState) -> FoodEditorState) {
+        _state.value = block(_state.value)
     }
 
     init {
@@ -272,7 +276,4 @@ class FoodEditorViewModel @Inject constructor(
             }
         }
     }
-
-
 }
-

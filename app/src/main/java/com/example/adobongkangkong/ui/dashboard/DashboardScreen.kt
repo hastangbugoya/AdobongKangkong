@@ -235,12 +235,11 @@ fun DashboardScreen(
                     items(state.todayItems, key = { it.logId }) { item ->
                         ListItem(
                             headlineContent = {
-                                Text(item.foodName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(item.itemName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             },
                             supportingContent = {
                                 Text(
                                     "${formatTime(item.timestamp)} • " +
-                                            "${item.servings.round2()} servings • " +
                                             "${item.caloriesKcal.round0()} kcal"
                                 )
                             },

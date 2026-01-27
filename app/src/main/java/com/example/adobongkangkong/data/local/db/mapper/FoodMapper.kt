@@ -7,6 +7,7 @@ internal fun Food.toEntity() = FoodEntity(
     id = id,
     name = name,
     brand = brand,
+    stableId = stableId,
     servingSize = servingSize,
     servingUnit = servingUnit,
     gramsPerServing = gramsPerServing,
@@ -16,6 +17,7 @@ internal fun Food.toEntity() = FoodEntity(
 
 internal fun FoodEntity.toDomain() = Food(
     id = id,
+    stableId = stableId,
     name = name,
     brand = brand,
     servingSize = servingSize,
