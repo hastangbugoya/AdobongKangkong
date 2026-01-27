@@ -118,7 +118,6 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
             }
 
             // B) Upsert food nutrients (replace per-food for simplicity)
-// B) Upsert food nutrients (replace per-food for simplicity)
             for (f in foods) {
                 val foodId = stableIdToFoodId[f.stableId] ?: continue
 

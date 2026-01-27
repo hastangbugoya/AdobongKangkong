@@ -9,6 +9,7 @@ enum class ImportSeverity { WARNING, ERROR }
 
 enum class ImportIssueCode {
     MISSING_FOOD_NAME,
+    BAD_WEIGHT_FORMAT,
     INVALID_SERVING_UNIT,
     MISSING_GRAMS_PER_SERVING_FOR_VOLUME,
     INVALID_NUMBER,
