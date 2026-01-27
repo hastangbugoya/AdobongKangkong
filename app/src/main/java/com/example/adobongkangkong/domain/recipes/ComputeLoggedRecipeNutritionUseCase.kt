@@ -26,7 +26,7 @@ class ComputeLoggedRecipeNutritionUseCase @Inject constructor() {
             is RecipeLogInput.ByCookedGrams -> {
                 val grams = input.grams
                 if (grams <= 0.0) {
-                    warnings += RecipeNutritionWarning.InvalidTotalYieldGrams(grams.toInt())
+                    warnings += RecipeNutritionWarning.InvalidTotalYieldGrams(grams)
                     return LoggedRecipeNutritionResult(
                         totals = NutrientMap.EMPTY,
                         warnings = warnings,
@@ -55,7 +55,7 @@ class ComputeLoggedRecipeNutritionUseCase @Inject constructor() {
             is RecipeLogInput.ByServings -> {
                 val servings = input.servings
                 if (servings <= 0.0) {
-                    warnings += RecipeNutritionWarning.InvalidServingsYield(servings.toInt())
+                    warnings += RecipeNutritionWarning.InvalidServingsYield(servings)
                     return LoggedRecipeNutritionResult(
                         totals = NutrientMap.EMPTY,
                         warnings = warnings,

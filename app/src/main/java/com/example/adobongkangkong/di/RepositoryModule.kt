@@ -1,19 +1,25 @@
 package com.example.adobongkangkong.di
 
 
+import com.example.adobongkangkong.data.repository.FoodGoalFlagsRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodNutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodNutritionSnapshotRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodRepositoryImpl
 import com.example.adobongkangkong.data.repository.LogRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientAliasRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientRepositoryImpl
+import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
+import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
+import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
+import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
 import dagger.Binds
 import dagger.Module
@@ -70,5 +76,24 @@ abstract class RepositoryModule {
     abstract fun bindFoodNutritionSnapshotRepository(
         impl: FoodNutritionSnapshotRepositoryImpl
     ): FoodNutritionSnapshotRepository
+
+
+    @Binds
+    @Singleton
+    abstract fun bindRecipeBatchLookupRepository (
+        impl: RecipeBatchLookupRepositoryImpl
+    ): RecipeBatchLookupRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRecipeDraftLookupRepository(
+        impl: RecipeDraftLookupRepositoryImpl
+    ): RecipeDraftLookupRepository
+
+    @Binds
+    abstract fun bindFoodGoalFlagsRepository(
+        impl: FoodGoalFlagsRepositoryImpl
+    ): FoodGoalFlagsRepository
+
 
 }

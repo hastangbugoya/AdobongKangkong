@@ -19,8 +19,8 @@ class LogRepositoryImpl @Inject constructor(
     private val converters: DbTypeConverters
 ) : LogRepository {
 
-    override suspend fun insert(entry: LogEntry) {
-        dao.insert(entry.toEntity(converters))
+    override suspend fun insert(entry: LogEntry): Long {
+        return dao.insert(entry.toEntity(converters))
     }
 
     override fun observeRange(

@@ -105,24 +105,24 @@ class DashboardViewModel @Inject constructor(
      * If the food is blocked (missing grams-per-serving for volume units),
      * shows a blocking sheet that routes the user to edit the food.
      */
-    fun logFoodByServings(foodId: Long, servings: Double) {
-        viewModelScope.launch {
-            val result = createLogEntry.execute(
-                foodId = foodId,
-                timestamp = Instant.now(),
-                amountInput = AmountInput.ByServings(servings)
-            )
-
-            when (result) {
-                is CreateLogEntryUseCase.Result.Success -> Unit
-                is CreateLogEntryUseCase.Result.Blocked ->
-                    showMissingGramsSheet(foodId = foodId, message = result.message)
-                is CreateLogEntryUseCase.Result.Error -> {
-                    _snackbar.value = "Log failed: ${result.message}"
-                }
-            }
-        }
-    }
+//    fun logFoodByServings(foodId: Long, servings: Double) {
+//        viewModelScope.launch {
+//            val result = createLogEntry.execute(
+//                foodId = foodId,
+//                timestamp = Instant.now(),
+//                amountInput = AmountInput.ByServings(servings)
+//            )
+//
+//            when (result) {
+//                is CreateLogEntryUseCase.Result.Success -> Unit
+//                is CreateLogEntryUseCase.Result.Blocked ->
+//                    showMissingGramsSheet(foodId = foodId, message = result.message)
+//                is CreateLogEntryUseCase.Result.Error -> {
+//                    _snackbar.value = "Log failed: ${result.message}"
+//                }
+//            }
+//        }
+//    }
 
     private fun showMissingGramsSheet(foodId: Long, message: String) {
         _overlay.update {

@@ -152,8 +152,8 @@ fun RecipeBuilderScreen(
                 Text("Picked: ${picked.name}", style = MaterialTheme.typography.titleSmall)
 
                 OutlinedTextField(
-                    value = state.pickedServings.toString(),
-                    onValueChange = { raw -> raw.toDoubleOrNull()?.let(vm::onPickedServingsChange) },
+                    value = state.pickedServingsText,
+                    onValueChange ={ vm::onPickedServingsChange },
                     label = { Text("Servings") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -162,6 +162,11 @@ fun RecipeBuilderScreen(
 
                 state.pickedGrams?.let { grams ->
                     Text("≈ ${"%,.1f".format(grams)} g", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(Modifier.width(8.dp))
+                state.pickedFood?.servingsPerPackage?.let { spp ->
+                    Text("$spp servings per package", style = MaterialTheme.typography.bodySmall)
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

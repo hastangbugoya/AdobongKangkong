@@ -17,6 +17,7 @@ data class RecipeBuilderState(
     val results: List<Food> = emptyList(),
     val pickedFood: Food? = null,
     val pickedServings: Double = 1.0,
+    val pickedServingsText: String = "",
     val pickedGrams: Double? = null,
     val ingredients: List<RecipeIngredientUi> = emptyList(),
 
@@ -28,6 +29,6 @@ data class RecipeBuilderState(
     val preview: RecipeMacroPreview = RecipeMacroPreview(),
     val blockingSheet: BlockingSheetModel? = null,
     val blockedFoodId: Long? = null,
-    val navigateToEditFoodId: Long? = null
+    val navigateToEditFoodId: Long? = null,
 )
 

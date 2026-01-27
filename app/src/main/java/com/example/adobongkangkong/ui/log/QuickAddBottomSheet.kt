@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import kotlin.math.max
@@ -56,6 +57,8 @@ fun QuickAddBottomSheet(
                 label = { Text("Search foods") },
                 singleLine = true
             )
+
+
 
             Spacer(Modifier.height(12.dp))
 
@@ -108,14 +111,21 @@ fun QuickAddBottomSheet(
                     SelectedFoodPanel(
                         food = state.selectedFood!!,
                         servings = state.servings,
-                        servingUnitAmount = state.servingUnitAmount ?: state.selectedFood!!.servingSize,
+                        servingUnitAmount = state.servingUnitAmount
+                            ?: state.selectedFood!!.servingSize,
                         gramsAmount = state.gramsAmount,
+                        inputMode = state.inputMode,
+                        batches = state.batches,
+                        selectedBatchId = state.selectedBatchId,
+                        onBatchSelected = vm::onBatchSelected,
+                        onCreateBatch = vm::openCreateBatchDialog,
                         onBack = vm::clearSelection,
                         onServingsChanged = vm::onServingsChanged,
                         onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
                         onGramsChanged = vm::onGramsChanged,
                         onPackage = vm::onPackageClicked,
-                        onSave = { vm.save(onDone = onDismiss) }
+                        onSave = { vm.save(onDone = onDismiss) },
+                        errorMessage = state.errorMessage
                     )
 
                     Spacer(Modifier.height(12.dp))
@@ -123,6 +133,17 @@ fun QuickAddBottomSheet(
             }
 
             Spacer(Modifier.height(12.dp))
+
+            if (state.isCreateBatchDialogOpen) {
+                CreateBatchDialog(
+                    yieldGramsText = state.yieldGramsText,
+                    servingsYieldText = state.servingsYieldText,
+                    onYieldChange = vm::onYieldGramsTextChange,
+                    onServingsYieldChange = vm::onServingsYieldTextChange,
+                    onDismiss = vm::closeCreateBatchDialog,
+                    onConfirm = vm::createBatchForSelectedRecipe
+                )
+            }
         }
     }
 
@@ -171,6 +192,12 @@ private fun SelectedFoodPanel(
     servings: Double,
     servingUnitAmount: Double,
     gramsAmount: Double?,
+    inputMode: InputMode,
+    batches: List<BatchSummary>,
+    selectedBatchId: Long?,
+    errorMessage: String?,
+    onBatchSelected: (Long?) -> Unit,
+    onCreateBatch: () -> Unit,
     onBack: () -> Unit,
     onServingsChanged: (Double) -> Unit,
     onServingUnitAmountChanged: (Double) -> Unit,
@@ -214,10 +241,11 @@ private fun SelectedFoodPanel(
 
     // Grams input if available
     val canLogGrams = food.gramsPerServingResolved() != null
+    val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
     if (canLogGrams) {
         NumberField(
             label = "Grams (g)",
-            value = gramsAmount ?: (servings * (food.gramsPerServingResolved()!!)),
+            value = gramsAmount ?: gramsDefault,
             onValue = onGramsChanged
         )
     }
@@ -237,14 +265,59 @@ private fun SelectedFoodPanel(
         Spacer(Modifier.height(12.dp))
     }
 
+    if (food.isRecipe) {
+
+        Spacer(Modifier.height(16.dp))
+
+        Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
+
+        Spacer(Modifier.height(8.dp))
+
+        BatchSelector(
+            batches = batches,
+            selectedBatchId = selectedBatchId,
+            onSelected = onBatchSelected,
+            onCreate = onCreateBatch
+        )
+
+        Spacer(Modifier.height(12.dp))
+    }
+
+    val isLoggingByGrams = inputMode == InputMode.GRAMS
+
+    val isLogEnabled =
+        !food.isRecipe ||
+                !isLoggingByGrams ||
+                selectedBatchId != null
+
+    errorMessage?.let { msg ->
+        Spacer(Modifier.height(8.dp))
+        Text(
+            msg,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+
+    if (food.isRecipe && isLoggingByGrams && selectedBatchId == null && errorMessage == null) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Select or create a cooked batch to log by grams.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
     Button(
         onClick = onSave,
+        enabled = isLogEnabled,
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
     ) {
         Text("Log")
     }
+
 }
 
 @Composable
@@ -288,6 +361,120 @@ private fun NumberField(
         modifier = Modifier.fillMaxWidth()
     )
 }
+
+@Composable
+private fun BatchSelector(
+    batches: List<BatchSummary>,
+    selectedBatchId: Long?,
+    onSelected: (Long?) -> Unit,
+    onCreate: () -> Unit
+) {
+    Column {
+
+        if (batches.isEmpty()) {
+            Text(
+                "No cooked batches yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedButton(onClick = onCreate) {
+                Text("Create cooked batch")
+            }
+            return
+        }
+
+        var expanded by remember { mutableStateOf(false) }
+
+        val selected =
+            batches.firstOrNull { it.batchId == selectedBatchId }
+
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                selected?.let {
+                    "Batch: ${it.cookedYieldGrams.clean()} g"
+                } ?: "Select batch"
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            batches.forEach { batch ->
+                DropdownMenuItem(
+                    text = {
+                        Text("${batch.cookedYieldGrams.clean()} g")
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(batch.batchId)
+                    }
+                )
+            }
+
+            Divider()
+
+            DropdownMenuItem(
+                text = { Text("➕ New cooked batch") },
+                onClick = {
+                    expanded = false
+                    onCreate()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreateBatchDialog(
+    yieldGramsText: String,
+    servingsYieldText: String,
+    onYieldChange: (String) -> Unit,
+    onServingsYieldChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New cooked batch") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = yieldGramsText,
+                    onValueChange = onYieldChange,
+                    label = { Text("Cooked yield (grams)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = servingsYieldText,
+                    onValueChange = onServingsYieldChange,
+                    label = { Text("Servings used (optional)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Create") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
 
 private fun Double.clean(): String =
     if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this)

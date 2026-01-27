@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.local.db
 
 import androidx.room.TypeConverter
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.domain.model.LogUnit
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
@@ -44,4 +45,20 @@ class DbTypeConverters {
     fun nutrientMapFromJson(raw: String?): NutrientMap =
         if (raw.isNullOrBlank()) NutrientMap.EMPTY
         else NutrientMap.fromCodeMap(json.decodeFromString(raw))
+
+
+    // Instant <-> Long (epoch millis)
+//    @TypeConverter
+//    fun instantToLong(value: Instant?): Long? = value?.toEpochMilli()
+
+//    @TypeConverter
+//    fun longToInstant(value: Long?): Instant? = value?.let(Instant::ofEpochMilli)
+
+    // LogUnit <-> String
+    @TypeConverter
+    fun logUnitToString(value: LogUnit?): String? = value?.name
+
+    @TypeConverter
+    fun stringToLogUnit(value: String?): LogUnit =
+        value?.let { runCatching { LogUnit.valueOf(it) }.getOrNull() } ?: LogUnit.ITEM
 }

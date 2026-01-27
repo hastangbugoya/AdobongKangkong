@@ -5,8 +5,8 @@ sealed interface RecipeNutritionWarning {
     data object MissingServingsYield : RecipeNutritionWarning
     data object MissingTotalYieldGrams : RecipeNutritionWarning
 
-    data class InvalidServingsYield(val value: Int) : RecipeNutritionWarning
-    data class InvalidTotalYieldGrams(val value: Int) : RecipeNutritionWarning
+    data class InvalidServingsYield(val value: Double) : RecipeNutritionWarning
+    data class InvalidTotalYieldGrams(val value: Double) : RecipeNutritionWarning
 
     data class MissingFood(val foodId: Long) : RecipeNutritionWarning
 

@@ -40,7 +40,6 @@ class RecipeBuilderViewModel @Inject constructor(
     private val foodRepo: FoodRepository,
 ) : ViewModel() {
 
-
     // -----------------------------
     // Recipe fields (edit/create)
     // -----------------------------
@@ -50,7 +49,7 @@ class RecipeBuilderViewModel @Inject constructor(
 
     /**
      * Final cooked batch weight in grams (optional).
-     * Used for gram-based logging and "per 100g" preview.
+     * Used for gram-based logging and "per cooked gram" style computations later.
      */
     private val totalYieldGramsFlow = MutableStateFlow<Double?>(null)
 
@@ -60,7 +59,24 @@ class RecipeBuilderViewModel @Inject constructor(
 
     private val queryFlow = MutableStateFlow("")
     private val pickedFoodFlow = MutableStateFlow<Food?>(null)
+
+    /**
+     * Canonical numeric servings value used when the user taps "Add".
+     */
     private val pickedServingsFlow = MutableStateFlow(1.0)
+
+    /**
+     * Raw text backing the Servings TextField.
+     *
+     * ## Why this exists (future debugging):
+     * Binding a numeric TextField directly to `Double.toString()` creates a feedback loop:
+     * keyboard input -> parse -> reformat -> set TextField value -> IME tries to “fix” it.
+     * Symptoms include cursor jumps and “backspace adds zeros”.
+     *
+     * Solution: keep the TextField state as **String**, allow partial numeric strings while typing
+     * (e.g. "", "1", "1.", "1.2"), and only update the Double when parsing succeeds.
+     */
+    private val pickedServingsTextFlow = MutableStateFlow("1.0")
 
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
 
@@ -99,8 +115,25 @@ class RecipeBuilderViewModel @Inject constructor(
     // UI state
     // -----------------------------
 
+    /**
+     * Builds [RecipeBuilderState] from internal flows.
+     *
+     * ## Why we “group” combines (future debugging):
+     * Some kotlinx.coroutines versions do not provide typed `combine()` overloads above a certain
+     * arity (often 5). When you try `combine(f1,f2,f3,f4,f5,f6) { a,b,c,d,e,f -> ... }`,
+     * Kotlin may resolve to the vararg overload:
+     *
+     *     combine(vararg flows) { values: Array<Any?> -> ... }
+     *
+     * which causes compile errors like:
+     * "SuspendFunction6 ... was expected SuspendFunction1<Array<Any?>,...>"
+     *
+     * Fix: either use the `Array<Any?>` overload intentionally (leftFlow), or group combines into
+     * smaller typed chunks (rightFlow).
+     */
     val state: StateFlow<RecipeBuilderState> =
         run {
+            // Left: explicitly use the Array<Any?> overload (safe + stable).
             val leftFlow: Flow<Left> =
                 combine(
                     nameFlow,
@@ -128,20 +161,30 @@ class RecipeBuilderViewModel @Inject constructor(
                     )
                 }
 
+            // Right: group into 3 + 3 to avoid combine(6) typed overload issues.
+            val rightAFlow: Flow<RightA> =
+                combine(pickedServingsFlow, pickedServingsTextFlow, ingredientsFlow) { s, sText, ing ->
+                    RightA(
+                        pickedServings = s,
+                        pickedServingsText = sText,
+                        ingredients = ing
+                    )
+                }
+
+            val rightBFlow: Flow<RightB> =
+                combine(previewFlow, isSavingFlow, errorFlow) { preview, isSaving, error ->
+                    RightB(preview = preview, isSaving = isSaving, error = error)
+                }
+
             val rightFlow: Flow<RightBase> =
-                combine(
-                    pickedServingsFlow,
-                    ingredientsFlow,
-                    previewFlow,
-                    isSavingFlow,
-                    errorFlow
-                ) { pickedServings, ingredients, preview, isSaving, error ->
+                combine(rightAFlow, rightBFlow) { a, b ->
                     RightBase(
-                        pickedServings = pickedServings,
-                        ingredients = ingredients,
-                        preview = preview,
-                        isSaving = isSaving,
-                        error = error
+                        pickedServings = a.pickedServings,
+                        pickedServingsText = a.pickedServingsText,
+                        ingredients = a.ingredients,
+                        preview = b.preview,
+                        isSaving = b.isSaving,
+                        error = b.error
                     )
                 }
 
@@ -169,8 +212,10 @@ class RecipeBuilderViewModel @Inject constructor(
 
                     query = left.query,
                     results = left.results,
+
                     pickedFood = left.pickedFood,
                     pickedServings = right.pickedServings,
+                    pickedServingsText = right.pickedServingsText,
                     pickedGrams = pickedGrams,
 
                     ingredients = right.ingredients,
@@ -204,7 +249,6 @@ class RecipeBuilderViewModel @Inject constructor(
     }
 
     fun onTotalYieldGramsChanged(value: Double?) {
-        // Lax: allow null/blank. Clamp negatives to null.
         totalYieldGramsFlow.value = value?.takeIf { it > 0.0 }
     }
 
@@ -216,26 +260,57 @@ class RecipeBuilderViewModel @Inject constructor(
         errorFlow.value = null
     }
 
+    /**
+     * TextField handler for the servings input.
+     *
+     * Accepts partial numeric strings while typing. Updates [pickedServingsFlow] only when parsing
+     * succeeds. This is the key to fixing “wonky” numeric input.
+     */
+    fun onPickedServingsTextChange(raw: String) {
+        if (!raw.matches(Regex("""^\d*([.]\d*)?$"""))) return
+
+        pickedServingsTextFlow.value = raw
+
+        raw.toDoubleOrNull()?.let { parsed ->
+            // Keep Double in sync when user finishes a valid number.
+            pickedServingsFlow.value = max(0.0, parsed)
+        }
+    }
+
     fun pickFood(food: Food) {
         pickedFoodFlow.value = food
         pickedServingsFlow.value = 1.0
+        pickedServingsTextFlow.value = "1.0"
         errorFlow.value = null
     }
 
     fun clearPickedFood() {
         pickedFoodFlow.value = null
         pickedServingsFlow.value = 1.0
+        pickedServingsTextFlow.value = "1.0"
     }
 
+    /**
+     * Used by +/- buttons (non-text input). Keep the text field synced.
+     */
     fun onPickedServingsChange(v: Double) {
-        pickedServingsFlow.value = max(0.0, v)
+        val newVal = max(0.0, v)
+        pickedServingsFlow.value = newVal
+        pickedServingsTextFlow.value = newVal.toString()
     }
 
+    /**
+     * If you support grams entry, derive servings when grams-per-serving is known.
+     * Keep the text field synced so the UI doesn't “snap back”.
+     */
     fun onPickedGramsChange(grams: Double) {
         val food = pickedFoodFlow.value ?: return
         val g = food.gramsPerServingResolved() ?: return
         if (g <= 0.0) return
-        pickedServingsFlow.value = (grams / g).coerceAtLeast(0.0)
+
+        val servings = (grams / g).coerceAtLeast(0.0)
+        pickedServingsFlow.value = servings
+        pickedServingsTextFlow.value = servings.toString()
     }
 
     fun dismissBlockingSheet() {
@@ -249,8 +324,8 @@ class RecipeBuilderViewModel @Inject constructor(
 
     /**
      * Point-of-use enforcement:
-     * If the user is trying to add an ingredient using servings/volume units but the food lacks
-     * grams-per-serving, we block and send them to Food Editor instead of guessing.
+     * If the food lacks grams-per-serving and user is working in "servings" units,
+     * route them to Food Editor rather than guessing.
      */
     fun addPickedIngredient() {
         val food = pickedFoodFlow.value ?: return
@@ -277,7 +352,6 @@ class RecipeBuilderViewModel @Inject constructor(
             return
         }
 
-        // ✅ Actually add the ingredient
         val next = ingredientsFlow.value.toMutableList()
         next.add(
             RecipeIngredientUi(
@@ -291,6 +365,7 @@ class RecipeBuilderViewModel @Inject constructor(
         // Reset add-ingredient UI
         pickedFoodFlow.value = null
         pickedServingsFlow.value = 1.0
+        pickedServingsTextFlow.value = "1.0"
         queryFlow.value = ""
         errorFlow.value = null
     }
@@ -328,7 +403,6 @@ class RecipeBuilderViewModel @Inject constructor(
                 val editingFoodId = editFoodId
 
                 if (editingFoodId == null) {
-                    // ---- Create ----
                     createRecipe(
                         RecipeDraft(
                             name = name,
@@ -343,7 +417,6 @@ class RecipeBuilderViewModel @Inject constructor(
                         )
                     )
                 } else {
-                    // ---- Edit ----
                     recipeRepo.updateRecipeByFoodId(
                         foodId = editingFoodId,
                         servingsYield = servingsYield,
@@ -379,6 +452,7 @@ class RecipeBuilderViewModel @Inject constructor(
         // Reset "add ingredient" UI state
         pickedFoodFlow.value = null
         pickedServingsFlow.value = 1.0
+        pickedServingsTextFlow.value = "1.0"
         queryFlow.value = ""
 
         viewModelScope.launch {
@@ -417,8 +491,21 @@ private data class Left(
     val pickedFood: Food?
 )
 
+private data class RightA(
+    val pickedServings: Double,
+    val pickedServingsText: String,
+    val ingredients: List<RecipeIngredientUi>
+)
+
+private data class RightB(
+    val preview: RecipeMacroPreview,
+    val isSaving: Boolean,
+    val error: String?
+)
+
 private data class RightBase(
     val pickedServings: Double,
+    val pickedServingsText: String,
     val ingredients: List<RecipeIngredientUi>,
     val preview: RecipeMacroPreview,
     val isSaving: Boolean,

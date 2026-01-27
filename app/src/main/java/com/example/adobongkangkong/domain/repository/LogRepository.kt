@@ -7,7 +7,7 @@ import java.time.Instant
 
 interface LogRepository {
 
-    suspend fun insert(entry: LogEntry)
+    suspend fun insert(entry: LogEntry): Long
 
     fun observeRange(
         startInclusive: Instant,

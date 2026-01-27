@@ -21,7 +21,8 @@ data class TodayLogRow(
 @Dao
 interface LogEntryDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entry: LogEntryEntity): Long
 
     @Query("""
@@ -57,4 +58,10 @@ interface LogEntryDao {
 
     @Query("DELETE FROM log_entries WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("SELECT * FROM log_entries ORDER BY timestamp DESC LIMIT :limit")
+    fun observeRecent(limit: Int = 50): Flow<List<LogEntryEntity>>
+
+    @Query("SELECT * FROM log_entries WHERE id = :id")
+    suspend fun getById(id: Long): LogEntryEntity?
 }

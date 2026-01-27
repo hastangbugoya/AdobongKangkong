@@ -28,7 +28,14 @@ data class FoodEditorState(
     val nutrientSearchResults: List<NutrientSearchResultUi> = emptyList(),
 
     val isSaving: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+
+    // Flags (stored separately from FoodEntity)
+    val favorite: Boolean = false,
+    val eatMore: Boolean = false,
+    val limit: Boolean = false,
+    val isLbDialogOpen: Boolean = false,
+    val lbInputText: String = "",
 )
 
 data class NutrientSearchResultUi(

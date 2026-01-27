@@ -9,6 +9,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
@@ -40,6 +41,7 @@ class FoodEditorViewModel @Inject constructor(
     private val searchNutrients: SearchNutrientsUseCase,
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
     private val nutrientAliasRepo: NutrientAliasRepository,
+    private val flagsRepo: FoodGoalFlagsRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -83,8 +85,8 @@ class FoodEditorViewModel @Inject constructor(
         // If already loaded for this foodId, do nothing.
         val current = _state.value
         if (current.foodId == foodId && (foodId != null)) return
-
         viewModelScope.launch {
+            val flags = if (foodId != null) flagsRepo.get(foodId) else null
             val data = getData(foodId)
             val food = data.food
             val rows = data.nutrients
@@ -111,7 +113,10 @@ class FoodEditorViewModel @Inject constructor(
                         category = r.nutrient.category,
                         amount = r.amount.toString()
                     )
-                }
+                },
+                favorite = flags?.favorite ?: false,
+                eatMore = flags?.eatMore ?: false,
+                limit = flags?.limit ?: false,
             )
         }
     }
@@ -122,6 +127,12 @@ class FoodEditorViewModel @Inject constructor(
     fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v) }
     fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServing = v) }
     fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v) }
+
+    // Flags
+    fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v) }
+    fun onEatMoreChange(v: Boolean) = update { it.copy(eatMore = v) }
+    fun onLimitChange(v: Boolean) = update { it.copy(limit = v) }
+
 
     fun onNutrientAmountChange(nutrientId: Long, amount: String) {
         update { s ->
@@ -216,6 +227,13 @@ class FoodEditorViewModel @Inject constructor(
             update { it.copy(isSaving = true, errorMessage = null, stableId = stableId) }
             try {
                 val savedId = saveFoodWithNutrients(food, rows)
+                // Save flags separately
+                flagsRepo.setFlags(
+                    foodId = savedId,
+                    favorite = s.favorite,
+                    eatMore = s.eatMore,
+                    limit = s.limit
+                )
                 onDone(savedId)
             } catch (t: Throwable) {
                 update { it.copy(errorMessage = t.message ?: "Failed to save food.") }
@@ -256,6 +274,51 @@ class FoodEditorViewModel @Inject constructor(
 
     private fun update(block: (FoodEditorState) -> FoodEditorState) {
         _state.value = block(_state.value)
+    }
+
+    fun openLbDialog() = update {
+        it.copy(isLbDialogOpen = true, lbInputText = "")
+    }
+
+    fun closeLbDialog() = update {
+        it.copy(isLbDialogOpen = false)
+    }
+
+    fun onLbInputChange(v: String) = update {
+        it.copy(lbInputText = v)
+    }
+
+    fun confirmLbToGrams() {
+        val raw = state.value.lbInputText
+        val pounds = raw.toPoundsOrNull()
+            ?: run {
+                update { it.copy(errorMessage = "Enter pounds like 1.5") }
+                return
+            }
+
+        val grams = pounds * 453.59237
+
+        // if your grams field is string-backed:
+        onGramsPerServingChange(grams.roundForUi())
+
+        // close dialog
+        update { it.copy(isLbDialogOpen = false) }
+    }
+
+    private fun String.toPoundsOrNull(): Double? {
+        // accepts: "1.5", "1.5lb", " 1.5 lb "
+        val cleaned = trim()
+            .lowercase()
+            .replace("lbs", "")
+            .replace("lb", "")
+            .trim()
+
+        return cleaned.toDoubleOrNull()
+    }
+
+    private fun Double.roundForUi(): String {
+        // simple: 2 decimals; you can tune
+        return "%,.2f".format(this).replace(",", "")
     }
 
     init {
