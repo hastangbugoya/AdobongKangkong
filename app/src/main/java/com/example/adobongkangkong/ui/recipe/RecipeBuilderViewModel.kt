@@ -443,6 +443,15 @@ class RecipeBuilderViewModel @Inject constructor(
             }
         }
     }
+    fun onPickedPackage(multiplier: Double) {
+        val food = pickedFoodFlow.value ?: return
+        val spp = food.servingsPerPackage ?: return
+        if (spp <= 0.0) return
+
+        val newServings = (spp * multiplier).coerceAtLeast(0.0)
+        pickedServingsFlow.value = newServings
+        pickedServingsTextFlow.value = newServings.toString()
+    }
 
     fun loadForEdit(foodId: Long?) {
         if (foodId == null) return

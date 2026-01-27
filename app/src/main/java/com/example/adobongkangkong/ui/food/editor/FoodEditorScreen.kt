@@ -289,23 +289,6 @@ private fun BasicsCard(
                 }
             )
 
-
-//            Box(
-//                modifier = Modifier.combinedClickable(
-//                    onClick = {},
-//                    onLongClick = { onOpenLbDialog() }
-//                )
-//            ) {
-//                OutlinedTextField(
-//                    value = state.gramsPerServing,
-//                    onValueChange = onGramsPerServingChange,
-//                    modifier = Modifier.fillMaxWidth(),
-//                    label = { Text("Grams per serving (optional)") },
-//                    singleLine = true
-//                )
-//            }
-
-
             Spacer(Modifier.height(FieldSpacing))
 
             OutlinedTextField(

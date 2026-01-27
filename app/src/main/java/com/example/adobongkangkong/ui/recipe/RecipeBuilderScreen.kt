@@ -13,6 +13,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
+import com.example.adobongkangkong.ui.format.ui
 
 /**
  * Recipe builder / editor screen.
@@ -164,9 +165,28 @@ fun RecipeBuilderScreen(
                     Text("≈ ${"%,.1f".format(grams)} g", style = MaterialTheme.typography.bodySmall)
                 }
 
-                Spacer(Modifier.width(8.dp))
-                state.pickedFood?.servingsPerPackage?.let { spp ->
-                    Text("$spp servings per package", style = MaterialTheme.typography.bodySmall)
+                val picked = state.pickedFood
+
+                if (picked?.servingsPerPackage != null) {
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        "${picked.servingsPerPackage.ui()} servings per package",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AssistChip(
+                            onClick = { vm.onPickedPackage(0.5) },
+                            label = { Text("½ package") }
+                        )
+                        AssistChip(
+                            onClick = { vm.onPickedPackage(1.0) },
+                            label = { Text("1 package") }
+                        )
+                    }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
