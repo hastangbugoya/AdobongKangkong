@@ -13,7 +13,7 @@ fun parseServingUnit(raw: String): ServingUnit {
         "cup", "cups" -> ServingUnit.CUP
         "oz", "ounce", "ounces" -> ServingUnit.OZ
         "lb", "pound", "pounds" -> ServingUnit.LB
-
+        "qt", "quart" -> ServingUnit.QUART
         "piece", "pcs", "pc" -> ServingUnit.PIECE
         "slice", "slices" -> ServingUnit.SLICE
         "pack", "packet", "pouch" -> ServingUnit.PACK

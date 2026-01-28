@@ -8,7 +8,7 @@ data class DashboardTargets(
     val caloriesKcal: Double = 2000.0,
     val proteinG: Double = 150.0,
     val carbsG: Double = 200.0,
-    val fatG: Double = 70.0
+    val fatG: Double = 77.0
 )
 
 data class DashboardState(

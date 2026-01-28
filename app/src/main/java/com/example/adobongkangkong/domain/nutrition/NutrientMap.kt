@@ -9,8 +9,10 @@ package com.example.adobongkangkong.domain.nutrition
  */
 @JvmInline
 value class NutrientMap(
-    private val amounts: Map<NutrientKey, Double>
+    private val amounts: Map<NutrientKey, Double>,
 ) {
+
+    fun asMap(): Map<String, Double> = toCodeMap()
 
     /** Safe lookup — returns 0.0 if the nutrient is missing. */
     operator fun get(key: NutrientKey): Double = amounts[key] ?: 0.0

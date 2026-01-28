@@ -11,6 +11,7 @@ import com.example.adobongkangkong.data.repository.NutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
+import com.example.adobongkangkong.data.repository.UserNutrientTargetRepositoryImpl
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
@@ -21,6 +22,7 @@ import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -95,5 +97,9 @@ abstract class RepositoryModule {
         impl: FoodGoalFlagsRepositoryImpl
     ): FoodGoalFlagsRepository
 
+    @Binds
+    abstract fun bindUserNutrientTargetRepository(
+        impl: UserNutrientTargetRepositoryImpl
+    ): UserNutrientTargetRepository
 
 }

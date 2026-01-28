@@ -37,4 +37,9 @@ object DatabaseModule {
 
     @Provides fun provideFoodGoalFlagsDao(db: NutriDatabase): FoodGoalFlagsDao = db.foodGoalFlagsDao()
 
+    @Provides
+    fun provideUserNutrientTargetDao(db: NutriDatabase): UserNutrientTargetDao =
+        db.userNutrientTargetDao()
+
+
 }

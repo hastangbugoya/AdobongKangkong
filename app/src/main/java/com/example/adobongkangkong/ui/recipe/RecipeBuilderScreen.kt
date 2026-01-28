@@ -154,7 +154,7 @@ fun RecipeBuilderScreen(
 
                 OutlinedTextField(
                     value = state.pickedServingsText,
-                    onValueChange ={ vm::onPickedServingsChange },
+                    onValueChange = vm::onPickedServingsTextChange,
                     label = { Text("Servings") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

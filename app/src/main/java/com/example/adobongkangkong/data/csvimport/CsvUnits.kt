@@ -60,6 +60,7 @@ object CsvUnits {
             "jar" -> ServingUnit.JAR
             "packet" -> ServingUnit.PACKET
             "pack" -> ServingUnit.PACK
+            "qt" -> ServingUnit.QUART
             else -> ServingUnit.OTHER
         }
     }

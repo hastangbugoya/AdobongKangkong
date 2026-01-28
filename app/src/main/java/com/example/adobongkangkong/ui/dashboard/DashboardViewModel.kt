@@ -6,8 +6,12 @@ import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
+import com.example.adobongkangkong.domain.model.DailyNutritionSummary
+import com.example.adobongkangkong.domain.model.DailyNutritionTotals
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
+import com.example.adobongkangkong.domain.usecase.BootstrapDomainUseCase
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
+import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionSummaryUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
@@ -17,12 +21,15 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 /**
@@ -45,11 +52,17 @@ class DashboardViewModel @Inject constructor(
     private val createLogEntry: CreateLogEntryUseCase,
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
     private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
-    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase
+    private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase,
+    private val bootstrapDomain: BootstrapDomainUseCase,
+    private val observeDailyNutritionSummary: ObserveDailyNutritionSummaryUseCase,
 ) : ViewModel() {
 
     private val _snackbar = MutableStateFlow<String?>(null)
     val snackbar = _snackbar.asStateFlow()
+
+    private val selectedDateFlow =
+        MutableStateFlow(LocalDate.now())
+
 
     private val _overlay = MutableStateFlow(DashboardOverlay())
 
@@ -88,6 +101,23 @@ class DashboardViewModel @Inject constructor(
         _overlay.update { it.copy(navigateToEditFoodId = null) }
     }
 
+    fun showPreviousDay() {
+        selectedDateFlow.value =
+            selectedDateFlow.value.minusDays(1)
+    }
+
+    fun showNextDay() {
+        val next = selectedDateFlow.value.plusDays(1)
+        if (next <= LocalDate.now()) {
+            selectedDateFlow.value = next
+        }
+    }
+
+    fun resetToToday() {
+        selectedDateFlow.value = LocalDate.now()
+    }
+
+
     /**
      * Dev-only: sync nutrient catalog + aliases (triggered via long press).
      */
@@ -98,31 +128,6 @@ class DashboardViewModel @Inject constructor(
                 "Synced nutrients: +${r.inserted} inserted, ${r.updated} updated, ${r.aliasesUpserted} aliases"
         }
     }
-
-    /**
-     * Called when user confirms logging by servings.
-     *
-     * If the food is blocked (missing grams-per-serving for volume units),
-     * shows a blocking sheet that routes the user to edit the food.
-     */
-//    fun logFoodByServings(foodId: Long, servings: Double) {
-//        viewModelScope.launch {
-//            val result = createLogEntry.execute(
-//                foodId = foodId,
-//                timestamp = Instant.now(),
-//                amountInput = AmountInput.ByServings(servings)
-//            )
-//
-//            when (result) {
-//                is CreateLogEntryUseCase.Result.Success -> Unit
-//                is CreateLogEntryUseCase.Result.Blocked ->
-//                    showMissingGramsSheet(foodId = foodId, message = result.message)
-//                is CreateLogEntryUseCase.Result.Error -> {
-//                    _snackbar.value = "Log failed: ${result.message}"
-//                }
-//            }
-//        }
-//    }
 
     private fun showMissingGramsSheet(foodId: Long, message: String) {
         _overlay.update {
@@ -171,6 +176,37 @@ class DashboardViewModel @Inject constructor(
             }
         }
     }
+
+    init {
+        viewModelScope.launch {
+            bootstrapDomain()
+        }
+        viewModelScope.launch {
+            val dailySummary: StateFlow<DailyNutritionSummary> =
+                selectedDateFlow
+                    .flatMapLatest { date ->
+                        observeDailyNutritionSummary(
+                            date,
+                            ZoneId.systemDefault()
+                        )
+                    }
+                    .stateIn(
+                        viewModelScope,
+                        SharingStarted.WhileSubscribed(5_000),
+                        DailyNutritionSummary(
+                            totals = DailyNutritionTotals(
+                                date = selectedDateFlow.value,
+                                totalsByCode = emptyMap()
+                            ),
+                            statuses = emptyList()
+                        )
+                    )
+        }
+
+    }
+
+
+
 }
 
 private data class DashboardOverlay(

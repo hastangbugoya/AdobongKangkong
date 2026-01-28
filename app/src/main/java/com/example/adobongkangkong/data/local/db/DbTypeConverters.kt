@@ -46,14 +46,6 @@ class DbTypeConverters {
         if (raw.isNullOrBlank()) NutrientMap.EMPTY
         else NutrientMap.fromCodeMap(json.decodeFromString(raw))
 
-
-    // Instant <-> Long (epoch millis)
-//    @TypeConverter
-//    fun instantToLong(value: Instant?): Long? = value?.toEpochMilli()
-
-//    @TypeConverter
-//    fun longToInstant(value: Long?): Instant? = value?.let(Instant::ofEpochMilli)
-
     // LogUnit <-> String
     @TypeConverter
     fun logUnitToString(value: LogUnit?): String? = value?.name

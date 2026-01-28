@@ -22,6 +22,7 @@ fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
     ServingUnit.OTHER,
     ServingUnit.PIECE,
     ServingUnit.SLICE,
+    ServingUnit.QUART,
     ServingUnit.BUNCH -> true
 
     // Weight-ish

@@ -17,7 +17,7 @@ enum class ServingUnit(val display: String) {
     RCCUP("rc cup"),
     BAG("bag"),
     PACKET("pkt"),
-
+    QUART("qt"),
     CAN("can"),
     PIECE("pc"),
     SLICE("slice"),
