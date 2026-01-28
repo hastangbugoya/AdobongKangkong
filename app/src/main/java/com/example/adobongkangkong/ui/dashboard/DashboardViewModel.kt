@@ -9,6 +9,9 @@ import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.model.DailyNutritionSummary
 import com.example.adobongkangkong.domain.model.DailyNutritionTotals
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
+import com.example.adobongkangkong.domain.trend.model.RollingNutritionAverages
+import com.example.adobongkangkong.domain.trend.model.RollingNutritionStats
+import com.example.adobongkangkong.domain.trend.usecase.ObserveRollingNutritionStatsUseCase
 import com.example.adobongkangkong.domain.usecase.BootstrapDomainUseCase
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionSummaryUseCase
@@ -55,6 +58,7 @@ class DashboardViewModel @Inject constructor(
     private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase,
     private val bootstrapDomain: BootstrapDomainUseCase,
     private val observeDailyNutritionSummary: ObserveDailyNutritionSummaryUseCase,
+    private val observeRollingNutritionStatsUseCase: ObserveRollingNutritionStatsUseCase
 ) : ViewModel() {
 
     private val _snackbar = MutableStateFlow<String?>(null)
@@ -62,6 +66,38 @@ class DashboardViewModel @Inject constructor(
 
     private val selectedDateFlow =
         MutableStateFlow(LocalDate.now())
+
+    private val rollingDaysFlow = MutableStateFlow(7) // default “weekly”
+
+    val rollingStats: StateFlow<RollingNutritionStats> =
+        combine(selectedDateFlow, rollingDaysFlow) { date, days -> date to days }
+            .flatMapLatest { (date, days) ->
+                observeRollingNutritionStatsUseCase(
+                    endDate = date,
+                    days = days,
+                    zoneId = ZoneId.systemDefault()
+                )
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                // choose a safe initial value that matches your model constructors
+                RollingNutritionStats(
+                    averages = RollingNutritionAverages(
+                        endDate = selectedDateFlow.value,
+                        days = rollingDaysFlow.value,
+                        averageByCode = emptyMap()
+                    ),
+                    okStreaks = emptyList()
+                )
+            )
+    fun setRollingDays(days: Int) {
+        rollingDaysFlow.value = days.coerceAtLeast(1)
+    }
+
+    fun useWeek() = setRollingDays(7)
+    fun useTwoWeeks() = setRollingDays(14)
+    fun useMonth() = setRollingDays(30)
 
 
     private val _overlay = MutableStateFlow(DashboardOverlay())
@@ -201,6 +237,9 @@ class DashboardViewModel @Inject constructor(
                             statuses = emptyList()
                         )
                     )
+            rollingStats.collect { stats ->
+                android.util.Log.d("Meow", "rolling avg keys=${stats.averages.averageByCode.keys.size}, streaks=${stats.okStreaks.size}")
+            }
         }
 
     }
