@@ -1,7 +1,7 @@
-========================================================
+======================================
 AdobongKangkong
 A Precision Nutrition + Recipe + Logging System for Android
-========================================================
+=====================================
 
 AdobongKangkong is a personal nutrition, recipe, and food logging application
 built for precision, correctness, and long-term usability.
