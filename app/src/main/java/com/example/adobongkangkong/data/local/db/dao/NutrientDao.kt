@@ -84,4 +84,18 @@ interface NutrientDao {
         insertIgnoreAll(items)
     }
 
+    /**
+     * Observes all nutrient metadata (definitions) in the database.
+     *
+     * This is the canonical source for:
+     * - display name
+     * - unit
+     * - grouping/category (if present)
+     * - any other nutrient metadata you store
+     *
+     * Used by dashboard composition to map nutrient codes -> display metadata.
+     */
+    @Query("SELECT * FROM nutrients ORDER BY displayName ASC")
+    fun observeAllNutrients(): Flow<List<NutrientEntity>>
+
 }

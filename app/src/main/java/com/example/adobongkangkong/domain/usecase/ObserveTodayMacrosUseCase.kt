@@ -4,6 +4,8 @@ import com.example.adobongkangkong.core.time.todayRange
 import com.example.adobongkangkong.domain.model.LogEntry
 import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
+import com.example.adobongkangkong.domain.nutrition.NutrientCodes
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.repository.LogRepository
 import kotlinx.coroutines.flow.Flow
@@ -34,10 +36,10 @@ class ObserveTodayMacrosUseCase @Inject constructor(
                     logs.fold(NutrientMap.EMPTY) { acc, log -> acc + log.nutrients }
 
                 MacroTotals(
-                    caloriesKcal = totals[MacroKeys.CALORIES],
-                    proteinG = totals[MacroKeys.PROTEIN],
-                    carbsG = totals[MacroKeys.CARBS],
-                    fatG = totals[MacroKeys.FAT],
+                    caloriesKcal = totals[NutrientKey.CALORIES_KCAL] ?: 0.0,
+                    proteinG = totals[NutrientKey.PROTEIN_G] ?: 0.0,
+                    carbsG = totals[NutrientKey.CARBS_G] ?: 0.0,
+                    fatG = totals[NutrientKey.FAT_G] ?: 0.0,
                 )
             }
     }

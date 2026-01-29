@@ -2,11 +2,7 @@ package com.example.adobongkangkong.domain.logging.model
 
 sealed interface FoodRef {
     data class Food(
-        val foodId: Long,
-        val stableId: String,
-        val displayName: String,
-        // per-serving nutrients (or per-100g if you use that; adapt in the usecase)
-        val perServingNutrientsJson: String
+        val foodId: Long
     ) : FoodRef
 
     data class Recipe(

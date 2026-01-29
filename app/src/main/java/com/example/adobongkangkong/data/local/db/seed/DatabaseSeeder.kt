@@ -10,6 +10,7 @@ import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.nutrition.NutrientCodes
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,14 +26,14 @@ class DatabaseSeeder @Inject constructor(
 
         // --- Nutrients (codes must match what dashboard expects) ---
         val nutrients = listOf(
-            NutrientEntity(id = 1, code = "CALORIES", displayName = "Calories", unit = NutrientUnit.KCAL, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 2, code = "PROTEIN", displayName = "Protein", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 3, code = "CARBS", displayName = "Carbohydrate", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 4, code = "FAT", displayName = "Fat", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 1, code = NutrientCodes.CALORIES_KCAL, displayName = "Calories", unit = NutrientUnit.KCAL, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 2, code = NutrientCodes.PROTEIN_G, displayName = "Protein", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 3, code = NutrientCodes.CARBS_G, displayName = "Carbohydrate", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 4, code = NutrientCodes.FAT_G, displayName = "Fat", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
 
-            NutrientEntity(id = 5, code = "FIBER", displayName = "Fiber", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 6, code = "SUGAR", displayName = "Total Sugars", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 7, code = "SODIUM", displayName = "Sodium", unit = NutrientUnit.MG, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 5, code = NutrientCodes.FIBER_G, displayName = "Fiber", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 6, code = NutrientCodes.SUGAR_G, displayName = "Total Sugars", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 7, code = NutrientCodes.SODIUM_MG, displayName = "Sodium", unit = NutrientUnit.MG, category = NutrientCategory.MACRO),
         )
         nutrientDao.upsertAll(nutrients)
 

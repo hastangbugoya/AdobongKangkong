@@ -16,6 +16,7 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.dao.SummaryDao
 import com.example.adobongkangkong.data.local.db.dao.UserNutrientTargetDao
+import com.example.adobongkangkong.data.local.db.dao.UserPinnedNutrientDao
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
@@ -28,7 +29,7 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
 import com.example.adobongkangkong.data.local.db.entity.UserNutrientTargetEntity
-
+import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
 @Database(
     entities = [
         FoodEntity::class,
@@ -42,7 +43,8 @@ import com.example.adobongkangkong.data.local.db.entity.UserNutrientTargetEntity
         ImportRunEntity::class,
         RecipeBatchEntity::class,
         FoodGoalFlagsEntity::class,
-        UserNutrientTargetEntity::class
+        UserNutrientTargetEntity::class,
+        UserPinnedNutrientEntity::class
     ],
     version = 2,
     exportSchema = true
@@ -62,4 +64,5 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun recipeBatchDao(): RecipeBatchDao
     abstract fun foodGoalFlagsDao(): FoodGoalFlagsDao
     abstract fun userNutrientTargetDao(): UserNutrientTargetDao
+    abstract fun userPinnedNutrientDao(): UserPinnedNutrientDao
 }

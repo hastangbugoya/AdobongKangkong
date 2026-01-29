@@ -407,9 +407,6 @@ class QuickAddViewModel @Inject constructor(
                     createLogEntry.execute(
                         ref = FoodRef.Food(
                             foodId = food.id,
-                            stableId = food.stableId,
-                            displayName = food.name,
-                            perServingNutrientsJson = "" // resolved inside usecase from snapshot
                         ),
                         timestamp = now,
                         amountInput = amountInput,

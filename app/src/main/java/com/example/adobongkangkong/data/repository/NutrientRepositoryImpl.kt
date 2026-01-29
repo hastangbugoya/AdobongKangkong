@@ -8,6 +8,7 @@ import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.util.NutrientSearchScorer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import javax.inject.Inject
 
@@ -53,4 +54,8 @@ class NutrientRepositoryImpl @Inject constructor(
                     .map { (n, _) -> n }
             }
     }
+
+    override fun observeAllNutrients(): Flow<List<Nutrient>> =
+        nutrientDao.observeAllNutrients()
+            .map { entities -> entities.map { it.toDomain() } }
 }

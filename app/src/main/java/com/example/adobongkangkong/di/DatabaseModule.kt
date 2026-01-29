@@ -41,5 +41,6 @@ object DatabaseModule {
     fun provideUserNutrientTargetDao(db: NutriDatabase): UserNutrientTargetDao =
         db.userNutrientTargetDao()
 
+    @Provides fun provideUserPinnedNutrientDao(db: NutriDatabase): UserPinnedNutrientDao = db.userPinnedNutrientDao()
 
 }

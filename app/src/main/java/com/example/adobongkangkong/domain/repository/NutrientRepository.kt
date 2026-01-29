@@ -6,4 +6,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface NutrientRepository {
     fun search(query: String, limit: Int = 50): Flow<List<Nutrient>>
+
+    fun observeAllNutrients(): Flow<List<Nutrient>>
 }

@@ -13,4 +13,15 @@ value class NutrientKey(val value: String) {
     }
 
     override fun toString(): String = value
+
+    companion object {
+        val CALORIES_KCAL = NutrientKey("CALORIES_KCAL")
+        val PROTEIN_G = NutrientKey("PROTEIN_G")
+        val CARBS_G = NutrientKey("CARBS_G")
+        val FAT_G = NutrientKey("FAT_G")
+
+        val FIBER_G = NutrientKey("FIBER_G")
+        val SUGAR_G = NutrientKey("SUGAR_G")
+        val SODIUM_MG = NutrientKey("SODIUM_MG")
+    }
 }

@@ -25,7 +25,7 @@ class FoodNutrientRepositoryImpl @Inject constructor(
 
         // Resolve macro nutrient IDs once per call (fast enough for v1).
         // If you want, we can cache these later.
-        val caloriesId = nutrientDao.getIdByCode(NutrientCodes.CALORIES)
+        val caloriesId = nutrientDao.getIdByCode(NutrientCodes.CALORIES_KCAL)
         val proteinId = nutrientDao.getIdByCode(NutrientCodes.PROTEIN_G)
         val carbsId = nutrientDao.getIdByCode(NutrientCodes.CARBS_G)
         val fatId = nutrientDao.getIdByCode(NutrientCodes.FAT_G)

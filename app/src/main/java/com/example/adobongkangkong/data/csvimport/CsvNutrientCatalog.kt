@@ -25,7 +25,7 @@ object CsvNutrientCatalog {
     // If you want to be strict, we can add a "unit unknown" and fix later.
     val defs: List<Def> = listOf(
         // Energy & macros
-        Def("cal", NutrientCodes.CALORIES, "Calories", "kcal", NutrientCategory.ENERGY.dbValue),
+        Def("cal", NutrientCodes.CALORIES_KCAL, "Calories", "kcal", NutrientCategory.ENERGY.dbValue),
         Def("carbs", NutrientCodes.CARBS_G, "Carbohydrates", "g", NutrientCategory.MACRO.dbValue),
         Def("prot", NutrientCodes.PROTEIN_G, "Protein", "g", NutrientCategory.MACRO.dbValue),
         Def("fat(g)", NutrientCodes.FAT_G, "Fat", "g", NutrientCategory.FAT.dbValue),

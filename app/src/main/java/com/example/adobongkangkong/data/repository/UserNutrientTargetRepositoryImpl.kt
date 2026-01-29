@@ -14,23 +14,29 @@ class UserNutrientTargetRepositoryImpl @Inject constructor(
 
     override fun observeTargets(): Flow<Map<String, UserNutrientTarget>> =
         dao.observeAll().map { list ->
-            list.associate { it.nutrientCode to it.toDomain() }
+            list
+                .map { it.toDomain().normalizeCode() }
+                .associateBy { it.nutrientCode }
         }
 
     override suspend fun upsert(target: UserNutrientTarget) {
-        dao.upsert(target.toEntity())
+        dao.upsert(target.normalizeCode().toEntity())
     }
 
     override suspend fun upsertAll(targets: List<UserNutrientTarget>) {
-        dao.upsertAll(targets.map { it.toEntity() })
+        dao.upsertAll(targets.map { it.normalizeCode().toEntity() })
     }
 
     override suspend fun delete(nutrientCode: String) {
-        dao.delete(nutrientCode)
+        dao.delete(nutrientCode.trim().uppercase())
     }
 
     override suspend fun hasAnyTargets(): Boolean = dao.hasAny()
+
 }
+
+
+
 
 private fun UserNutrientTargetEntity.toDomain() = UserNutrientTarget(
     nutrientCode = nutrientCode,
@@ -45,3 +51,6 @@ private fun UserNutrientTarget.toEntity() = UserNutrientTargetEntity(
     targetPerDay = targetPerDay,
     maxPerDay = maxPerDay
 )
+
+private fun UserNutrientTarget.normalizeCode(): UserNutrientTarget =
+    copy(nutrientCode = nutrientCode.trim().uppercase())

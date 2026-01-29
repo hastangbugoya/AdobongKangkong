@@ -1,13 +1,13 @@
 package com.example.adobongkangkong.domain.nutrition
 
 object MacroKeys {
-    val CALORIES = NutrientKey(NutrientCodes.CALORIES)
+    val CALORIES = NutrientKey(NutrientCodes.CALORIES_KCAL)
     val PROTEIN  = NutrientKey(NutrientCodes.PROTEIN_G)
     val CARBS    = NutrientKey(NutrientCodes.CARBS_G)
     val FAT      = NutrientKey(NutrientCodes.FAT_G)
 
     // Optional extras
-    val SUGAR    = NutrientKey("SUGARS_G")
-    val FIBER    = NutrientKey("FIBER_G")
-    val SODIUM   = NutrientKey("SODIUM_MG")
+    val SUGAR    = NutrientKey(NutrientCodes.SUGAR_G)
+    val FIBER    = NutrientKey(NutrientCodes.FIBER_G)
+    val SODIUM   = NutrientKey(NutrientCodes.SODIUM_MG)
 }

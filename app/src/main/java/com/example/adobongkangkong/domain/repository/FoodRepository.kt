@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.repository
 
+import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import kotlinx.coroutines.flow.Flow
 
@@ -9,5 +10,7 @@ interface FoodRepository {
     suspend fun getById(id: Long): Food?
 
     suspend fun upsert(food: Food): Long
+
+    suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food?
 }
 

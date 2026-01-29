@@ -4,6 +4,7 @@ import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.data.local.db.mapper.toEntity
+import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -24,6 +25,14 @@ class FoodRepositoryImpl @Inject constructor(
         foodDao.upsert(entity)
         return entity.id
     }
+
+    override suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food? {
+        val entity = foodDao.getById(foodId) ?: return null
+
+        return FoodRef.Food(foodId = entity.id)
+    }
+
+
 }
 
 private fun FoodEntity.toDomain(): Food =

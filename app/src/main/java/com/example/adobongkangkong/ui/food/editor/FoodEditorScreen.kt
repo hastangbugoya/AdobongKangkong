@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -44,10 +42,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.R
 
 private val ScreenPadding = 16.dp
 private val CardPadding = 12.dp
@@ -433,7 +433,7 @@ private fun NutrientRowOverflowMenu(
 
     IconButton(onClick = { menuExpanded = true }) {
         Icon(
-            imageVector = Icons.Default.MoreVert,
+            painter = painterResource(id = R.drawable.circle_ellipsis_vertical),
             contentDescription = "More"
         )
     }

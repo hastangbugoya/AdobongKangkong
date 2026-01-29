@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.dashboard
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -17,8 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +53,9 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
+import androidx.compose.ui.res.painterResource
+import com.example.adobongkangkong.R
+
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -74,6 +77,8 @@ fun DashboardScreen(
 
     val context = LocalContext.current
     var showDevTransferSheet by remember { mutableStateOf(false) }
+
+    val targetDraft by vm.targetDraft.collectAsState()
 
     val exportLauncher =
         rememberLauncherForActivityResult(
@@ -162,11 +167,12 @@ fun DashboardScreen(
         }
     }
 
-
-
-
-    val totals = state.totals
-    val targets = state.targets
+//    val targetsByCode = state.targetsByCode
+//
+//    val caloriesTarget = targetsByCode["calories_kcal"]?.targetPerDay ?: 2000.0
+//    val proteinTarget = targetsByCode["protein_g"]?.targetPerDay ?: 150.0
+//    val carbsTarget = targetsByCode["carbs_g"]?.targetPerDay ?: 200.0
+//    val fatTarget = targetsByCode["fat_g"]?.targetPerDay ?: 77.0
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -182,8 +188,14 @@ fun DashboardScreen(
                             onLongClick = { showDevTransferSheet = true }
                         )
                     )
+                },
+                actions = {
+                    IconButton(onClick = vm::onSettingsClicked) {
+                        Icon(painter = painterResource(id = R.drawable.settings), contentDescription = "Dashboard settings")
+                    }
                 }
             )
+
 
         },
         floatingActionButton = {
@@ -216,10 +228,11 @@ fun DashboardScreen(
             )
             Spacer(Modifier.height(16.dp))
 
-            MacroRow("Calories", totals.caloriesKcal, targets.caloriesKcal, "kcal")
-            MacroRow("Protein", totals.proteinG, targets.proteinG, "g")
-            MacroRow("Carbs", totals.carbsG, targets.carbsG, "g")
-            MacroRow("Fat", totals.fatG, targets.fatG, "g")
+
+            state.nutrientCards.forEach { card ->
+                Log.d("Meow", "NutrientCard ${card.displayName} > max:${card.maxPerDay} min:${card.minPerDay} target:${card.targetPerDay}")
+                DashboardNutrientCardRow(card)
+            }
 
             Spacer(Modifier.height(16.dp))
             Text("Logged Today", style = MaterialTheme.typography.titleMedium)
@@ -245,7 +258,7 @@ fun DashboardScreen(
                             },
                             trailingContent = {
                                 IconButton(onClick = { vm.delete(item.logId) }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                                    Icon(painterResource(id = R.drawable.trash), contentDescription = "Delete")
                                 }
                             }
                         )
@@ -253,6 +266,39 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            if (state.settingsSheetOpen) {
+                val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+                ModalBottomSheet(
+                    onDismissRequest = { vm.onDismissSettingsSheet() },
+                    sheetState = settingsSheetState
+                ) {
+                    DashboardSettingsSheet(
+                        pinnedKeys = state.pinnedKeys,
+                        monitoredCards = state.nutrientCards,
+                        targetDraft = targetDraft,
+
+                        onDismiss = vm::onDismissSettingsSheet,
+
+                        onApplyPins = vm::applyPinnedCodes,
+
+                        onStartTargetEdit = vm::startTargetEdit,
+                        onDraftMinChange = vm::updateTargetDraftMin,
+                        onDraftTargetChange = vm::updateTargetDraftTarget,
+                        onDraftMaxChange = vm::updateTargetDraftMax,
+                        onCancelTargetEdit = vm::cancelTargetEdit,
+                        onSaveTargetDraft = vm::saveTargetDraft,
+
+                        onSync = vm::devSyncNutrients,
+                        onExport = { exportLauncher.launch("adobongkangkong_export.zip") },
+                        onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
+                    )
+                }
+            }
+
+
+
         }
 
         if (showQuickAdd) {
@@ -295,3 +341,90 @@ private fun formatTime(instant: java.time.Instant): String {
 
 internal fun Double.round0(): String = "%,.0f".format(this)
 internal fun Double.round2(): String = "%,.2f".format(this).trimEnd('0').trimEnd('.')
+
+@Composable
+private fun DashboardNutrientCardRow(
+    card: com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
+) {
+    val unit = card.unit.orEmpty()
+
+    val display = remember(card) { card.toDisplay(unit) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(card.displayName, style = MaterialTheme.typography.titleMedium)
+            Text(display.rightText, style = MaterialTheme.typography.bodyMedium)
+        }
+
+        Spacer(Modifier.height(6.dp))
+        LinearProgressIndicator(progress = display.progress, modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Status: ${card.status.name}",
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        card.rollingAverage?.let { avg ->
+            Text(
+                text = "Avg: ${avg.round1()} $unit",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+private data class NutrientCardDisplay(
+    val rightText: String,
+    val progress: Float
+)
+
+private fun com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard.toDisplay(
+    unit: String
+): NutrientCardDisplay {
+    val consumed = consumedToday
+
+    val target = targetPerDay
+    val min = minPerDay
+    val max = maxPerDay
+
+    // Priority: target > min > max (matches your UX expectation)
+    return when {
+        target != null && target > 0.0 -> {
+            val p = (consumed / target).coerceIn(0.0, 1.0).toFloat()
+            NutrientCardDisplay(
+                rightText = "${consumed.round1()} / ${target.round1()} $unit",
+                progress = p
+            )
+        }
+
+        min != null && min > 0.0 -> {
+            // Below min -> fill up toward 100%. At/above min -> cap at 100%.
+            val p = (consumed / min).coerceIn(0.0, 1.0).toFloat()
+            NutrientCardDisplay(
+                rightText = "${consumed.round1()} / ≥${min.round1()} $unit",
+                progress = p
+            )
+        }
+
+        max != null && max > 0.0 -> {
+            // Under max -> progress approaches 100%. Over max -> show full (you already convey HIGH via status).
+            val p = (consumed / max).coerceIn(0.0, 1.0).toFloat()
+            NutrientCardDisplay(
+                rightText = "${consumed.round1()} / ≤${max.round1()} $unit",
+                progress = p
+            )
+        }
+
+        else -> {
+            NutrientCardDisplay(
+                rightText = "${consumed.round1()} $unit",
+                progress = 0f
+            )
+        }
+    }
+}

@@ -20,7 +20,7 @@ class AdobongKangkongApp: Application() {
         super.onCreate()
 
         appScope.launch {
-//            seeder.seedIfEmpty()
+            seeder.seedIfEmpty()
         }
     }
 }
