@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.domain.usecase
+package com.example.adobongkangkong.ui.dashboard.pinned.usecase
 
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository

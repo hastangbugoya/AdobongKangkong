@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.navigation
 
+import HeatmapScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
@@ -10,10 +11,12 @@ import androidx.navigation.navArgument
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
+import com.example.adobongkangkong.ui.heatmap.DayLogScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.time.LocalDate
 
 @Composable
 fun AppNavHost(modifier: Modifier = Modifier) {
@@ -44,7 +47,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onCreateRecipe = { navController.navigate(NavRoutes.Recipes.new) },
                 onCreateFood = { navController.navigate(NavRoutes.Foods.new()) },
                 onOpenFoods = { navController.navigate(NavRoutes.Foods.list) },
-                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) }
+                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
+                onOpenHeatmap = { navController.navigate(NavRoutes.Heatmap.route) }
             )
         }
 
@@ -135,6 +139,27 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     navController.navigate(NavRoutes.Foods.edit(foodId)) {
                         launchSingleTop = true
                     }
+                }
+            )
+        }
+
+        composable(
+            route = NavRoutes.Heatmap.dayLog,
+            arguments = listOf(navArgument("date") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val date = LocalDate.parse(
+                backStackEntry.arguments!!.getString("date")!!
+            )
+            DayLogScreen(
+                date = date,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(NavRoutes.Heatmap.route) {
+            HeatmapScreen(
+                onNavigateToDayLog = { date ->
+                    navController.navigate(NavRoutes.Heatmap.dayLog(date))
                 }
             )
         }

@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.repository
 
 import com.example.adobongkangkong.domain.model.UserNutrientTarget
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import kotlinx.coroutines.flow.Flow
 
 interface UserNutrientTargetRepository {
@@ -9,4 +10,5 @@ interface UserNutrientTargetRepository {
     suspend fun upsertAll(targets: List<UserNutrientTarget>)
     suspend fun delete(nutrientCode: String)
     suspend fun hasAnyTargets(): Boolean
+
 }

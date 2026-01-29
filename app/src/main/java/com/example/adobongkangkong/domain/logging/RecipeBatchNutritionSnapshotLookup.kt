@@ -19,7 +19,7 @@ interface RecipeBatchNutritionSnapshotLookup {
  * snapshot.nutrientsPerGram (i.e., supports scaledBy()).
  */
 data class RecipeBatchNutritionSnapshot(
-    val batchId: Long,
+    val batchIdF: Long,
     val nutrientsPerCookedGram: NutrientMap?
 )
 

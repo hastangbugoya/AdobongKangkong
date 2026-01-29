@@ -66,6 +66,7 @@ fun DashboardScreen(
     onCreateRecipe: () -> Unit,
     onCreateFood: (String) -> Unit,
     onOpenFoods: () -> Unit,
+    onOpenHeatmap: () -> Unit,
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -220,6 +221,7 @@ fun DashboardScreen(
                 TextButton(onClick = onCreateRecipe) { Text("Recipes") }
                 TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
                 TextButton(onClick = onOpenFoods) { Text("Foods") }
+                TextButton(onClick = onOpenHeatmap) { Text("Heatmap") }
             }
             Text(
                 "Today",
@@ -246,7 +248,8 @@ fun DashboardScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 24.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    userScrollEnabled = true
                 ) {
                     items(state.todayItems, key = { it.logId }) { item ->
                         ListItem(

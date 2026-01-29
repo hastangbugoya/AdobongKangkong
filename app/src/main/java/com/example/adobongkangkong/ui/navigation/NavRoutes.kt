@@ -51,4 +51,12 @@ object NavRoutes {
         // Builders
         fun edit(foodId: Long): String = "$BASE/edit/$foodId"
     }
+
+    object Heatmap {
+        const val route: String = "heatmap"
+        const val dayLog: String = "dayLog/{date}"
+
+        fun dayLog(date: java.time.LocalDate): String =
+            "dayLog/$date"
+    }
 }

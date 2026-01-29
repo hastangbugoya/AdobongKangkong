@@ -1,7 +1,7 @@
 package com.example.adobongkangkong.domain.usecase
 
 import com.example.adobongkangkong.domain.model.DailyNutrientStatus
-import com.example.adobongkangkong.domain.model.TargetStatus
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -39,7 +39,7 @@ class ObserveDailyNutrientStatusesUseCase @Inject constructor(
         when {
             min != null && consumed < min -> TargetStatus.LOW
             max != null && consumed > max -> TargetStatus.HIGH
-            min == null && max == null -> TargetStatus.UNKNOWN
+            min == null && max == null -> TargetStatus.NO_TARGET
             else -> TargetStatus.OK
         }
 }

@@ -1,6 +1,6 @@
 package com.example.adobongkangkong.domain.trend.usecase
 
-import com.example.adobongkangkong.domain.model.TargetStatus
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.trend.model.ComplianceScore
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutrientStatusesUseCase
 import kotlinx.coroutines.flow.Flow
