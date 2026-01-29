@@ -22,6 +22,9 @@ import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
 import com.example.adobongkangkong.domain.usecase.UpsertUserNutrientTargetUseCase
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
+import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
+import com.example.adobongkangkong.ui.dashboard.pinned.model.NutrientOption
+import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObserveDashboardPinOptionsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -69,6 +72,8 @@ class DashboardViewModel @Inject constructor(
     private val deleteLogEntry: DeleteLogEntryUseCase,
 
     private val logFood: LogFoodUseCase,
+    private val observeDashboardPinOptions: ObserveDashboardPinOptionsUseCase,
+
 
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
     private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
@@ -99,6 +104,15 @@ class DashboardViewModel @Inject constructor(
                     zoneId = ZoneId.systemDefault()
                 )
             }
+
+    val pinOptions: StateFlow<List<DashboardPinOption>> =
+        observeDashboardPinOptions()
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                emptyList()
+            )
+
 
     private val pinnedKeysFlow: StateFlow<List<NutrientKey>> =
         userPinnedNutrientRepository.observePinnedKeys()
@@ -168,6 +182,9 @@ class DashboardViewModel @Inject constructor(
             SharingStarted.WhileSubscribed(5_000),
             DashboardState()
         )
+
+
+
 
     // region UI toggles
 
@@ -340,7 +357,7 @@ class DashboardViewModel @Inject constructor(
                     key = key,
                     min = "",
                     target = "",
-                    max = "",
+                    max = ""
                 ),
                 settingsSheetOpen = true
             )
@@ -460,6 +477,25 @@ class DashboardViewModel @Inject constructor(
         this?.trim()
             ?.takeIf { it.isNotBlank() }
             ?.let { NutrientKey(it.uppercase()) }
+
+    fun startTargetEditPrefilled(
+        key: NutrientKey,
+        min: String,
+        target: String,
+        max: String
+    ) {
+        _overlay.update {
+            it.copy(
+                targetDraft = TargetDraft(
+                    key = key,
+                    min = min,
+                    target = target,
+                    max = max
+                ),
+                settingsSheetOpen = true
+            )
+        }
+    }
 
     // endregion
 

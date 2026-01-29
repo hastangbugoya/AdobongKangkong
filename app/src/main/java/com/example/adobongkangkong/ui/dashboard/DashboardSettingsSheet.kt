@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,21 +32,17 @@ import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.domain.model.TargetDraft
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
+import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 
-data class PinOption(
-    val code: String,
-    val label: String
-)
 @Composable
 fun DashboardSettingsSheet(
     pinnedKeys: List<NutrientKey>,
     monitoredCards: List<DashboardNutrientCard>,
     targetDraft: TargetDraft?,
     onDismiss: () -> Unit,
-
+    pinOptions: List<DashboardPinOption>,
     onApplyPins: (slot0: String?, slot1: String?) -> Unit,
-
-    onStartTargetEdit: (NutrientKey) -> Unit,
+    onStartTargetEditPrefilled: (NutrientKey, String, String, String) -> Unit,
     onDraftMinChange: (String) -> Unit,
     onDraftTargetChange: (String) -> Unit,
     onDraftMaxChange: (String) -> Unit,
@@ -54,33 +53,13 @@ fun DashboardSettingsSheet(
     onExport: () -> Unit,
     onImport: () -> Unit
 ) {
-    val fixedCodes = setOf("CALORIES_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G")
-
-    val pinOptions = remember(monitoredCards, pinnedKeys) {
-        val fromCards = monitoredCards.map { card ->
-            val unit = card.unit?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
-            PinOption(
-                code = card.code,
-                label = "${card.displayName} — ${card.code}$unit"
-            )
-        }
-
-        val fromPinned = pinnedKeys.map { key ->
-            PinOption(code = key.value, label = key.value)
-        }
-
-        (fromCards + fromPinned)
-            .distinctBy { it.code }
-            .filterNot { it.code.uppercase() in fixedCodes }
-            .sortedBy { it.label.lowercase() }
-    }
-
     var slot0Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(0)?.value) }
     var slot1Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(1)?.value) }
 
     Column(
         Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         Text("Dashboard Settings", style = MaterialTheme.typography.titleLarge)
@@ -126,32 +105,9 @@ fun DashboardSettingsSheet(
 
         // ---------------- Targets ----------------
 
-        Text("Targets (min / target / max)", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-
-        monitoredCards.forEach { card ->
-            ListItem(
-                headlineContent = { Text(card.displayName) },
-                supportingContent = {
-                    Text(
-                        buildString {
-                            append("min="); append(card.minPerDay ?: "—")
-                            append("  target="); append(card.targetPerDay ?: "—")
-                            append("  max="); append(card.maxPerDay ?: "—")
-                            if (!card.unit.isNullOrBlank()) {
-                                append(" "); append(card.unit)
-                            }
-                        }
-                    )
-                },
-                modifier = Modifier.clickable {
-                    onStartTargetEdit(NutrientKey(card.code))
-                }
-            )
-            HorizontalDivider()
-        }
 
         targetDraft?.let { draft ->
+            Text("Targets (min / target / max)", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(16.dp))
             Text("Edit: ${draft.key.value}", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -199,6 +155,39 @@ fun DashboardSettingsSheet(
             }
         }
 
+
+
+        Spacer(Modifier.height(8.dp))
+
+        monitoredCards.forEach { card ->
+            ListItem(
+                headlineContent = { Text(card.displayName) },
+                supportingContent = {
+                    Text(
+                        buildString {
+                            append("min="); append(card.minPerDay ?: "—")
+                            append("  target="); append(card.targetPerDay ?: "—")
+                            append("  max="); append(card.maxPerDay ?: "—")
+                            if (!card.unit.isNullOrBlank()) {
+                                append(" "); append(card.unit)
+                            }
+                        }
+                    )
+                },
+                modifier = Modifier.clickable {
+                    Log.d("Meow", "SettingsSheet tap: ${card.code}")
+                    onStartTargetEditPrefilled(
+                        NutrientKey(card.code),
+                        card.minPerDay?.toString() ?: "",
+                        card.targetPerDay?.toString() ?: "",
+                        card.maxPerDay?.toString() ?: ""
+                    )
+                }
+            )
+            HorizontalDivider()
+        }
+        Text("DEBUG targetDraft = ${targetDraft != null}")
+
         Spacer(Modifier.height(20.dp))
 
         // ---------------- Data ----------------
@@ -245,16 +234,19 @@ fun DashboardSettingsSheet(
 private fun PinDropdown(
     title: String,
     selectedCode: String?,
-    options: List<PinOption>,
+    options: List<DashboardPinOption>,
     disabledCodes: Set<String>,
     onSelect: (String?) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     val selectedLabel = remember(selectedCode, options) {
-        options.firstOrNull { it.code.equals(selectedCode, ignoreCase = true) }?.label
-            ?: (selectedCode ?: "None")
+        options.firstOrNull { it.key.value.equals(selectedCode, ignoreCase = true) }?.let { opt ->
+            val unit = opt.unit?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+            "${opt.displayName} — ${opt.key.value}$unit"
+        } ?: (selectedCode ?: "None")
     }
+
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
@@ -284,16 +276,22 @@ private fun PinDropdown(
             HorizontalDivider()
 
             options.forEach { opt ->
-                val disabled = disabledCodes.any { it.equals(opt.code, ignoreCase = true) }
+                val code = opt.key.value
+                val unit = opt.unit?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+                val label = "${opt.displayName} — $code$unit"
+
+                val disabled = disabledCodes.any { it.equals(code, ignoreCase = true) }
+
                 DropdownMenuItem(
-                    text = { Text(opt.label) },
+                    text = { Text(label) },
                     enabled = !disabled,
                     onClick = {
-                        onSelect(opt.code)
+                        onSelect(code)
                         expanded = false
                     }
                 )
             }
+
         }
     }
 }

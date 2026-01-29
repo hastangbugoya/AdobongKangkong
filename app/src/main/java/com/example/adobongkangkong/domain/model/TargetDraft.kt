@@ -9,9 +9,9 @@ import com.example.adobongkangkong.domain.nutrition.NutrientKey
  */
 data class TargetDraft(
     val key: NutrientKey,
-    val min: String,
-    val target: String,
-    val max: String,
+    val min: String = "",
+    val target: String = "",
+    val max: String = "",
     val isDirty: Boolean = false,
     val error: String? = null,
     val isSaving: Boolean = false

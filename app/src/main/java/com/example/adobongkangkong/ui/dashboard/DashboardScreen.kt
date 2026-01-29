@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-
+import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -55,7 +55,8 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
-
+import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
+import java.time.Instant
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -79,6 +80,8 @@ fun DashboardScreen(
     var showDevTransferSheet by remember { mutableStateOf(false) }
 
     val targetDraft by vm.targetDraft.collectAsState()
+
+    val pinOptions by vm.pinOptions.collectAsState()
 
     val exportLauncher =
         rememberLauncherForActivityResult(
@@ -278,12 +281,9 @@ fun DashboardScreen(
                         pinnedKeys = state.pinnedKeys,
                         monitoredCards = state.nutrientCards,
                         targetDraft = targetDraft,
-
+                        pinOptions = pinOptions,
                         onDismiss = vm::onDismissSettingsSheet,
-
                         onApplyPins = vm::applyPinnedCodes,
-
-                        onStartTargetEdit = vm::startTargetEdit,
                         onDraftMinChange = vm::updateTargetDraftMin,
                         onDraftTargetChange = vm::updateTargetDraftTarget,
                         onDraftMaxChange = vm::updateTargetDraftMax,
@@ -292,7 +292,15 @@ fun DashboardScreen(
 
                         onSync = vm::devSyncNutrients,
                         onExport = { exportLauncher.launch("adobongkangkong_export.zip") },
-                        onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
+                        onImport = {
+                            importLauncher.launch(
+                                arrayOf(
+                                    "application/zip",
+                                    "application/octet-stream"
+                                )
+                            )
+                        },
+                        onStartTargetEditPrefilled = vm::startTargetEditPrefilled
                     )
                 }
             }
@@ -334,7 +342,7 @@ private fun MacroRow(label: String, value: Double, target: Double, unit: String)
 
 private fun Double.round1(): String = "%,.1f".format(this)
 
-private fun formatTime(instant: java.time.Instant): String {
+private fun formatTime(instant: Instant): String {
     val zdt = ZonedDateTime.ofInstant(instant, ZoneId.systemDefault())
     return zdt.format(DateTimeFormatter.ofPattern("h:mm a"))
 }
@@ -344,7 +352,7 @@ internal fun Double.round2(): String = "%,.2f".format(this).trimEnd('0').trimEnd
 
 @Composable
 private fun DashboardNutrientCardRow(
-    card: com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
+    card: DashboardNutrientCard
 ) {
     val unit = card.unit.orEmpty()
 
@@ -383,7 +391,7 @@ private data class NutrientCardDisplay(
     val progress: Float
 )
 
-private fun com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard.toDisplay(
+private fun DashboardNutrientCard.toDisplay(
     unit: String
 ): NutrientCardDisplay {
     val consumed = consumedToday
