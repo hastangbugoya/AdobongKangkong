@@ -42,7 +42,7 @@ fun MonthHeader(
     ) {
         IconButton(onClick = onPrevMonth) {
             Icon(
-                painter = painterResource(id = R.drawable.settings),
+                painter = painterResource(id = R.drawable.angle_small_left),
                 contentDescription = "Previous month"
             )
         }
@@ -56,7 +56,7 @@ fun MonthHeader(
 
         IconButton(onClick = onNextMonth) {
             Icon(
-                painter = painterResource(id = R.drawable.settings),
+                painter = painterResource(id = R.drawable.angle_small_right),
                 contentDescription = "Next month"
             )
         }

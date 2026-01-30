@@ -11,7 +11,7 @@ import androidx.navigation.navArgument
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
-import com.example.adobongkangkong.ui.heatmap.DayLogScreen
+import com.example.adobongkangkong.ui.daylog.DayLogScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import java.net.URLDecoder
@@ -48,7 +48,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onCreateFood = { navController.navigate(NavRoutes.Foods.new()) },
                 onOpenFoods = { navController.navigate(NavRoutes.Foods.list) },
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
-                onOpenHeatmap = { navController.navigate(NavRoutes.Heatmap.route) }
+                onOpenHeatmap = { navController.navigate(NavRoutes.Heatmap.route) },
+                onOpenDayLog = { date -> navController.navigate(NavRoutes.Heatmap.dayLog(date))}
             )
         }
 
@@ -147,12 +148,11 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             route = NavRoutes.Heatmap.dayLog,
             arguments = listOf(navArgument("date") { type = NavType.StringType })
         ) { backStackEntry ->
-            val date = LocalDate.parse(
-                backStackEntry.arguments!!.getString("date")!!
-            )
-            DayLogScreen(
+            val date = LocalDate.parse(backStackEntry.arguments!!.getString("date")!!)
+            com.example.adobongkangkong.ui.daylog.DayLogScreen(
                 date = date,
                 onBack = { navController.popBackStack() }
+                // no need to pass onDelete if you used the nullable default pattern
             )
         }
 

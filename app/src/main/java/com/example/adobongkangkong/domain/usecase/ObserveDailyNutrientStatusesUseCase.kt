@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.usecase
 
 import com.example.adobongkangkong.domain.model.DailyNutrientStatus
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +23,7 @@ class ObserveDailyNutrientStatusesUseCase @Inject constructor(
 
             // Only show nutrients that have targets (logic first).
             for ((code, target) in targets) {
-                val consumed = totals.totalsByCode[code] ?: 0.0
+                val consumed = totals.totalsByCode[NutrientKey(code)] ?: 0.0
                 result += DailyNutrientStatus(
                     nutrientCode = code,
                     consumed = consumed,

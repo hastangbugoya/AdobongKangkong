@@ -202,7 +202,7 @@ class FoodEditorViewModel @Inject constructor(
             gramsPerServing = gramsPerServing,
             servingsPerPackage = servingsPerPackage,
             isRecipe = false,
-            stableId = stableId
+            stableId = stableId,
         )
 
         val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->

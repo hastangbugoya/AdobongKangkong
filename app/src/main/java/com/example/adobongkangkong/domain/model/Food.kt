@@ -13,5 +13,6 @@ data class Food(
     val gramsPerServing: Double?,
     val servingsPerPackage: Double?,
 
-    val isRecipe: Boolean
+    val isRecipe: Boolean,
+    val isLowSodium: Boolean? = null
 )

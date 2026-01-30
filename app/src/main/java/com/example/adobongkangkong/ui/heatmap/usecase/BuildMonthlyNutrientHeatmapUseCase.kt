@@ -41,7 +41,7 @@ class BuildMonthlyNutrientHeatmapUseCase @Inject constructor(
             val date = month.atDay(day)
 
             val totals = observeDailyTotals(date, zoneId).first()
-            val value = totals.totalsByCode[resolvedKey.value]
+            val value = totals.totalsByCode[resolvedKey]
 
             HeatmapDay(
                 date = date,

@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
+import com.example.adobongkangkong.data.local.db.mapper.toDomain
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.data.local.db.mapper.toEntity
 import com.example.adobongkangkong.domain.logging.model.FoodRef
@@ -31,19 +32,4 @@ class FoodRepositoryImpl @Inject constructor(
 
         return FoodRef.Food(foodId = entity.id)
     }
-
-
 }
-
-private fun FoodEntity.toDomain(): Food =
-    Food(
-        id = id,
-        name = name,
-        brand = brand,
-        servingSize = servingSize,
-        servingUnit = servingUnit,
-        gramsPerServing = gramsPerServing,
-        servingsPerPackage = servingsPerPackage,
-        isRecipe = isRecipe,
-        stableId = stableId
-    )

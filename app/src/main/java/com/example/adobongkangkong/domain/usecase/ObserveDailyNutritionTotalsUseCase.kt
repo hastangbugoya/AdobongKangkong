@@ -1,6 +1,8 @@
 package com.example.adobongkangkong.domain.usecase
 
 import com.example.adobongkangkong.domain.model.DailyNutritionTotals
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.repository.LogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -26,20 +28,20 @@ class ObserveDailyNutritionTotalsUseCase @Inject constructor(
         zoneId: ZoneId
     ): Flow<DailyNutritionTotals> {
         val (startInclusive, endExclusive) = dayBounds(date, zoneId)
-
         return logRepository.observeRange(startInclusive, endExclusive)
             .map { entries ->
-                val totals = mutableMapOf<String, Double>()
+                val totals = mutableMapOf<NutrientKey, Double>()
 
                 for (entry in entries) {
-                    entry.nutrients.asMap().forEach { (code, value) ->
-                        totals[code] = (totals[code] ?: 0.0) + value
+                    entry.nutrients.asMap().forEach { (code, amount) ->
+                        val key = NutrientKey(code) // matches your usage NutrientKey(card.code)
+                        totals[key] = (totals[key] ?: 0.0) + amount
                     }
                 }
 
                 DailyNutritionTotals(
                     date = date,
-                    totalsByCode = totals
+                    totalsByCode = NutrientMap(totals.toMap())
                 )
             }
     }

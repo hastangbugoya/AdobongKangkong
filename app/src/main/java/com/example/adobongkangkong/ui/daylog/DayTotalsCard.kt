@@ -16,38 +16,36 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun DayTotalsCard(totals: Any /* replace with your DailyNutritionTotals type */) {
-    // Adapt this to your real totals model.
-    // You already show totals on dashboard — reuse that formatter logic.
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium
     ) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Daily totals", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(6.dp))
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                text = "Daily totals",
+                style = MaterialTheme.typography.titleLarge
+            )
 
-            // Example layout – adapt to your real totals model:
-            // Calories | Protein | Carbs | Fat
+            Spacer(Modifier.height(10.dp))
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Calories")
-                Text("— kcal")
+                Text("Calories", style = MaterialTheme.typography.bodyLarge)
+                Text("— kcal", style = MaterialTheme.typography.bodyLarge)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Protein")
-                Text("— g")
+                Text("Protein", style = MaterialTheme.typography.bodyLarge)
+                Text("— g", style = MaterialTheme.typography.bodyLarge)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Carbs")
-                Text("— g")
+                Text("Carbs", style = MaterialTheme.typography.bodyLarge)
+                Text("— g", style = MaterialTheme.typography.bodyLarge)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Fat")
-                Text("— g")
+                Text("Fat", style = MaterialTheme.typography.bodyLarge)
+                Text("— g", style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
 }
-

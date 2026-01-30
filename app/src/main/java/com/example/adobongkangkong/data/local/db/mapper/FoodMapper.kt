@@ -12,7 +12,8 @@ internal fun Food.toEntity() = FoodEntity(
     servingUnit = servingUnit,
     gramsPerServing = gramsPerServing,
     servingsPerPackage = servingsPerPackage,
-    isRecipe = isRecipe
+    isRecipe = isRecipe,
+    isLowSodium = isLowSodium
 )
 
 internal fun FoodEntity.toDomain() = Food(
@@ -25,4 +26,5 @@ internal fun FoodEntity.toDomain() = Food(
     gramsPerServing = gramsPerServing,
     servingsPerPackage = servingsPerPackage,
     isRecipe = isRecipe,
+    isLowSodium = isLowSodium
 )

@@ -27,7 +27,7 @@ class ObserveRollingNutritionAveragesUseCase @Inject constructor(
             val sum = mutableMapOf<String, Double>()
 
             for (daily in totalsArray) {
-                for ((code, value) in daily.totalsByCode) {
+                for ((code, value) in daily.totalsByCode.asMap()) {
                     sum[code] = (sum[code] ?: 0.0) + value
                 }
             }

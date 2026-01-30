@@ -35,6 +35,7 @@ data class FoodEntity(
     val gramsPerServing: Double? = null,
 
     // Treat recipes as foods so they can be logged identically
-    val isRecipe: Boolean = false
+    val isRecipe: Boolean = false,
+    val isLowSodium: Boolean? = null
 )
 

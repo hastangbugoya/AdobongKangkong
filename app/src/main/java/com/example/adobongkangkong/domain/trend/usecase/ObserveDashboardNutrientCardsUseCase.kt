@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.trend.usecase
 
 import com.example.adobongkangkong.domain.model.UserNutrientTarget
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientSpec
 import com.example.adobongkangkong.domain.trend.model.RollingNutritionStats
@@ -48,7 +49,9 @@ class ObserveDashboardNutrientCardsUseCase @Inject constructor(
             android.util.Log.d("Meow", "spec codes=${specs.map { it.code }}")
             specs.map { spec: DashboardNutrientSpec ->
                 val code = spec.code.trim().uppercase()
-                val consumed = totalsByCode[code] ?: totalsByCode[spec.code] ?: 0.0
+                val key1 = NutrientKey(code)
+                val key2 = NutrientKey(spec.code)
+                val consumed = totalsByCode[key1] ?: totalsByCode[key2] ?: 0.0
 
                 val target = targetsByCode[code] // now canonical because repo normalizes
 

@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +58,7 @@ import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import java.time.Instant
+import java.time.LocalDate
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -67,6 +69,8 @@ fun DashboardScreen(
     onCreateFood: (String) -> Unit,
     onOpenFoods: () -> Unit,
     onOpenHeatmap: () -> Unit,
+    onOpenDayLog: (LocalDate) -> Unit,
+
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -202,9 +206,6 @@ fun DashboardScreen(
 
 
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showQuickAdd = true }) { Text("+") }
-        }
     ) { padding ->
         Column(
             Modifier
@@ -240,35 +241,29 @@ fun DashboardScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            Text("Logged Today", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Logged Today",
+                    style = MaterialTheme.typography.titleMedium
+                )
 
-            if (state.todayItems.isEmpty()) {
-                Text("Nothing logged yet.", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    userScrollEnabled = true
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(state.todayItems, key = { it.logId }) { item ->
-                        ListItem(
-                            headlineContent = {
-                                Text(item.itemName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            supportingContent = {
-                                Text(
-                                    "${formatTime(item.timestamp)} • " +
-                                            "${item.caloriesKcal.round0()} kcal"
-                                )
-                            },
-                            trailingContent = {
-                                IconButton(onClick = { vm.delete(item.logId) }) {
-                                    Icon(painterResource(id = R.drawable.trash), contentDescription = "Delete")
-                                }
-                            }
-                        )
-                        HorizontalDivider()
+                    Text(
+                        text = "Add",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { showQuickAdd = true }
+                    )
+
+                    TextButton(onClick = { onOpenDayLog(LocalDate.now()) }) {
+                        Text("View (${state.todayItems.size})")
                     }
                 }
             }

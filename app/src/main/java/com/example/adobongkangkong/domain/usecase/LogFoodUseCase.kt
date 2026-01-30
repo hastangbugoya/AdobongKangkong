@@ -22,7 +22,6 @@ import javax.inject.Inject
 class LogFoodUseCase @Inject constructor(
     private val createLogEntry: CreateLogEntryUseCase
 ) {
-
     suspend fun logFoodByServings(
         foodId: Long,
         servings: Double,
