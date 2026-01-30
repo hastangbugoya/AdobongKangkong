@@ -189,7 +189,6 @@ fun DashboardScreen(
                 title = {
                     Text(
                         text = "AdobongKangkong",
-                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.combinedClickable(
                             onClick = {},

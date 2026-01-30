@@ -49,7 +49,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onOpenFoods = { navController.navigate(NavRoutes.Foods.list) },
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
                 onOpenHeatmap = { navController.navigate(NavRoutes.Heatmap.route) },
-                onOpenDayLog = { date -> navController.navigate(NavRoutes.Heatmap.dayLog(date))}
+                onOpenDayLog = { date -> navController.navigate(NavRoutes.DayLog.dayLog(date))}
             )
         }
 
@@ -145,7 +145,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
 
         composable(
-            route = NavRoutes.Heatmap.dayLog,
+            route = NavRoutes.DayLog.route,
             arguments = listOf(navArgument("date") { type = NavType.StringType })
         ) { backStackEntry ->
             val date = LocalDate.parse(backStackEntry.arguments!!.getString("date")!!)
@@ -159,7 +159,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         composable(NavRoutes.Heatmap.route) {
             HeatmapScreen(
                 onNavigateToDayLog = { date ->
-                    navController.navigate(NavRoutes.Heatmap.dayLog(date))
+                    navController.navigate(NavRoutes.DayLog.dayLog(date))
                 }
             )
         }

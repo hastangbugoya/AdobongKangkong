@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.navigation
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.LocalDate
 
 object NavRoutes {
 
@@ -56,7 +57,10 @@ object NavRoutes {
         const val route: String = "heatmap"
         const val dayLog: String = "dayLog/{date}"
 
-        fun dayLog(date: java.time.LocalDate): String =
-            "dayLog/$date"
+        fun dayLog(date: LocalDate): String = "dayLog/$date"
+    }
+    object DayLog {
+        const val route: String = "dayLog/{date}"
+        fun dayLog(date: java.time.LocalDate): String = "dayLog/$date"
     }
 }
