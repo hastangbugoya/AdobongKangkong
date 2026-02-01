@@ -7,7 +7,11 @@ import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 data class RecipeIngredientUi(
     val foodId: Long,
     val foodName: String,
-    val servings: Double
+    val servings: Double,
+    /** Human-facing unit label for the serving basis (e.g., cup, tbsp, box). */
+    val servingUnitLabel: String? = null,
+    /** Approx grams for this ingredient line, derived from servings * gramsPerServing (if available). */
+    val grams: Double? = null
 )
 
 data class RecipeBuilderState(
@@ -18,6 +22,7 @@ data class RecipeBuilderState(
     val pickedFood: Food? = null,
     val pickedServings: Double = 1.0,
     val pickedServingsText: String = "",
+    val pickedGramsText: String = "",
     val pickedGrams: Double? = null,
     val ingredients: List<RecipeIngredientUi> = emptyList(),
 
@@ -31,4 +36,3 @@ data class RecipeBuilderState(
     val blockedFoodId: Long? = null,
     val navigateToEditFoodId: Long? = null,
 )
-

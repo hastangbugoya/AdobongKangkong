@@ -205,12 +205,12 @@ fun FoodEditorScreen(
                 grouped.entries
                     .sortedBy { it.key.name } // optional: stable ordering by enum name
                     .forEach { (category, rows) ->
-//                        item {
-//                            Text(
-//                                text = category.labelForUi(),
-//                                style = MaterialTheme.typography.titleMedium
-//                            )
-//                        }
+                        item {
+                            Text(
+                                text = category.labelForUi(),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
 
                         items(
                             items = rows,

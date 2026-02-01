@@ -56,6 +56,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipeBuilderScreen(
+    recipeId: Long? = null,
     editFoodId: Long?,
     onBack: () -> Unit,
     onEditFood: (Long) -> Unit
@@ -140,7 +141,6 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
-
             item {
                 OutlinedTextField(
                     value = state.servingsYield.toString(),
@@ -151,7 +151,6 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
-
             state.errorMessage?.let { err ->
                 item {
                     Text(
@@ -209,10 +208,21 @@ fun RecipeBuilderScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true
                     )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = state.pickedGramsText,
+                        onValueChange = vm::onPickedGramsTextChange,
+                        label = { Text("Grams") },
+                        enabled = (state.pickedFood?.gramsPerServing != null),
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
 
-                    state.pickedGrams?.let { grams ->
-                        Text("≈ ${"%,.1f".format(grams)} g", style = MaterialTheme.typography.bodySmall)
-                    }
+//                    state.pickedGrams?.let { grams ->
+//                        Text("≈ ${"%,.1f".format(grams)} g", style = MaterialTheme.typography.bodySmall)
+//                    }
 
                     if (pickedFood.servingsPerPackage != null) {
                         Spacer(Modifier.height(8.dp))
@@ -256,11 +266,19 @@ fun RecipeBuilderScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
+                                val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
+                                val amountText = if (unitLabel.isNotBlank()) {
+                                        "${"%,.2f".format(ing.servings)} $unitLabel"
+                                    } else {
+                                        "${"%,.2f".format(ing.servings)} servings"
+                                    }
+                                val gramsText = ing.grams?.let { g -> " (≈ ${"%,.1f".format(g)} g)" }.orEmpty()
                                 Text(
-                                    "${ing.foodName} • ${"%,.2f".format(ing.servings)} servings",
+                                    "${ing.foodName} • $amountText$gramsText",
                                     modifier = Modifier.weight(1f),
                                     maxLines = 2
                                 )
+
                                 IconButton(onClick = { vm.removeIngredientAt(index) }) {
                                     Icon(
                                         painterResource(id = R.drawable.trash),

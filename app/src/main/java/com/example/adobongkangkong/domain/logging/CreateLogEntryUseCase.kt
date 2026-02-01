@@ -16,7 +16,10 @@ import com.example.adobongkangkong.domain.usage.FoodUsageCheck
 import com.example.adobongkangkong.domain.usage.UsageContext
 import java.time.Instant
 import javax.inject.Inject
-
+// NOTE:
+// Recipe logging intentionally bypasses RecipeDraft.
+// We always load persisted RecipeEntity + ingredients from DB
+// to ensure correct identity and reproducible nutrition snapshots.
 class CreateLogEntryUseCase @Inject constructor(
     private val foodRepository: FoodRepository,
     private val snapshotRepository: FoodNutritionSnapshotRepository,
