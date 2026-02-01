@@ -218,10 +218,12 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
 
                     RecipeIngredientEntity(
                         recipeId = recipeId,
-                        ingredientFoodId = ingredientFoodId!!,
-                        ingredientServings = ing.ingredientServings
+                        foodId = ingredientFoodId!!,
+                        amountServings = ing.ingredientServings,
+                        amountGrams = null
                     )
                 }
+
 
                 if (ingredientRows.isNotEmpty()) {
                     recipeIngredientDao.insertAll(ingredientRows)

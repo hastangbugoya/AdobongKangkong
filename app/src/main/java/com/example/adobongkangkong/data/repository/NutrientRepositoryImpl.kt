@@ -18,33 +18,33 @@ class NutrientRepositoryImpl @Inject constructor(
 ) : NutrientRepository {
 
     override fun search(query: String, limit: Int): Flow<List<Nutrient>> {
-        // Pull more candidates than we display, then score & trim.
         val qLike = "%${query.trim().lowercase()}%"
 
         return nutrientDao.searchWithAliases(qLike, limit = 200)
             .mapLatest { entities ->
-
                 val nutrients = entities.map { it.toDomain() }
-
                 val ids = nutrients.map { it.id }
 
-                val aliases =
+                val aliasRows =
                     if (ids.isEmpty()) emptyList()
                     else aliasDao.getForNutrients(ids)
 
-                val aliasesById =
-                    aliases.groupBy { it.nutrientId }
-                        .mapValues { (_, list) ->
-                            list.map { it.aliasDisplay }
-                        }
+                val aliasesById: Map<Long, List<String>> =
+                    aliasRows
+                        .groupBy { it.nutrientId }
+                        .mapValues { (_, list) -> list.map { it.aliasDisplay } }
 
-                nutrients
-                    .map { n: Nutrient ->
-                        val a = aliasesById[n.id].orEmpty()
+                val nutrientsWithAliases: List<Nutrient> =
+                    nutrients.map { n ->
+                        n.copy(aliases = aliasesById[n.id].orEmpty())
+                    }
+
+                nutrientsWithAliases
+                    .map { n ->
                         val score = NutrientSearchScorer.score(
                             query = query,
                             nutrient = n,
-                            aliases = a
+                            aliases = n.aliases
                         )
                         n to score
                     }
@@ -54,6 +54,7 @@ class NutrientRepositoryImpl @Inject constructor(
                     .map { (n, _) -> n }
             }
     }
+
 
     override fun observeAllNutrients(): Flow<List<Nutrient>> =
         nutrientDao.observeAllNutrients()

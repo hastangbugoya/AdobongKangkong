@@ -2,7 +2,6 @@ package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
-import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
@@ -23,8 +22,8 @@ class RecipeDraftLookupRepositoryImpl @Inject constructor(
             totalYieldGrams = recipe.totalYieldGrams,
             ingredients = ingredients.map { ing ->
                 RecipeIngredientDraft(
-                    foodId = ing.ingredientFoodId,
-                    ingredientServings = ing.ingredientServings
+                    foodId = ing.foodId,
+                    ingredientServings = ing.amountServings ?: 0.0
                 )
             }
         )

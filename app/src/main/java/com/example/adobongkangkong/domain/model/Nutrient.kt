@@ -5,5 +5,6 @@ data class Nutrient (
     val code: String, // e.g. "CALORIES", "PROTEIN", "VITAMIN_C"
     val displayName: String, // e.g. "Calories", "Protein", "Vitamin C"
     val unit: NutrientUnit = NutrientUnit.G, // "kcal", "g", "mg", "µg"
-    val category: NutrientCategory = NutrientCategory.MACRO // "macro", "vitamin", "mineral", "other"
+    val category: NutrientCategory = NutrientCategory.MACRO, // "macro", "vitamin", "mineral", "other"
+    val aliases: List<String> = emptyList()
 )

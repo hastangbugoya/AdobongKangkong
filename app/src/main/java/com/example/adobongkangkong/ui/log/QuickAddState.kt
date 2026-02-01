@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.log
 
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 
 enum class InputMode {
     SERVINGS,
@@ -11,7 +12,7 @@ enum class InputMode {
 
 data class QuickAddState(
     val query: String = "",
-    val results: List<Food> = emptyList(),
+    val results: List<FoodListItemUiModel> = emptyList(),
 
     val selectedFood: Food? = null,
 

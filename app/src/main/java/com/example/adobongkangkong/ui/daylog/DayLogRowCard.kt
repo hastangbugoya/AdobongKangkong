@@ -20,6 +20,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
+import com.example.adobongkangkong.ui.format.toPrettyTime
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @Composable
@@ -52,7 +54,7 @@ fun DayLogRowCard(
                 Spacer(Modifier.height(4.dp))
 
                 Text(
-                    text = "${row.timestamp} • ${row.caloriesKcal?.roundToInt() ?: "0"} kcal",
+                    text = "${row.timestamp.toPrettyTime()} • ${row.caloriesKcal?.roundToInt() ?: "0"} kcal",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -60,10 +62,10 @@ fun DayLogRowCard(
                 Spacer(Modifier.height(4.dp))
 
                 Text(
-                    text = "Cal ${row.caloriesKcal?.roundToInt() ?: "0"}  " +
-                            "P ${row.proteinG?.format1() ?: "0.0"}  " +
-                            "C ${row.carbsG?.format1() ?: "0.0"}  " +
-                            "F ${row.fatG?.format1() ?: "0,0"}",
+                    text = /*"Cal ${row.caloriesKcal?.roundToInt() ?: "0"}  " +*/
+                            "Protein ${row.proteinG?.format1() ?: "0.0"}g  " +
+                            "Carbs ${row.carbsG?.format1() ?: "0.0"}g  " +
+                            "Fat ${row.fatG?.format1() ?: "0,0"}g",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -61,7 +61,7 @@ import java.time.Instant
 import java.time.LocalDate
 
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     onEditFood: (foodID: Long) -> Unit,
@@ -69,8 +69,7 @@ fun DashboardScreen(
     onCreateFood: (String) -> Unit,
     onOpenFoods: () -> Unit,
     onOpenHeatmap: () -> Unit,
-    onOpenDayLog: (LocalDate) -> Unit,
-
+    onOpenDayLog: (LocalDate) -> Unit = {}
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -85,7 +84,6 @@ fun DashboardScreen(
     var showDevTransferSheet by remember { mutableStateOf(false) }
 
     val targetDraft by vm.targetDraft.collectAsState()
-
     val pinOptions by vm.pinOptions.collectAsState()
 
     val exportLauncher =
@@ -95,9 +93,6 @@ fun DashboardScreen(
             if (uri != null) {
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     vm.exportTo(out)
-                } ?: run {
-                    // keep it simple: VM snackbar handles messaging
-                    // but we can also show a local snackbar if you want
                 }
             }
         }
@@ -113,13 +108,14 @@ fun DashboardScreen(
             }
         }
 
-    // One-shot navigation request
+    // One-shot navigation request (e.g., "needs grams-per-serving" -> edit food)
     LaunchedEffect(state.navigateToEditFoodId) {
         val id = state.navigateToEditFoodId ?: return@LaunchedEffect
         onEditFood(id)
         vm.onEditFoodNavigationHandled()
     }
 
+    // Snackbar messages from VM
     LaunchedEffect(snackbarMsg) {
         val msg = snackbarMsg ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
@@ -132,7 +128,6 @@ fun DashboardScreen(
             onDismissRequest = { vm.dismissBlockingSheet() },
             sheetState = blockingSheetState
         ) {
-            // IMPORTANT: BlockingBottomSheet calls model.onPrimary internally
             BlockingBottomSheet(
                 model = sheetModel,
                 onDismiss = { vm.dismissBlockingSheet() }
@@ -140,8 +135,8 @@ fun DashboardScreen(
         }
     }
 
+    // Dev transfer sheet (long-press title)
     val devSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
     if (showDevTransferSheet) {
         ModalBottomSheet(
             onDismissRequest = { showDevTransferSheet = false },
@@ -175,12 +170,42 @@ fun DashboardScreen(
         }
     }
 
-//    val targetsByCode = state.targetsByCode
-//
-//    val caloriesTarget = targetsByCode["calories_kcal"]?.targetPerDay ?: 2000.0
-//    val proteinTarget = targetsByCode["protein_g"]?.targetPerDay ?: 150.0
-//    val carbsTarget = targetsByCode["carbs_g"]?.targetPerDay ?: 200.0
-//    val fatTarget = targetsByCode["fat_g"]?.targetPerDay ?: 77.0
+    // Dashboard settings sheet (gear icon)
+    val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (state.settingsSheetOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { vm.onDismissSettingsSheet() },
+            sheetState = settingsSheetState
+        ) {
+            DashboardSettingsSheet(
+                pinnedKeys = state.pinnedKeys,
+                monitoredCards = state.nutrientCards,
+                targetDraft = targetDraft,
+                pinOptions = pinOptions,
+                onDismiss = vm::onDismissSettingsSheet,
+                onApplyPins = vm::applyPinnedCodes,
+                onDraftMinChange = vm::updateTargetDraftMin,
+                onDraftTargetChange = vm::updateTargetDraftTarget,
+                onDraftMaxChange = vm::updateTargetDraftMax,
+                onCancelTargetEdit = vm::cancelTargetEdit,
+                onSaveTargetDraft = vm::saveTargetDraft,
+                onStartTargetEditPrefilled = vm::startTargetEditPrefilled,
+                onSync = vm::devSyncNutrients,
+                onExport = { exportLauncher.launch("adobongkangkong_export.zip") },
+                onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }
+            )
+        }
+    }
+
+    if (showQuickAdd) {
+        QuickAddBottomSheet(
+            onDismiss = { showQuickAdd = false },
+            onCreateFood = onCreateFood,
+            onOpenFoodEditor = { foodId ->
+                onEditFood(foodId) // DashboardScreen callback
+            }
+        )
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -189,6 +214,7 @@ fun DashboardScreen(
                 title = {
                     Text(
                         text = "AdobongKangkong",
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.combinedClickable(
                             onClick = {},
@@ -198,122 +224,98 @@ fun DashboardScreen(
                 },
                 actions = {
                     IconButton(onClick = vm::onSettingsClicked) {
-                        Icon(painter = painterResource(id = R.drawable.settings), contentDescription = "Dashboard settings")
+                        Icon(
+                            painter = painterResource(id = R.drawable.settings),
+                            contentDescription = "Dashboard settings"
+                        )
                     }
                 }
             )
-
-
-        },
+        }
     ) { padding ->
-        Column(
-            Modifier
+        // Single scroll surface for the entire dashboard.
+        LazyColumn(
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = 24.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TextButton(onClick = onCreateRecipe) { Text("Recipes") }
-                TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
-                TextButton(onClick = onOpenFoods) { Text("Foods") }
-                TextButton(onClick = onOpenHeatmap) { Text("Heatmap") }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    TextButton(onClick = onCreateRecipe) { Text("Recipes") }
+                    TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
+                    TextButton(onClick = onOpenFoods) { Text("Foods") }
+                    TextButton(onClick = onOpenHeatmap) { Text("Heatmap") }
+                }
             }
-            Text(
-                "Today",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = { vm.devSyncNutrients() }
+
+            item {
+                Text(
+                    text = "Today",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = { vm.devSyncNutrients() }
+                    )
                 )
-            )
-            Spacer(Modifier.height(16.dp))
+            }
 
-
-            state.nutrientCards.forEach { card ->
-                Log.d("Meow", "NutrientCard ${card.displayName} > max:${card.maxPerDay} min:${card.minPerDay} target:${card.targetPerDay}")
+            items(
+                items = state.nutrientCards,
+                key = { it.code }
+            ) { card ->
                 DashboardNutrientCardRow(card)
             }
 
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Logged Today",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
+            item {
+                // Logged Today: compact and resilient to font scaling.
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Add",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { showQuickAdd = true }
+                        text = "Logged Today",
+                        style = MaterialTheme.typography.titleMedium
                     )
 
-                    TextButton(onClick = { onOpenDayLog(LocalDate.now()) }) {
-                        Text("View (${state.todayItems.size})")
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Add",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { showQuickAdd = true }
+                        )
+
+                        TextButton(
+                            onClick = { onOpenDayLog(LocalDate.now()) }
+                        ) {
+                            Text("View (${state.todayItems.size})")
+                        }
                     }
                 }
             }
 
-            if (state.settingsSheetOpen) {
-                val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-                ModalBottomSheet(
-                    onDismissRequest = { vm.onDismissSettingsSheet() },
-                    sheetState = settingsSheetState
-                ) {
-                    DashboardSettingsSheet(
-                        pinnedKeys = state.pinnedKeys,
-                        monitoredCards = state.nutrientCards,
-                        targetDraft = targetDraft,
-                        pinOptions = pinOptions,
-                        onDismiss = vm::onDismissSettingsSheet,
-                        onApplyPins = vm::applyPinnedCodes,
-                        onDraftMinChange = vm::updateTargetDraftMin,
-                        onDraftTargetChange = vm::updateTargetDraftTarget,
-                        onDraftMaxChange = vm::updateTargetDraftMax,
-                        onCancelTargetEdit = vm::cancelTargetEdit,
-                        onSaveTargetDraft = vm::saveTargetDraft,
-
-                        onSync = vm::devSyncNutrients,
-                        onExport = { exportLauncher.launch("adobongkangkong_export.zip") },
-                        onImport = {
-                            importLauncher.launch(
-                                arrayOf(
-                                    "application/zip",
-                                    "application/octet-stream"
-                                )
-                            )
-                        },
-                        onStartTargetEditPrefilled = vm::startTargetEditPrefilled
-                    )
-                }
+            item {
+                Text(
+                    text = if (state.todayItems.isEmpty()) "Nothing logged yet."
+                    else "${state.todayItems.size} item(s) logged today.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-
-
-
-        }
-
-        if (showQuickAdd) {
-            QuickAddBottomSheet(
-                onDismiss = { showQuickAdd = false },
-                onCreateFood = { query ->
-                    showQuickAdd = false
-                    onCreateFood(query)
-                }
-            )
         }
     }
 }

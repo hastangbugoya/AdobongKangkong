@@ -78,15 +78,15 @@ class ExportFoodsAndRecipesUseCase @Inject constructor(
 
             val ingredients = recipeIngredientDao.getForRecipe(recipe.id).map { ing ->
                 val ingredientStable =
-                    foodStableIdById[ing.ingredientFoodId]
+                    foodStableIdById[ing.foodId]
                         ?: run {
-                            warnings += "Recipe '${recipe.name}' references missing ingredientFoodId=${ing.ingredientFoodId}."
-                            "MISSING_INGREDIENT:${ing.ingredientFoodId}"
+                            warnings += "Recipe '${recipe.name}' references missing ingredient foodId=${ing.foodId}."
+                            "MISSING_INGREDIENT:${ing.foodId}"
                         }
 
                 RecipeIngredientExport(
                     ingredientFoodStableId = ingredientStable,
-                    ingredientServings = ing.ingredientServings
+                    ingredientServings = ing.amountServings ?: 0.0
                 )
             }
 

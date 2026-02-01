@@ -53,6 +53,11 @@ fun MonthlyHeatmapCalendar(
 ) {
     val daysByDate = remember(days) { days.associateBy { it.date } }
 
+    // Compute the max value for this month once; used to derive intensity buckets.
+    val monthMax = remember(days) {
+        days.maxOfOrNull { it.value ?: 0.0 } ?: 0.0
+    }
+
     val cells = remember(month, daysByDate) {
         buildCalendarCells(month, daysByDate)
     }
@@ -73,6 +78,7 @@ fun MonthlyHeatmapCalendar(
             items(cells) { cell ->
                 HeatmapDayCell(
                     cell = cell,
+                    monthMax = monthMax,
                     isSelected = (cell.date != null && cell.date == selectedDate),
                     onClick = {
                         val date = cell.date ?: return@HeatmapDayCell
@@ -115,32 +121,34 @@ private fun WeekdayHeader(modifier: Modifier = Modifier) {
 @Composable
 private fun HeatmapDayCell(
     cell: CalendarCell,
+    monthMax: Double,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
 
-    val bg = when (cell.status) {
-        TargetStatus.OK -> MaterialTheme.colorScheme.primaryContainer
-        TargetStatus.LOW -> MaterialTheme.colorScheme.tertiaryContainer
-        TargetStatus.HIGH -> MaterialTheme.colorScheme.errorContainer
-        TargetStatus.NO_TARGET, null -> MaterialTheme.colorScheme.surfaceVariant
+    val v = cell.value ?: 0.0
+    val intensity =
+        if (monthMax > 0.0) (v / monthMax).coerceIn(0.0, 1.0) else 0.0
+
+    val bg = when {
+        v <= 0.0 -> MaterialTheme.colorScheme.surfaceVariant
+        intensity < 0.34 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+        intensity < 0.67 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.80f)
     }
 
-    // Optional subtle selection treatment
-    val borderBg = if (isSelected) MaterialTheme.colorScheme.primary else null
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else null
 
     Surface(
+        color = bg, // <-- this is the important part (no modifier.background needed)
+        shape = shape,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
+        border = borderColor?.let { androidx.compose.foundation.BorderStroke(2.dp, it) },
         modifier = Modifier
             .aspectRatio(1f)
             .sizeIn(minWidth = 36.dp, minHeight = 36.dp)
-            .clip(shape)
-            .background(borderBg ?: bg, shape)
-            .padding(if (isSelected) 2.dp else 0.dp)
-            .clip(shape)
-            .background(bg, shape)
             .clickable(enabled = cell.date != null) { onClick() }
     ) {
         Box(
@@ -154,7 +162,9 @@ private fun HeatmapDayCell(
             )
         }
     }
+
 }
+
 
 private fun buildCalendarCells(
     month: YearMonth,

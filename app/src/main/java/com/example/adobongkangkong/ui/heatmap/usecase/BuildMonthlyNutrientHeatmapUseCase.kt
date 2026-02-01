@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.heatmap.usecase
 
+import android.util.Log
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
@@ -7,6 +8,7 @@ import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObservePinnedNutr
 import com.example.adobongkangkong.ui.heatmap.model.HeatmapDay
 import com.example.adobongkangkong.ui.heatmap.model.TargetRange
 import kotlinx.coroutines.flow.first
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import javax.inject.Inject
@@ -35,6 +37,7 @@ class BuildMonthlyNutrientHeatmapUseCase @Inject constructor(
         val min = targetRange.min
         val target = targetRange.target
         val max = targetRange.max
+        Log.d("Meow", "Heatmap building month=$month resolvedKey=$resolvedKey")
 
         val days = month.lengthOfMonth()
         return (1..days).map { day ->
@@ -43,6 +46,20 @@ class BuildMonthlyNutrientHeatmapUseCase @Inject constructor(
             val totals = observeDailyTotals(date, zoneId).first()
             val value = totals.totalsByCode[resolvedKey]
 
+            if (day <= 3) {
+                Log.d(
+                    "Meow",
+                    "$day date=$date value=${totals.totalsByCode[resolvedKey]} keys=${totals.totalsByCode.keys()}"
+                )
+            }
+
+            if (date == LocalDate.now(zoneId)) {
+                Log.d("Meow","Available keys = ${totals.totalsByCode.keys()} Resolved key = $resolvedKey Value = ${totals.totalsByCode[resolvedKey]}")
+                println("Heatmap debug:")
+                println("Available keys = ${totals.totalsByCode.keys()}")
+                println("Resolved key   = $resolvedKey")
+                println("Value          = ${totals.totalsByCode[resolvedKey]}")
+            }
             HeatmapDay(
                 date = date,
                 nutrientKey = resolvedKey,

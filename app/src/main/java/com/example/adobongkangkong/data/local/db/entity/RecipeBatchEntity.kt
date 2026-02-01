@@ -6,18 +6,19 @@ import androidx.room.PrimaryKey
 import java.time.Instant
 
 /**
- * A specific cooking event for a recipe.
+ * A specific cooking event (batch) created from an editable recipe.
  *
- * Why this exists:
- * - A recipe definition is editable.
- * - Cooked yield varies each time you cook.
- * - Logging by cooked grams MUST reference a batch/yield context.
+ * Key rule:
+ * - The recipe definition remains editable.
+ * - Creating a batch creates a *new Food snapshot* ([batchFoodId]) that is loggable.
+ * - Logs should reference the batch food snapshot, not the recipe.
  */
 @Entity(
     tableName = "recipe_batches",
     indices = [
         Index(value = ["recipeId"]),
-        Index(value = ["createdAt"])
+        Index(value = ["createdAt"]),
+        Index(value = ["batchFoodId"], unique = true)
     ]
 )
 data class RecipeBatchEntity(
@@ -25,6 +26,12 @@ data class RecipeBatchEntity(
     val id: Long = 0L,
 
     val recipeId: Long,
+
+    /**
+     * The loggable Food snapshot created for this batch.
+     * This is the Food ID that should be logged in DayLog/QuickAdd.
+     */
+    val batchFoodId: Long,
 
     /** Final cooked batch weight in grams (measured). */
     val cookedYieldGrams: Double,
@@ -37,3 +44,4 @@ data class RecipeBatchEntity(
 
     val createdAt: Instant = Instant.now()
 )
+

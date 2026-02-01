@@ -21,7 +21,9 @@ object DatabaseModule {
             context,
             NutriDatabase::class.java,
             "nutri.db"
-        ).build()
+        )
+            .fallbackToDestructiveMigration()
+            .build()
     }
 
     @Provides fun provideFoodDao(db: NutriDatabase): FoodDao = db.foodDao()

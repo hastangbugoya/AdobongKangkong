@@ -46,7 +46,7 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         UserNutrientTargetEntity::class,
         UserPinnedNutrientEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(DbTypeConverters::class)

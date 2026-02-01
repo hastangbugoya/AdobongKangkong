@@ -37,6 +37,10 @@ class FoodsCsvImporter @Inject constructor(
     private val db: NutriDatabase
 ) {
 
+    companion object {
+        private const val TAG = "FoodsCsvImporter"
+    }
+
     data class Report(
         val runId: Long,
         val foodsInserted: Int,
@@ -151,54 +155,45 @@ class FoodsCsvImporter @Inject constructor(
         skipIfFoodsExist: Boolean = true
     ): Report = withContext(Dispatchers.IO) {
 
-        val foodDao = db.foodDao()
-        val nutrientDao = db.nutrientDao()
-        val foodNutrientDao = db.foodNutrientDao()
-        val importRunDao = db.importRunDao()
-        val importIssueDao = db.importIssueDao()
+        Log.d("Meow", "START importFromAssets(assetFileName='$assetFileName', skipIfFoodsExist=$skipIfFoodsExist)")
 
-        if (skipIfFoodsExist) {
-            val count = foodDao.countFoods()
-            if (count > 0) {
-                return@withContext Report(
-                    runId = -1L,
-                    foodsInserted = 0,
-                    nutrientsInserted = 0,
-                    foodNutrientsInserted = 0,
-                    skippedRows = 0,
-                    warningCount = 0,
-                    errorCount = 0,
-                    notes = listOf("Skipped import because foods table already has $count rows.")
-                )
+        try {
+            val foodDao = db.foodDao()
+            val nutrientDao = db.nutrientDao()
+            val foodNutrientDao = db.foodNutrientDao()
+            val importRunDao = db.importRunDao()
+            val importIssueDao = db.importIssueDao()
+
+            if (skipIfFoodsExist) {
+                val count = foodDao.countFoods()
+                Log.d(TAG, "skipIfFoodsExist=true; foods table count=$count")
+                if (count > 0) {
+                    Log.d(TAG, "SKIP import because foods already exist (count=$count)")
+                    return@withContext Report(
+                        runId = -1L,
+                        foodsInserted = 0,
+                        nutrientsInserted = 0,
+                        foodNutrientsInserted = 0,
+                        skippedRows = 0,
+                        warningCount = 0,
+                        errorCount = 0,
+                        notes = listOf("Skipped import because foods table already has $count rows.")
+                    )
+                }
             }
-        }
 
-        val lines = readNonBlankLines(assetFileName)
-        val totalRows = (lines.size - 1).coerceAtLeast(0)
-        val startedAt = System.currentTimeMillis()
+            val lines = readNonBlankLines(assetFileName)
+            val totalRows = (lines.size - 1).coerceAtLeast(0)
+            val startedAt = System.currentTimeMillis()
 
-        val runId = importRunDao.insert(
-            ImportRunEntity(
-                startedAt = startedAt,
-                finishedAt = null,
-                source = "assets:$assetFileName",
-                totalRows = totalRows,
-                foodsInserted = 0,
-                nutrientsUpserted = 0,
-                foodNutrientsUpserted = 0,
-                skippedRows = 0,
-                warningCount = 0,
-                errorCount = 0
-            )
-        )
+            Log.d(TAG, "Read lines: totalLines=${lines.size} (dataRows=$totalRows)")
+            Log.d(TAG, "First line (header raw)='${lines.firstOrNull() ?: "<EMPTY>"}'")
+            Log.d(TAG, "First data line='${lines.getOrNull(1) ?: "<NONE>"}'")
 
-        if (lines.isEmpty()) {
-            val finishedAt = System.currentTimeMillis()
-            importRunDao.update(
+            val runId = importRunDao.insert(
                 ImportRunEntity(
-                    id = runId,
                     startedAt = startedAt,
-                    finishedAt = finishedAt,
+                    finishedAt = null,
                     source = "assets:$assetFileName",
                     totalRows = totalRows,
                     foodsInserted = 0,
@@ -209,211 +204,260 @@ class FoodsCsvImporter @Inject constructor(
                     errorCount = 0
                 )
             )
-            return@withContext Report(
-                runId = runId,
-                foodsInserted = 0,
-                nutrientsInserted = 0,
-                foodNutrientsInserted = 0,
-                skippedRows = 0,
-                warningCount = 0,
-                errorCount = 0,
-                notes = listOf("CSV was empty.")
-            )
-        }
 
-        val header = CsvParser.parseLine(lines.first())
-//        val headerIndex = buildHeaderIndex(header)
-        val headerIndex = buildHeaderIndexNormalized(header)
+            Log.d(TAG, "Created ImportRunEntity runId=$runId")
 
-        // 1) Upsert nutrients for any headers we recognize
-        val nutrientDefsByHeader = CsvNutrientCatalog.defs.associateBy { normalizeHeader(it.csvHeader) }
-
-        val nutrientsToUpsert = header.mapNotNull { h ->
-            val def = nutrientDefsByHeader[normalizeHeader(h.trim())] ?: return@mapNotNull null
-            NutrientEntity(
-                code = def.code,
-                displayName = def.displayName,
-                unit = NutrientUnit.fromDb(def.unit),
-                category = NutrientCategory.fromDb(def.categoryDbValue)
-            )
-        }
-
-        nutrientDao.upsertAll(nutrientsToUpsert)
-
-        // Resolve nutrient ids by header
-        val nutrientIdByHeader: Map<String, Long> = buildMap {
-            for (def in CsvNutrientCatalog.defs) {
-                val headerKey = def.csvHeader.trim().lowercase() // normalize to match headerIndexNormalized
-                if (!headerIndex.containsKey(headerKey)) continue
-
-                val id = nutrientDao.getIdByCode(def.code)
-                if (id != null) put(headerKey, id)
-            }
-        }
-
-        val notes = mutableListOf<String>()
-
-        // Duplicate Cu handling
-        val cuPositions = findHeaderPositions(header, "Cu")
-        val hasCuDuplicate = cuPositions.size >= 2
-        if (hasCuDuplicate) {
-            notes += "Detected duplicate 'Cu' column in CSV; importer will take the FIRST non-empty Cu value."
-        }
-
-        // Issues collected as (rowIndex -> code); persisted later
-        val issues = mutableListOf<Pair<Int, ImportIssueCode>>()
-
-        // Output buffers
-        val foods = ArrayList<FoodEntity>(lines.size)
-        val foodNutrients = ArrayList<FoodNutrientEntity>(lines.size * 10)
-
-        var skipped = 0
-        var warnMissingGrams = 0
-        var warnDuplicateCuResolved = 0 // for notes only (run warningCount remains warnMissingGrams)
-        var errorCount = 0
-
-        for (i in 1 until lines.size) {
-            val row = CsvParser.parseLine(lines[i])
-
-            val name = cellNormalized(row, headerIndex, "food")?.trim().orEmpty()
-            if (name.isBlank()) {
-                skipped++
-                continue
-            }
-
-            val servRaw = cellNormalized(row, headerIndex, "serv")
-            val weightRaw = cellNormalized(row, headerIndex, "weight")
-
-            val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
-            val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
-
-            if (!weightRaw.isNullOrBlank() && weightRaw.contains("g", ignoreCase = true) && parsedWeight.grams == null) {
-                issues.warn(i, ImportIssueCode.BAD_WEIGHT_FORMAT)
-            }
-
-            // Warn but import anyway if volume-like serving unit requires grams-per-serving and it is missing.
-            if (servingUnit.requiresGramsPerServing() && parsedWeight.grams == null) {
-                issues.warn(i, ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
-                warnMissingGrams++
-            }
-
-            val servingSize = 1.0
-            val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
-
-            foods += FoodEntity(
-                id = foodId,
-                name = name,
-                brand = null,
-                servingSize = servingSize,
-                servingUnit = servingUnit,
-                servingsPerPackage = null,
-                gramsPerServing = parsedWeight.grams, // ✅ Strawberry "144g" becomes 144.0 now
-                isRecipe = false
-            )
-
-            val basisType = decideBasisType(parsedWeight.grams)
-
-            for ((headerKey, nutrientId) in nutrientIdByHeader) {
-                val raw = cellNormalized(row, headerIndex, headerKey) ?: continue
-                val amount = parseAmount(raw) ?: continue
-
-                // Handle duplicate Cu columns by choosing the first non-empty Cu value
-                val finalAmount = if (headerKey == "cu" && hasCuDuplicate) {
-                    val chosen = pickCuValue(row, cuPositions, i, issues)
-                    if (
-                        issues.lastOrNull()?.first == i &&
-                        issues.lastOrNull()?.second == ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED
-                    ) {
-                        warnDuplicateCuResolved++
-                    }
-                    parseAmount(chosen ?: "") // chosen is a string, parse it
-                } else {
-                    amount
-                } ?: continue
-
-                foodNutrients += FoodNutrientEntity(
-                    foodId = foodId,
-                    nutrientId = nutrientId,
-                    nutrientAmountPerBasis = finalAmount,
-                    basisType = basisType
+            if (lines.isEmpty()) {
+                val finishedAt = System.currentTimeMillis()
+                importRunDao.update(
+                    ImportRunEntity(
+                        id = runId,
+                        startedAt = startedAt,
+                        finishedAt = finishedAt,
+                        source = "assets:$assetFileName",
+                        totalRows = totalRows,
+                        foodsInserted = 0,
+                        nutrientsUpserted = 0,
+                        foodNutrientsUpserted = 0,
+                        skippedRows = 0,
+                        warningCount = 0,
+                        errorCount = 0
+                    )
+                )
+                Log.d(TAG, "CSV empty; finished runId=$runId")
+                return@withContext Report(
+                    runId = runId,
+                    foodsInserted = 0,
+                    nutrientsInserted = 0,
+                    foodNutrientsInserted = 0,
+                    skippedRows = 0,
+                    warningCount = 0,
+                    errorCount = 0,
+                    notes = listOf("CSV was empty.")
                 )
             }
-        }
-        if (warnMissingGrams > 0) {
-            notes += "Imported $warnMissingGrams foods missing grams-per-serving for a non-weight serving unit. These foods will be BLOCKED when logging/recipes by servings until you set grams-per-serving."
-            val sampleRows = issues
-                .filter { it.second == ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT }
-                .take(5)
-                .joinToString { "row ${it.first}" }
-            if (sampleRows.isNotBlank()) {
-                notes += "Missing grams-per-serving sample: $sampleRows"
+
+            val header = CsvParser.parseLine(lines.first())
+            val headerIndex = buildHeaderIndexNormalized(header)
+
+            Log.d(TAG, "Parsed header columns=${header.size}")
+            Log.d(TAG, "Header normalized keys=${headerIndex.keys}")
+
+            // 1) Upsert nutrients for any headers we recognize
+            val nutrientDefsByHeader = CsvNutrientCatalog.defs.associateBy { normalizeHeader(it.csvHeader) }
+
+            val nutrientsToUpsert = header.mapNotNull { h ->
+                val def = nutrientDefsByHeader[normalizeHeader(h.trim())] ?: return@mapNotNull null
+                NutrientEntity(
+                    code = def.code,
+                    displayName = def.displayName,
+                    unit = NutrientUnit.fromDb(def.unit),
+                    category = NutrientCategory.fromDb(def.categoryDbValue)
+                )
             }
-        }
 
-        if (warnDuplicateCuResolved > 0) {
-            notes += "Resolved duplicate Copper (Cu) values on $warnDuplicateCuResolved rows by choosing the first non-empty value."
-        }
+            Log.d(TAG, "Recognized nutrients from header: nutrientsToUpsert=${nutrientsToUpsert.size}")
 
-        val finishedAt = System.currentTimeMillis()
+            nutrientDao.upsertAll(nutrientsToUpsert)
+            Log.d(TAG, "Upserted nutrients: count=${nutrientsToUpsert.size}")
 
-        db.withTransaction {
-            foodDao.upsertAll(foods)
-            foodNutrientDao.upsertAll(foodNutrients)
+            // Resolve nutrient ids by header
+            val nutrientIdByHeader: Map<String, Long> = buildMap {
+                for (def in CsvNutrientCatalog.defs) {
+                    val headerKey = def.csvHeader.trim().lowercase() // normalize to match headerIndexNormalized
+                    if (!headerIndex.containsKey(headerKey)) continue
 
-            if (issues.isNotEmpty()) {
-                val issueEntities = issues.map { (rowIndex, code) ->
-                    ImportIssueEntity(
-                        runId = runId,
-                        severity = "WARNING",
-                        code = code.name,
-                        rowIndex = rowIndex,
-                        field = when (code) {
-                            ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT -> "Weight"
-                            ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED -> "Cu"
-                            else -> null
-                        },
-                        message = when (code) {
-                            ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT ->
-                                "This food uses a serving unit like cup/tbsp/serving, but its Weight (grams per serving) was missing or invalid. The food was imported, but you must set grams-per-serving before you can log or use it in recipes by servings."
-                            ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED ->
-                                "The CSV had two Copper (Cu) columns with different values. The importer chose the first non-empty Copper value."
-                            else -> code.name
-                        },
-                        rawValue = null,
-                        foodId = null
+                    val id = nutrientDao.getIdByCode(def.code)
+                    if (id != null) put(headerKey, id)
+                }
+            }
+
+            Log.d(TAG, "Resolved nutrient IDs: nutrientIdByHeader.size=${nutrientIdByHeader.size}")
+
+            val notes = mutableListOf<String>()
+
+            // Duplicate Cu handling
+            val cuPositions = findHeaderPositions(header, "Cu")
+            val hasCuDuplicate = cuPositions.size >= 2
+            if (hasCuDuplicate) {
+                notes += "Detected duplicate 'Cu' column in CSV; importer will take the FIRST non-empty Cu value."
+            }
+            Log.d(TAG, "Cu positions=$cuPositions hasCuDuplicate=$hasCuDuplicate")
+
+            // Issues collected as (rowIndex -> code); persisted later
+            val issues = mutableListOf<Pair<Int, ImportIssueCode>>()
+
+            // Output buffers
+            val foods = ArrayList<FoodEntity>(lines.size)
+            val foodNutrients = ArrayList<FoodNutrientEntity>(lines.size * 10)
+
+            var skipped = 0
+            var warnMissingGrams = 0
+            var warnDuplicateCuResolved = 0 // for notes only (run warningCount remains warnMissingGrams)
+            var errorCount = 0
+
+            for (i in 1 until lines.size) {
+                // existing per-line logging (kept)
+                Log.d("Meow", lines[i])
+
+                val row = CsvParser.parseLine(lines[i])
+
+                val name = cellNormalized(row, headerIndex, "food")?.trim().orEmpty()
+                if (name.isBlank()) {
+                    skipped++
+                    continue
+                }
+
+                val servRaw = cellNormalized(row, headerIndex, "serv")
+                val weightRaw = cellNormalized(row, headerIndex, "weight")
+
+                val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
+                val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
+
+                if (!weightRaw.isNullOrBlank() && weightRaw.contains("g", ignoreCase = true) && parsedWeight.grams == null) {
+                    issues.warn(i, ImportIssueCode.BAD_WEIGHT_FORMAT)
+                }
+
+                // Warn but import anyway if volume-like serving unit requires grams-per-serving and it is missing.
+                if (servingUnit.requiresGramsPerServing() && parsedWeight.grams == null) {
+                    issues.warn(i, ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
+                    warnMissingGrams++
+                }
+
+                val servingSize = 1.0
+                val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
+
+                foods += FoodEntity(
+                    id = foodId,
+                    name = name,
+                    brand = null,
+                    servingSize = servingSize,
+                    servingUnit = servingUnit,
+                    servingsPerPackage = null,
+                    gramsPerServing = parsedWeight.grams, // ✅ Strawberry "144g" becomes 144.0 now
+                    isRecipe = false
+                )
+
+                val basisType = decideBasisType(parsedWeight.grams)
+
+                for ((headerKey, nutrientId) in nutrientIdByHeader) {
+                    val raw = cellNormalized(row, headerIndex, headerKey) ?: continue
+                    val amount = parseAmount(raw) ?: continue
+
+                    // Handle duplicate Cu columns by choosing the first non-empty Cu value
+                    val finalAmount = if (headerKey == "cu" && hasCuDuplicate) {
+                        val chosen = pickCuValue(row, cuPositions, i, issues)
+                        if (
+                            issues.lastOrNull()?.first == i &&
+                            issues.lastOrNull()?.second == ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED
+                        ) {
+                            warnDuplicateCuResolved++
+                        }
+                        parseAmount(chosen ?: "") // chosen is a string, parse it
+                    } else {
+                        amount
+                    } ?: continue
+
+                    foodNutrients += FoodNutrientEntity(
+                        foodId = foodId,
+                        nutrientId = nutrientId,
+                        nutrientAmountPerBasis = finalAmount,
+                        basisType = basisType
                     )
                 }
-                importIssueDao.insertAll(issueEntities)
             }
 
-            importRunDao.update(
-                ImportRunEntity(
-                    id = runId,
-                    startedAt = startedAt,
-                    finishedAt = finishedAt,
-                    source = "assets:$assetFileName",
-                    totalRows = totalRows,
-                    foodsInserted = foods.size,
-                    nutrientsUpserted = nutrientsToUpsert.size,
-                    foodNutrientsUpserted = foodNutrients.size,
-                    skippedRows = skipped,
-                    // preserve existing behavior: warningCount currently equals warnMissingGrams only
-                    warningCount = warnMissingGrams,
-                    errorCount = errorCount
-                )
+            Log.d(
+                TAG,
+                "Parsed rows done: foods.size=${foods.size}, foodNutrients.size=${foodNutrients.size}, skipped=$skipped, warnMissingGrams=$warnMissingGrams, warnDuplicateCuResolved=$warnDuplicateCuResolved, issues.size=${issues.size}"
             )
-        }
 
-        Report(
-            runId = runId,
-            foodsInserted = foods.size,
-            nutrientsInserted = nutrientsToUpsert.size,
-            foodNutrientsInserted = foodNutrients.size,
-            skippedRows = skipped,
-            warningCount = warnMissingGrams,
-            errorCount = errorCount,
-            notes = notes
-        )
+            if (warnMissingGrams > 0) {
+                notes += "Imported $warnMissingGrams foods missing grams-per-serving for a non-weight serving unit. These foods will be BLOCKED when logging/recipes by servings until you set grams-per-serving."
+                val sampleRows = issues
+                    .filter { it.second == ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT }
+                    .take(5)
+                    .joinToString { "row ${it.first}" }
+                if (sampleRows.isNotBlank()) {
+                    notes += "Missing grams-per-serving sample: $sampleRows"
+                }
+            }
+
+            if (warnDuplicateCuResolved > 0) {
+                notes += "Resolved duplicate Copper (Cu) values on $warnDuplicateCuResolved rows by choosing the first non-empty value."
+            }
+
+            val finishedAt = System.currentTimeMillis()
+
+            Log.d(TAG, "DB write starting: upsertAll foods=${foods.size}, foodNutrients=${foodNutrients.size}")
+
+            db.withTransaction {
+                foodDao.upsertAll(foods)
+                foodNutrientDao.upsertAll(foodNutrients)
+
+                if (issues.isNotEmpty()) {
+                    val issueEntities = issues.map { (rowIndex, code) ->
+                        ImportIssueEntity(
+                            runId = runId,
+                            severity = "WARNING",
+                            code = code.name,
+                            rowIndex = rowIndex,
+                            field = when (code) {
+                                ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT -> "Weight"
+                                ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED -> "Cu"
+                                else -> null
+                            },
+                            message = when (code) {
+                                ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT ->
+                                    "This food uses a serving unit like cup/tbsp/serving, but its Weight (grams per serving) was missing or invalid. The food was imported, but you must set grams-per-serving before you can log or use it in recipes by servings."
+                                ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED ->
+                                    "The CSV had two Copper (Cu) columns with different values. The importer chose the first non-empty Copper value."
+                                else -> code.name
+                            },
+                            rawValue = null,
+                            foodId = null
+                        )
+                    }
+                    importIssueDao.insertAll(issueEntities)
+                }
+
+                importRunDao.update(
+                    ImportRunEntity(
+                        id = runId,
+                        startedAt = startedAt,
+                        finishedAt = finishedAt,
+                        source = "assets:$assetFileName",
+                        totalRows = totalRows,
+                        foodsInserted = foods.size,
+                        nutrientsUpserted = nutrientsToUpsert.size,
+                        foodNutrientsUpserted = foodNutrients.size,
+                        skippedRows = skipped,
+                        // preserve existing behavior: warningCount currently equals warnMissingGrams only
+                        warningCount = warnMissingGrams,
+                        errorCount = errorCount
+                    )
+                )
+            }
+
+            Log.d(
+                TAG,
+                "DONE runId=$runId foodsInserted=${foods.size} nutrientsInserted=${nutrientsToUpsert.size} foodNutrientsInserted=${foodNutrients.size} skipped=$skipped warningCount=$warnMissingGrams errorCount=$errorCount"
+            )
+
+            Report(
+                runId = runId,
+                foodsInserted = foods.size,
+                nutrientsInserted = nutrientsToUpsert.size,
+                foodNutrientsInserted = foodNutrients.size,
+                skippedRows = skipped,
+                warningCount = warnMissingGrams,
+                errorCount = errorCount,
+                notes = notes
+            )
+        } catch (t: Throwable) {
+            Log.e(TAG, "FAILED importFromAssets(assetFileName='$assetFileName')", t)
+            throw t
+        }
     }
 
     private fun parseAmount(raw: String): Double? {

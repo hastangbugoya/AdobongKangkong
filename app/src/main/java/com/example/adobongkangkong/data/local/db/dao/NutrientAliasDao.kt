@@ -35,7 +35,7 @@ interface NutrientAliasDao {
     suspend fun upsertAll(items: List<NutrientAliasEntity>)
 
     @Query("SELECT aliasKey FROM nutrient_aliases WHERE nutrientId = :nutrientId")
-    fun observeAliasKeys(nutrientId: Long): kotlinx.coroutines.flow.Flow<List<String>>
+    fun observeAliasKeys(nutrientId: Long): Flow<List<String>>
 
     @Query(
         """

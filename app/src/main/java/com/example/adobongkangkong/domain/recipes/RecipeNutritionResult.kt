@@ -13,6 +13,7 @@ import com.example.adobongkangkong.domain.nutrition.NutrientMap
  * - perCookedGram assumes totals reflect the batch nutrient content (which they do),
  *   and cooked yield represents final cooked weight.
  */
+
 data class RecipeNutritionResult(
     val totals: NutrientMap,
     val perServing: NutrientMap?,

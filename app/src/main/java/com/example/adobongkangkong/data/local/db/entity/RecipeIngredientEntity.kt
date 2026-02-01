@@ -1,16 +1,28 @@
 package com.example.adobongkangkong.data.local.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "recipe_ingredients",
-    primaryKeys = ["recipeId", "ingredientFoodId"]
+    tableName = "recipe_ingredient",
+    indices = [
+        Index("recipeId"),
+        Index("foodId"),
+    ]
 )
 data class RecipeIngredientEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0L,
+
     val recipeId: Long,
-    val ingredientFoodId: Long,
+    val foodId: Long,
 
-    // canonical: ingredients stored in SERVINGS of that ingredient
-    val ingredientServings: Double
+    /** Mutually exclusive with [amountGrams]. */
+    val amountServings: Double? = null,
+
+    /** Mutually exclusive with [amountServings]. */
+    val amountGrams: Double? = null,
+
+    val sortOrder: Int = 0
 )
-

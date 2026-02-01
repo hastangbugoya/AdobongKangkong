@@ -69,8 +69,24 @@ class AddRecipeIngredientUseCase(
         writer.upsert(
             RecipeIngredientEntity(
                 recipeId = recipeId,
-                ingredientFoodId = ingredientFoodId,
-                ingredientServings = servings
+                foodId = ingredientFoodId,
+                amountServings = when (amountInput) {
+                    is AmountInput.ByServings -> amountInput.servings
+                    is AmountInput.ByGrams -> {
+                        val r = ServingAmountConverter.gramsToServings(
+                            servingUnit = food.servingUnit,
+                            gramsPerServing = food.gramsPerServing,
+                            grams = amountInput.grams
+                        )
+                        r.getOrElse {
+                            return Result.Blocked("Set grams-per-serving before adding grams for this ingredient.")
+                        }
+                    }
+                },
+                amountGrams = when (amountInput) {
+                    is AmountInput.ByServings -> null
+                    is AmountInput.ByGrams -> amountInput.grams
+                }
             )
         )
         return Result.Success

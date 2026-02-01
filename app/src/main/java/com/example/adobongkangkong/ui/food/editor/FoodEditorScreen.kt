@@ -1,10 +1,13 @@
 package com.example.adobongkangkong.ui.food.editor
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import android.annotation.SuppressLint
+import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,11 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,449 +27,545 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.domain.model.NutrientUnit
+import com.example.adobongkangkong.domain.model.ServingUnit
 
-private val ScreenPadding = 16.dp
-private val CardPadding = 12.dp
-private val FieldSpacing = 10.dp
-private val SectionSpacing = 16.dp
-
-/**
- * Food editor screen (create/edit).
- *
- * Responsibilities:
- * - Edit food basics (name, brand, serving size/unit, grams/serving, servings/package).
- * - Show food nutrient rows grouped by category.
- * - Add nutrients via a bottom-sheet search (smart search includes aliases).
- * - Manage nutrient aliases via a dedicated bottom sheet opened from a nutrient row menu.
- *
- * Alias UX (polished, discrete):
- * - Each nutrient row has an overflow menu (⋮) containing:
- *   - "Aliases…" → opens alias management sheet
- *   - "Remove" → removes the nutrient row from the food
- *
- * Notes:
- * - This screen is intentionally “single-file” for v1 iteration speed.
- *   You can split sub-composables into separate files later once it stabilizes.
- */
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodEditorScreen(
-    foodId: Long?,
-    initialName: String?,
-    onBack: () -> Unit,
-    vm: FoodEditorViewModel = hiltViewModel()
-) {
-    val state by vm.state.collectAsState()
-
-    // One-time load for create/edit
-    LaunchedEffect(foodId, initialName) {
-        vm.load(foodId, initialName)
-    }
-
-    val canSave = state.name.trim().isNotEmpty() && !state.isSaving
-    var showAddNutrient by remember { mutableStateOf(false) }
-
-    // Alias sheet state
-    val selectedAliases by vm.selectedAliases.collectAsState()
-    val aliasSheetNutrientName by vm.aliasSheetNutrientName.collectAsState()
-
-    val aliasMessage by vm.aliasSheetMessage.collectAsState()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (foodId == null) "New Food" else "Edit Food") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back") }
-                },
-                actions = {
-                    TextButton(
-                        onClick = { vm.save { onBack() } },
-                        enabled = canSave
-                    ) {
-                        Text(if (state.isSaving) "Saving…" else "Save")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(ScreenPadding)
-        ) {
-            ErrorBanner(message = state.errorMessage)
-
-            BasicsCard(
-                state = state,
-                onNameChange = vm::onNameChange,
-                onBrandChange = vm::onBrandChange,
-                onServingSizeChange = vm::onServingSizeChange,
-                onServingUnitChange = vm::onServingUnitChange,
-                onGramsPerServingChange = vm::onGramsPerServingChange,
-                onServingsPerPackageChange = vm::onServingsPerPackageChange,
-                onFavoriteChange = vm::onFavoriteChange,
-                onEatMoreChange = vm::onEatMoreChange,
-                onLimitChange = vm::onLimitChange,
-                onOpenLbDialog = vm::openLbDialog
-            )
-
-            Spacer(Modifier.height(SectionSpacing))
-
-            NutrientsCard(
-                rows = state.nutrientRows,
-                onAddClick = { showAddNutrient = true },
-                onAmountChange = { nutrientId, value -> vm.onNutrientAmountChange(nutrientId, value) },
-                onRemove = { nutrientId -> vm.removeNutrientRow(nutrientId) },
-                onAliases = { nutrientId, name -> vm.openAliasSheet(nutrientId, name) }
-            )
-
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-
-    if (state.isLbDialogOpen) {
-        AlertDialog(
-            onDismissRequest = vm::closeLbDialog,
-            title = { Text("Enter pounds (lb)") },
-            text = {
-                OutlinedTextField(
-                    value = state.lbInputText,
-                    onValueChange = vm::onLbInputChange,
-                    label = { Text("Pounds") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = vm::confirmLbToGrams) { Text("Convert") }
-            },
-            dismissButton = {
-                TextButton(onClick = vm::closeLbDialog) { Text("Cancel") }
-            }
-        )
-    }
-
-    // Alias management sheet (opened from nutrient row overflow menu)
-    if (aliasSheetNutrientName != null) {
-        ManageNutrientAliasesBottomSheet(
-            nutrientDisplayName = aliasSheetNutrientName ?: "Nutrient",
-            aliases = selectedAliases,
-            message = aliasMessage,
-            onAddAlias = vm::addAlias,
-            onDeleteAlias = vm::deleteAlias,
-            onDismiss = vm::closeAliasSheet
-        )
-    }
-
-    // Add nutrient search sheet
-    if (showAddNutrient) {
-        AddNutrientBottomSheet(
-            query = state.nutrientSearchQuery,
-            results = state.nutrientSearchResults,
-            onQueryChange = vm::onNutrientSearchQueryChange,
-            onPick = { picked ->
-                vm.addNutrient(picked)
-                showAddNutrient = false
-            },
-            onDismiss = { showAddNutrient = false }
-        )
-    }
-}
-
-/**
- * Simple error banner shown at the top of the screen when a user-visible error occurs.
- */
-@Composable
-private fun ErrorBanner(message: String?) {
-    if (message.isNullOrBlank()) return
-    Text(
-        text = message,
-        color = MaterialTheme.colorScheme.error
-    )
-    Spacer(Modifier.height(12.dp))
-}
-
-/**
- * Card section for basic food metadata.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun BasicsCard(
     state: FoodEditorState,
+
+    // Navigation
+    onBack: () -> Unit,
+
+    // Core fields
     onNameChange: (String) -> Unit,
     onBrandChange: (String) -> Unit,
     onServingSizeChange: (String) -> Unit,
     onServingUnitChange: (ServingUnit) -> Unit,
     onGramsPerServingChange: (String) -> Unit,
     onServingsPerPackageChange: (String) -> Unit,
-    onFavoriteChange: (Boolean) -> Unit,
-    onEatMoreChange: (Boolean) -> Unit,
-    onLimitChange: (Boolean) -> Unit,
-    onOpenLbDialog: () -> Unit
-    ) {
-    Card {
-        Column(Modifier.padding(CardPadding)) {
-            Text("Basics", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(FieldSpacing))
 
-            OutlinedTextField(
-                value = state.name,
-                onValueChange = onNameChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Name*") },
-                singleLine = true
-            )
+    // Nutrient rows
+    onNutrientAmountChange: (nutrientId: Long, newAmount: String) -> Unit,
+    onRemoveNutrient: (nutrientId: Long) -> Unit,
 
-            Spacer(Modifier.height(FieldSpacing))
+    // Nutrient search/add
+    onNutrientSearchQueryChange: (String) -> Unit,
+    onAddNutrientFromSearch: (nutrientId: Long) -> Unit,
 
-            OutlinedTextField(
-                value = state.brand,
-                onValueChange = onBrandChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Brand (optional)") },
-                singleLine = true
-            )
+    // Flags
+    onToggleFavorite: (Boolean) -> Unit,
+    onToggleEatMore: (Boolean) -> Unit,
+    onToggleLimit: (Boolean) -> Unit,
 
-            Spacer(Modifier.height(12.dp))
+    // Save/Delete
+    onSave: () -> Unit,
+    onDeleteFood: (() -> Unit)? = null,
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = state.servingSize,
-                    onValueChange = onServingSizeChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("Serving size") },
-                    singleLine = true
-                )
-
-                ServingUnitDropdown(
-                    value = state.servingUnit,
-                    onChange = onServingUnitChange,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(Modifier.height(FieldSpacing))
-
-            OutlinedTextField(
-                value = state.gramsPerServing,
-                onValueChange = onGramsPerServingChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Grams per serving (optional)") },
-                singleLine = true,
-                trailingIcon = {
-                    // Tap opens lb dialog (or use long-press on this icon if you want)
-                    IconButton(onClick = onOpenLbDialog) {
-                        Text("lb")
-                    }
-                }
-            )
-
-            Spacer(Modifier.height(FieldSpacing))
-
-            OutlinedTextField(
-                value = state.servingsPerPackage,
-                onValueChange = onServingsPerPackageChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Servings per package (optional)") },
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(SectionSpacing))
-            Text("Flags", style = MaterialTheme.typography.titleMedium)
-            FlagRow(
-                label = "⭐ Favorite",
-                checked = state.favorite,
-                onCheckedChange = onFavoriteChange
-            )
-
-            FlagRow(
-                label = "➕ Eat more of this",
-                checked = state.eatMore,
-                onCheckedChange = onEatMoreChange
-            )
-
-            FlagRow(
-                label = "⚠ Limit this",
-                checked = state.limit,
-                onCheckedChange = onLimitChange
-            )
-        }
-    }
-}
-
-/**
- * Card section for nutrient rows.
- *
- * - Rows are grouped by category.
- * - Each row supports inline amount edit.
- * - Overflow menu provides discrete actions:
- *   - "Aliases…" (opens alias sheet)
- *   - "Remove"
- */
-@Composable
-private fun NutrientsCard(
-    rows: List<NutrientRowUi>,
-    onAddClick: () -> Unit,
-    onAmountChange: (nutrientId: Long, value: String) -> Unit,
-    onRemove: (nutrientId: Long) -> Unit,
-    onAliases: (nutrientId: Long, nutrientName: String) -> Unit
+    // Alias sheet
+    aliasSheetNutrientName: String?,
+    aliasSheetAliases: List<String>,
+    aliasSheetMessage: String?,
+    onOpenAliasSheet: (nutrientId: Long, nutrientName: String) -> Unit,
+    onAddAlias: (String) -> Unit,
+    onDeleteAlias: (String) -> Unit,
+    onDismissAliasSheet: () -> Unit,
 ) {
-    Card {
-        Column(Modifier.padding(CardPadding)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Nutrients", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = onAddClick) { Text("Add") }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            if (rows.isEmpty()) {
-                Text("No nutrients yet. Tap Add.", style = MaterialTheme.typography.bodyMedium)
-                return@Column
-            }
-
-            rows
-                .groupBy { it.category }
-                .forEach { (category, group) ->
-                    Text(category.displayName, style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(6.dp))
-
-                    group.forEach { row ->
-                        NutrientRow(
-                            row = row,
-                            onAmountChange = { value -> onAmountChange(row.nutrientId, value) },
-                            onRemove = { onRemove(row.nutrientId) },
-                            onAliases = { onAliases(row.nutrientId, row.name) }
-                        )
-                        Spacer(Modifier.height(8.dp))
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (state.foodId == null) "New Food" else "Edit Food",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(painter = painterResource(R.drawable.angle_circle_left), contentDescription = "Back")
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
+            )
+        },
+        bottomBar = {
+            FoodEditorBottomBar(
+                isSaving = state.isSaving,
+                errorMessage = state.errorMessage,
+                showDelete = (onDeleteFood != null && state.foodId != null),
+                onDelete = { onDeleteFood?.invoke() },
+                onSave = onSave
+            )
+        }
+    ) { padding ->
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            val isTablet = maxWidth > 600.dp
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = 96.dp // space for bottom bar
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+
+                item {
+                    OutlinedTextField(
+                        value = state.name,
+                        onValueChange = onNameChange,
+                        label = { Text("Food name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = state.brand,
+                        onValueChange = onBrandChange,
+                        label = { Text("Brand") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    ServingSection(
+                        servingSize = state.servingSize,
+                        servingUnit = state.servingUnit,
+                        gramsPerServing = state.gramsPerServing,
+                        servingsPerPackage = state.servingsPerPackage,
+                        onServingSizeChange = onServingSizeChange,
+                        onServingUnitChange = onServingUnitChange,
+                        onGramsPerServingChange = onGramsPerServingChange,
+                        onServingsPerPackageChange = onServingsPerPackageChange,
+                        isTablet = isTablet
+                    )
+                }
+
+                item {
+                    FlagsSection(
+                        favorite = state.favorite,
+                        eatMore = state.eatMore,
+                        limit = state.limit,
+                        onToggleFavorite = onToggleFavorite,
+                        onToggleEatMore = onToggleEatMore,
+                        onToggleLimit = onToggleLimit,
+                        isTablet = isTablet
+                    )
+                }
+
+                item { HorizontalDivider() }
+
+                item {
+                    SectionHeader(
+                        title = "Nutrients",
+                        subtitle = "Edit amounts (as entered) per serving unit."
+                    )
+                }
+
+                // Group nutrient rows by category for readability and large-font safety.
+                val grouped = state.nutrientRows.groupBy { it.category }
+
+                grouped.entries
+                    .sortedBy { it.key.name } // optional: stable ordering by enum name
+                    .forEach { (category, rows) ->
+                        item {
+                            Text(
+                                text = category.labelForUi(),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+
+                        items(
+                            items = rows,
+                            key = { it.nutrientId }
+                        ) { row ->
+                            NutrientRowEditor(
+                                row = row,
+                                onAmountChange = { newValue ->
+                                    onNutrientAmountChange(row.nutrientId, newValue)
+                                },
+                                onRemove = { onRemoveNutrient(row.nutrientId) },
+                                isTablet = isTablet
+                            )
+                        }
+                    }
+
+                item { HorizontalDivider() }
+
+                item {
+                    SectionHeader(
+                        title = "Add nutrient",
+                        subtitle = "Search nutrients and add them to this food."
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = state.nutrientSearchQuery,
+                        onValueChange = onNutrientSearchQueryChange,
+                        label = { Text("Search nutrients") },
+//                        leadingIcon = { Icon(painter = painterResource(R.drawable.circle_ellipsis_vertical), contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (state.nutrientSearchResults.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Results",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    items(
+                        items = state.nutrientSearchResults,
+                        key = { it.id }
+                    ) { item ->
+                        NutrientSearchResultRow(
+                            item = item,
+                            onAdd = { onAddNutrientFromSearch(item.id) },
+                            onManageAliases = { onOpenAliasSheet(item.id, item.name) }
+                        )
+                    }
+                } else if (state.nutrientSearchQuery.isNotBlank()) {
+                    item {
+                        Text(
+                            text = "No results.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Optional debugging info (stableId) — keep subtle.
+                if (!state.stableId.isNullOrBlank()) {
+                    item {
+                        Text(
+                            text = "StableId: ${state.stableId}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (aliasSheetNutrientName != null) {
+        ManageNutrientAliasesBottomSheet(
+            nutrientDisplayName = aliasSheetNutrientName,
+            aliases = aliasSheetAliases,
+            message = aliasSheetMessage,
+            onAddAlias = onAddAlias,
+            onDeleteAlias = onDeleteAlias,
+            onDismiss = onDismissAliasSheet
+        )
+    }
+
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    subtitle: String? = null
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = title, style = MaterialTheme.typography.titleLarge)
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
-/**
- * Single nutrient line item:
- * - label + unit
- * - editable amount field
- * - overflow actions (Aliases/Remove)
- */
 @Composable
-private fun NutrientRow(
+private fun FlagsSection(
+    favorite: Boolean,
+    eatMore: Boolean,
+    limit: Boolean,
+    onToggleFavorite: (Boolean) -> Unit,
+    onToggleEatMore: (Boolean) -> Unit,
+    onToggleLimit: (Boolean) -> Unit,
+    isTablet: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = "Flags", style = MaterialTheme.typography.titleMedium)
+
+        if (isTablet) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.weight(1f))
+                FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.weight(1f))
+                FlagCheck("Limit", limit, onToggleLimit, Modifier.weight(1f))
+            }
+        } else {
+            FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.fillMaxWidth())
+            FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.fillMaxWidth())
+            FlagCheck("Limit", limit, onToggleLimit, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun FlagCheck(
+    label: String,
+    checked: Boolean,
+    onChecked: (Boolean) -> Unit,
+    modifier: Modifier
+) {
+    Row(
+        modifier = modifier
+            .clickable { onChecked(!checked) }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChecked)
+        Spacer(Modifier.width(8.dp))
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+    }
+}
+
+@Composable
+private fun NutrientRowEditor(
     row: NutrientRowUi,
     onAmountChange: (String) -> Unit,
     onRemove: () -> Unit,
-    onAliases: () -> Unit
+    isTablet: Boolean
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
+    // Layout that survives large fonts:
+    // Line 1: name + unit + delete icon
+    // Line 2: amount field (full width on phone; half width on tablet)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(row.name, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                row.unit.symbol,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = row.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = row.unit.labelForUi(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(onClick = onRemove) {
+                Icon(painter = painterResource(R.drawable.trash), contentDescription = "Remove nutrient")
+            }
         }
 
         OutlinedTextField(
             value = row.amount,
             onValueChange = onAmountChange,
-            modifier = Modifier.width(120.dp),
-            label = { Text("Amt") },
-            singleLine = true
-        )
-
-        NutrientRowOverflowMenu(
-            onAliases = onAliases,
-            onRemove = onRemove
+            label = { Text("Amount") },
+            singleLine = true,
+            modifier = if (isTablet) Modifier.fillMaxWidth(0.6f) else Modifier.fillMaxWidth()
         )
     }
 }
 
-/**
- * Overflow menu for a nutrient row.
- *
- * Keeping this as a separate composable avoids repeating menuExpanded state and
- * keeps the nutrient row readable.
- */
 @Composable
-private fun NutrientRowOverflowMenu(
-    onAliases: () -> Unit,
-    onRemove: () -> Unit
+private fun NutrientSearchResultRow(
+    item: NutrientSearchResultUi,
+    onAdd: () -> Unit,
+    onManageAliases: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    IconButton(onClick = { menuExpanded = true }) {
-        Icon(
-            painter = painterResource(id = R.drawable.circle_ellipsis_vertical),
-            contentDescription = "More"
-        )
-    }
-
-    DropdownMenu(
-        expanded = menuExpanded,
-        onDismissRequest = { menuExpanded = false }
+    Surface(
+        tonalElevation = 1.dp,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        DropdownMenuItem(
-            text = { Text("Aliases…") },
-            onClick = {
-                menuExpanded = false
-                onAliases()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // Optional: show aliases subtly (if you already added aliases to the UI model)
+                if (item.aliases.isNotEmpty()) {
+                    Text(
+                        text = item.aliases.joinToString(prefix = "Also: "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Text(
+                    text = "${item.unit.labelForUi()} • ${item.category.labelForUi()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+
+            TextButton(onClick = onAdd) { Text("Add") }
+
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                        contentDescription = "More actions"
+                    )
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Manage aliases") },
+                        onClick = {
+                            menuExpanded = false
+                            onManageAliases()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun ServingSection(
+    servingSize: String,
+    servingUnit: ServingUnit,
+    gramsPerServing: String,
+    servingsPerPackage: String,
+    onServingSizeChange: (String) -> Unit,
+    onServingUnitChange: (ServingUnit) -> Unit,
+    onGramsPerServingChange: (String) -> Unit,
+    onServingsPerPackageChange: (String) -> Unit,
+    isTablet: Boolean
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(text = "Serving", style = MaterialTheme.typography.titleMedium)
+
+        if (isTablet) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = servingSize,
+                    onValueChange = onServingSizeChange,
+                    label = { Text("Serving size") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                ServingUnitDropdown(
+                    value = servingUnit,
+                    onValueChange = onServingUnitChange,
+                    modifier = Modifier.weight(1f),
+                    options = ServingUnit.values().toList()
+                )
+            }
+        } else {
+            OutlinedTextField(
+                value = servingSize,
+                onValueChange = onServingSizeChange,
+                label = { Text("Serving size") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            ServingUnitDropdown(
+                value = servingUnit,
+                onValueChange = onServingUnitChange,
+                modifier = Modifier.fillMaxWidth(),
+                options = ServingUnit.values().toList()
+            )
+        }
+
+        // gramsPerServing is critical for non-gram units; keep it prominent and full-width.
+        OutlinedTextField(
+            value = gramsPerServing,
+            onValueChange = onGramsPerServingChange,
+            label = { Text("Grams per serving") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
         )
-        DropdownMenuItem(
-            text = { Text("Remove") },
-            onClick = {
-                menuExpanded = false
-                onRemove()
-            }
+
+        OutlinedTextField(
+            value = servingsPerPackage,
+            onValueChange = onServingsPerPackageChange,
+            label = { Text("Servings per package") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 /**
- * Serving unit dropdown for food logging (e.g., G, ML, TBSP).
+ * Replace this dropdown with your existing ServingUnit picker implementation.
+ * I’m keeping it minimal and compile-safe: a clickable text that cycles is NOT ideal.
+ * If you already have a proper dropdown composable, swap it in here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServingUnitDropdown(
     value: ServingUnit,
-    onChange: (ServingUnit) -> Unit,
-    modifier: Modifier = Modifier
+    onValueChange: (ServingUnit) -> Unit,
+    modifier: Modifier = Modifier,
+    options: List<ServingUnit>
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -477,21 +575,30 @@ private fun ServingUnitDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            readOnly = true,
-            value = value.name,
+            value = value.display,
             onValueChange = {},
-            label = { Text("Unit") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth()
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Serving unit") },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
         )
 
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            ServingUnit.entries.forEach { u ->
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { unit ->
                 DropdownMenuItem(
-                    text = { Text(u.name) },
+                    text = { Text(unit.display) },
                     onClick = {
-                        onChange(u)
                         expanded = false
+                        if (unit != value) onValueChange(unit)
                     }
                 )
             }
@@ -499,84 +606,58 @@ private fun ServingUnitDropdown(
     }
 }
 
+
 /**
- * Bottom sheet used to add a nutrient row to the food.
- *
- * - User types a query
- * - Results are shown (smart search includes aliases)
- * - Each result has a compact "Add" action
- *
- * This sheet intentionally does NOT expose alias editing to keep it focused.
- * Alias editing remains in the nutrient row overflow menu (discrete UX).
+ * Sticky bottom bar: always reachable with big fonts and long forms.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddNutrientBottomSheet(
-    query: String,
-    results: List<NutrientSearchResultUi>,
-    onQueryChange: (String) -> Unit,
-    onPick: (NutrientSearchResultUi) -> Unit,
-    onDismiss: () -> Unit
+private fun FoodEditorBottomBar(
+    isSaving: Boolean,
+    errorMessage: String?,
+    showDelete: Boolean,
+    onDelete: () -> Unit,
+    onSave: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(ScreenPadding)
-        ) {
-            Text("Add nutrient", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search nutrients") },
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            if (query.isNotBlank() && results.isEmpty()) {
-                Text("No matching nutrients.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                results.forEach { n ->
-                    ListItem(
-                        headlineContent = { Text(n.name) },
-                        supportingContent = {
-                            // Keep this compact and human-friendly.
-                            Text("${n.category.displayName} • ${n.unit.symbol}")
-                        },
-                        trailingContent = {
-                            TextButton(onClick = { onPick(n) }) { Text("Add") }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    HorizontalDivider()
-                }
+    Surface(tonalElevation = 3.dp) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            if (!errorMessage.isNullOrBlank()) {
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(8.dp))
             }
 
-            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (showDelete) {
+                    OutlinedButton(
+                        onClick = onDelete,
+                        enabled = !isSaving,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Delete") }
+                }
+
+                Button(
+                    onClick = onSave,
+                    enabled = !isSaving,
+                    modifier = Modifier.weight(1f)
+                ) { Text(if (isSaving) "Saving…" else "Save") }
+            }
         }
     }
 }
 
-@Composable
-private fun FlagRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label)
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
-    }
-    Spacer(Modifier.height(8.dp))
-}
+// --- UI labels (keep these local; change later if you want nicer names) ---
 
+private fun NutrientCategory.labelForUi(): String = name.replace('_', ' ').lowercase()
+    .replaceFirstChar { it.uppercase() }
+
+private fun NutrientUnit.labelForUi(): String = name.lowercase()
+
+private fun NutrientRowUi.categoryLabelForUi(): String = category.labelForUi()

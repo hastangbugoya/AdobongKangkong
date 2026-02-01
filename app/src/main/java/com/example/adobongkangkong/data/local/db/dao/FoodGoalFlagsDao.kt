@@ -19,6 +19,9 @@ interface FoodGoalFlagsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: FoodGoalFlagsEntity)
 
+    @Query("SELECT * FROM food_goal_flags")
+    fun observeAll(): Flow<List<FoodGoalFlagsEntity>>
+
     @Query("DELETE FROM food_goal_flags WHERE foodId = :foodId")
     suspend fun clear(foodId: Long)
 }

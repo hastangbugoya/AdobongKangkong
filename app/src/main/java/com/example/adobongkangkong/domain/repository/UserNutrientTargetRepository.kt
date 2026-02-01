@@ -10,5 +10,4 @@ interface UserNutrientTargetRepository {
     suspend fun upsertAll(targets: List<UserNutrientTarget>)
     suspend fun delete(nutrientCode: String)
     suspend fun hasAnyTargets(): Boolean
-
 }

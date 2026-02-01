@@ -68,12 +68,26 @@ object NutrientCatalog {
             category = NutrientCategory.VITAMIN,
             aliases = listOf("vit c", "ascorbic acid")
         ),
-        Entry(
-            code = "SODIUM",
-            displayName = "Sodium",
-            unit = NutrientUnit.MG,
-            category = NutrientCategory.MINERAL,
-            aliases = listOf("na", "salt")
-        )
+//        Entry(
+//            code = "SODIUM",
+//            displayName = "Sodium",
+//            unit = NutrientUnit.MG,
+//            category = NutrientCategory.MINERAL,
+//            aliases = listOf("na", "salt")
+//        )
     )
+
+    private val keyToId: Map<String, Long> = mapOf(
+        NutrientKey.CALORIES_KCAL.value to 1001L,
+        NutrientKey.PROTEIN_G.value to 1002L,
+        NutrientKey.CARBS_G.value to 1003L,
+        NutrientKey.FAT_G.value to 1004L,
+        NutrientKey.FIBER_G.value to 1005L,
+        NutrientKey.SUGAR_G.value to 1006L,
+        NutrientKey.SODIUM_MG.value to 1007L
+    )
+
+    fun idOf(key: NutrientKey): Long? = keyToId[key.value]
+    
+    fun idOfValue(keyValue: String): Long? = keyToId[keyValue]
 }

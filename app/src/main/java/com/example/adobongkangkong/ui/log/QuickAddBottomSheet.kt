@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.log
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -17,14 +19,27 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
+import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import kotlin.math.max
 
+/**
+ * Quick-add logging sheet.
+ *
+ * Shows food search + a compact logging form.
+ * If the selected food uses a non-gram serving unit and is missing grams-per-serving,
+ * an **Edit food** button is shown to jump to the food editor (so the user can fill in grams-per-serving).
+ *
+ * @param onOpenFoodEditor Navigate to the food editor for the given food id.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickAddBottomSheet(
     onDismiss: () -> Unit,
     onCreateFood: (String) -> Unit,
+    onOpenFoodEditor: (foodId: Long) -> Unit = {},
     vm: QuickAddViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
@@ -34,7 +49,7 @@ fun QuickAddBottomSheet(
         skipPartiallyExpanded = true
     )
 
-    val scrollState = rememberScrollState()
+    rememberScrollState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -57,8 +72,6 @@ fun QuickAddBottomSheet(
                 label = { Text("Search foods") },
                 singleLine = true
             )
-
-
 
             Spacer(Modifier.height(12.dp))
 
@@ -124,6 +137,7 @@ fun QuickAddBottomSheet(
                         onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
                         onGramsChanged = vm::onGramsChanged,
                         onPackage = vm::onPackageClicked,
+                        onEditFoodInEditor = { onOpenFoodEditor(state.selectedFood!!.id) },
                         onSave = { vm.save(onDone = onDismiss) },
                         errorMessage = state.errorMessage
                     )
@@ -146,12 +160,11 @@ fun QuickAddBottomSheet(
             }
         }
     }
-
 }
 
 @Composable
 private fun FoodSearchResults(
-    results: List<Food>,
+    results: List<FoodListItemUiModel>,
     onPick: (Food) -> Unit
 ) {
     if (results.isEmpty()) {
@@ -166,7 +179,9 @@ private fun FoodSearchResults(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(vertical = 8.dp)
     ) {
-        items(results, key = { it.id }) { food ->
+        items(results, key = { it.food.id }) { item ->
+            val food = item.food
+            Log.d("Meow", "QuickAdd search > ${item.food.name} flages:${item.goalFlags.toString()}")
             ListItem(
                 headlineContent = { Text(food.name) },
                 supportingContent = {
@@ -177,14 +192,18 @@ private fun FoodSearchResults(
                     }
                     Text(subtitle)
                 },
+                trailingContent = {
+                    FoodGoalFlagsStrip(item.goalFlags)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onPick(food) }
+                    .clickable { onPick(item.food) }
             )
             HorizontalDivider()
         }
     }
 }
+
 
 @Composable
 private fun SelectedFoodPanel(
@@ -203,6 +222,7 @@ private fun SelectedFoodPanel(
     onServingUnitAmountChanged: (Double) -> Unit,
     onGramsChanged: (Double) -> Unit,
     onPackage: (Double) -> Unit,
+    onEditFoodInEditor: () -> Unit,
     onSave: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -217,6 +237,10 @@ private fun SelectedFoodPanel(
         TextButton(onClick = onBack) { Text("Change") }
     }
 
+    Log.d(
+        "Meow",
+        "QuickAdd selected: unit=${food.servingUnit} servingSize=${food.servingSize} gramsPerServing=${food.gramsPerServing} resolved=${food.gramsPerServingResolved()}"
+    )
     Spacer(Modifier.height(12.dp))
 
     // Servings input (canonical)
@@ -243,11 +267,73 @@ private fun SelectedFoodPanel(
     val canLogGrams = food.gramsPerServingResolved() != null
     val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
     if (canLogGrams) {
-        NumberField(
-            label = "Grams (g)",
-            value = gramsAmount ?: gramsDefault,
-            onValue = onGramsChanged
-        )
+        var isLbDialogOpen by rememberSaveable { mutableStateOf(false) }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.weight(1f)) {
+                NumberField(
+                    label = "Grams (g)",
+                    value = gramsAmount ?: gramsDefault,
+                    onValue = onGramsChanged
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            TextButton(
+                onClick = { isLbDialogOpen = true },
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                Text("lb")
+            }
+        }
+
+        if (isLbDialogOpen) {
+            PoundsToGramsDialog(
+                onDismiss = { isLbDialogOpen = false },
+                onApplyGrams = { grams ->
+                    onGramsChanged(grams)
+                    isLbDialogOpen = false
+                }
+            )
+        }
+    }
+
+    // If the unit is not grams and we don't have grams-per-serving, offer a shortcut to the editor.
+    val needsGramsPerServing = (food.servingUnit != ServingUnit.G) && (food.gramsPerServingResolved() == null)
+    if (needsGramsPerServing) {
+        Spacer(Modifier.height(8.dp))
+        Surface(
+            tonalElevation = 1.dp,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Missing grams-per-serving",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Add grams-per-serving in the food editor to enable gram-based logging and accurate conversions.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = onEditFoodInEditor) {
+                    Text("Edit food")
+                }
+            }
+        }
     }
 
     // Package buttons
@@ -317,7 +403,6 @@ private fun SelectedFoodPanel(
     ) {
         Text("Log")
     }
-
 }
 
 @Composable
@@ -475,7 +560,46 @@ private fun CreateBatchDialog(
     )
 }
 
+@Composable
+private fun PoundsToGramsDialog(
+    onDismiss: () -> Unit,
+    onApplyGrams: (Double) -> Unit
+) {
+    var poundsText by rememberSaveable { mutableStateOf("") }
+
+    // basic parse (keeps it small + safe)
+    val pounds = poundsText.toDoubleOrNull()
+    val grams = pounds?.let { it * 453.59237 }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enter pounds") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = poundsText,
+                    onValueChange = { poundsText = it },
+                    label = { Text("Pounds (lb)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    supportingText = {
+                        if (grams != null) Text("= ${grams.clean()} g")
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (grams != null) onApplyGrams(grams) },
+                enabled = grams != null && grams > 0.0
+            ) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
 
 private fun Double.clean(): String =
     if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this)
-

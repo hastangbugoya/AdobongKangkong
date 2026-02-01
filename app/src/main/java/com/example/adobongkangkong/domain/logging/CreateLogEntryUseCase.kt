@@ -3,8 +3,8 @@ package com.example.adobongkangkong.domain.logging
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.LogEntry
+import com.example.adobongkangkong.domain.nutrition.ComputeRecipeBatchNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
-import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.toRecipe
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -26,7 +26,7 @@ class CreateLogEntryUseCase @Inject constructor(
     // NEW: recipe batch context + snapshot
     private val recipeDraftLookup: RecipeDraftLookupRepository,
     private val recipeBatchLookup: RecipeBatchLookupRepository,
-    private val computeRecipeNutrition: ComputeRecipeNutritionUseCase,
+    private val computeRecipeBatchNutritionUseCase: ComputeRecipeBatchNutritionUseCase,
     private val computeLoggedRecipeNutrition: ComputeLoggedRecipeNutritionUseCase
 ) {
 
@@ -130,7 +130,7 @@ class CreateLogEntryUseCase @Inject constructor(
             servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
         )
 
-        val computed = computeRecipeNutrition.invoke(effectiveDraft.toRecipe())
+        val computed = computeRecipeBatchNutritionUseCase(effectiveDraft.toRecipe())
             ?: return Result.Error("Recipe nutrition unavailable")
 
         val logged = computeLoggedRecipeNutrition.invoke(

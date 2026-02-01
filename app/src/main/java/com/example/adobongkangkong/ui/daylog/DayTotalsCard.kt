@@ -13,9 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.adobongkangkong.domain.model.DailyNutritionTotals
+import com.example.adobongkangkong.domain.nutrition.NutrientCodes
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 
 @Composable
-fun DayTotalsCard(totals: Any /* replace with your DailyNutritionTotals type */) {
+fun DayTotalsCard(totals: DailyNutritionTotals) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -32,19 +35,19 @@ fun DayTotalsCard(totals: Any /* replace with your DailyNutritionTotals type */)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Calories", style = MaterialTheme.typography.bodyLarge)
-                Text("— kcal", style = MaterialTheme.typography.bodyLarge)
+                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.CALORIES_KCAL)]}kcal", style = MaterialTheme.typography.bodyLarge)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Protein", style = MaterialTheme.typography.bodyLarge)
-                Text("— g", style = MaterialTheme.typography.bodyLarge)
+                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.PROTEIN_G)]}g", style = MaterialTheme.typography.bodyLarge)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Carbs", style = MaterialTheme.typography.bodyLarge)
-                Text("— g", style = MaterialTheme.typography.bodyLarge)
+                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.CARBS_G)]}g", style = MaterialTheme.typography.bodyLarge)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Fat", style = MaterialTheme.typography.bodyLarge)
-                Text("— g", style = MaterialTheme.typography.bodyLarge)
+                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.FAT_G)]}g", style = MaterialTheme.typography.bodyLarge)
             }
         }
     }

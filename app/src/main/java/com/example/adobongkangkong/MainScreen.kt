@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.navigation.compose.rememberNavController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.navigation.AppNavHost
@@ -25,5 +26,8 @@ private enum class RootScreen { DASHBOARD, RECIPE_BUILDER }
 
 @Composable
 fun MainScreen() {
-    AppNavHost()
+
+    val navController = rememberNavController()
+
+    AppNavHost(navController)
 }

@@ -11,7 +11,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun StartupScreen(
     onDone: () -> Unit,
-    vm: StartupViewModel = hiltViewModel()
+    vm: StartupViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
 

@@ -32,8 +32,8 @@ class DatabaseSeeder @Inject constructor(
             NutrientEntity(id = 4, code = NutrientCodes.FAT_G, displayName = "Fat", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
 
             NutrientEntity(id = 5, code = NutrientCodes.FIBER_G, displayName = "Fiber", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 6, code = NutrientCodes.SUGAR_G, displayName = "Total Sugars", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
-            NutrientEntity(id = 7, code = NutrientCodes.SODIUM_MG, displayName = "Sodium", unit = NutrientUnit.MG, category = NutrientCategory.MACRO),
+//            NutrientEntity(id = 6, code = NutrientCodes.SUGAR_G, displayName = "Total Sugars", unit = NutrientUnit.G, category = NutrientCategory.MACRO),
+            NutrientEntity(id = 6, code = NutrientCodes.SODIUM_MG, displayName = "Sodium", unit = NutrientUnit.MG, category = NutrientCategory.MACRO),
         )
         nutrientDao.upsertAll(nutrients)
 

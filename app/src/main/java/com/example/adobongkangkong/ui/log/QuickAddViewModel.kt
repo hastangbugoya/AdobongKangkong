@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.log
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
@@ -11,7 +12,9 @@ import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
+import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,7 +35,9 @@ class QuickAddViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
     private val createLogEntry: CreateLogEntryUseCase,
     private val recipeDao: RecipeDao,
-    private val recipeBatchDao: RecipeBatchDao
+    private val recipeBatchDao: RecipeBatchDao,
+    private val createBatchFoodFromRecipeUseCase: CreateSnapshotFoodFromRecipeUseCase,
+    private val foodGoalFlagsDao: FoodGoalFlagsDao,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -66,6 +71,22 @@ class QuickAddViewModel @Inject constructor(
                 if (q.isBlank()) flowOf(emptyList())
                 else searchFoods(q, limit = 50)
             }
+
+    private val flagsByFoodIdFlow =
+        foodGoalFlagsDao
+            .observeAll()
+            .map { list -> list.associateBy { it.foodId } }
+
+    private val resultsUiFlow =
+        combine(resultsFlow, flagsByFoodIdFlow) { foods, flagsById ->
+            foods.map { food ->
+                FoodListItemUiModel(
+                    food = food,
+                    goalFlags = flagsById[food.id]
+                )
+            }
+        }
+
 
     private val batchesFlow =
         selectedRecipeIdFlow.flatMapLatest { recipeId ->
@@ -113,7 +134,7 @@ class QuickAddViewModel @Inject constructor(
 
     private data class CoreInputs(
         val query: String,
-        val results: List<Food>,
+        val results: List<FoodListItemUiModel>,
         val selected: Food?,
         val servings: Double,
         val inputMode: InputMode
@@ -141,7 +162,7 @@ class QuickAddViewModel @Inject constructor(
          */
         val coreFlow = combine(
             queryFlow,
-            resultsFlow,
+            resultsUiFlow,
             selectedFoodFlow,
             servingsFlow,
             inputModeFlow
@@ -213,7 +234,6 @@ class QuickAddViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
     }
-
 
     fun onQueryChange(q: String) {
         queryFlow.value = q
@@ -345,22 +365,40 @@ class QuickAddViewModel @Inject constructor(
         }
 
         val servingsYieldUsed =
-            servingsYieldTextFlow.value.trim().takeIf { it.isNotBlank() }?.toDoubleOrNull()
-        if (servingsYieldTextFlow.value.trim().isNotBlank() && (servingsYieldUsed == null || servingsYieldUsed <= 0.0)) {
+            servingsYieldTextFlow.value.trim()
+                .takeIf { it.isNotBlank() }
+                ?.toDoubleOrNull()
+
+        if (servingsYieldTextFlow.value.trim().isNotBlank() &&
+            (servingsYieldUsed == null || servingsYieldUsed <= 0.0)
+        ) {
             errorFlow.value = "Servings yield must be a number > 0 (or leave blank)."
             return
         }
 
         viewModelScope.launch {
             try {
-                val id = recipeBatchDao.insert(
+
+
+                val result = createBatchFoodFromRecipeUseCase.execute(
+                    recipeId = recipeId,
+                    cookedYieldGrams = cookedYieldGrams,
+                    servingsYieldUsed = servingsYieldUsed
+                )
+
+                val batchFoodId = result.batchFoodId
+
+                // 2️⃣ Create batch referencing snapshot food
+                val batchId = recipeBatchDao.insert(
                     RecipeBatchEntity(
                         recipeId = recipeId,
+                        batchFoodId = batchFoodId,
                         cookedYieldGrams = cookedYieldGrams,
                         servingsYieldUsed = servingsYieldUsed
                     )
                 )
-                selectedBatchIdFlow.value = id
+
+                selectedBatchIdFlow.value = batchId
                 isCreateBatchDialogOpenFlow.value = false
                 yieldGramsTextFlow.value = ""
                 servingsYieldTextFlow.value = ""

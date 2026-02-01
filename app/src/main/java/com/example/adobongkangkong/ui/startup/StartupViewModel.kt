@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.startup
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.prefs.FirstRunPrefs
@@ -28,6 +29,7 @@ class StartupViewModel @Inject constructor(
     val state: StateFlow<StartupUiState> = _state
 
     fun start() {
+        Log.d("Meow", "StartupViewModel > start")
         viewModelScope.launch {
             try {
                 val already = prefs.importDone.first()
@@ -44,12 +46,12 @@ class StartupViewModel @Inject constructor(
                     isWorking = true,
                     message = "Importing foods…"
                 )
-
+                Log.d("Meow", "StartupViewModel before import")
                 val report = importFoodsCsv(
                     assetFileName = "foods.csv",
                     skipIfFoodsExist = false // important: first-run should force import
                 )
-
+                Log.d("Meow", "StartupViewModel after import")
                 prefs.setImportDone(true)
 
                 _state.value = StartupUiState(

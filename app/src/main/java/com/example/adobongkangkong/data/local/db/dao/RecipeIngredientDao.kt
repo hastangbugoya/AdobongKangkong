@@ -12,10 +12,40 @@ interface RecipeIngredientDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<RecipeIngredientEntity>)
 
-    @Query("SELECT * FROM recipe_ingredients WHERE recipeId = :recipeId")
+    @Query("SELECT * FROM recipe_ingredient WHERE recipeId = :recipeId ORDER BY sortOrder ASC")
     suspend fun getForRecipe(recipeId: Long): List<RecipeIngredientEntity>
 
     // Edit Recipe
-    @Query("DELETE FROM recipe_ingredients WHERE recipeId = :recipeId")
+    @Query("DELETE FROM recipe_ingredient WHERE recipeId = :recipeId")
     suspend fun deleteForRecipe(recipeId: Long)
+
+    /**
+     * Sets ingredient amount using grams.
+     * Enforces mutual exclusivity by nulling [amountServings].
+     */
+    @Query("""
+        UPDATE recipe_ingredient
+        SET amountGrams = :grams,
+            amountServings = NULL
+        WHERE id = :ingredientId
+    """)
+    suspend fun setAmountGrams(
+        ingredientId: Long,
+        grams: Double?
+    )
+
+    /**
+     * Sets ingredient amount using servings.
+     * Enforces mutual exclusivity by nulling [amountGrams].
+     */
+    @Query("""
+        UPDATE recipe_ingredient
+        SET amountServings = :servings,
+            amountGrams = NULL
+        WHERE id = :ingredientId
+    """)
+    suspend fun setAmountServings(
+        ingredientId: Long,
+        servings: Double?
+    )
 }

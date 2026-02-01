@@ -103,8 +103,10 @@ class FoodEditorViewModel @Inject constructor(
                 brand = food?.brand.orEmpty(),
                 servingSize = food?.servingSize?.toString() ?: "1.0",
                 servingUnit = food?.servingUnit ?: ServingUnit.G,
-                gramsPerServing = food?.gramsPerServing?.toString().orEmpty(),
-                servingsPerPackage = food?.servingsPerPackage?.toString().orEmpty(),
+                gramsPerServing = current.gramsPerServing.takeIf { it.isNotBlank() }
+                    ?: food?.gramsPerServing?.toString().orEmpty(),
+                servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
+                    ?: food?.servingsPerPackage?.toString().orEmpty(),
                 nutrientRows = rows.map { r ->
                     NutrientRowUi(
                         nutrientId = r.nutrient.id,
@@ -331,7 +333,8 @@ class FoodEditorViewModel @Inject constructor(
                                 id = n.id,
                                 name = n.displayName,
                                 unit = n.unit,
-                                category = n.category
+                                category = n.category,
+                                aliases = n.aliases
                             )
                         }
                     )

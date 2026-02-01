@@ -13,7 +13,7 @@ import javax.inject.Inject
  * - Enforce correctness at point-of-use.
  * - All math is done using per-gram normalized snapshots.
  */
-class ComputeRecipeNutritionUseCase @Inject constructor(
+class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
     private val snapshotRepo: FoodNutritionSnapshotRepository
 ) {
 
@@ -45,7 +45,7 @@ class ComputeRecipeNutritionUseCase @Inject constructor(
 
         val warnings = mutableListOf<RecipeNutritionWarning>()
 
-        val totals = recipe.ingredients.fold(NutrientMap.EMPTY) { acc, ingredient ->
+        val totals = recipe.ingredients.fold(NutrientMap.Companion.EMPTY) { acc, ingredient ->
             val foodId = ingredient.foodId
             val servings = ingredient.servings
 

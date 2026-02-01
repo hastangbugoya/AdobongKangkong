@@ -1,5 +1,7 @@
 package com.example.adobongkangkong.data.csvimport
 
+import android.util.Log
+
 object CsvParser {
 
     /**
@@ -34,6 +36,9 @@ object CsvParser {
             i++
         }
         out.add(sb.toString().trim())
+        out.forEach { s ->
+            Log.d("Meow","Parsed: $s")
+        }
         return out
     }
 }
