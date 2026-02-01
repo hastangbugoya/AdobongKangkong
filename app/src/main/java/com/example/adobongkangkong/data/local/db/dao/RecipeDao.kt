@@ -44,4 +44,7 @@ interface RecipeDao {
         name: String,
         servingsYield: Double
     )
+
+    @Query("SELECT COUNT(*) FROM recipes")
+    suspend fun countRecipes(): Int
 }

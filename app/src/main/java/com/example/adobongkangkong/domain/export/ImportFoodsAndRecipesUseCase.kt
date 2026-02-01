@@ -48,7 +48,7 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
         encodeDefaults = true
     }
 
-    suspend operator fun invoke(inputStream: InputStream): Result {
+    suspend operator fun invoke(inputStream: InputStream, replaceExisting: Boolean): Result {
         // 0) Parse ZIP entries
         val (foodsJson, recipesJson) = readZipEntries(inputStream)
 

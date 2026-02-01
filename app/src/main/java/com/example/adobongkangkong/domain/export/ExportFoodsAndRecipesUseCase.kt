@@ -100,7 +100,9 @@ class ExportFoodsAndRecipesUseCase @Inject constructor(
         }
 
         // 4) Write ZIP
-        ZipOutputStream(outputStream).use { zip ->
+// 4) Write ZIP
+        val zip = ZipOutputStream(outputStream)
+        try {
             val createdAt = Instant.now().toString()
             val manifest = ExportManifest(
                 schemaVersion = 1,
@@ -108,13 +110,21 @@ class ExportFoodsAndRecipesUseCase @Inject constructor(
                 appName = "AdobongKangkong",
                 foodsCount = foodExports.size,
                 recipesCount = recipeExports.size,
-                notes = warnings.take(50) // keep manifest small
+                notes = warnings.take(50)
             )
 
             writeZipJson(zip, "manifest.json", json.encodeToString(manifest))
             writeZipJson(zip, "foods.json", json.encodeToString(foodExports))
             writeZipJson(zip, "recipes.json", json.encodeToString(recipeExports))
+
+            zip.finish()   // ✅ finalize zip
+            zip.flush()
+        } finally {
+            // ✅ Do NOT close zip or outputStream here.
+            // zip.close() would close outputStream.
         }
+
+
 
         return ExportResult(
             foodsExported = foodExports.size,

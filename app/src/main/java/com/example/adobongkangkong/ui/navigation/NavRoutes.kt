@@ -53,21 +53,19 @@ object NavRoutes {
         private const val ARG_RECIPE_ID = "recipeId"
         private const val ARG_EDIT_FOOD_ID = "editFoodId"
 
-        // Pattern: builder is the screen
-        const val builder: String = "$BASE/builder?$ARG_RECIPE_ID={$ARG_RECIPE_ID}&$ARG_EDIT_FOOD_ID={$ARG_EDIT_FOOD_ID}"
+        // Route *pattern* registered in the NavGraph
+        const val builder: String =
+            "$BASE/builder?$ARG_RECIPE_ID={$ARG_RECIPE_ID}&$ARG_EDIT_FOOD_ID={$ARG_EDIT_FOOD_ID}"
 
+        // Route *string* used by navigate(...)
         fun builder(recipeId: Long? = null, editFoodId: Long? = null): String {
-            val params = buildList {
-                if (recipeId != null) add("$ARG_RECIPE_ID=$recipeId")
-                if (editFoodId != null) add("$ARG_EDIT_FOOD_ID=$editFoodId")
-            }
-            return if (params.isEmpty()) {
-                "$BASE/builder"
-            } else {
-                "$BASE/builder?" + params.joinToString("&")
-            }
-        }
+            val r = recipeId?.toString().orEmpty()
+            val f = editFoodId?.toString().orEmpty()
+            // ✅ Always include BOTH query params, even if blank.
+            return "$BASE/builder?$ARG_RECIPE_ID=$r&$ARG_EDIT_FOOD_ID=$f"
         }
     }
+
+}
 
 

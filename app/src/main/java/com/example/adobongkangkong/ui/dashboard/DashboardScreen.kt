@@ -88,25 +88,23 @@ fun DashboardScreen(
 
     val exportLauncher =
         rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("application/zip")
+            contract = ActivityResultContracts.CreateDocument("application/zip")
         ) { uri: Uri? ->
             if (uri != null) {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    vm.exportTo(out)
-                }
+                vm.exportTo(uri) // ✅ pass Uri, VM opens the stream
             }
         }
+
 
     val importLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument()
         ) { uri: Uri? ->
             if (uri != null) {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    vm.importFrom(input)
-                }
+                vm.onImportZipPicked(uri) // or vm.importFromZip(uri)
             }
         }
+
 
     // One-shot navigation request (e.g., "needs grams-per-serving" -> edit food)
     LaunchedEffect(state.navigateToEditFoodId) {

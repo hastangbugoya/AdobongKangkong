@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.navigation
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -29,6 +30,7 @@ fun AppNavHost(
         startDestination = startDestination,
         modifier = modifier
     ) {
+
 
         composable("startup") {
             StartupScreen(
@@ -118,7 +120,7 @@ fun AppNavHost(
 
                 // Row tap → edit recipe (or route to recipes entry for now)
                 onEditRecipe = { recipeId ->
-                    navController.navigate(NavRoutes.Recipes.builder(recipeId))
+                    navController.navigate(NavRoutes.Recipes.builder(editFoodId = recipeId))
                     // or NavRoutes.Recipes.route / list if that’s your current setup
                 },
 
@@ -201,5 +203,29 @@ fun AppNavHost(
                 }
             )
         }
+
+        composable(
+            route = NavRoutes.Recipes.builder,
+            arguments = listOf(
+                navArgument("recipeId") { nullable = true; defaultValue = "" },
+                navArgument("editFoodId") { nullable = true; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            val recipeId = backStackEntry.arguments?.getString("recipeId").orEmpty().toLongOrNull()
+            val editFoodId = backStackEntry.arguments?.getString("editFoodId").orEmpty().toLongOrNull()
+
+            RecipeBuilderScreen(
+                editFoodId = editFoodId,
+                recipeId = recipeId,
+                onBack = { navController.popBackStack() },
+                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) }
+            )
+        }
+
+        Log.d("NavDbg", "Recipes.route=${NavRoutes.Recipes.route}")
+        Log.d("NavDbg", "Recipes.builderPattern=${NavRoutes.Recipes.builder}")
+        Log.d("NavDbg", "Recipes.builderSample=${NavRoutes.Recipes.builder(recipeId = 123)}")
+
+
     }
 }

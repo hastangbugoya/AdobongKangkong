@@ -1,5 +1,7 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
@@ -17,6 +19,7 @@ import com.example.adobongkangkong.domain.trend.usecase.ObserveRollingNutritionS
 import com.example.adobongkangkong.domain.trend.usecase.SetPinnedDashboardNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.BootstrapDomainUseCase
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
+import com.example.adobongkangkong.domain.usecase.HasAnyUserDataUseCase
 import com.example.adobongkangkong.domain.usecase.LogFoodUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
@@ -26,6 +29,7 @@ import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 import com.example.adobongkangkong.ui.dashboard.pinned.model.NutrientOption
 import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObserveDashboardPinOptionsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +40,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
 import java.time.LocalDate
@@ -76,6 +81,7 @@ class DashboardViewModel @Inject constructor(
 
 
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
+    private val hasAnyUserData: HasAnyUserDataUseCase,
     private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
     private val importFoodsAndRecipes: ImportFoodsAndRecipesUseCase,
 
@@ -86,7 +92,9 @@ class DashboardViewModel @Inject constructor(
 
     private val userPinnedNutrientRepository: UserPinnedNutrientRepository,
     private val setPinnedDashboardNutrientsUseCase: SetPinnedDashboardNutrientsUseCase,
-    private val upsertUserNutrientTargetUseCase: UpsertUserNutrientTargetUseCase
+    private val upsertUserNutrientTargetUseCase: UpsertUserNutrientTargetUseCase,
+
+    private val application: Application
 ) : ViewModel() {
 
     private val _snackbar = MutableStateFlow<String?>(null)
@@ -94,6 +102,7 @@ class DashboardViewModel @Inject constructor(
 
     private val selectedDateFlow = MutableStateFlow(LocalDate.now())
     private val rollingDaysFlow = MutableStateFlow(7)
+
 
     private val cardsFlow =
         combine(selectedDateFlow, rollingDaysFlow) { date, days -> date to days }
@@ -182,9 +191,6 @@ class DashboardViewModel @Inject constructor(
             SharingStarted.WhileSubscribed(5_000),
             DashboardState()
         )
-
-
-
 
     // region UI toggles
 
@@ -295,6 +301,7 @@ class DashboardViewModel @Inject constructor(
     // endregion
 
     // region Import / Export / Sync
+    // region Import / Export / Sync
 
     fun devSyncNutrients() {
         viewModelScope.launch {
@@ -304,30 +311,101 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    fun importFrom(input: InputStream) {
-        viewModelScope.launch {
-            try {
-                val r = importFoodsAndRecipes(input)
-                val warnSuffix = if (r.warnings.isNotEmpty()) " (${r.warnings.size} warnings)" else ""
-                _snackbar.value =
-                    "Imported: ${r.foodsInserted} foods (+${r.foodsUpdated} updated), " +
-                            "${r.recipesInserted} recipes (+${r.recipesUpdated} updated)$warnSuffix"
-            } catch (e: Exception) {
-                _snackbar.value = "Import failed: ${e.message ?: "unknown error"}"
+    /**
+     * Entry point from UI after user picks a ZIP Uri.
+     * If there is existing user data, we require WoW-style confirmation (type RESTORE).
+     * Otherwise we restore immediately.
+     */
+    fun onImportZipPicked(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val shouldConfirm = hasAnyUserData()
+            if (shouldConfirm) {
+                _overlay.update { o ->
+                    o.copy(
+                        pendingRestoreUri = uri,
+                        restoreConfirmOpen = true
+                    )
+                }
+            } else {
+                runImportReplace(uri)
             }
         }
     }
 
-    fun exportTo(out: OutputStream) {
-        viewModelScope.launch {
+    /**
+     * Called by UI when the user types into the confirm dialog and presses Restore.
+     */
+    fun confirmRestore(typed: String) {
+        if (typed.trim().uppercase() != "RESTORE") return
+
+        val uri = _overlay.value.pendingRestoreUri ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            // Close dialog first
+            _overlay.update { o -> o.copy(restoreConfirmOpen = false) }
+
+            runImportReplace(uri)
+
+            // Clear pending
+            _overlay.update { o -> o.copy(pendingRestoreUri = null) }
+        }
+    }
+
+    fun dismissRestoreConfirm() {
+        _overlay.update { o ->
+            o.copy(
+                restoreConfirmOpen = false,
+                pendingRestoreUri = null
+            )
+        }
+    }
+
+    /**
+     * Performs the restore (replaceExisting = true).
+     * VM owns the InputStream lifetime (prevents stream-closed issues).
+     */
+    private suspend fun runImportReplace(uri: Uri) {
+        val cr = application.contentResolver
+
+        val input = cr.openInputStream(uri)
+            ?: throw IllegalStateException("Unable to open input stream")
+
+        input.use { stream ->
+            // NOTE: add this parameter to your use case if it doesn't exist yet
+            importFoodsAndRecipes(
+                inputStream = stream,
+                replaceExisting = true
+            )
+        }
+
+        withContext(Dispatchers.Main) {
+            _snackbar.value = "Restore completed"
+        }
+    }
+
+    fun exportTo(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val r = exportFoodsAndRecipes(out)
-                _snackbar.value = "Exported ${r.foodsExported} foods, ${r.recipesExported} recipes"
+                val out = application.contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Unable to open output stream")
+
+                out.use { stream ->
+                    val r = exportFoodsAndRecipes(stream)
+                    withContext(Dispatchers.Main) {
+                        _snackbar.value =
+                            "Exported ${r.foodsExported} foods, ${r.recipesExported} recipes"
+                    }
+                }
             } catch (e: Exception) {
-                _snackbar.value = "Export failed: ${e.message ?: "unknown error"}"
+                withContext(Dispatchers.Main) {
+                    _snackbar.value = "Export failed: ${e.message ?: "unknown error"}"
+                }
             }
         }
     }
+
+    // endregion
+
 
     // endregion
 
@@ -509,6 +587,10 @@ private data class DashboardOverlay(
     val blockedFoodId: Long? = null,
     val navigateToEditFoodId: Long? = null,
     val settingsSheetOpen: Boolean = false,
-    val targetDraft: TargetDraft? = null
+    val targetDraft: TargetDraft? = null,
+
+    // Restore confirmation
+    val restoreConfirmOpen: Boolean = false,
+    val pendingRestoreUri: Uri? = null
 )
 

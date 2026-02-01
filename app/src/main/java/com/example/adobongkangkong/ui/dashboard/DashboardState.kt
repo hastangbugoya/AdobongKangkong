@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import android.net.Uri
 import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.model.TodayLogItem
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
@@ -27,5 +28,9 @@ data class DashboardState(
     // One-shot navigation request consumed by DashboardScreen
     val navigateToEditFoodId: Long? = null,
 
-    val snackbarMessage: String? = null
+    val snackbarMessage: String? = null,
+
+    // Restore confirmation
+    val restoreConfirmOpen: Boolean = false,
+    val pendingRestoreUri: Uri? = null
 )

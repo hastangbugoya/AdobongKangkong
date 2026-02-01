@@ -45,7 +45,7 @@ class RecipeBuilderViewModel @Inject constructor(
     // -----------------------------
 
     private val nameFlow = MutableStateFlow("")
-    private val servingsYieldFlow = MutableStateFlow(4.0)
+    private val servingsYieldFlow = MutableStateFlow(5.0)
 
     /**
      * Final cooked batch weight in grams (optional).
