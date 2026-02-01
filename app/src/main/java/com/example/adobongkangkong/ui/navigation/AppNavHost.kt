@@ -107,23 +107,33 @@ fun AppNavHost(
 
         composable(route = NavRoutes.Foods.list) {
             FoodsListScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.popBackStack()
+                },
 
-                // if list rows open "details", wire edit or details depending on your UX:
+                // Row tap → edit food
                 onEditFood = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
                 },
 
-                // If you don’t have recipe edit yet, you can temporarily no-op:
+                // Row tap → edit recipe (or route to recipes entry for now)
                 onEditRecipe = { recipeId ->
-                    navController.navigate(route = NavRoutes.Recipes.route)
-
-                    // or navController.navigate(NavRoutes.Recipes.list) if that's your builder entry
+                    navController.navigate(NavRoutes.Recipes.builder(recipeId))
+                    // or NavRoutes.Recipes.route / list if that’s your current setup
                 },
 
+                // Add button when filter = FOODS_ONLY or ALL
                 onCreateFood = {
-                    // no prefill supported by this screen signature
-                    navController.navigate(NavRoutes.Foods.new(prefillName = null))
+                    navController.navigate(
+                        NavRoutes.Foods.new(prefillName = null)
+                    )
+                },
+
+                // Add button when filter = RECIPES_ONLY
+                onCreateRecipe = {
+                    navController.navigate(
+                        NavRoutes.Recipes.route
+                    )
                 }
             )
         }

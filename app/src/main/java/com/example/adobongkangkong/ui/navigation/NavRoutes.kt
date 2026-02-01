@@ -57,10 +57,17 @@ object NavRoutes {
         const val builder: String = "$BASE/builder?$ARG_RECIPE_ID={$ARG_RECIPE_ID}&$ARG_EDIT_FOOD_ID={$ARG_EDIT_FOOD_ID}"
 
         fun builder(recipeId: Long? = null, editFoodId: Long? = null): String {
-            val r = recipeId?.toString().orEmpty()
-            val f = editFoodId?.toString().orEmpty()
-            return "$BASE/builder?$ARG_RECIPE_ID=$r&$ARG_EDIT_FOOD_ID=$f"
+            val params = buildList {
+                if (recipeId != null) add("$ARG_RECIPE_ID=$recipeId")
+                if (editFoodId != null) add("$ARG_EDIT_FOOD_ID=$editFoodId")
+            }
+            return if (params.isEmpty()) {
+                "$BASE/builder"
+            } else {
+                "$BASE/builder?" + params.joinToString("&")
+            }
+        }
         }
     }
 
-}
+

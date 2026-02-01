@@ -27,6 +27,7 @@ fun FoodsListScreen(
     onEditFood: (Long) -> Unit,
     onEditRecipe: (Long) -> Unit,
     onCreateFood: () -> Unit,
+    onCreateRecipe: () -> Unit,
     vm: FoodsListViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -35,17 +36,34 @@ fun FoodsListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Foods") },
-                navigationIcon = { IconButton(onClick = onBack) {
-                    Icon(
-                        painter = painterResource(R.drawable.angle_circle_left),
-                        contentDescription = "Back"
-                    )} },
-                actions = {  IconButton(onClick = onCreateFood) {
-                    Icon(
-                        painter = painterResource(R.drawable.add),
-                        contentDescription = "Back"
-                    )} }
+
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            painter = painterResource(R.drawable.angle_circle_left),
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+
+                actions = {
+                    IconButton(
+                        onClick = {
+                            when (state.filter) {
+                                FoodsFilter.FOODS_ONLY -> onCreateFood()
+                                FoodsFilter.RECIPES_ONLY -> onCreateRecipe()
+                                FoodsFilter.ALL -> onCreateFood()
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.add),
+                            contentDescription = "Add"
+                        )
+                    }
+                }
             )
+
         }
     ) { padding ->
         Column(
