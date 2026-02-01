@@ -8,6 +8,7 @@ import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 data class NutrientRowUi(
     val nutrientId: Long,
     val name: String,
+    val aliases: List<String> = emptyList(),
     val unit: NutrientUnit,
     val category: NutrientCategory,
     val amount: String // keep as String for text field editing
