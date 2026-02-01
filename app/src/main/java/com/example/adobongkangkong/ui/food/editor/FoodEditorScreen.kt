@@ -94,6 +94,11 @@ fun FoodEditorScreen(
     onDeleteAlias: (String) -> Unit,
     onDismissAliasSheet: () -> Unit,
 ) {
+    val attachedNutrientIds = remember(state.nutrientRows) {
+        state.nutrientRows
+            .map { it.nutrientId }
+            .toSet()
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -255,12 +260,16 @@ fun FoodEditorScreen(
                         items = state.nutrientSearchResults,
                         key = { it.id }
                     ) { item ->
+                        val alreadyAdded = item.id in attachedNutrientIds
+
                         NutrientSearchResultRow(
                             item = item,
+                            alreadyAdded = alreadyAdded,
                             onAdd = { onAddNutrientFromSearch(item.id) },
                             onManageAliases = { onOpenAliasSheet(item.id, item.name) }
                         )
                     }
+
                 } else if (state.nutrientSearchQuery.isNotBlank()) {
                     item {
                         Text(
@@ -416,76 +425,61 @@ private fun NutrientRowEditor(
 @Composable
 private fun NutrientSearchResultRow(
     item: NutrientSearchResultUi,
+    alreadyAdded: Boolean,
     onAdd: () -> Unit,
     onManageAliases: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Surface(
-        tonalElevation = 1.dp,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (alreadyAdded)
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                else
+                    MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                text = "${item.unit.labelForUi()} • ${item.category.labelForUi()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        TextButton(
+            onClick = onAdd,
+            enabled = !alreadyAdded
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text(if (alreadyAdded) "Added" else "Add")
+        }
 
-                // Optional: show aliases subtly (if you already added aliases to the UI model)
-                if (item.aliases.isNotEmpty()) {
-                    Text(
-                        text = item.aliases.joinToString(prefix = "Also: "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+        IconButton(onClick = { menuExpanded = true }) {
+            Icon(painter = painterResource(R.drawable.circle_ellipsis_vertical), contentDescription = "More")
+        }
+
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Manage aliases") },
+                onClick = {
+                    menuExpanded = false
+                    onManageAliases()
                 }
-
-                Text(
-                    text = "${item.unit.labelForUi()} • ${item.category.labelForUi()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            TextButton(onClick = onAdd) { Text("Add") }
-
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        painter = painterResource(R.drawable.circle_ellipsis_vertical),
-                        contentDescription = "More actions"
-                    )
-                }
-                androidx.compose.material3.DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Manage aliases") },
-                        onClick = {
-                            menuExpanded = false
-                            onManageAliases()
-                        }
-                    )
-                }
-            }
+            )
         }
     }
 }
+
 
 
 @Composable
