@@ -31,17 +31,34 @@ fun StartupScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            CircularProgressIndicator()
-            Spacer(Modifier.height(16.dp))
-            Text(state.message, style = MaterialTheme.typography.titleMedium)
+            when {
+                state.isWorking -> {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    state.message?.let {
+                        Text(it, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
 
-            state.error?.let { err ->
-                Spacer(Modifier.height(12.dp))
-                Text(err, color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = vm::retry) { Text("Retry") }
+                state.error != null -> {
+                    Text(
+                        text = state.message ?: "Unknown Error",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = vm::retry) {
+                        Text("Retry")
+                    }
+                }
+
+                state.isDone -> {
+                    // Usually navigation happens via LaunchedEffect,
+                    // but you can show a fallback message if you want
+                    Text("Ready", style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
     }
+
 }
 

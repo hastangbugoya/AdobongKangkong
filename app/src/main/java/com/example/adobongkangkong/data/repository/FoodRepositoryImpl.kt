@@ -32,4 +32,8 @@ class FoodRepositoryImpl @Inject constructor(
 
         return FoodRef.Food(foodId = entity.id)
     }
+
+    override suspend fun isFoodsEmpty(): Boolean =
+        foodDao.countFoods() == 0
+
 }

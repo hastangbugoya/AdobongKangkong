@@ -12,5 +12,7 @@ interface FoodRepository {
     suspend fun upsert(food: Food): Long
 
     suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food?
+
+    suspend fun isFoodsEmpty(): Boolean
 }
 
