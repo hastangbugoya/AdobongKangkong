@@ -41,4 +41,7 @@ data class RecipeBuilderState(
     val blockingSheet: BlockingSheetModel? = null,
     val blockedFoodId: Long? = null,
     val navigateToEditFoodId: Long? = null,
+
+    // monitor user changes values
+    val hasUnsavedChanges: Boolean = false,
 )

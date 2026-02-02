@@ -1,6 +1,7 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -37,7 +38,14 @@ import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.format.ui
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import kotlinx.coroutines.delay
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * Recipe builder / editor screen.
@@ -70,6 +78,18 @@ fun RecipeBuilderScreen(
 
     val listState = rememberLazyListState()
 
+    val showExitDialog = rememberSaveable { mutableStateOf(false) }
+
+    fun requestExit() {
+        if (state.hasUnsavedChanges && !state.isSaving) {
+            showExitDialog.value = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler { requestExit() }
+    // --------------------------------------------------------------------------
     // Deterministic scroll: when a food is picked, bring the "Picked" section into view.
     LaunchedEffect(state.pickedFood?.id) {
         if (state.pickedFood != null) {
@@ -124,7 +144,7 @@ fun RecipeBuilderScreen(
             TopAppBar(
                 title = { Text(if (editFoodId == null) "New Recipe" else "Edit Recipe") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = ::requestExit) {
                         Icon(
                             painter = painterResource(R.drawable.angle_circle_left),
                             contentDescription = "Back"
@@ -367,4 +387,35 @@ fun RecipeBuilderScreen(
             item { Spacer(Modifier.height(16.dp)) }
         }
     }
+
+    if (showExitDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog.value = false },
+            title = { Text("Unsaved changes") },
+            text = { Text("What would you like to do with your changes?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitDialog.value = false
+                        vm.save(onDone = onBack)
+                    }
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                androidx.compose.foundation.layout.Row {
+                    TextButton(
+                        onClick = {
+                            showExitDialog.value = false
+                            onBack()
+                        }
+                    ) { Text("Discard") }
+
+                    TextButton(
+                        onClick = { showExitDialog.value = false }
+                    ) { Text("Cancel") }
+                }
+            }
+        )
+    }
+
 }

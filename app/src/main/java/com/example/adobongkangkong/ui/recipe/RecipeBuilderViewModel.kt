@@ -46,7 +46,7 @@ class RecipeBuilderViewModel @Inject constructor(
 ) : ViewModel() {
 
     private var editFoodId: Long? = null
-
+    private val hasUnsavedChangesFlow = MutableStateFlow(false)
     private val nameFlow = MutableStateFlow("")
     private val servingsYieldFlow = MutableStateFlow(5.0)
     private val totalYieldGramsFlow = MutableStateFlow<Double?>(null)
@@ -138,7 +138,8 @@ class RecipeBuilderViewModel @Inject constructor(
     private data class Overlay(
         val blockingSheet: BlockingSheetModel?,
         val blockedFoodId: Long?,
-        val navigateToEditFoodId: Long?
+        val navigateToEditFoodId: Long?,
+        val hasUnsavedChanges: Boolean
     )
 
     val state: StateFlow<RecipeBuilderState> =
@@ -208,12 +209,14 @@ class RecipeBuilderViewModel @Inject constructor(
                 combine(
                     blockingSheetFlow,
                     blockedFoodIdFlow,
-                    navigateToEditFoodIdFlow
-                ) { blockingSheet, blockedFoodId, navFoodId ->
+                    navigateToEditFoodIdFlow,
+                    hasUnsavedChangesFlow
+                ) { blockingSheet, blockedFoodId, navFoodId, hasUnsavedChangesFlow ->
                     Overlay(
                         blockingSheet = blockingSheet,
                         blockedFoodId = blockedFoodId,
-                        navigateToEditFoodId = navFoodId
+                        navigateToEditFoodId = navFoodId,
+                        hasUnsavedChangesFlow
                     )
                 }
 
@@ -245,7 +248,8 @@ class RecipeBuilderViewModel @Inject constructor(
 
                     blockingSheet = overlay.blockingSheet,
                     blockedFoodId = overlay.blockedFoodId,
-                    navigateToEditFoodId = overlay.navigateToEditFoodId
+                    navigateToEditFoodId = overlay.navigateToEditFoodId,
+                    hasUnsavedChanges = overlay.hasUnsavedChanges
                 )
             }.stateIn(
                 viewModelScope,
@@ -254,20 +258,27 @@ class RecipeBuilderViewModel @Inject constructor(
             )
         }
 
+    private fun markDirty() {
+        hasUnsavedChangesFlow.value = true
+    }
+
     // -----------------------------
     // Events
     // -----------------------------
 
     fun onNameChange(v: String) {
         nameFlow.value = v
+        markDirty()
     }
 
     fun onYieldChange(v: Double) {
         servingsYieldFlow.value = v.coerceAtLeast(0.1)
+        markDirty()
     }
 
     fun onTotalYieldGramsChanged(value: Double?) {
         totalYieldGramsFlow.value = value?.takeIf { it > 0.0 }
+        markDirty()
     }
 
     fun onQueryChange(v: String) {
@@ -442,6 +453,7 @@ class RecipeBuilderViewModel @Inject constructor(
             )
         )
         ingredientsFlow.value = next
+        markDirty()
         isEditingGrams = false
         // Reset add-ingredient UI
         pickedFoodFlow.value = null
@@ -457,6 +469,7 @@ class RecipeBuilderViewModel @Inject constructor(
         if (index !in list.indices) return
         list.removeAt(index)
         ingredientsFlow.value = list
+        markDirty()
     }
 
     fun save(onDone: () -> Unit) {
@@ -538,7 +551,7 @@ class RecipeBuilderViewModel @Inject constructor(
 
     fun loadForEdit(foodId: Long?) {
         if (foodId == null) return
-
+        hasUnsavedChangesFlow.value = false
         editFoodId = foodId
 
         // Reset "add ingredient" UI state
@@ -578,6 +591,7 @@ class RecipeBuilderViewModel @Inject constructor(
                     grams = gramsForLine
                 )
             }
+            hasUnsavedChangesFlow.value = false
         }
     }
 
