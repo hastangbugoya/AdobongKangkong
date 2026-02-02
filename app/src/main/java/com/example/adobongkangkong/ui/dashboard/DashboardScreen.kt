@@ -211,7 +211,7 @@ fun DashboardScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "AdobongKangkong",
+                        text = "Adobong Kangkong",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.combinedClickable(
@@ -242,7 +242,7 @@ fun DashboardScreen(
                 top = 16.dp,
                 bottom = 24.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+//            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             item {
                 Row(

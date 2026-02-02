@@ -1,14 +1,16 @@
+// RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
-import androidx.compose.material3.AssistChip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -34,6 +36,8 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.format.ui
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.delay
 
 /**
  * Recipe builder / editor screen.
@@ -63,6 +67,28 @@ fun RecipeBuilderScreen(
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+
+    val listState = rememberLazyListState()
+
+    // Deterministic scroll: when a food is picked, bring the "Picked" section into view.
+    LaunchedEffect(state.pickedFood?.id) {
+        if (state.pickedFood != null) {
+            // Wait for LazyColumn to insert the conditional "Picked" item.
+            delay(16)
+
+            // Compute the index of the "Picked" item based on current list structure.
+            var idx = 0
+            idx += 1 // name
+            idx += 1 // servings yield
+            if (state.errorMessage != null) idx += 1
+            idx += 1 // spacer
+            idx += 1 // "Add ingredient" title
+            idx += 1 // search field
+            if (state.results.isNotEmpty()) idx += 1 // results list
+
+            listState.animateScrollToItem(idx)
+        }
+    }
 
     // --- Edit-mode load -------------------------------------------------------
     LaunchedEffect(editFoodId) {
@@ -121,14 +147,16 @@ fun RecipeBuilderScreen(
         }
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imePadding(),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
                 top = 16.dp,
-                bottom = 24.dp
+                bottom = 120.dp
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -141,6 +169,7 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
+
             item {
                 OutlinedTextField(
                     value = state.servingsYield.toString(),
@@ -151,6 +180,7 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
+
             state.errorMessage?.let { err ->
                 item {
                     Text(
@@ -203,12 +233,35 @@ fun RecipeBuilderScreen(
                     OutlinedTextField(
                         value = state.pickedServingsText,
                         onValueChange = vm::onPickedServingsTextChange,
-                        label = { Text("Servings") },
+                        label = {
+                            val unitLabel = state.pickedFood
+                                ?.servingUnit
+                                ?.name
+                                ?.lowercase()
+                                ?.replace('_', ' ')
+                                ?.replaceFirstChar { it.uppercase() }
+                                ?: "Servings"
+                            Text(unitLabel)
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true
                     )
+
                     Spacer(Modifier.height(8.dp))
+
+                    val gPerServing = pickedFood.gramsPerServing
+                    if (gPerServing != null && gPerServing > 0.0) {
+                        val unitLabel = pickedFood.servingUnit.name
+                            .lowercase()
+                            .replace('_', ' ')
+                        Text(
+                            "1 $unitLabel = ${"%,.1f".format(gPerServing)} g",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
                     OutlinedTextField(
                         value = state.pickedGramsText,
                         onValueChange = vm::onPickedGramsTextChange,
@@ -218,11 +271,8 @@ fun RecipeBuilderScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true
                     )
-                    Spacer(Modifier.height(8.dp))
 
-//                    state.pickedGrams?.let { grams ->
-//                        Text("≈ ${"%,.1f".format(grams)} g", style = MaterialTheme.typography.bodySmall)
-//                    }
+                    Spacer(Modifier.height(8.dp))
 
                     if (pickedFood.servingsPerPackage != null) {
                         Spacer(Modifier.height(8.dp))
@@ -268,11 +318,12 @@ fun RecipeBuilderScreen(
                             ) {
                                 val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
                                 val amountText = if (unitLabel.isNotBlank()) {
-                                        "${"%,.2f".format(ing.servings)} $unitLabel"
-                                    } else {
-                                        "${"%,.2f".format(ing.servings)} servings"
-                                    }
+                                    "${"%,.2f".format(ing.servings)} $unitLabel"
+                                } else {
+                                    "${"%,.2f".format(ing.servings)} servings"
+                                }
                                 val gramsText = ing.grams?.let { g -> " (≈ ${"%,.1f".format(g)} g)" }.orEmpty()
+
                                 Text(
                                     "${ing.foodName} • $amountText$gramsText",
                                     modifier = Modifier.weight(1f),
@@ -293,12 +344,24 @@ fun RecipeBuilderScreen(
 
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Preview", style = MaterialTheme.typography.titleMedium) }
-
+            val noDivZero = state.servingsYield > 0
             item {
-                Text("Calories: ${"%,.0f".format(state.preview.totalCalories)} kcal")
+                Text("Calories: ${"%,.0f".format(state.preview.totalCalories)} kcal/batch")
+                if (noDivZero && state.preview.totalCalories > 0.0) {
+                    Text("Calories: ${"%,.0f".format(state.preview.totalCalories/state.servingsYield)} kcal/serving")
+                }
                 Text("Protein: ${"%,.1f".format(state.preview.totalProteinG)} g")
+                if (noDivZero && state.preview.totalProteinG > 0.0) {
+                    Text("Protein: ${"%,.0f".format(state.preview.totalProteinG/state.servingsYield)} g/serving")
+                }
                 Text("Carbs: ${"%,.1f".format(state.preview.totalCarbsG)} g")
+                if (noDivZero && state.preview.totalCarbsG > 0) {
+                    Text("Carbs: ${"%,.0f".format(state.preview.totalCarbsG/state.servingsYield)} g/serving")
+                }
                 Text("Fat: ${"%,.1f".format(state.preview.totalFatG)} g")
+                if (noDivZero && state.preview.totalFatG > 0.0) {
+                    Text("Fat: ${"%,.0f".format(state.preview.totalFatG/state.servingsYield)} g/serving")
+                }
             }
 
             item { Spacer(Modifier.height(16.dp)) }

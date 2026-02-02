@@ -132,6 +132,9 @@ private fun FoodRow(
             )
         },
         supportingContent = {
+            food.brand?.let {
+                Text(text = food.brand)
+            }
             Text(if (food.isRecipe) "Recipe" else "Food")
         },
         trailingContent = {

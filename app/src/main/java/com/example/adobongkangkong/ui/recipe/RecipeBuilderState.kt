@@ -7,16 +7,19 @@ import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 data class RecipeIngredientUi(
     val foodId: Long,
     val foodName: String,
+    /** Quantity expressed in the food's serving unit (e.g., 1.5 "can", 0.5 "cup"). */
     val servings: Double,
-    /** Human-facing unit label for the serving basis (e.g., cup, tbsp, box). */
+    /** Human-readable serving unit label (e.g., "can", "cup"). Optional for legacy rows. */
     val servingUnitLabel: String? = null,
-    /** Approx grams for this ingredient line, derived from servings * gramsPerServing (if available). */
+    /** Convenience display: servings converted to grams using grams-per-serving, if available. */
     val grams: Double? = null
 )
 
 data class RecipeBuilderState(
     val name: String = "",
     val servingsYield: Double = 4.0,
+
+    // Add ingredient
     val query: String = "",
     val results: List<Food> = emptyList(),
     val pickedFood: Food? = null,
@@ -24,11 +27,14 @@ data class RecipeBuilderState(
     val pickedServingsText: String = "",
     val pickedGramsText: String = "",
     val pickedGrams: Double? = null,
+
+    // Ingredients list
     val ingredients: List<RecipeIngredientUi> = emptyList(),
 
     // ✅ add default
     val totalYieldGrams: Double? = null,
 
+    // UI state
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
     val preview: RecipeMacroPreview = RecipeMacroPreview(),

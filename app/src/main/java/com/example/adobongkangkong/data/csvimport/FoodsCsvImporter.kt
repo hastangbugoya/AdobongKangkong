@@ -21,13 +21,92 @@ import javax.inject.Inject
 /**
  * Imports foods + nutrients from a CSV asset into Room.
  *
- * Design goals:
- * - **Lax import**: warn instead of failing when data is missing or malformed.
- * - **No density guessing**: volume units are permitted only when grams-per-serving is known.
- * - **Enforce correctness at point-of-use**: missing grams-per-serving is allowed in DB,
- *   but logging/recipe flows must block when that conversion is required.
+ * ## Overall importer philosophy
  *
- * Notes:
+ * This importer is intentionally **lax**:
+ * - It prefers to **import as much as possible**.
+ * - It records problems as **warnings** (see [ImportIssueEntity]) rather than failing the run.
+ * - It avoids "density guessing": if a food uses a **non-weight serving unit** (e.g. cup/tbsp/serving),
+ *   it may require a grams-per-serving conversion to be usable by servings in logging/recipes.
+ *
+ * Correctness is enforced **at point-of-use**, not at import time:
+ * - Missing grams-per-serving is allowed to exist in the DB.
+ * - But logging/recipe flows can block when a servings→grams conversion is required.
+ *
+ * ## Nutrient header recognition
+ *
+ * - Nutrient columns are discovered from the CSV header via [CsvNutrientCatalog].
+ * - Nutrients are upserted by **nutrient code** (e.g. "PROCNT", "FAT", etc.), then mapped to DB IDs.
+ * - Each row then produces [FoodNutrientEntity] entries keyed by the food ID and nutrient ID.
+ *
+ * ## IMPORTANT: Why you may see "huge" food IDs (e.g. 7427404468594635327)
+ *
+ * You may expect `@PrimaryKey(autoGenerate = true)` IDs to be small and sequential (1, 2, 3, ...).
+ * That is true **only when you insert rows with `id = 0`**.
+ *
+ * This importer does **not** insert foods with `id = 0`.
+ * Instead, it generates a **stable** Long ID per row:
+ *
+ * ```
+ * val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
+ * FoodEntity(id = foodId, ...)
+ * ```
+ *
+ * ### What "stableFoodId" means
+ *
+ * [CsvUnits.stableFoodId] produces a deterministic 64-bit [Long] based on a row's identifying fields
+ * (currently: food name, serving text, weight text). This typically uses hashing.
+ *
+ * **Deterministic** means:
+ * - Import the same CSV row twice → you get the same `foodId` twice.
+ * - This makes imports **idempotent** when combined with `upsertAll()`:
+ *   the second import updates/replaces the same logical food instead of creating duplicates.
+ *
+ * ### Why the number is so large
+ *
+ * A 64-bit hash looks like a "random" integer spread across the entire signed Long range.
+ * So it can be:
+ * - very large (19 digits),
+ * - negative,
+ * - not sequential,
+ * - not human-friendly.
+ *
+ * SQLite/Room treat it as just an INTEGER primary key, so it works fine.
+ *
+ * ### Interaction with `@PrimaryKey(autoGenerate = true)`
+ *
+ * Auto-generation is bypassed when you supply a non-zero primary key:
+ * - If `FoodEntity.id == 0` at insert time → SQLite assigns a sequential ID.
+ * - If `FoodEntity.id != 0` at insert time → SQLite uses your ID verbatim.
+ *
+ * Because this importer always sets a non-zero `id`, the DB will contain large stable IDs.
+ *
+ * ### What about foods being edited later?
+ *
+ * This design choice has an important implication:
+ *
+ * - In normal in-app editing, the app should **preserve the existing `FoodEntity.id`**
+ *   and update other fields (name/unit/gramsPerServing/etc). That keeps recipes/logs stable.
+ *
+ * - If some code path were to **recompute** `stableFoodId(...)` during an edit and write it into `id`,
+ *   that would effectively "change the primary key" and could break any references to the old ID
+ *   (recipes, logs, ingredients). This importer does not do that—it only assigns IDs at import time.
+ *
+ * - If a user edits the identifying fields used by `stableFoodId` (e.g. name/serv/weight),
+ *   then a *future import* of the original CSV row may generate the original stable ID again.
+ *   Depending on your overall product intent, that can be acceptable or it can lead to duplicates.
+ *   The long-term "most robust" approach is to keep:
+ *     - an immutable DB primary key (auto-generate),
+ *     - and a separate unique `importKey`/`externalKey` used for import matching.
+ *   This file keeps the current approach intentionally (stable ID as PK) and does not change logic.
+ *
+ * ### Collision note
+ *
+ * Any hash-based ID can theoretically collide (two different rows producing the same Long).
+ * With a good 64-bit hash this is extremely unlikely for typical datasets, but it is not impossible.
+ * If collision resistance becomes a concern, consider moving to a dedicated unique import key column.
+ *
+ * ## Notes
  * - Nutrient headers are recognized via [CsvNutrientCatalog].
  * - Nutrients are upserted by code, then foods and food_nutrients are upserted by stable IDs.
  * - The importer records user-friendly [ImportIssueEntity] warnings for later review.
@@ -325,6 +404,24 @@ class FoodsCsvImporter @Inject constructor(
                 }
 
                 val servingSize = 1.0
+
+                /**
+                 * Stable food ID derived from the CSV row.
+                 *
+                 * This is the source of the "very large" Long IDs you may see in logs/UI debugging.
+                 *
+                 * - It is generated via [CsvUnits.stableFoodId] (typically hashing `name/servRaw/weightRaw`).
+                 * - It is used as the **primary key** for [FoodEntity] in this importer.
+                 * - Because we set `id = foodId` (non-zero), Room/SQLite will **NOT** auto-generate a sequential ID.
+                 *
+                 * Why do this?
+                 * - It makes imports idempotent: importing the same CSV twice targets the same food ID.
+                 *
+                 * Operational caution (product/design):
+                 * - Do not recompute this ID during normal food edits; preserve the existing DB primary key.
+                 * - If users edit fields that contribute to the stable ID, future imports of the original CSV row
+                 *   may reintroduce a row with the original ID (depending on upsert strategy).
+                 */
                 val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
 
                 foods += FoodEntity(
