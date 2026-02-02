@@ -32,6 +32,9 @@ data class FoodEditorState(
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
 
+    // Navigate-away warning
+    val hasUnsavedChanges: Boolean = false,
+
     // Flags (stored separately from FoodEntity)
     val favorite: Boolean = false,
     val eatMore: Boolean = false,

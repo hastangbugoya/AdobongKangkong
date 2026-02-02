@@ -119,35 +119,41 @@ class FoodEditorViewModel @Inject constructor(
                 favorite = flags?.favorite ?: false,
                 eatMore = flags?.eatMore ?: false,
                 limit = flags?.limit ?: false,
+                hasUnsavedChanges = false,
             )
         }
     }
 
-    fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null) }
-    fun onBrandChange(v: String) = update { it.copy(brand = v) }
-    fun onServingSizeChange(v: String) = update { it.copy(servingSize = v) }
-    fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v) }
-    fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServing = v) }
-    fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v) }
+    fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null, hasUnsavedChanges = true) }
+    fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
+    fun onServingSizeChange(v: String) = update { it.copy(servingSize = v, hasUnsavedChanges = true) }
+    fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v, hasUnsavedChanges = true) }
+    fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServing = v, hasUnsavedChanges = true) }
+    fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v, hasUnsavedChanges = true) }
 
     // Flags
-    fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v) }
-    fun onEatMoreChange(v: Boolean) = update { it.copy(eatMore = v) }
-    fun onLimitChange(v: Boolean) = update { it.copy(limit = v) }
-
+    fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v, hasUnsavedChanges = true) }
+    fun onEatMoreChange(v: Boolean) = update { it.copy(eatMore = v, hasUnsavedChanges = true) }
+    fun onLimitChange(v: Boolean) = update { it.copy(limit = v, hasUnsavedChanges = true) }
 
     fun onNutrientAmountChange(nutrientId: Long, amount: String) {
         update { s ->
             s.copy(
                 nutrientRows = s.nutrientRows.map {
                     if (it.nutrientId == nutrientId) it.copy(amount = amount) else it
-                }
+                },
+                hasUnsavedChanges = true
             )
         }
     }
 
     fun removeNutrientRow(nutrientId: Long) {
-        update { s -> s.copy(nutrientRows = s.nutrientRows.filterNot { it.nutrientId == nutrientId }) }
+        update { s ->
+            s.copy(
+                nutrientRows = s.nutrientRows.filterNot { it.nutrientId == nutrientId },
+                hasUnsavedChanges = true
+            )
+        }
     }
 
     fun onNutrientSearchQueryChange(v: String) {
@@ -163,6 +169,7 @@ class FoodEditorViewModel @Inject constructor(
         update { s ->
             if (s.nutrientRows.any { it.nutrientId == n.id }) s
             else s.copy(
+                hasUnsavedChanges = true,
                 nutrientRows = (s.nutrientRows + NutrientRowUi(
                     nutrientId = n.id,
                     name = n.name,
@@ -236,6 +243,7 @@ class FoodEditorViewModel @Inject constructor(
                     eatMore = s.eatMore,
                     limit = s.limit
                 )
+                update { it.copy(hasUnsavedChanges = false) }
                 onDone(savedId)
             } catch (t: Throwable) {
                 update { it.copy(errorMessage = t.message ?: "Failed to save food.") }
@@ -260,7 +268,10 @@ class FoodEditorViewModel @Inject constructor(
         val id = aliasSheetNutrientIdFlow.value ?: return
         viewModelScope.launch {
             when (nutrientAliasRepo.addAlias(id, alias)) {
-                AliasAddResult.Added -> aliasSheetMessageFlow.value = null
+                AliasAddResult.Added -> {
+                    aliasSheetMessageFlow.value = null
+                    update { it.copy(hasUnsavedChanges = true) }
+                }
                 AliasAddResult.IgnoredEmpty -> aliasSheetMessageFlow.value = "Alias is empty."
                 AliasAddResult.IgnoredDuplicate -> aliasSheetMessageFlow.value = "Alias already exists."
             }
@@ -271,6 +282,7 @@ class FoodEditorViewModel @Inject constructor(
         val id = aliasSheetNutrientIdFlow.value ?: return
         viewModelScope.launch {
             nutrientAliasRepo.deleteAlias(id, alias)
+            update { it.copy(hasUnsavedChanges = true) }
         }
     }
 
