@@ -26,12 +26,17 @@ interface FoodDao {
     suspend fun getByIds(ids: List<Long>): List<FoodEntity>
 
     @Query("""
-        SELECT * FROM foods
-        WHERE name LIKE '%' || :query || '%'
-        ORDER BY isRecipe DESC, name ASC
-        LIMIT :limit
-    """)
+                SELECT * FROM foods
+                WHERE
+                  LOWER(name) LIKE '%' || LOWER(:query) || '%'
+                  OR LOWER(COALESCE(brand, '')) LIKE '%' || LOWER(:query) || '%'
+                ORDER BY isRecipe DESC, name ASC
+                LIMIT :limit
+            """)
     fun search(query: String, limit: Int = 50): Flow<List<FoodEntity>>
+
+
+
 
     @Query("SELECT COUNT(*) FROM foods")
     suspend fun countFoods(): Int

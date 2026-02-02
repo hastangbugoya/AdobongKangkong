@@ -218,29 +218,28 @@ fun FoodEditorScreen(
                 val grouped = state.nutrientRows.groupBy { it.category }
 
                 grouped.entries
-                    .sortedBy { it.key.name } // optional: stable ordering by enum name
-                    .forEach { (category, rows) ->
-                        item {
-                            Text(
-                                text = category.labelForUi(),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-
-                        items(
-                            items = rows,
-                            key = { it.nutrientId }
-                        ) { row ->
-                            NutrientRowEditor(
-                                row = row,
-                                onAmountChange = { newValue ->
-                                    onNutrientAmountChange(row.nutrientId, newValue)
-                                },
-                                onRemove = { onRemoveNutrient(row.nutrientId) },
-                                isTablet = isTablet
-                            )
-                        }
+                .sortedBy { it.key.name } // optional: stable ordering by enum name
+                .forEach { (category, rows) ->
+                    item {
+                        Text(
+                            text = category.labelForUi(),
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
+                    items(
+                        items = rows,
+                        key = { it.nutrientId }
+                    ) { row ->
+                        NutrientRowEditor(
+                            row = row,
+                            onAmountChange = { newValue ->
+                                onNutrientAmountChange(row.nutrientId, newValue)
+                            },
+                            onRemove = { onRemoveNutrient(row.nutrientId) },
+                            isTablet = isTablet
+                        )
+                    }
+                }
 
                 item { HorizontalDivider() }
 
