@@ -11,6 +11,7 @@ import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
@@ -47,6 +48,11 @@ class QuickAddViewModel @Inject constructor(
     private val servingsFlow = MutableStateFlow(1.0)
     private val inputModeFlow = MutableStateFlow(InputMode.SERVINGS)
 
+
+    // user input (Amount + Unit) used by QuickAdd
+    private val inputUnitFlow = MutableStateFlow(ServingUnit.G)
+    private val inputAmountFlow = MutableStateFlow<Double?>(null)
+
     // recipe context
     private val selectedRecipeIdFlow = MutableStateFlow<Long?>(null)
     private val selectedRecipeStableIdFlow = MutableStateFlow<String?>(null)
@@ -61,7 +67,6 @@ class QuickAddViewModel @Inject constructor(
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
 
-    private val gramsTypedFlow = MutableStateFlow<Double?>(null)
 
     private val resultsFlow =
         queryFlow
@@ -137,11 +142,12 @@ class QuickAddViewModel @Inject constructor(
         val results: List<FoodListItemUiModel>,
         val selected: Food?,
         val servings: Double,
-        val inputMode: InputMode
+        val inputMode: InputMode,
+        val inputUnit: ServingUnit,
+        val inputAmount: Double?
     )
 
     private data class RecipeInputs(
-        val gramsTyped: Double?,
         val batches: List<BatchSummary>,
         val selectedBatchId: Long?,
         val yieldGramsText: String,
@@ -160,31 +166,64 @@ class QuickAddViewModel @Inject constructor(
          * Some coroutines versions do not provide typed `combine` overloads for large arity
          * (e.g., 13 flows). Grouping keeps everything type-safe and avoids `Array<Any?>` indices.
          */
-        val coreFlow = combine(
+        data class CoreA(
+            val query: String,
+            val results: List<FoodListItemUiModel>,
+            val selected: Food?,
+            val servings: Double
+        )
+
+        data class CoreB(
+            val inputMode: InputMode,
+            val inputUnit: ServingUnit,
+            val inputAmount: Double?
+        )
+
+        val coreAFlow = combine(
             queryFlow,
             resultsUiFlow,
             selectedFoodFlow,
-            servingsFlow,
-            inputModeFlow
-        ) { query, results, selected, servings, inputMode ->
-            CoreInputs(
+            servingsFlow
+        ) { query, results, selected, servings ->
+            CoreA(
                 query = query,
                 results = results,
                 selected = selected,
-                servings = servings,
-                inputMode = inputMode
+                servings = servings
+            )
+        }
+
+        val coreBFlow = combine(
+            inputModeFlow,
+            inputUnitFlow,
+            inputAmountFlow
+        ) { inputMode, inputUnit, inputAmount ->
+            CoreB(
+                inputMode = inputMode,
+                inputUnit = inputUnit,
+                inputAmount = inputAmount
+            )
+        }
+
+        val coreFlow = combine(coreAFlow, coreBFlow) { a, b ->
+            CoreInputs(
+                query = a.query,
+                results = a.results,
+                selected = a.selected,
+                servings = a.servings,
+                inputMode = b.inputMode,
+                inputUnit = b.inputUnit,
+                inputAmount = b.inputAmount
             )
         }
 
         val recipeFlow = combine(
-            gramsTypedFlow,
             batchesFlow,
             selectedBatchIdFlow,
             yieldGramsTextFlow,
             servingsYieldTextFlow
-        ) { gramsTyped, batches, selectedBatchId, yieldGramsText, servingsYieldText ->
+        ) { batches, selectedBatchId, yieldGramsText, servingsYieldText ->
             RecipeInputs(
-                gramsTyped = gramsTyped,
                 batches = batches,
                 selectedBatchId = selectedBatchId,
                 yieldGramsText = yieldGramsText,
@@ -206,12 +245,32 @@ class QuickAddViewModel @Inject constructor(
 
         combine(coreFlow, recipeFlow, flagsFlow) { core, recipe, flags ->
 
-            val servingUnitAmount = core.selected?.let { core.servings * it.servingSize }
+            val gramsAmount: Double? = core.selected?.let { food ->
+                computeGramsAmount(
+                    food = food,
+                    servings = core.servings,
+                    inputMode = core.inputMode,
+                    inputUnit = core.inputUnit,
+                    inputAmount = core.inputAmount
+                )
+            }
 
-            // Input-mode-driven grams:
-            val gramsAmount = when (core.inputMode) {
-                InputMode.GRAMS -> recipe.gramsTyped
-                else -> core.selected?.gramsPerServingResolved()?.let { g -> core.servings * g }
+            // Serving-equivalent is only computable when we have grams-per-serving (or when user is in SERVINGS mode).
+            val servingsEquivalent: Double? = core.selected?.let { food ->
+                when (core.inputMode) {
+                    InputMode.SERVINGS -> core.servings
+                    else -> {
+                        val grams = gramsAmount ?: return@let null
+                        val gPerServing = food.gramsPerServingResolved() ?: return@let null
+                        if (gPerServing <= 0.0) return@let null
+                        grams / gPerServing
+                    }
+                }
+            }
+
+            val servingUnitAmount: Double? = core.selected?.let { food ->
+                val s = servingsEquivalent ?: return@let null
+                s * food.servingSize
             }
 
             QuickAddState(
@@ -219,6 +278,9 @@ class QuickAddViewModel @Inject constructor(
                 results = core.results,
                 selectedFood = core.selected,
                 servings = core.servings,
+                servingsEquivalent = servingsEquivalent,
+                inputUnit = core.inputUnit,
+                inputAmount = core.inputAmount,
                 servingUnitAmount = servingUnitAmount,
                 gramsAmount = gramsAmount,
                 inputMode = core.inputMode,
@@ -243,6 +305,21 @@ class QuickAddViewModel @Inject constructor(
         selectedFoodFlow.value = food
         servingsFlow.value = 1.0
         inputModeFlow.value = InputMode.SERVINGS
+
+        // Default input unit: prefer the food serving unit when it is convertible, otherwise grams.
+        inputUnitFlow.value = when (food.servingUnit) {
+            ServingUnit.MG, ServingUnit.G, ServingUnit.KG, ServingUnit.OZ, ServingUnit.LB,
+            ServingUnit.ML, ServingUnit.L,
+            ServingUnit.TSP_US, ServingUnit.TBSP_US, ServingUnit.FL_OZ_US, ServingUnit.CUP_US, ServingUnit.PINT_US, ServingUnit.QUART_US, ServingUnit.GALLON_US,
+            ServingUnit.CUP_METRIC, ServingUnit.CUP_JP, ServingUnit.RCCUP,
+            ServingUnit.FL_OZ_IMP, ServingUnit.PINT_IMP, ServingUnit.QUART_IMP, ServingUnit.GALLON_IMP,
+            ServingUnit.TSP, ServingUnit.TBSP, ServingUnit.CUP, ServingUnit.QUART,
+            ServingUnit.SERVING -> food.servingUnit
+            else -> ServingUnit.G
+        }
+        // For 1 serving, the natural amount shown is the serving size in its serving unit.
+        inputAmountFlow.value = food.servingSize.coerceAtLeast(0.0)
+
         errorFlow.value = null
 
         // Resolve recipe context if this Food is a recipe “proxy”
@@ -293,35 +370,112 @@ class QuickAddViewModel @Inject constructor(
         inputModeFlow.value = mode
     }
 
+    fun onInputUnitChanged(unit: ServingUnit) {
+        inputUnitFlow.value = unit
+
+        val food = selectedFoodFlow.value ?: return
+        val currentGrams = computeGramsAmount(
+            food = food,
+            servings = servingsFlow.value,
+            inputMode = inputModeFlow.value,
+            inputUnit = inputUnitFlow.value,
+            inputAmount = inputAmountFlow.value
+        )
+
+        // Keep grams constant when possible; otherwise leave amount as-is.
+        if (currentGrams != null) {
+            // If new unit is mass, rewrite amount accordingly.
+            unit.gPerUnitOrNull()?.let { gPerUnit ->
+                inputAmountFlow.value = currentGrams / gPerUnit
+                inputModeFlow.value = InputMode.GRAMS
+                return
+            }
+            // If new unit is volume, rewrite amount accordingly (only if density is available).
+            unit.mlPerUnitOrNull()?.let { mlPerUnit ->
+                val grams = currentGrams
+                val foodMlPerUnit = food.servingUnit.mlPerUnitOrNull()
+                val gPerServing = food.gramsPerServingResolved()
+                if (foodMlPerUnit != null && gPerServing != null && gPerServing > 0.0 && food.servingSize > 0.0) {
+                    val density = gPerServing / (food.servingSize * foodMlPerUnit)
+                    if (density > 0.0) {
+                        val ml = grams / density
+                        inputAmountFlow.value = ml / mlPerUnit
+                        inputModeFlow.value = InputMode.SERVING_UNIT
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    fun onInputAmountChanged(amount: Double) {
+        val food = selectedFoodFlow.value ?: return
+        val unit = inputUnitFlow.value
+        val a = amount.coerceAtLeast(0.0)
+        inputAmountFlow.value = a
+
+        // Decide mode based on unit kind.
+        val grams = computeGramsFromAmountAndUnit(food, a, unit)
+
+        if (grams != null) {
+            // If we can compute grams, sync servings when possible.
+            val gPerServing = food.gramsPerServingResolved()
+            if (gPerServing != null && gPerServing > 0.0) {
+                servingsFlow.value = (grams / gPerServing).coerceAtLeast(0.0)
+            }
+            inputModeFlow.value = if (unit.gPerUnitOrNull() != null) InputMode.GRAMS else InputMode.SERVING_UNIT
+        } else {
+            // Fallback: if user picked the food's serving unit, we can still treat it as serving-unit input.
+            if (unit == food.servingUnit && food.servingSize > 0.0) {
+                servingsFlow.value = (a / food.servingSize).coerceAtLeast(0.0)
+                inputModeFlow.value = InputMode.SERVING_UNIT
+            }
+        }
+    }
+
     fun onServingsChanged(servings: Double) {
-        gramsTypedFlow.value = null
-        servingsFlow.value = servings.coerceAtLeast(0.0)
+        val s = servings.coerceAtLeast(0.0)
+        servingsFlow.value = s
         inputModeFlow.value = InputMode.SERVINGS
+
+        // Keep the amount field aligned with the food's serving unit when possible.
+        selectedFoodFlow.value?.let { food ->
+            inputUnitFlow.value = food.servingUnit
+            inputAmountFlow.value = s * food.servingSize
+        }
     }
 
     fun onServingUnitAmountChanged(amount: Double) {
-        gramsTypedFlow.value = null
         val food = selectedFoodFlow.value ?: return
-        if (food.servingSize <= 0.0) return
-        servingsFlow.value = (amount / food.servingSize).coerceAtLeast(0.0)
-        inputModeFlow.value = InputMode.SERVING_UNIT
+        // Legacy behavior: amount in the food's own serving unit.
+        inputUnitFlow.value = food.servingUnit
+        onInputAmountChanged(amount)
     }
 
     fun onGramsChanged(grams: Double) {
         val food = selectedFoodFlow.value ?: return
-        val g = food.gramsPerServingResolved() ?: return
-        if (g <= 0.0) return
+        val gramsClamped = grams.coerceAtLeast(0.0)
 
-        gramsTypedFlow.value = grams.coerceAtLeast(0.0)
-        servingsFlow.value = (grams / g).coerceAtLeast(0.0)
+        inputUnitFlow.value = ServingUnit.G
+        inputAmountFlow.value = gramsClamped
         inputModeFlow.value = InputMode.GRAMS
+
+        // If grams-per-serving is known, keep servings stepper in sync.
+        val gPerServing = food.gramsPerServingResolved()
+        if (gPerServing != null && gPerServing > 0.0) {
+            servingsFlow.value = (gramsClamped / gPerServing).coerceAtLeast(0.0)
+        }
     }
 
     fun onPackageClicked(multiplier: Double = 1.0) {
         val food = selectedFoodFlow.value ?: return
         val spp = food.servingsPerPackage ?: return
-        servingsFlow.value = (spp * multiplier).coerceAtLeast(0.0)
+        val s = (spp * multiplier).coerceAtLeast(0.0)
+        servingsFlow.value = s
         inputModeFlow.value = InputMode.SERVINGS
+
+        inputUnitFlow.value = food.servingUnit
+        inputAmountFlow.value = s * food.servingSize
     }
 
     // -----------------------------
@@ -409,28 +563,139 @@ class QuickAddViewModel @Inject constructor(
         }
     }
 
+
     // -----------------------------
+    // Unit conversion helpers (QuickAdd)
+    // -----------------------------
+
+    private fun computeGramsAmount(
+        food: Food,
+        servings: Double,
+        inputMode: InputMode,
+        inputUnit: ServingUnit,
+        inputAmount: Double?
+    ): Double? {
+        return when (inputMode) {
+            InputMode.SERVINGS -> {
+                val gPerServing = food.gramsPerServingResolved() ?: return null
+                if (gPerServing <= 0.0) return null
+                servings * gPerServing
+            }
+            // User typed an amount in some unit (mass or volume or count-ish).
+            InputMode.GRAMS, InputMode.SERVING_UNIT -> {
+                val amount = inputAmount ?: return null
+                computeGramsFromAmountAndUnit(food, amount, inputUnit)
+            }
+        }
+    }
+
+    private fun computeGramsFromAmountAndUnit(food: Food, amount: Double, unit: ServingUnit): Double? {
+        val a = amount.coerceAtLeast(0.0)
+
+        // Mass input: direct conversion to grams.
+        unit.gPerUnitOrNull()?.let { gPerUnit ->
+            return a * gPerUnit
+        }
+
+        // Special case: user chooses "SERVING" explicitly (means servings-count).
+        if (unit == ServingUnit.SERVING) {
+            val gPerServing = food.gramsPerServingResolved() ?: return null
+            if (gPerServing <= 0.0) return null
+            return a * gPerServing
+        }
+
+        // If user picks the food's own serving unit (piece/cup/etc.), treat as a serving-unit amount.
+        if (unit == food.servingUnit) {
+            if (food.servingSize <= 0.0) return null
+            val servings = a / food.servingSize
+            val gPerServing = food.gramsPerServingResolved() ?: return null
+            if (gPerServing <= 0.0) return null
+            return servings * gPerServing
+        }
+
+        // Volume input: needs density derived from the food's serving definition.
+        val inputMlPerUnit = unit.mlPerUnitOrNull() ?: return null
+        val foodMlPerUnit = food.servingUnit.mlPerUnitOrNull() ?: return null
+        if (food.servingSize <= 0.0) return null
+
+        val gPerServing = food.gramsPerServingResolved() ?: return null
+        if (gPerServing <= 0.0) return null
+
+        // gramsPerServing corresponds to (servingSize * foodServingUnit) volume.
+        val mlPerServing = food.servingSize * foodMlPerUnit
+        if (mlPerServing <= 0.0) return null
+
+        val densityGPerMl = gPerServing / mlPerServing
+        val ml = a * inputMlPerUnit
+        return ml * densityGPerMl
+    }
+
+    private fun ServingUnit.gPerUnitOrNull(): Double? = when (this) {
+        ServingUnit.MG -> 0.001
+        ServingUnit.G -> 1.0
+        ServingUnit.KG -> 1000.0
+        ServingUnit.OZ -> 28.349523125
+        ServingUnit.LB -> 453.59237
+        else -> null
+    }
+
+    private fun ServingUnit.mlPerUnitOrNull(): Double? = when (this) {
+        // Metric
+        ServingUnit.ML -> 1.0
+        ServingUnit.L -> 1000.0
+
+        // US nutrition-standard set (internally consistent)
+        ServingUnit.CUP_US -> 240.0
+        ServingUnit.TBSP_US -> 240.0 / 16.0
+        ServingUnit.TSP_US -> (240.0 / 16.0) / 3.0
+        ServingUnit.FL_OZ_US -> 240.0 / 8.0
+        ServingUnit.PINT_US -> 240.0 * 2.0
+        ServingUnit.QUART_US -> 240.0 * 4.0
+        ServingUnit.GALLON_US -> 240.0 * 16.0
+
+        // Cup variants
+        ServingUnit.CUP_METRIC -> 250.0
+        ServingUnit.CUP_JP -> 200.0
+
+        // Rice cooker cup (international)
+        ServingUnit.RCCUP -> 180.0
+
+        // Imperial (exact)
+        ServingUnit.FL_OZ_IMP -> 28.4130625
+        ServingUnit.PINT_IMP -> 568.26125
+        ServingUnit.QUART_IMP -> 1136.5225
+        ServingUnit.GALLON_IMP -> 4546.09
+
+        // Legacy aliases: treat as US for compatibility
+        ServingUnit.CUP -> ServingUnit.CUP_US.mlPerUnitOrNull()
+        ServingUnit.TBSP -> ServingUnit.TBSP_US.mlPerUnitOrNull()
+        ServingUnit.TSP -> ServingUnit.TSP_US.mlPerUnitOrNull()
+        ServingUnit.QUART -> ServingUnit.QUART_US.mlPerUnitOrNull()
+
+        else -> null
+    }
+// -----------------------------
     // Save (log entry)
     // -----------------------------
 
     fun save(onDone: () -> Unit) {
         val food = selectedFoodFlow.value ?: return
         val servings = servingsFlow.value
-        if (servings <= 0.0) return
+
+        val gramsForSave = computeGramsAmount(
+            food = food,
+            servings = servings,
+            inputMode = inputModeFlow.value,
+            inputUnit = inputUnitFlow.value,
+            inputAmount = inputAmountFlow.value
+        )
 
         val amountInput =
-            when (inputModeFlow.value) {
-                InputMode.GRAMS -> {
-                    val grams = gramsTypedFlow.value
-                        ?: run {
-                            errorFlow.value = "Enter grams."
-                            return
-                        }
-                    AmountInput.ByGrams(grams)
-                }
-                InputMode.SERVINGS, InputMode.SERVING_UNIT -> {
-                    AmountInput.ByServings(servings)
-                }
+            if (gramsForSave != null && gramsForSave > 0.0 && inputModeFlow.value != InputMode.SERVINGS) {
+                AmountInput.ByGrams(gramsForSave)
+            } else {
+                if (servings <= 0.0) return
+                AmountInput.ByServings(servings)
             }
 
         viewModelScope.launch {

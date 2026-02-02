@@ -128,6 +128,16 @@ fun QuickAddBottomSheet(
                             ?: state.selectedFood!!.servingSize,
                         gramsAmount = state.gramsAmount,
                         inputMode = state.inputMode,
+                        inputUnit = state.inputUnit,
+                        inputAmount = state.inputAmount,
+                        onInputUnitChanged = vm::onInputUnitChanged,
+                        onInputAmountChanged = { amount ->
+                            // keep your local text state update exactly as-is
+                            amount?.let {
+                                // this ultimately calls vm.onInputAmountChanged(Double)
+                                vm.onInputAmountChanged(amount)
+                            }
+                        },
                         batches = state.batches,
                         selectedBatchId = state.selectedBatchId,
                         onBatchSelected = vm::onBatchSelected,
@@ -212,6 +222,8 @@ private fun SelectedFoodPanel(
     servingUnitAmount: Double,
     gramsAmount: Double?,
     inputMode: InputMode,
+    inputUnit: ServingUnit,
+    inputAmount: Double?,
     batches: List<BatchSummary>,
     selectedBatchId: Long?,
     errorMessage: String?,
@@ -221,6 +233,8 @@ private fun SelectedFoodPanel(
     onServingsChanged: (Double) -> Unit,
     onServingUnitAmountChanged: (Double) -> Unit,
     onGramsChanged: (Double) -> Unit,
+    onInputUnitChanged: (ServingUnit) -> Unit,
+    onInputAmountChanged: (Double?) -> Unit,
     onPackage: (Double) -> Unit,
     onEditFoodInEditor: () -> Unit,
     onSave: () -> Unit
@@ -267,7 +281,7 @@ private fun SelectedFoodPanel(
     val canLogGrams = food.gramsPerServingResolved() != null
     val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
     if (canLogGrams) {
-        var isLbDialogOpen by rememberSaveable { mutableStateOf(false) }
+        var isUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -284,19 +298,23 @@ private fun SelectedFoodPanel(
             Spacer(Modifier.width(8.dp))
 
             TextButton(
-                onClick = { isLbDialogOpen = true },
+                onClick = { isUnitDialogOpen = true },
                 contentPadding = PaddingValues(horizontal = 12.dp)
             ) {
-                Text("lb")
+                Text(inputUnit.display)
             }
         }
 
-        if (isLbDialogOpen) {
-            PoundsToGramsDialog(
-                onDismiss = { isLbDialogOpen = false },
-                onApplyGrams = { grams ->
-                    onGramsChanged(grams)
-                    isLbDialogOpen = false
+        if (isUnitDialogOpen) {
+            UnitToGramsDialog(
+                food = food,
+                initialUnit = inputUnit,
+                initialAmount = inputAmount,
+                onDismiss = { isUnitDialogOpen = false },
+                onApply = { unit, amount ->
+                    onInputUnitChanged(unit)
+                    onInputAmountChanged(amount)
+                    isUnitDialogOpen = false
                 }
             )
         }
@@ -560,38 +578,80 @@ private fun CreateBatchDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PoundsToGramsDialog(
+private fun UnitToGramsDialog(
+    food: Food,
+    initialUnit: ServingUnit,
+    initialAmount: Double?,
     onDismiss: () -> Unit,
-    onApplyGrams: (Double) -> Unit
+    onApply: (ServingUnit, Double?) -> Unit
 ) {
-    var poundsText by rememberSaveable { mutableStateOf("") }
+    val unitOptions = remember(food) { buildQuickAddInputUnits(food) }
 
-    // basic parse (keeps it small + safe)
-    val pounds = poundsText.toDoubleOrNull()
-    val grams = pounds?.let { it * 453.59237 }
+    var expanded by remember { mutableStateOf(false) }
+    var selectedUnit by remember { mutableStateOf(initialUnit.coerceToAvailable(unitOptions)) }
+    var amountText by remember { mutableStateOf(initialAmount?.toString().orEmpty()) }
+
+    LaunchedEffect(unitOptions) {
+        selectedUnit = selectedUnit.coerceToAvailable(unitOptions)
+    }
+
+    val parsedAmount: Double? = amountText.toDoubleOrNull()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Enter pounds") },
+        title = { Text("Input amount") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = poundsText,
-                    onValueChange = { poundsText = it },
-                    label = { Text("Pounds (lb)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    supportingText = {
-                        if (grams != null) Text("= ${grams.clean()} g")
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedUnit.display,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Unit") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        unitOptions.forEach { unit ->
+                            DropdownMenuItem(
+                                text = { Text(unit.display) },
+                                onClick = {
+                                    selectedUnit = unit
+                                    expanded = false
+                                }
+                            )
+                        }
                     }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Amount (${selectedUnit.display})") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { if (grams != null) onApplyGrams(grams) },
-                enabled = grams != null && grams > 0.0
+                onClick = { onApply(selectedUnit, parsedAmount) },
+                enabled = parsedAmount != null && parsedAmount > 0.0
             ) { Text("Apply") }
         },
         dismissButton = {
@@ -600,6 +660,76 @@ private fun PoundsToGramsDialog(
     )
 }
 
+private fun buildQuickAddInputUnits(food: Food): List<ServingUnit> {
+    val massUnits = listOf(
+        ServingUnit.G,
+        ServingUnit.OZ,
+        ServingUnit.LB,
+        ServingUnit.KG
+    )
+
+    val canVolumeInput = food.gramsPerServingResolved() != null && food.servingUnit.isVolumeUnitForDensity()
+    if (!canVolumeInput) return massUnits
+
+    val volumeUnits = listOf(
+        ServingUnit.ML,
+        ServingUnit.L,
+
+        ServingUnit.TSP_US,
+        ServingUnit.TBSP_US,
+        ServingUnit.FL_OZ_US,
+        ServingUnit.CUP_US,
+        ServingUnit.PINT_US,
+        ServingUnit.QUART_US,
+        ServingUnit.GALLON_US,
+
+        ServingUnit.CUP_METRIC,
+        ServingUnit.CUP_JP,
+        ServingUnit.RCCUP,
+
+        ServingUnit.FL_OZ_IMP,
+        ServingUnit.PINT_IMP,
+        ServingUnit.QUART_IMP,
+        ServingUnit.GALLON_IMP
+    )
+
+    return massUnits + volumeUnits
+}
+
+private fun ServingUnit.isVolumeUnitForDensity(): Boolean = when (this) {
+    ServingUnit.ML,
+    ServingUnit.L,
+
+    ServingUnit.TSP_US,
+    ServingUnit.TBSP_US,
+    ServingUnit.FL_OZ_US,
+    ServingUnit.CUP_US,
+    ServingUnit.PINT_US,
+    ServingUnit.QUART_US,
+    ServingUnit.GALLON_US,
+
+    ServingUnit.CUP_METRIC,
+    ServingUnit.CUP_JP,
+    ServingUnit.RCCUP,
+
+    ServingUnit.FL_OZ_IMP,
+    ServingUnit.PINT_IMP,
+    ServingUnit.QUART_IMP,
+    ServingUnit.GALLON_IMP,
+
+        // Legacy aliases treated as US volume (but not offered in picker)
+    ServingUnit.TSP,
+    ServingUnit.TBSP,
+    ServingUnit.CUP,
+    ServingUnit.QUART -> true
+
+    else -> false
+}
+
+private fun ServingUnit.coerceToAvailable(options: List<ServingUnit>): ServingUnit {
+    if (this in options) return this
+    return options.firstOrNull { it == ServingUnit.G } ?: options.first()
+}
 
 private fun Double.clean(): String =
     if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this)

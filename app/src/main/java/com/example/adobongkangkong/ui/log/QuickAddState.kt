@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.log
 
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 
 enum class InputMode {
@@ -16,8 +17,15 @@ data class QuickAddState(
 
     val selectedFood: Food? = null,
 
-    // canonical amount (we keep this as servings; grams/unit are derived + can “drive” servings)
+    // canonical stepper amount (servings UI)
     val servings: Double = 1.0,
+
+    // Derived: serving-equivalent computed from grams when possible
+    val servingsEquivalent: Double? = null,
+
+    // User input for "Amount (UNIT)"
+    val inputUnit: ServingUnit = ServingUnit.G,
+    val inputAmount: Double? = null,
 
     // derived UI values
     val servingUnitAmount: Double? = null,

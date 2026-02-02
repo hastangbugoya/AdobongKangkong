@@ -126,24 +126,54 @@ private fun FoodRow(
     ListItem(
         headlineContent = {
             Text(
-                food.name,
+                text = food.name,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleMedium
             )
         },
         supportingContent = {
-            food.brand?.let {
-                Text(text = food.brand)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Brand (if present)
+                if (!food.brand.isNullOrBlank()) {
+                    Text(
+                        text = food.brand!!,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+
+                // Type chip-like label
+                AssistChip(
+                    onClick = { /* no-op */ },
+                    label = { Text(if (food.isRecipe) "Recipe" else "Food") },
+                    enabled = false
+                )
             }
-            Text(if (food.isRecipe) "Recipe" else "Food")
         },
         trailingContent = {
-            FoodGoalFlagsStrip(goalFlags)
+            // Gives the trailing icons breathing room and keeps them from feeling vertically cramped
+            Column(
+                modifier = Modifier.padding(top = 2.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                FoodGoalFlagsStrip(goalFlags)
+            }
         },
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
     )
+
 }
 
 @Composable
