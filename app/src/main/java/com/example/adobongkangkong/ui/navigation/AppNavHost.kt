@@ -24,6 +24,7 @@ import java.time.LocalDate
 fun AppNavHost(
     navController: NavHostController,
     bannerCaptureController: BannerCaptureController,
+    bannerRefreshTick: Int,
     modifier: Modifier = Modifier,
     startDestination: String = "startup"
 ) {
@@ -153,24 +154,8 @@ fun AppNavHost(
                 initialName = null,
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
-                bannerCaptureController = bannerCaptureController
-            )
-        }
-
-        composable(
-            route = NavRoutes.Foods.edit,
-            arguments = listOf(
-                navArgument("foodId") { type = NavType.LongType }
-            )
-        ) { entry ->
-            val foodId = entry.arguments!!.getLong("foodId")
-
-            FoodEditorRoute(
-                foodId = foodId,
-                initialName = null,
-                onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack() },
-                bannerCaptureController = bannerCaptureController
+                bannerCaptureController = bannerCaptureController,
+                bannerRefreshTick = bannerRefreshTick
             )
         }
 
@@ -191,7 +176,8 @@ fun AppNavHost(
                 initialName = initialName,
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
-                bannerCaptureController = bannerCaptureController
+                bannerCaptureController = bannerCaptureController,
+                bannerRefreshTick = bannerRefreshTick
             )
         }
 

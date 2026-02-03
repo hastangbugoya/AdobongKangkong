@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.food
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -47,9 +48,12 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
+import com.example.adobongkangkong.ui.camera.generateBlurDerivative
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
 import com.example.adobongkangkong.ui.theme.FavoriteYellow
 import com.example.adobongkangkong.ui.theme.LimitRed
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,10 +163,35 @@ private fun FoodRow(
     val storage = remember(context) { FoodImageStorage(context) }
 
     // Load blurred banner derivative (if it exists). This is app-private cache, not Gallery.
-    val blurBitmapState = produceState<android.graphics.Bitmap?>(initialValue = null, key1 = food.id) {
-        val file = storage.bannerBlurWebpFile(food.id)
-        value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+    val blurBitmapState = produceState<Bitmap?>(initialValue = null, key1 = food.id) {
+        val storage = FoodImageStorage(context)
+
+        val bannerFile = storage.bannerJpegFile(food.id)
+        val blurFile = storage.bannerBlurWebpFile(food.id)
+
+        value = withContext(Dispatchers.IO) {
+            // If cache was flushed, recreate blur from the master banner.
+            if (!blurFile.exists() && bannerFile.exists()) {
+                storage.ensureBlurDir(food.id)
+
+                // reuse the same blur algorithm you already use in BannerCaptureSheet
+                // (preferably call the same function; if not accessible, copy that function into FoodRow file)
+                generateBlurDerivative(
+                    inputJpeg = bannerFile,
+                    outputWebp = blurFile,
+                    webpQuality = 60,
+                    downscaleTargetWidthPx = 96
+                )
+            }
+
+            if (blurFile.exists()) {
+                BitmapFactory.decodeFile(blurFile.absolutePath)
+            } else {
+                null
+            }
+        }
     }
+
 
     Box(
         modifier = Modifier

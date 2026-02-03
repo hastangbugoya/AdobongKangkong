@@ -7,26 +7,15 @@ import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 
-/**
- * Route wrapper for FoodEditorScreen.
- *
- * Responsibilities:
- * - Pull nav args (foodId / initialName) from the NavGraph and pass them in.
- * - Call vm.load(...) when args change.
- * - Map VM functions to the UI callbacks.
- *
- * NOTE:
- * - foodId == null means "New Food"
- * - initialName is only meaningful for "New Food" route prefill.
- */
 @Composable
 fun FoodEditorRoute(
     foodId: Long?,
     initialName: String?,
     onBack: () -> Unit,
     onDone: () -> Unit,
+    bannerRefreshTick: Int = 0,
     viewModel: FoodEditorViewModel = hiltViewModel(),
-    bannerCaptureController: BannerCaptureController
+    bannerCaptureController: BannerCaptureController,
 ) {
     val state by viewModel.state.collectAsState()
 
@@ -34,7 +23,6 @@ fun FoodEditorRoute(
     val aliasMessage by viewModel.aliasSheetMessage.collectAsState()
     val aliases by viewModel.selectedAliases.collectAsState()
 
-    // Load / initialize editor state when navigation args change.
     LaunchedEffect(foodId, initialName) {
         viewModel.load(foodId = foodId, initialName = initialName)
     }
@@ -43,7 +31,6 @@ fun FoodEditorRoute(
         state = state,
         onBack = onBack,
 
-        // Core fields
         onNameChange = viewModel::onNameChange,
         onBrandChange = viewModel::onBrandChange,
         onServingSizeChange = viewModel::onServingSizeChange,
@@ -51,33 +38,25 @@ fun FoodEditorRoute(
         onGramsPerServingChange = viewModel::onGramsPerServingChange,
         onServingsPerPackageChange = viewModel::onServingsPerPackageChange,
 
-        // Nutrient rows
         onNutrientAmountChange = viewModel::onNutrientAmountChange,
         onRemoveNutrient = viewModel::removeNutrientRow,
 
-        // Nutrient search/add
         onNutrientSearchQueryChange = viewModel::onNutrientSearchQueryChange,
         onAddNutrientFromSearch = { nutrientId ->
-            // Screen provides only the id; VM expects the full UI item.
             val item = state.nutrientSearchResults.firstOrNull { it.id == nutrientId }
                 ?: return@FoodEditorScreen
             viewModel.addNutrient(item)
         },
 
-        // Flags (note: your VM names differ from the screen param names)
         onToggleFavorite = viewModel::onFavoriteChange,
         onToggleEatMore = viewModel::onEatMoreChange,
         onToggleLimit = viewModel::onLimitChange,
 
-        // Save/Delete
         onSave = {
-            viewModel.save { /*savedId*/ _ ->
-                onDone()
-            }
+            viewModel.save { _ -> onDone() }
         },
-        onDeleteFood = null, // You currently don't have a delete() API in this VM.
+        onDeleteFood = null,
 
-        // Alias sheet wiring
         aliasSheetNutrientName = aliasName,
         aliasSheetAliases = aliases,
         aliasSheetMessage = aliasMessage,
@@ -85,6 +64,8 @@ fun FoodEditorRoute(
         onAddAlias = { viewModel.addAlias(it) },
         onDeleteAlias = { viewModel.deleteAlias(it) },
         onDismissAliasSheet = { viewModel.closeAliasSheet() },
+
+        bannerRefreshTick = bannerRefreshTick,
         bannerCaptureController = bannerCaptureController,
     )
 }

@@ -1,6 +1,8 @@
 package com.example.adobongkangkong.ui.log
 
+import android.graphics.BitmapFactory
 import android.util.Log
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,7 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -19,6 +24,7 @@ import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
@@ -64,15 +70,17 @@ fun QuickAddBottomSheet(
 
             Spacer(Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = vm::onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search foods") },
-                singleLine = true
-            )
+            if (state.selectedFood == null) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = vm::onQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search foods") },
+                    singleLine = true
+                )
 
-            Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(12.dp))
+            }
 
             if (state.selectedFood == null) {
 
@@ -114,57 +122,82 @@ fun QuickAddBottomSheet(
 
             } else {
                 val selected = state.selectedFood!!
+                val context = LocalContext.current
+
+                // Proof-of-concept: show the saved banner JPG as a subtle background behind the panel
+                // (no extra vertical space).
+                val bannerBitmapState = produceState<android.graphics.Bitmap?>(
+                    initialValue = null,
+                    key1 = selected.id
+                ) {
+                    val storage = FoodImageStorage(context)
+                    val file = storage.bannerJpegFile(selected.id)
+                    value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+                }
+
                 val isLoggingByGrams = state.inputMode == InputMode.GRAMS
                 val isLogEnabled =
                     !selected.isRecipe ||
                             !isLoggingByGrams ||
                             state.selectedBatchId != null
 
-                SelectedFoodPanel(
-                    food = selected,
-                    servings = state.servings,
-                    servingUnitAmount = state.servingUnitAmount
-                        ?: selected.servingSize,
-                    gramsAmount = state.gramsAmount,
-                    inputUnit = state.inputUnit,
-                    inputAmount = state.inputAmount,
-                    errorMessage = state.errorMessage,
-                    onBack = vm::clearSelection,
-                    onServingsChanged = vm::onServingsChanged,
-                    onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
-                    onGramsChanged = vm::onGramsChanged,
-                    onInputUnitChanged = vm::onInputUnitChanged,
-                    onInputAmountChanged = { amount ->
-                        // keep behavior identical to before: only forward when non-null
-                        amount?.let { vm.onInputAmountChanged(it) }
-                    },
-                    onPackage = vm::onPackageClicked,
-                    onEditFoodInEditor = { onOpenFoodEditor(selected.id) },
-                    primaryButtonLabel = "Log",
-                    isPrimaryEnabled = isLogEnabled,
-                    onPrimaryAction = { vm.save(onDone = onDismiss) },
-                    extraContent = {
-                        if (selected.isRecipe) {
-                            Spacer(Modifier.height(16.dp))
-                            Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(8.dp))
-                            BatchSelector(
-                                batches = state.batches,
-                                selectedBatchId = state.selectedBatchId,
-                                onSelected = vm::onBatchSelected,
-                                onCreate = vm::openCreateBatchDialog
-                            )
-                            if (isLoggingByGrams && state.selectedBatchId == null && state.errorMessage == null) {
+                Box(Modifier.fillMaxWidth()) {
+                    bannerBitmapState.value?.let { bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop,
+                            alpha = 0.18f
+                        )
+                    }
+
+                    SelectedFoodPanel(
+                        food = selected,
+                        servings = state.servings,
+                        servingUnitAmount = state.servingUnitAmount
+                            ?: selected.servingSize,
+                        gramsAmount = state.gramsAmount,
+                        inputUnit = state.inputUnit,
+                        inputAmount = state.inputAmount,
+                        errorMessage = state.errorMessage,
+                        onBack = vm::clearSelection,
+                        onServingsChanged = vm::onServingsChanged,
+                        onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
+                        onGramsChanged = vm::onGramsChanged,
+                        onInputUnitChanged = vm::onInputUnitChanged,
+                        onInputAmountChanged = { amount ->
+                            // keep behavior identical to before: only forward when non-null
+                            amount?.let { vm.onInputAmountChanged(it) }
+                        },
+                        onPackage = vm::onPackageClicked,
+                        onEditFoodInEditor = { onOpenFoodEditor(selected.id) },
+                        primaryButtonLabel = "Log",
+                        isPrimaryEnabled = isLogEnabled,
+                        onPrimaryAction = { vm.save(onDone = onDismiss) },
+                        extraContent = {
+                            if (selected.isRecipe) {
+                                Spacer(Modifier.height(16.dp))
+                                Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
                                 Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "Select or create a cooked batch to log by grams.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                BatchSelector(
+                                    batches = state.batches,
+                                    selectedBatchId = state.selectedBatchId,
+                                    onSelected = vm::onBatchSelected,
+                                    onCreate = vm::openCreateBatchDialog
                                 )
+                                if (isLoggingByGrams && state.selectedBatchId == null && state.errorMessage == null) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "Select or create a cooked batch to log by grams.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
 
             Spacer(Modifier.height(12.dp))

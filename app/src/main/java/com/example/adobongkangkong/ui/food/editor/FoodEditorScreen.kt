@@ -1,7 +1,9 @@
 package com.example.adobongkangkong.ui.food.editor
 
 import android.annotation.SuppressLint
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,11 +41,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -96,6 +103,7 @@ fun FoodEditorScreen(
     onDismissAliasSheet: () -> Unit,
 
     // Camera
+    bannerRefreshTick: Int = 0,
     bannerCaptureController: BannerCaptureController
 ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
@@ -103,8 +111,6 @@ fun FoodEditorScreen(
             .map { it.nutrientId }
             .toSet()
     }
-
-    val canCaptureBanner : Boolean = false
 
     // ---------------- Navigate-away warning (state-driven) ----------------
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
@@ -182,6 +188,54 @@ fun FoodEditorScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    val context = LocalContext.current
+                    val foodId = state.foodId
+
+                    if (foodId != null) {
+                        val file = remember(foodId) {
+                            com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
+                                .bannerJpegFile(foodId)
+                        }
+
+                        val bannerBitmapState = produceState<android.graphics.Bitmap?>(
+                            initialValue = null,
+                            key1 = foodId,
+                            key2 = bannerRefreshTick
+                        ) {
+                            value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+                        }
+
+                        bannerBitmapState.value?.let { bmp ->
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(3f / 1f)
+                            ) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier.matchParentSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+
+                                IconButton(
+                                    onClick = { bannerCaptureController.open(foodId) },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(8.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(android.R.drawable.ic_menu_camera),
+                                        contentDescription = "Change banner"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+
 
                 item {
                     OutlinedTextField(

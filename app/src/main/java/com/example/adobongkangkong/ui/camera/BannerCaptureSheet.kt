@@ -2,8 +2,11 @@ package com.example.adobongkangkong.ui.camera
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import androidx.exifinterface.media.ExifInterface
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.util.Rational
 import android.view.Surface
 import android.view.ViewGroup
@@ -16,10 +19,13 @@ import androidx.camera.core.ViewPort
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -130,10 +136,18 @@ fun BannerCaptureSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(3f / 1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Color.Black)
-            ) {
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+            )  {
                 AndroidView(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black),
                     factory = { previewView }
                 )
 
@@ -174,6 +188,9 @@ fun BannerCaptureSheet(
                                         outputFile = bannerFile,
                                         mainExecutor = mainExecutor
                                     )
+                                    fixJpegOrientationInPlace(bannerFile)
+                                    Log.d("BannerCapture", "banner saved: ${bannerFile.absolutePath} exists=${bannerFile.exists()} size=${bannerFile.length()}")
+                                    Log.d("BannerCapture", "blur target: ${blurFile.absolutePath} parentExists=${blurFile.parentFile?.exists()}")
 
                                     generateBlurDerivative(
                                         inputJpeg = bannerFile,
@@ -181,6 +198,8 @@ fun BannerCaptureSheet(
                                         webpQuality = 60,
                                         downscaleTargetWidthPx = 96
                                     )
+
+                                    Log.d("BannerCapture", "blur after gen: exists=${blurFile.exists()} size=${blurFile.length()}")
 
                                     bannerFile.toUri()
                                 }
@@ -232,13 +251,17 @@ private suspend fun takePictureToFile(
     )
 }
 
-private fun generateBlurDerivative(
+internal fun generateBlurDerivative(
     inputJpeg: File,
     outputWebp: File,
     webpQuality: Int,
     downscaleTargetWidthPx: Int
 ) {
-    val src = BitmapFactory.decodeFile(inputJpeg.absolutePath) ?: return
+    val src = BitmapFactory.decodeFile(inputJpeg.absolutePath)
+    if (src == null) {
+        Log.e("BannerCapture", "decodeFile failed: ${inputJpeg.absolutePath} exists=${inputJpeg.exists()} size=${inputJpeg.length()}")
+        return
+    }
 
     val targetW = downscaleTargetWidthPx.coerceAtLeast(1)
     val targetH = ((src.height * (targetW.toFloat() / src.width)).toInt()).coerceAtLeast(1)
@@ -257,4 +280,40 @@ private fun generateBlurDerivative(
     if (blurred !== src) blurred.recycle()
     if (small !== src) small.recycle()
     src.recycle()
+}
+
+private fun fixJpegOrientationInPlace(jpegFile: File) {
+    runCatching {
+        val exif = ExifInterface(jpegFile)
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+
+        val rotateDegrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
+            else -> 0
+        }
+
+        if (rotateDegrees == 0) return
+
+        val src = BitmapFactory.decodeFile(jpegFile.absolutePath) ?: return
+        val m = Matrix().apply { postRotate(rotateDegrees.toFloat()) }
+        val rotated = Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
+
+        FileOutputStream(jpegFile).use { out ->
+            rotated.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        }
+
+        // After physically rotating pixels, reset EXIF orientation so viewers don't rotate again
+        exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+        exif.saveAttributes()
+
+        if (rotated !== src) rotated.recycle()
+        src.recycle()
+    }.onFailure {
+        Log.e("BannerCapture", "fixJpegOrientationInPlace failed", it)
+    }
 }
