@@ -1,15 +1,29 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.DropdownMenuItem
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.ui.food.SelectedFoodPanel
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,8 +35,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -32,7 +48,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -243,79 +261,62 @@ fun RecipeBuilderScreen(
 
             state.pickedFood?.let { pickedFood ->
                 item {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Picked: ${pickedFood.name}", style = MaterialTheme.typography.titleSmall)
+                    // ------------------------------------------------------------------
+                    // IDENTICAL steps to QuickAddBottomSheet (SelectedFoodPanel)
+                    // ------------------------------------------------------------------
+                    val gramsPerServing = pickedFood.gramsPerServingResolved()
+                    var inputUnit by rememberSaveable(pickedFood.id) { mutableStateOf(ServingUnit.G) }
+                    var inputAmount by rememberSaveable(pickedFood.id) { mutableStateOf<Double?>(null) }
 
-                    OutlinedTextField(
-                        value = state.pickedServingsText,
-                        onValueChange = vm::onPickedServingsTextChange,
-                        label = {
-                            val unitLabel = state.pickedFood
-                                ?.servingUnit
-                                ?.name
-                                ?.lowercase()
-                                ?.replace('_', ' ')
-                                ?.replaceFirstChar { it.uppercase() }
-                                ?: "Servings"
-                            Text(unitLabel)
+                    var servingUnitAmount by rememberSaveable(pickedFood.id) {
+                        mutableStateOf(state.pickedServings * pickedFood.servingSize)
+                    }
+
+                    var gramsAmount by rememberSaveable(pickedFood.id) {
+                        mutableStateOf(gramsPerServing?.let { g -> state.pickedServings * g })
+                    }
+
+                    // Keep derived fields synced whenever canonical servings changes (same behavior as QuickAdd VM).
+                    LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServing) {
+                        servingUnitAmount = state.pickedServings * pickedFood.servingSize
+                        gramsAmount = gramsPerServing?.let { g -> state.pickedServings * g }
+                    }
+
+                    SelectedFoodPanel(
+                        food = pickedFood,
+                        servings = state.pickedServings,
+                        servingUnitAmount = servingUnitAmount,
+                        gramsAmount = gramsAmount,
+                        inputUnit = inputUnit,
+                        inputAmount = inputAmount,
+                        errorMessage = state.errorMessage,
+                        onBack = vm::clearSelection,
+                        onServingsChanged = { s ->
+                            vm.onServingsChanged(s)
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
+                        onServingUnitAmountChanged = { amt ->
+                            servingUnitAmount = amt
+                            vm.onServingUnitAmountChanged(amt)
+                        },
+                        onGramsChanged = { g ->
+                            gramsAmount = g
+                            vm.onGramsChanged(g)
+                        },
+                        onInputUnitChanged = { u ->
+                            inputUnit = u
+                            vm.onInputUnitChanged(u)
+                        },
+                        onInputAmountChanged = { amt ->
+                            inputAmount = amt
+                            vm.onInputAmountChanged(amt)
+                        },
+                        onPackage = { mult ->
+                            vm.onPackageClicked(mult)
+                        },
+                        onEditFoodInEditor = { onEditFood(pickedFood.id) },
+                        primaryButtonLabel = "Add ingredient",
+                        onPrimaryAction = vm::addPickedIngredient
                     )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    val gPerServing = pickedFood.gramsPerServing
-                    if (gPerServing != null && gPerServing > 0.0) {
-                        val unitLabel = pickedFood.servingUnit.name
-                            .lowercase()
-                            .replace('_', ' ')
-                        Text(
-                            "1 $unitLabel = ${"%,.1f".format(gPerServing)} g",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(Modifier.height(8.dp))
-                    }
-
-                    OutlinedTextField(
-                        value = state.pickedGramsText,
-                        onValueChange = vm::onPickedGramsTextChange,
-                        label = { Text("Grams") },
-                        enabled = (state.pickedFood?.gramsPerServing != null),
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    if (pickedFood.servingsPerPackage != null) {
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            "${pickedFood.servingsPerPackage.ui()} servings per package",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            AssistChip(
-                                onClick = { vm.onPickedPackage(0.5) },
-                                label = { Text("½ package") }
-                            )
-                            AssistChip(
-                                onClick = { vm.onPickedPackage(1.0) },
-                                label = { Text("1 package") }
-                            )
-                        }
-                    }
-
-                    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = vm::addPickedIngredient, enabled = !state.isSaving) { Text("Add") }
-                        TextButton(onClick = vm::clearPickedFood) { Text("Cancel") }
-                    }
                 }
             }
 
@@ -328,7 +329,7 @@ fun RecipeBuilderScreen(
                 } else {
                     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         state.ingredients.forEachIndexed { index, ing ->
-                            androidx.compose.foundation.layout.Row(
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -340,11 +341,30 @@ fun RecipeBuilderScreen(
                                 }
                                 val gramsText = ing.grams?.let { g -> " (≈ ${"%,.1f".format(g)} g)" }.orEmpty()
 
-                                Text(
-                                    "${ing.foodName} • $amountText$gramsText",
+                                // NEW: compute entered-as string (only if present)
+                                val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
+                                val enteredAs = if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
+                                    "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit"
+                                } else null
+
+                                Column(
                                     modifier = Modifier.weight(1f),
-                                    maxLines = 2
-                                )
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        "${ing.foodName} • $amountText$gramsText",
+                                        maxLines = 2
+                                    )
+
+                                    if (enteredAs != null) {
+                                        Text(
+                                            enteredAs,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
 
                                 IconButton(onClick = { vm.removeIngredientAt(index) }) {
                                     Icon(
@@ -354,6 +374,7 @@ fun RecipeBuilderScreen(
                                 }
                             }
                         }
+
                     }
                 }
             }
@@ -415,3 +436,4 @@ fun RecipeBuilderScreen(
     }
 
 }
+

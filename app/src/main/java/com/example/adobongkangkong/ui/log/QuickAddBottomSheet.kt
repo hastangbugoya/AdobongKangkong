@@ -7,10 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -23,6 +21,7 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
+import com.example.adobongkangkong.ui.food.SelectedFoodPanel
 import kotlin.math.max
 
 /**
@@ -114,46 +113,58 @@ fun QuickAddBottomSheet(
                 }
 
             } else {
-                // Selected food: scroll this section so the Log button is reachable
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    SelectedFoodPanel(
-                        food = state.selectedFood!!,
-                        servings = state.servings,
-                        servingUnitAmount = state.servingUnitAmount
-                            ?: state.selectedFood!!.servingSize,
-                        gramsAmount = state.gramsAmount,
-                        inputMode = state.inputMode,
-                        inputUnit = state.inputUnit,
-                        inputAmount = state.inputAmount,
-                        onInputUnitChanged = vm::onInputUnitChanged,
-                        onInputAmountChanged = { amount ->
-                            // keep your local text state update exactly as-is
-                            amount?.let {
-                                // this ultimately calls vm.onInputAmountChanged(Double)
-                                vm.onInputAmountChanged(amount)
-                            }
-                        },
-                        batches = state.batches,
-                        selectedBatchId = state.selectedBatchId,
-                        onBatchSelected = vm::onBatchSelected,
-                        onCreateBatch = vm::openCreateBatchDialog,
-                        onBack = vm::clearSelection,
-                        onServingsChanged = vm::onServingsChanged,
-                        onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
-                        onGramsChanged = vm::onGramsChanged,
-                        onPackage = vm::onPackageClicked,
-                        onEditFoodInEditor = { onOpenFoodEditor(state.selectedFood!!.id) },
-                        onSave = { vm.save(onDone = onDismiss) },
-                        errorMessage = state.errorMessage
-                    )
+                val selected = state.selectedFood!!
+                val isLoggingByGrams = state.inputMode == InputMode.GRAMS
+                val isLogEnabled =
+                    !selected.isRecipe ||
+                            !isLoggingByGrams ||
+                            state.selectedBatchId != null
 
-                    Spacer(Modifier.height(12.dp))
-                }
+                SelectedFoodPanel(
+                    food = selected,
+                    servings = state.servings,
+                    servingUnitAmount = state.servingUnitAmount
+                        ?: selected.servingSize,
+                    gramsAmount = state.gramsAmount,
+                    inputUnit = state.inputUnit,
+                    inputAmount = state.inputAmount,
+                    errorMessage = state.errorMessage,
+                    onBack = vm::clearSelection,
+                    onServingsChanged = vm::onServingsChanged,
+                    onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
+                    onGramsChanged = vm::onGramsChanged,
+                    onInputUnitChanged = vm::onInputUnitChanged,
+                    onInputAmountChanged = { amount ->
+                        // keep behavior identical to before: only forward when non-null
+                        amount?.let { vm.onInputAmountChanged(it) }
+                    },
+                    onPackage = vm::onPackageClicked,
+                    onEditFoodInEditor = { onOpenFoodEditor(selected.id) },
+                    primaryButtonLabel = "Log",
+                    isPrimaryEnabled = isLogEnabled,
+                    onPrimaryAction = { vm.save(onDone = onDismiss) },
+                    extraContent = {
+                        if (selected.isRecipe) {
+                            Spacer(Modifier.height(16.dp))
+                            Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            BatchSelector(
+                                batches = state.batches,
+                                selectedBatchId = state.selectedBatchId,
+                                onSelected = vm::onBatchSelected,
+                                onCreate = vm::openCreateBatchDialog
+                            )
+                            if (isLoggingByGrams && state.selectedBatchId == null && state.errorMessage == null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Select or create a cooked batch to log by grams.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                )
             }
 
             Spacer(Modifier.height(12.dp))
@@ -215,255 +226,6 @@ private fun FoodSearchResults(
 }
 
 
-@Composable
-private fun SelectedFoodPanel(
-    food: Food,
-    servings: Double,
-    servingUnitAmount: Double,
-    gramsAmount: Double?,
-    inputMode: InputMode,
-    inputUnit: ServingUnit,
-    inputAmount: Double?,
-    batches: List<BatchSummary>,
-    selectedBatchId: Long?,
-    errorMessage: String?,
-    onBatchSelected: (Long?) -> Unit,
-    onCreateBatch: () -> Unit,
-    onBack: () -> Unit,
-    onServingsChanged: (Double) -> Unit,
-    onServingUnitAmountChanged: (Double) -> Unit,
-    onGramsChanged: (Double) -> Unit,
-    onInputUnitChanged: (ServingUnit) -> Unit,
-    onInputAmountChanged: (Double?) -> Unit,
-    onPackage: (Double) -> Unit,
-    onEditFoodInEditor: () -> Unit,
-    onSave: () -> Unit
-) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column(Modifier.weight(1f)) {
-            Text(food.name, style = MaterialTheme.typography.titleMedium)
-            Text(
-                "${food.servingSize.clean()} ${food.servingUnit}" +
-                        (food.gramsPerServingResolved()?.let { " (${it.clean()} g)" } ?: ""),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-        TextButton(onClick = onBack) { Text("Change") }
-    }
-
-    Log.d(
-        "Meow",
-        "QuickAdd selected: unit=${food.servingUnit} servingSize=${food.servingSize} gramsPerServing=${food.gramsPerServing} resolved=${food.gramsPerServingResolved()}"
-    )
-    Spacer(Modifier.height(12.dp))
-
-    // Servings input (canonical)
-    AmountRow(
-        label = "Servings",
-        value = servings,
-        unit = "",
-        onMinus = { onServingsChanged(max(0.0, servings - 0.5)) },
-        onPlus = { onServingsChanged(servings + 0.5) }
-    )
-
-    Spacer(Modifier.height(10.dp))
-
-    // Serving-unit amount input (volume/unit)
-    NumberField(
-        label = "Amount (${food.servingUnit})",
-        value = servingUnitAmount,
-        onValue = onServingUnitAmountChanged
-    )
-
-    Spacer(Modifier.height(10.dp))
-
-    // Grams input if available
-    val canLogGrams = food.gramsPerServingResolved() != null
-    val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
-    if (canLogGrams) {
-        var isUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.weight(1f)) {
-                NumberField(
-                    label = "Grams (g)",
-                    value = gramsAmount ?: gramsDefault,
-                    onValue = onGramsChanged
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            TextButton(
-                onClick = { isUnitDialogOpen = true },
-                contentPadding = PaddingValues(horizontal = 12.dp)
-            ) {
-                Text(inputUnit.display)
-            }
-        }
-
-        if (isUnitDialogOpen) {
-            UnitToGramsDialog(
-                food = food,
-                initialUnit = inputUnit,
-                initialAmount = inputAmount,
-                onDismiss = { isUnitDialogOpen = false },
-                onApply = { unit, amount ->
-                    onInputUnitChanged(unit)
-                    onInputAmountChanged(amount)
-                    isUnitDialogOpen = false
-                }
-            )
-        }
-    }
-
-    // If the unit is not grams and we don't have grams-per-serving, offer a shortcut to the editor.
-    val needsGramsPerServing = (food.servingUnit != ServingUnit.G) && (food.gramsPerServingResolved() == null)
-    if (needsGramsPerServing) {
-        Spacer(Modifier.height(8.dp))
-        Surface(
-            tonalElevation = 1.dp,
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Missing grams-per-serving",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = "Add grams-per-serving in the food editor to enable gram-based logging and accurate conversions.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = onEditFoodInEditor) {
-                    Text("Edit food")
-                }
-            }
-        }
-    }
-
-    // Package buttons
-    if (food.servingsPerPackage != null) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(
-                onClick = { onPackage(0.5) },
-                label = { Text("½ package") }
-            )
-            AssistChip(
-                onClick = { onPackage(1.0) },
-                label = { Text("1 package") }
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-
-    if (food.isRecipe) {
-
-        Spacer(Modifier.height(16.dp))
-
-        Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
-
-        Spacer(Modifier.height(8.dp))
-
-        BatchSelector(
-            batches = batches,
-            selectedBatchId = selectedBatchId,
-            onSelected = onBatchSelected,
-            onCreate = onCreateBatch
-        )
-
-        Spacer(Modifier.height(12.dp))
-    }
-
-    val isLoggingByGrams = inputMode == InputMode.GRAMS
-
-    val isLogEnabled =
-        !food.isRecipe ||
-                !isLoggingByGrams ||
-                selectedBatchId != null
-
-    errorMessage?.let { msg ->
-        Spacer(Modifier.height(8.dp))
-        Text(
-            msg,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
-
-    if (food.isRecipe && isLoggingByGrams && selectedBatchId == null && errorMessage == null) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Select or create a cooked batch to log by grams.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    Button(
-        onClick = onSave,
-        enabled = isLogEnabled,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Text("Log")
-    }
-}
-
-@Composable
-private fun AmountRow(
-    label: String,
-    value: Double,
-    unit: String,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit
-) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onMinus) { Text("–") }
-            Text("${value.clean()} $unit", style = MaterialTheme.typography.titleMedium)
-            OutlinedButton(onClick = onPlus) { Text("+") }
-        }
-    }
-}
-
-@Composable
-private fun NumberField(
-    label: String,
-    value: Double,
-    onValue: (Double) -> Unit
-) {
-    var text by remember(value) { mutableStateOf(value.clean()) }
-
-    OutlinedTextField(
-        value = text,
-        onValueChange = {
-            text = it
-            it.toDoubleOrNull()?.let(onValue)
-        },
-        label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
-    )
-}
 
 @Composable
 private fun BatchSelector(
@@ -578,158 +340,6 @@ private fun CreateBatchDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun UnitToGramsDialog(
-    food: Food,
-    initialUnit: ServingUnit,
-    initialAmount: Double?,
-    onDismiss: () -> Unit,
-    onApply: (ServingUnit, Double?) -> Unit
-) {
-    val unitOptions = remember(food) { buildQuickAddInputUnits(food) }
-
-    var expanded by remember { mutableStateOf(false) }
-    var selectedUnit by remember { mutableStateOf(initialUnit.coerceToAvailable(unitOptions)) }
-    var amountText by remember { mutableStateOf(initialAmount?.toString().orEmpty()) }
-
-    LaunchedEffect(unitOptions) {
-        selectedUnit = selectedUnit.coerceToAvailable(unitOptions)
-    }
-
-    val parsedAmount: Double? = amountText.toDoubleOrNull()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Input amount") },
-        text = {
-            Column {
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = !expanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedUnit.display,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Unit") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        unitOptions.forEach { unit ->
-                            DropdownMenuItem(
-                                text = { Text(unit.display) },
-                                onClick = {
-                                    selectedUnit = unit
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { Text("Amount (${selectedUnit.display})") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onApply(selectedUnit, parsedAmount) },
-                enabled = parsedAmount != null && parsedAmount > 0.0
-            ) { Text("Apply") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-private fun buildQuickAddInputUnits(food: Food): List<ServingUnit> {
-    val massUnits = listOf(
-        ServingUnit.G,
-        ServingUnit.OZ,
-        ServingUnit.LB,
-        ServingUnit.KG
-    )
-
-    val canVolumeInput = food.gramsPerServingResolved() != null && food.servingUnit.isVolumeUnitForDensity()
-    if (!canVolumeInput) return massUnits
-
-    val volumeUnits = listOf(
-        ServingUnit.ML,
-        ServingUnit.L,
-
-        ServingUnit.TSP_US,
-        ServingUnit.TBSP_US,
-        ServingUnit.FL_OZ_US,
-        ServingUnit.CUP_US,
-        ServingUnit.PINT_US,
-        ServingUnit.QUART_US,
-        ServingUnit.GALLON_US,
-
-        ServingUnit.CUP_METRIC,
-        ServingUnit.CUP_JP,
-        ServingUnit.RCCUP,
-
-        ServingUnit.FL_OZ_IMP,
-        ServingUnit.PINT_IMP,
-        ServingUnit.QUART_IMP,
-        ServingUnit.GALLON_IMP
-    )
-
-    return massUnits + volumeUnits
-}
-
-private fun ServingUnit.isVolumeUnitForDensity(): Boolean = when (this) {
-    ServingUnit.ML,
-    ServingUnit.L,
-
-    ServingUnit.TSP_US,
-    ServingUnit.TBSP_US,
-    ServingUnit.FL_OZ_US,
-    ServingUnit.CUP_US,
-    ServingUnit.PINT_US,
-    ServingUnit.QUART_US,
-    ServingUnit.GALLON_US,
-
-    ServingUnit.CUP_METRIC,
-    ServingUnit.CUP_JP,
-    ServingUnit.RCCUP,
-
-    ServingUnit.FL_OZ_IMP,
-    ServingUnit.PINT_IMP,
-    ServingUnit.QUART_IMP,
-    ServingUnit.GALLON_IMP,
-
-        // Legacy aliases treated as US volume (but not offered in picker)
-    ServingUnit.TSP,
-    ServingUnit.TBSP,
-    ServingUnit.CUP,
-    ServingUnit.QUART -> true
-
-    else -> false
-}
-
-private fun ServingUnit.coerceToAvailable(options: List<ServingUnit>): ServingUnit {
-    if (this in options) return this
-    return options.firstOrNull { it == ServingUnit.G } ?: options.first()
-}
 
 private fun Double.clean(): String =
     if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this)

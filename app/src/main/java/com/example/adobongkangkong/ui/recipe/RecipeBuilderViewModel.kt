@@ -6,6 +6,9 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
+import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.toGrams
+import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ServingPolicy
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -99,6 +102,10 @@ class RecipeBuilderViewModel @Inject constructor(
             SharingStarted.WhileSubscribed(5_000),
             RecipeMacroPreview()
         )
+
+
+    private val pickedInputUnitFlow = MutableStateFlow(ServingUnit.G)
+    private val pickedInputAmountTextFlow = MutableStateFlow("")
     // -----------------------------
     // State wiring
     // -----------------------------
@@ -349,6 +356,117 @@ class RecipeBuilderViewModel @Inject constructor(
         }
     }
 
+    fun onPickedInputAmountTextChange(raw: String) {
+        if (!raw.matches(Regex("""^\d*([.]\d*)?$"""))) return
+
+        pickedInputAmountTextFlow.value = raw
+
+        val food = pickedFoodFlow.value ?: return
+
+        if (raw.isBlank() || raw == ".") {
+            // Don’t force 0.0; just clear derived fields similarly to grams typing.
+            isEditingGrams = true
+            pickedGramsTextFlow.value = ""
+            pickedServingsFlow.value = 0.0
+            pickedServingsTextFlow.value = "0"
+            return
+        }
+
+        val amount = raw.toDoubleOrNull() ?: return
+        val unit = pickedInputUnitFlow.value
+
+        val grams = computePickedInputGrams(food = food, amount = amount, unit = unit) ?: return
+
+        // Push through your existing grams→servings sync
+        isEditingGrams = true
+        pickedGramsTextFlow.value = formatTo2Decimals(grams) // optional: keep text in sync
+        onPickedGramsChange(grams)
+    }
+
+    fun onPickedInputUnitChange(unit: ServingUnit) {
+        pickedInputUnitFlow.value = unit
+
+        val food = pickedFoodFlow.value ?: return
+        val raw = pickedInputAmountTextFlow.value.trim()
+        if (raw.isBlank() || raw == ".") return
+
+        val amount = raw.toDoubleOrNull() ?: return
+        val grams = computePickedInputGrams(food = food, amount = amount, unit = unit) ?: return
+
+        isEditingGrams = true
+        pickedGramsTextFlow.value = formatTo2Decimals(grams)
+        onPickedGramsChange(grams)
+    }
+
+    private fun computePickedInputGrams(
+        food: Food,
+        amount: Double,
+        unit: ServingUnit
+    ): Double? {
+        val a = amount.coerceAtLeast(0.0)
+
+        // Mass → grams (deterministic)
+        unit.toGrams(a)?.let { grams ->
+            return grams
+        }
+
+        // Volume → grams requires density derived from food's serving definition
+        val mlInput = unit.toMilliliters(a) ?: return null
+
+        val gPerServing = food.gramsPerServingResolved() ?: return null
+        if (gPerServing <= 0.0) return null
+
+        // mL per ONE food serving (servingSize + servingUnit)
+        val mlPerFoodServing = food.servingUnit.toMilliliters(food.servingSize) ?: return null
+        if (mlPerFoodServing <= 0.0) return null
+
+        val densityGPerMl = gPerServing / mlPerFoodServing // g/mL
+        return mlInput * densityGPerMl
+    }
+
+
+
+    // --------------------------------------------------------------------
+// QuickAdd-compatible API (RecipeBuilder should behave the same way)
+// --------------------------------------------------------------------
+
+    fun onFoodSelected(food: Food) = pickFood(food)
+
+    fun clearSelection() = clearPickedFood()
+
+    fun onServingsChanged(servings: Double) = onPickedServingsChange(servings)
+
+    /**
+     * Amount in the food's serving unit (e.g., CUP_US, TBSP_US, etc).
+     * Mirrors QuickAdd behavior: servings = amount / servingSize.
+     */
+    fun onServingUnitAmountChanged(amountInServingUnit: Double) {
+        val food = pickedFoodFlow.value ?: return
+        val servingSize = food.servingSize
+        if (servingSize <= 0.0) return
+
+        val servings = (amountInServingUnit / servingSize).coerceAtLeast(0.0)
+        onPickedServingsChange(servings)
+    }
+
+    fun onGramsChanged(grams: Double) = onPickedGramsChange(grams)
+
+    fun onInputUnitChanged(unit: ServingUnit) = onPickedInputUnitChange(unit)
+
+    fun onInputAmountChanged(amount: Double?) {
+        val food = pickedFoodFlow.value ?: return
+        val unit = pickedInputUnitFlow.value
+
+        if (amount == null || amount <= 0.0) return
+
+        val grams = computePickedInputGrams(food = food, amount = amount, unit = unit) ?: return
+        isEditingGrams = true
+        pickedGramsTextFlow.value = formatTo2Decimals(grams)
+        onPickedGramsChange(grams)
+    }
+
+    fun onPackageClicked(multiplier: Double) = onPickedPackage(multiplier)
+
     fun pickFood(food: Food) {
         isEditingGrams = false
         pickedFoodFlow.value = food
@@ -442,6 +560,19 @@ class RecipeBuilderViewModel @Inject constructor(
             (servings * gPerServing).coerceAtLeast(0.0)
         }
 
+        val rawEntered = pickedInputAmountTextFlow.value.trim()
+        val enteredAmount: Double
+        val enteredUnitLabel: String
+
+        if (rawEntered.isNotBlank() && rawEntered != ".") {
+            enteredAmount = rawEntered.toDoubleOrNull() ?: servings
+            enteredUnitLabel = pickedInputUnitFlow.value.toString()
+        } else {
+            // User likely used the servings +/- controls, not the freeform input picker.
+            enteredAmount = servings
+            enteredUnitLabel = food.servingUnit.toString()
+        }
+
         val next = ingredientsFlow.value.toMutableList()
         next.add(
             RecipeIngredientUi(
@@ -449,7 +580,9 @@ class RecipeBuilderViewModel @Inject constructor(
                 foodName = food.name,
                 servings = servings,
                 servingUnitLabel = food.servingUnit.toString(),
-                grams = gramsForLine
+                grams = gramsForLine,
+                enteredAmount = enteredAmount,
+                enteredUnitLabel = enteredUnitLabel
             )
         )
         ingredientsFlow.value = next

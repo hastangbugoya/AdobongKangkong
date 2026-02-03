@@ -12,8 +12,13 @@ data class RecipeIngredientUi(
     /** Human-readable serving unit label (e.g., "can", "cup"). Optional for legacy rows. */
     val servingUnitLabel: String? = null,
     /** Convenience display: servings converted to grams using grams-per-serving, if available. */
-    val grams: Double? = null
+    val grams: Double? = null,
+
+    /** What the user actually entered (for reminder + edit UX). */
+    val enteredAmount: Double? = null,
+    val enteredUnitLabel: String? = null
 )
+
 
 data class RecipeBuilderState(
     val name: String = "",
