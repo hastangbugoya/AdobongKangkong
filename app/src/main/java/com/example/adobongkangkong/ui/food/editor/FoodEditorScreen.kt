@@ -50,6 +50,7 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.ui.camera.BannerCaptureController
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,12 +94,17 @@ fun FoodEditorScreen(
     onAddAlias: (String) -> Unit,
     onDeleteAlias: (String) -> Unit,
     onDismissAliasSheet: () -> Unit,
+
+    // Camera
+    bannerCaptureController: BannerCaptureController
 ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
             .map { it.nutrientId }
             .toSet()
     }
+
+    val canCaptureBanner : Boolean = false
 
     // ---------------- Navigate-away warning (state-driven) ----------------
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
@@ -123,6 +129,23 @@ fun FoodEditorScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    val canCaptureBanner = state.foodId != null
+                    Spacer(Modifier.width(16.dp))
+                    TextButton(
+                        enabled = canCaptureBanner,
+                        onClick = { bannerCaptureController.open(state.foodId!!) }
+                    ) {
+                        Text("Open banner camera")
+                    }
+
+                    if (state.foodId == null) {
+                        Text(
+                            "Save the food first to enable banner capture.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                 },
                 navigationIcon = {
                     IconButton(onClick = ::requestExit) {
@@ -137,7 +160,8 @@ fun FoodEditorScreen(
                 errorMessage = state.errorMessage,
                 showDelete = (onDeleteFood != null && state.foodId != null),
                 onDelete = { onDeleteFood?.invoke() },
-                onSave = onSave
+                onSave = onSave,
+                bannerCaptureController = bannerCaptureController
             )
         }
     ) { padding ->
@@ -601,7 +625,7 @@ private fun ServingUnitDropdown(
     value: ServingUnit,
     onValueChange: (ServingUnit) -> Unit,
     modifier: Modifier = Modifier,
-    options: List<ServingUnit>
+    options: List<ServingUnit>,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -652,7 +676,8 @@ private fun FoodEditorBottomBar(
     errorMessage: String?,
     showDelete: Boolean,
     onDelete: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    bannerCaptureController: BannerCaptureController
 ) {
     Surface(tonalElevation = 3.dp) {
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {

@@ -9,6 +9,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.daylog.DayLogScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
@@ -22,6 +23,7 @@ import java.time.LocalDate
 @Composable
 fun AppNavHost(
     navController: NavHostController,
+    bannerCaptureController: BannerCaptureController,
     modifier: Modifier = Modifier,
     startDestination: String = "startup"
 ) {
@@ -150,7 +152,8 @@ fun AppNavHost(
                 foodId = foodId,
                 initialName = null,
                 onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack() }
+                onDone = { navController.popBackStack() },
+                bannerCaptureController = bannerCaptureController
             )
         }
 
@@ -166,7 +169,8 @@ fun AppNavHost(
                 foodId = foodId,
                 initialName = null,
                 onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack() }
+                onDone = { navController.popBackStack() },
+                bannerCaptureController = bannerCaptureController
             )
         }
 
@@ -186,7 +190,8 @@ fun AppNavHost(
                 foodId = null,
                 initialName = initialName,
                 onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack() }
+                onDone = { navController.popBackStack() },
+                bannerCaptureController = bannerCaptureController
             )
         }
 

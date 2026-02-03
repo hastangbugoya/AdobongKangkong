@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.adobongkangkong.ui.camera.BannerCaptureController
 
 /**
  * Route wrapper for FoodEditorScreen.
@@ -25,6 +26,7 @@ fun FoodEditorRoute(
     onBack: () -> Unit,
     onDone: () -> Unit,
     viewModel: FoodEditorViewModel = hiltViewModel(),
+    bannerCaptureController: BannerCaptureController
 ) {
     val state by viewModel.state.collectAsState()
 
@@ -57,7 +59,8 @@ fun FoodEditorRoute(
         onNutrientSearchQueryChange = viewModel::onNutrientSearchQueryChange,
         onAddNutrientFromSearch = { nutrientId ->
             // Screen provides only the id; VM expects the full UI item.
-            val item = state.nutrientSearchResults.firstOrNull { it.id == nutrientId } ?: return@FoodEditorScreen
+            val item = state.nutrientSearchResults.firstOrNull { it.id == nutrientId }
+                ?: return@FoodEditorScreen
             viewModel.addNutrient(item)
         },
 
@@ -81,6 +84,7 @@ fun FoodEditorRoute(
         onOpenAliasSheet = { id, name -> viewModel.openAliasSheet(id, name) },
         onAddAlias = { viewModel.addAlias(it) },
         onDeleteAlias = { viewModel.deleteAlias(it) },
-        onDismissAliasSheet = { viewModel.closeAliasSheet() }
+        onDismissAliasSheet = { viewModel.closeAliasSheet() },
+        bannerCaptureController = bannerCaptureController,
     )
 }
