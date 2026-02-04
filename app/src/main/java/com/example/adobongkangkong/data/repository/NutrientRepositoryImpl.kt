@@ -59,4 +59,7 @@ class NutrientRepositoryImpl @Inject constructor(
     override fun observeAllNutrients(): Flow<List<Nutrient>> =
         nutrientDao.observeAllNutrients()
             .map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun getByCode(code: String): Nutrient? =
+        nutrientDao.getByCode(code)?.toDomain()
 }

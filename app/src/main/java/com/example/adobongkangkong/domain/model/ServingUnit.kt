@@ -66,5 +66,7 @@ enum class ServingUnit(val display: String) {
     @Deprecated("Use CUP_US / CUP_METRIC / CUP_JP instead.")
     CUP("cup"),
     @Deprecated("Use QUART_US / QUART_IMP instead.")
-    QUART("qt")
+    QUART("qt");
+
+    companion object
 }

@@ -103,4 +103,7 @@ interface NutrientDao {
 
     @Query("SELECT unit FROM nutrients WHERE code = :code LIMIT 1")
     suspend fun getUnitByCode(code: String): NutrientUnit?
+
+    @Query("SELECT * FROM nutrients WHERE code = :code LIMIT 1")
+    suspend fun getByCode(code: String): NutrientEntity?
 }

@@ -29,9 +29,12 @@ object CsvNutrientCatalog {
         Def("carbs", NutrientCodes.CARBS_G, "Carbohydrates", "g", NutrientCategory.MACRO.dbValue),
         Def("prot", NutrientCodes.PROTEIN_G, "Protein", "g", NutrientCategory.MACRO.dbValue),
         Def("fat(g)", NutrientCodes.FAT_G, "Fat", "g", NutrientCategory.FAT.dbValue),
-
+        // Fats
+        Def("sat_fat", "SATURATED_FAT_G", "Saturated Fat", "g", NutrientCategory.FAT.dbValue),
+        Def("trans_fat", "TRANS_FAT_G", "Trans Fat", "g", NutrientCategory.FAT.dbValue),
         // Carb breakdown
         Def("sug", "SUGARS_G", "Sugars", "g", NutrientCategory.SUGAR.dbValue),
+        Def("added_sug", "ADDED_SUGARS_G", "Added Sugars", "g", NutrientCategory.SUGAR.dbValue),
         Def("fib", "FIBER_G", "Fiber", "g", NutrientCategory.FIBER.dbValue),
 
         // Sterols / electrolytes / minerals etc
@@ -65,5 +68,6 @@ object CsvNutrientCatalog {
         Def("Retinol", "RETINOL_MCG", "Retinol", "mcg", NutrientCategory.VITAMIN.dbValue),
         Def("Niacin", "NIACIN_MG", "Niacin (B3)", "mg", NutrientCategory.VITAMIN.dbValue),
         Def("Choline", "CHOLINE_MG", "Choline", "mg", NutrientCategory.OTHER.dbValue),
+        Def("Riboflavin", "RIBOFLAVIN_MG", "Riboflavin (B2)", "mg", NutrientCategory.VITAMIN.dbValue),
     )
 }

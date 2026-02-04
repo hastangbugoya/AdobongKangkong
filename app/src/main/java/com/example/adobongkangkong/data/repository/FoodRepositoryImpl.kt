@@ -24,8 +24,11 @@ class FoodRepositoryImpl @Inject constructor(
     override suspend fun upsert(food: Food): Long {
         val entity = food.toEntity()
         foodDao.upsert(entity)
-        return entity.id
+
+        return foodDao.getIdByStableId(entity.stableId)
+            ?: error("Upsert failed: no row found for stableId='${entity.stableId}'")
     }
+
 
     override suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food? {
         val entity = foodDao.getById(foodId) ?: return null

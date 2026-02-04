@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -16,8 +17,9 @@ interface FoodDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<FoodEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsert(item: FoodEntity)
+
 
     @Query("SELECT * FROM foods WHERE id = :id")
     suspend fun getById(id: Long): FoodEntity?
@@ -68,5 +70,7 @@ interface FoodDao {
         gramsPerServingUnit: Double?,
         isRecipe: Boolean
     )
+
+
 
 }

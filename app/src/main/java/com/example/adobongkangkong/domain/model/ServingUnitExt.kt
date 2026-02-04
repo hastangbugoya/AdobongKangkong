@@ -246,3 +246,43 @@ private fun ServingUnit.gPerUnit(): Double = when (this) {
  * Helper for comparing values with a tolerance (useful for tests).
  */
 fun nearlyEquals(a: Double, b: Double, eps: Double = 1e-9): Boolean = abs(a - b) <= eps
+
+
+/**
+ * Map USDA servingSizeUnit strings to our canonical ServingUnit.
+ *
+ * Observed in USDA Branded search:
+ * - "GRM" (grams)
+ * - "MLT" (milliliters)
+ * Also be tolerant of lowercase variants (e.g. "g") and common synonyms.
+ *
+ * Returns null if unknown/unhandled.
+ */
+fun ServingUnit.Companion.fromUsda(unit: String?): ServingUnit? {
+    if (unit.isNullOrBlank()) return null
+
+    return when (unit.trim().uppercase()) {
+        // Mass
+        "G", "GRM", "GRAM", "GRAMS" -> ServingUnit.G
+        "MG", "MGM", "MILLIGRAM", "MILLIGRAMS" -> ServingUnit.MG
+        "KG", "KGM", "KILOGRAM", "KILOGRAMS" -> ServingUnit.KG
+        "OZ" -> ServingUnit.OZ
+        "LB", "LBR" -> ServingUnit.LB
+
+        // Volume
+        "ML", "MLT", "MILLILITER", "MILLILITERS" -> ServingUnit.ML
+        "L", "LTR", "LITER", "LITERS" -> ServingUnit.L
+
+        // Sometimes seen / helpful if USDA ever sends them:
+        "TSP" -> ServingUnit.TSP          // legacy alias in your enum
+        "TBSP" -> ServingUnit.TBSP        // legacy alias in your enum
+        "CUP" -> ServingUnit.CUP          // legacy alias in your enum
+        "QT", "QUART" -> ServingUnit.QUART // legacy alias in your enum
+
+        // If you ever decide to parse householdServingFullText into US units, you'd use:
+        "FLOZ", "FL OZ" -> ServingUnit.FL_OZ_US
+        // but USDA servingSizeUnit for Branded usually comes as GRM/MLT.
+
+        else -> null
+    }
+}
