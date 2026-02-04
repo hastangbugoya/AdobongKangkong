@@ -81,6 +81,7 @@ fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
     ServingUnit.OTHER,
     ServingUnit.PIECE,
     ServingUnit.SLICE,
+    ServingUnit.BATCH,
     ServingUnit.BUNCH -> true
 
     // Mass units are already grounded

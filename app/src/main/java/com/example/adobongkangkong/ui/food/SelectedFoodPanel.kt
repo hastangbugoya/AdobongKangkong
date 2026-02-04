@@ -116,7 +116,8 @@ fun SelectedFoodPanel(
             Spacer(Modifier.width(8.dp))
 
             IconButton(
-                onClick = { isServingUnitDialogOpen = true }
+                onClick = { isServingUnitDialogOpen = true },
+                enabled = canOpenServingVolumeDialog
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.exchange),
@@ -430,6 +431,12 @@ private fun UnitToServingUnitDialog(
     onApply: (ServingUnit, Double?) -> Unit
 ) {
     val unitOptions = remember(food) { buildQuickAddServingVolumeUnits(food) }
+
+
+    if (unitOptions.isEmpty()) {
+        onDismiss()
+        return
+    }
 
     var expanded by remember { mutableStateOf(false) }
     val coercedInitial = remember(unitOptions, food) {

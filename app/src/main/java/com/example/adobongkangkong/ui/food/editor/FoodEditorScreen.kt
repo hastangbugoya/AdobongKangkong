@@ -103,8 +103,8 @@ fun FoodEditorScreen(
     onDismissAliasSheet: () -> Unit,
 
     // Camera
-    bannerRefreshTick: Int = 0,
-    bannerCaptureController: BannerCaptureController
+    bannerCaptureController: BannerCaptureController,
+    bannerRefreshTick: Int,
 ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows

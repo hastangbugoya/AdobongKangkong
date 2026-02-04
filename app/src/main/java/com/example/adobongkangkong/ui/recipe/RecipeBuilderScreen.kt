@@ -1,6 +1,7 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
+import android.graphics.BitmapFactory
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.DropdownMenuItem
@@ -12,12 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,15 +51,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.feature.camera.FoodImageStorage
+import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.format.ui
 import kotlinx.coroutines.delay
@@ -85,7 +93,9 @@ fun RecipeBuilderScreen(
     recipeId: Long? = null,
     editFoodId: Long?,
     onBack: () -> Unit,
-    onEditFood: (Long) -> Unit
+    onEditFood: (Long) -> Unit,
+    bannerRefreshTick: Int,
+    bannerCaptureController: BannerCaptureController
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -194,6 +204,53 @@ fun RecipeBuilderScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                val context = LocalContext.current
+                val canCaptureBanner = (editFoodId != null)
+
+                val bannerFile = remember(editFoodId) {
+                        if (editFoodId == null) null else FoodImageStorage(context).bannerJpegFile(editFoodId)
+                    }
+
+                val bannerBitmapState = produceState<android.graphics.Bitmap?>(
+                        initialValue = null,
+                        key1 = editFoodId,
+                        key2 = bannerRefreshTick
+                            ) {
+                        val file = bannerFile
+                        value = if (file != null && file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+                    }
+
+                bannerBitmapState.value?.let { bmp ->
+                        androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(3f / 1f)
+                                    ) {
+                                Image(
+                                        bitmap = bmp.asImageBitmap(),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize()
+                                            )
+                            }
+                    }
+
+                Spacer(Modifier.height(8.dp))
+
+                TextButton(
+                        enabled = canCaptureBanner,
+                        onClick = { bannerCaptureController.open(editFoodId!!) }
+                            ) {
+                        Text("Open banner camera")
+                    }
+
+                if (editFoodId == null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Save recipe first to add a photo.")
+                    }
+
+                Spacer(Modifier.height(16.dp))
+            }
             item {
                 OutlinedTextField(
                     value = state.name,

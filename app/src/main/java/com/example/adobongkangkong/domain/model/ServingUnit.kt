@@ -53,6 +53,7 @@ enum class ServingUnit(val display: String) {
     JAR("jar"),
     SERVING("serving"),
     OTHER("other"),
+    BATCH("batch"),
 
     /**
      * Legacy aliases kept for backward compatibility.

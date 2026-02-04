@@ -11,9 +11,9 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
 fun FoodEditorRoute(
     foodId: Long?,
     initialName: String?,
+    bannerRefreshTick: Int,
     onBack: () -> Unit,
     onDone: () -> Unit,
-    bannerRefreshTick: Int = 0,
     viewModel: FoodEditorViewModel = hiltViewModel(),
     bannerCaptureController: BannerCaptureController,
 ) {
@@ -65,7 +65,7 @@ fun FoodEditorRoute(
         onDeleteAlias = { viewModel.deleteAlias(it) },
         onDismissAliasSheet = { viewModel.closeAliasSheet() },
 
-        bannerRefreshTick = bannerRefreshTick,
         bannerCaptureController = bannerCaptureController,
+        bannerRefreshTick = bannerRefreshTick,
     )
 }

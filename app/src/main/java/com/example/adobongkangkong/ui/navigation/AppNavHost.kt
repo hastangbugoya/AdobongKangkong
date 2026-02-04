@@ -34,7 +34,6 @@ fun AppNavHost(
         modifier = modifier
     ) {
 
-
         composable("startup") {
             StartupScreen(
                 onDone = {
@@ -155,7 +154,7 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
                 bannerCaptureController = bannerCaptureController,
-                bannerRefreshTick = bannerRefreshTick
+                bannerRefreshTick = bannerRefreshTick,
             )
         }
 
@@ -177,10 +176,9 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
                 bannerCaptureController = bannerCaptureController,
-                bannerRefreshTick = bannerRefreshTick
+                bannerRefreshTick = bannerRefreshTick,
             )
         }
-
 
         // ------------------------------------------------------------
         // Recipes
@@ -191,7 +189,9 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onEditFood = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
-                }
+                },
+                bannerRefreshTick = bannerRefreshTick,
+                bannerCaptureController = bannerCaptureController
             )
         }
 
@@ -209,14 +209,14 @@ fun AppNavHost(
                 editFoodId = editFoodId,
                 recipeId = recipeId,
                 onBack = { navController.popBackStack() },
-                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) }
+                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
+                bannerRefreshTick = bannerRefreshTick,
+                bannerCaptureController = bannerCaptureController
             )
         }
 
         Log.d("NavDbg", "Recipes.route=${NavRoutes.Recipes.route}")
         Log.d("NavDbg", "Recipes.builderPattern=${NavRoutes.Recipes.builder}")
         Log.d("NavDbg", "Recipes.builderSample=${NavRoutes.Recipes.builder(recipeId = 123)}")
-
-
     }
 }
