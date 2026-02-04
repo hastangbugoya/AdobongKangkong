@@ -85,6 +85,15 @@ class RecipeBuilderViewModel @Inject constructor(
 
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
 
+    val ingredientTotalGrams: StateFlow<Double> =
+        ingredientsFlow
+            .map { lines -> lines.sumOf { it.grams ?: 0.0 } }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                0.0
+            )
+
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
 
@@ -103,12 +112,28 @@ class RecipeBuilderViewModel @Inject constructor(
             RecipeMacroPreview()
         )
 
-
+    // totalYieldGrams create and update
+    private var didAutoPrefillTotalYieldGrams: Boolean = false
+    private var didUserEditTotalYieldGrams: Boolean = false
+    // SelectedFoodPanel
     private val pickedInputUnitFlow = MutableStateFlow(ServingUnit.G)
     private val pickedInputAmountTextFlow = MutableStateFlow("")
+
     // -----------------------------
     // State wiring
     // -----------------------------
+
+    private fun maybeAutoPrefillTotalYieldGramsFromIngredients() {
+        if (didAutoPrefillTotalYieldGrams) return
+        if (didUserEditTotalYieldGrams) return
+        if (totalYieldGramsFlow.value != null) return
+
+        val grams = ingredientsFlow.value.sumOf { it.grams ?: 0.0 }
+        if (grams > 0.0) {
+            totalYieldGramsFlow.value = grams
+            didAutoPrefillTotalYieldGrams = true
+        }
+    }
 
     private data class Left(
         val name: String,
@@ -272,7 +297,6 @@ class RecipeBuilderViewModel @Inject constructor(
     // -----------------------------
     // Events
     // -----------------------------
-
     fun onNameChange(v: String) {
         nameFlow.value = v
         markDirty()
@@ -284,6 +308,7 @@ class RecipeBuilderViewModel @Inject constructor(
     }
 
     fun onTotalYieldGramsChanged(value: Double?) {
+        didUserEditTotalYieldGrams = true
         totalYieldGramsFlow.value = value?.takeIf { it > 0.0 }
         markDirty()
     }
@@ -586,6 +611,7 @@ class RecipeBuilderViewModel @Inject constructor(
             )
         )
         ingredientsFlow.value = next
+        maybeAutoPrefillTotalYieldGramsFromIngredients()
         markDirty()
         isEditingGrams = false
         // Reset add-ingredient UI
@@ -602,6 +628,7 @@ class RecipeBuilderViewModel @Inject constructor(
         if (index !in list.indices) return
         list.removeAt(index)
         ingredientsFlow.value = list
+        maybeAutoPrefillTotalYieldGramsFromIngredients()
         markDirty()
     }
 
@@ -687,6 +714,9 @@ class RecipeBuilderViewModel @Inject constructor(
         hasUnsavedChangesFlow.value = false
         editFoodId = foodId
 
+        didAutoPrefillTotalYieldGrams = false
+        didUserEditTotalYieldGrams = false
+
         // Reset "add ingredient" UI state
         isEditingGrams = false
         pickedFoodFlow.value = null
@@ -723,6 +753,11 @@ class RecipeBuilderViewModel @Inject constructor(
                     servingUnitLabel = ingFood?.servingUnit?.toString(),
                     grams = gramsForLine
                 )
+            }
+            if (totalYieldGramsFlow.value == null) {
+                maybeAutoPrefillTotalYieldGramsFromIngredients()
+            } else {
+                didAutoPrefillTotalYieldGrams = true
             }
             hasUnsavedChangesFlow.value = false
         }

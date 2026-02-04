@@ -190,17 +190,19 @@ fun FoodEditorScreen(
             ) {
                 item {
                     val context = LocalContext.current
-                    val foodId = state.foodId
 
-                    if (foodId != null) {
-                        val file = remember(foodId) {
+                    val bannerOwnerId = state.foodId
+                    val canCaptureBanner = bannerOwnerId != null
+
+                    if (canCaptureBanner) {
+                        val file = remember(bannerOwnerId ) {
                             com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
-                                .bannerJpegFile(foodId)
+                                .bannerJpegFile(bannerOwnerId )
                         }
 
                         val bannerBitmapState = produceState<android.graphics.Bitmap?>(
                             initialValue = null,
-                            key1 = foodId,
+                            key1 = bannerOwnerId ,
                             key2 = bannerRefreshTick
                         ) {
                             value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
@@ -220,7 +222,7 @@ fun FoodEditorScreen(
                                 )
 
                                 IconButton(
-                                    onClick = { bannerCaptureController.open(foodId) },
+                                    onClick = { bannerCaptureController.open(bannerOwnerId ) },
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
                                         .padding(8.dp)
@@ -233,6 +235,38 @@ fun FoodEditorScreen(
                             }
                         }
                     }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                enabled = canCaptureBanner,
+                                onClick = { bannerCaptureController.open(bannerOwnerId!!) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Change banner",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+
+                        if (!canCaptureBanner) {
+                            Text(
+                                text = "Save first to enable banner image.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+
                 }
 
 

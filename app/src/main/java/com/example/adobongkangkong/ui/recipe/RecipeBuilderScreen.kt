@@ -33,7 +33,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +62,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
@@ -99,6 +102,8 @@ fun RecipeBuilderScreen(
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+
+    val ingredientTotalGrams by vm.ingredientTotalGrams.collectAsState()
 
     val listState = rememberLazyListState()
 
@@ -206,48 +211,44 @@ fun RecipeBuilderScreen(
         ) {
             item {
                 val context = LocalContext.current
-                val canCaptureBanner = (editFoodId != null)
+                val bannerOwnerId =editFoodId
+                val canCaptureBanner = bannerOwnerId != null
 
-                val bannerFile = remember(editFoodId) {
+                val bannerFile = remember(bannerOwnerId) {
                         if (editFoodId == null) null else FoodImageStorage(context).bannerJpegFile(editFoodId)
                     }
 
-                val bannerBitmapState = produceState<android.graphics.Bitmap?>(
-                        initialValue = null,
-                        key1 = editFoodId,
-                        key2 = bannerRefreshTick
-                            ) {
-                        val file = bannerFile
-                        value = if (file != null && file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            enabled = canCaptureBanner,
+                            onClick = { bannerCaptureController.open(bannerOwnerId!!) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Change banner",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
 
-                bannerBitmapState.value?.let { bmp ->
-                        androidx.compose.foundation.layout.Box(
-                                modifier = Modifier
-                                            .fillMaxWidth()
-                                            .aspectRatio(3f / 1f)
-                                    ) {
-                                Image(
-                                        bitmap = bmp.asImageBitmap(),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize()
-                                            )
-                            }
+                    if (canCaptureBanner) {
+                        Text(
+                            text = "Save first to enable banner image.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
-
-                Spacer(Modifier.height(8.dp))
-
-                TextButton(
-                        enabled = canCaptureBanner,
-                        onClick = { bannerCaptureController.open(editFoodId!!) }
-                            ) {
-                        Text("Open banner camera")
-                    }
-
-                if (editFoodId == null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("Save recipe first to add a photo.")
-                    }
+                }
 
                 Spacer(Modifier.height(16.dp))
             }
@@ -440,23 +441,101 @@ fun RecipeBuilderScreen(
             item { Text("Preview", style = MaterialTheme.typography.titleMedium) }
             val noDivZero = state.servingsYield > 0
             item {
-                Text("Calories: ${"%,.0f".format(state.preview.totalCalories)} kcal/batch")
-                if (noDivZero && state.preview.totalCalories > 0.0) {
-                    Text("Calories: ${"%,.0f".format(state.preview.totalCalories/state.servingsYield)} kcal/serving")
-                }
-                Text("Protein: ${"%,.1f".format(state.preview.totalProteinG)} g")
-                if (noDivZero && state.preview.totalProteinG > 0.0) {
-                    Text("Protein: ${"%,.0f".format(state.preview.totalProteinG/state.servingsYield)} g/serving")
-                }
-                Text("Carbs: ${"%,.1f".format(state.preview.totalCarbsG)} g")
-                if (noDivZero && state.preview.totalCarbsG > 0) {
-                    Text("Carbs: ${"%,.0f".format(state.preview.totalCarbsG/state.servingsYield)} g/serving")
-                }
-                Text("Fat: ${"%,.1f".format(state.preview.totalFatG)} g")
-                if (noDivZero && state.preview.totalFatG > 0.0) {
-                    Text("Fat: ${"%,.0f".format(state.preview.totalFatG/state.servingsYield)} g/serving")
+                val servings = state.servingsYield
+                val noDivZero = servings > 0
+
+                fun fmt0(v: Double?) = if (v == null) "—" else "%,.0f".format(v)
+                fun fmt1(v: Double?) = if (v == null) "—" else "%,.1f".format(v)
+                fun perServing(total: Double): Double? =
+                    if (noDivZero) total / servings else null
+
+                val numberColWidth = 88.dp
+
+                Column {
+
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "",
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "batch",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.width(numberColWidth)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "serving",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.width(numberColWidth)
+                        )
+                    }
+
+                    HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+
+                    @Composable
+                    fun RowItem(label: String, batch: String, serving: String) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                label,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                batch,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.width(numberColWidth)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                serving,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.width(numberColWidth)
+                            )
+                        }
+                    }
+
+                    RowItem(
+                        "Ingredient weight (g)",
+                        fmt0(ingredientTotalGrams),
+                        fmt0(perServing(ingredientTotalGrams))
+                    )
+
+                    RowItem(
+                        "Calories (kcal)",
+                        fmt0(state.preview.totalCalories),
+                        fmt0(perServing(state.preview.totalCalories))
+                    )
+
+                    RowItem(
+                        "Protein (g)",
+                        fmt1(state.preview.totalProteinG),
+                        fmt1(perServing(state.preview.totalProteinG))
+                    )
+
+                    RowItem(
+                        "Carbs (g)",
+                        fmt1(state.preview.totalCarbsG),
+                        fmt1(perServing(state.preview.totalCarbsG))
+                    )
+
+                    RowItem(
+                        "Fat (g)",
+                        fmt1(state.preview.totalFatG),
+                        fmt1(perServing(state.preview.totalFatG))
+                    )
                 }
             }
+
+
 
             item { Spacer(Modifier.height(16.dp)) }
         }
