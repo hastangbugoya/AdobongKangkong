@@ -13,5 +13,5 @@ interface FoodLookup {
 data class FoodSnapshot(
     val id: Long,
     val servingUnit: ServingUnit,
-    val gramsPerServing: Double?
+    val gramsPerServingUnit: Double?
 )

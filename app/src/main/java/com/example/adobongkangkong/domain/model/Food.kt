@@ -10,7 +10,7 @@ data class Food(
     val servingSize: Double,
     val servingUnit: ServingUnit,
 
-    val gramsPerServing: Double?,
+    val gramsPerServingUnit: Double?,
     val servingsPerPackage: Double?,
 
     val isRecipe: Boolean,

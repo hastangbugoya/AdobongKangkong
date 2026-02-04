@@ -295,7 +295,7 @@ fun FoodEditorScreen(
                     ServingSection(
                         servingSize = state.servingSize,
                         servingUnit = state.servingUnit,
-                        gramsPerServing = state.gramsPerServing,
+                        gramsPerServingUnit = state.gramsPerServingUnit,
                         servingsPerPackage = state.servingsPerPackage,
                         onServingSizeChange = onServingSizeChange,
                         onServingUnitChange = onServingUnitChange,
@@ -640,7 +640,7 @@ private fun NutrientSearchResultRow(
 private fun ServingSection(
     servingSize: String,
     servingUnit: ServingUnit,
-    gramsPerServing: String,
+    gramsPerServingUnit: String,
     servingsPerPackage: String,
     onServingSizeChange: (String) -> Unit,
     onServingUnitChange: (ServingUnit) -> Unit,
@@ -683,9 +683,9 @@ private fun ServingSection(
             )
         }
 
-        // gramsPerServing is critical for non-gram units; keep it prominent and full-width.
+        // gramsPerServingUnit is critical for non-gram units; keep it prominent and full-width.
         OutlinedTextField(
-            value = gramsPerServing,
+            value = gramsPerServingUnit,
             onValueChange = onGramsPerServingChange,
             label = { Text("Grams per serving") },
             singleLine = true,

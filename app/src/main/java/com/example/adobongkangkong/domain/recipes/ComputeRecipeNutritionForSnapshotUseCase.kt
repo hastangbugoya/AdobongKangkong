@@ -60,8 +60,8 @@ class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
                 return@fold acc
             }
 
-            val gramsPerServing = snapshot.gramsPerServing
-            if (gramsPerServing == null || gramsPerServing <= 0.0) {
+            val gramsPerServingUnit = snapshot.gramsPerServingUnit
+            if (gramsPerServingUnit == null || gramsPerServingUnit <= 0.0) {
                 warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
                 return@fold acc
             }
@@ -72,7 +72,7 @@ class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
                 return@fold acc
             }
 
-            val grams = servings * gramsPerServing
+            val grams = servings * gramsPerServingUnit
             acc + nutrientsPerGram.scaledBy(grams)
         }
 

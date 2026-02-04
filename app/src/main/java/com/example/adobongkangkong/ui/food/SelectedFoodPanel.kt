@@ -14,8 +14,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
-import com.example.adobongkangkong.domain.model.convertVolume
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import kotlin.math.max
 import kotlin.math.abs
 import java.util.Locale
@@ -70,7 +69,7 @@ fun SelectedFoodPanel(
                 Text(food.name, style = MaterialTheme.typography.titleMedium)
                 Text(
                     "${food.servingSize.clean()} ${food.servingUnit}" +
-                            (food.gramsPerServingResolved()?.let { " (${it.clean()} g)" } ?: ""),
+                            (food.gramsPerServingUnitResolved()?.let { " (${it.clean()} g)" } ?: ""),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -93,7 +92,7 @@ fun SelectedFoodPanel(
         // Amount in the food's own serving unit.
         // Amount in the food's own serving unit.
         // Add a unit button (like the grams row) that opens a volume-input dialog for convertible volume units.
-        val canOpenServingVolumeDialog = food.servingUnit.isVolumeUnit() && (food.gramsPerServingResolved() != null)
+        val canOpenServingVolumeDialog = food.servingUnit.isVolumeUnit() && (food.gramsPerServingUnitResolved() != null)
         var isServingUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 
         Row(
@@ -162,8 +161,8 @@ fun SelectedFoodPanel(
         Spacer(Modifier.height(10.dp))
 
         // Grams input if available
-        val canLogGrams = food.gramsPerServingResolved() != null
-        val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
+        val canLogGrams = food.gramsPerServingUnitResolved() != null
+        val gramsDefault = servings * (food.gramsPerServingUnitResolved() ?: 0.0)
         if (canLogGrams) {
             var isUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -226,7 +225,7 @@ fun SelectedFoodPanel(
         }
 
         // If the unit is not grams and we don't have grams-per-serving, offer a shortcut to the editor.
-        val needsGramsPerServing = (food.servingUnit != ServingUnit.G) && (food.gramsPerServingResolved() == null)
+        val needsGramsPerServing = (food.servingUnit != ServingUnit.G) && (food.gramsPerServingUnitResolved() == null)
         if (needsGramsPerServing) {
             Spacer(Modifier.height(8.dp))
             Surface(
@@ -543,7 +542,7 @@ private fun buildQuickAddInputUnits(food: Food): List<ServingUnit> {
         ServingUnit.KG
     )
 
-    val canVolumeInput = food.gramsPerServingResolved() != null && food.servingUnit.isVolumeUnitForDensity()
+    val canVolumeInput = food.gramsPerServingUnitResolved() != null && food.servingUnit.isVolumeUnitForDensity()
     if (!canVolumeInput) return massUnits
 
     val volumeUnits = listOf(

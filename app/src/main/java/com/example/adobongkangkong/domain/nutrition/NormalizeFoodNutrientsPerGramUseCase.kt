@@ -21,24 +21,48 @@ class NormalizeFoodNutrientsPerGramUseCase {
         val perGram = mutableMapOf<Long, Double>()
 
         for (row in nutrientRows) {
-            val perGramAmt = when (row.basisType) {
-                BasisType.PER_100G -> row.nutrientAmountPerBasis / 100.0
 
-                BasisType.PER_SERVING -> {
+            val perGramAmt: Double = when (row.basisType) {
+
+                // Already normalized: X per 100 g → X / 100 per gram
+                BasisType.PER_100G -> {
+                    row.nutrientAmountPerBasis / 100.0
+                }
+
+                // Serving-based snapshot (USDA or user-defined)
+                BasisType.USDA_REPORTED_SERVING -> {
+
+                    // Case 1: serving itself is grams (e.g. servingSize = 37 g)
                     if (food.servingUnit == ServingUnit.G) {
                         val grams = food.servingSize
-                        if (grams <= 0.0) return Result.Blocked("Invalid serving size.")
+                        if (grams <= 0.0) {
+                            return Result.Blocked("Invalid serving size.")
+                        }
                         row.nutrientAmountPerBasis / grams
-                    } else {
-                        val gps = food.gramsPerServing ?: return Result.Blocked("Set grams-per-serving (no density guessing).")
-                        if (gps <= 0.0) return Result.Blocked("Invalid grams-per-serving.")
-                        row.nutrientAmountPerBasis / gps
                     }
+
+                    // Case 2: non-gram serving with explicit grams-per-serving backing
+                    else {
+                        val gpsu = food.gramsPerServingUnit
+                            ?: return Result.Blocked("Set grams-per-serving (no density guessing).")
+
+                        if (gpsu <= 0.0) {
+                            return Result.Blocked("Invalid grams-per-serving.")
+                        }
+                        row.nutrientAmountPerBasis / gpsu
+                    }
+                }
+
+                // Volume-based normalization cannot be converted to grams without density
+                BasisType.PER_100ML -> {
+                    return Result.Blocked("Cannot normalize PER_100ML to grams without density.")
                 }
             }
 
-            perGram[row.nutrientId] = (perGram[row.nutrientId] ?: 0.0) + perGramAmt
+            perGram[row.nutrientId] =
+                (perGram[row.nutrientId] ?: 0.0) + perGramAmt
         }
+
 
         return Result.Ok(perGram)
     }

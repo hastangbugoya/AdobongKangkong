@@ -103,8 +103,8 @@ class FoodEditorViewModel @Inject constructor(
                 brand = food?.brand.orEmpty(),
                 servingSize = food?.servingSize?.toString() ?: "1.0",
                 servingUnit = food?.servingUnit ?: ServingUnit.G,
-                gramsPerServing = current.gramsPerServing.takeIf { it.isNotBlank() }
-                    ?: food?.gramsPerServing?.toString().orEmpty(),
+                gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() }
+                    ?: food?.gramsPerServingUnit?.toString().orEmpty(),
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
                 nutrientRows = rows.map { r ->
@@ -128,7 +128,7 @@ class FoodEditorViewModel @Inject constructor(
     fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
     fun onServingSizeChange(v: String) = update { it.copy(servingSize = v, hasUnsavedChanges = true) }
     fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v, hasUnsavedChanges = true) }
-    fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServing = v, hasUnsavedChanges = true) }
+    fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServingUnit = v, hasUnsavedChanges = true) }
     fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v, hasUnsavedChanges = true) }
 
     // Flags
@@ -193,7 +193,7 @@ class FoodEditorViewModel @Inject constructor(
             x.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
 
         val servingSize = parseDoubleOrNull(s.servingSize) ?: 1.0
-        val gramsPerServing = parseDoubleOrNull(s.gramsPerServing)
+        val gramsPerServingUnit = parseDoubleOrNull(s.gramsPerServingUnit)
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
         // IMPORTANT:
@@ -208,12 +208,20 @@ class FoodEditorViewModel @Inject constructor(
             brand = s.brand.trim().ifEmpty { null },
             servingSize = servingSize,
             servingUnit = s.servingUnit,
-            gramsPerServing = gramsPerServing,
+            gramsPerServingUnit = gramsPerServingUnit,
             servingsPerPackage = servingsPerPackage,
             isRecipe = false,
             stableId = stableId,
         )
-
+            // Decide default basis for MANUAL foods created/edited in the editor.
+            // If we can express the food in grams (either the servingUnit is grams OR the user provided grams-per-unit),
+            // store nutrients as PER_100G. Otherwise store as a serving-based snapshot (USDA_REPORTED_SERVING).
+            val defaultBasisType: BasisType =
+            if (s.servingUnit == ServingUnit.G || (gramsPerServingUnit != null && gramsPerServingUnit > 0.0)) {
+                BasisType.PER_100G
+            } else {
+                BasisType.USDA_REPORTED_SERVING
+            }
         val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
             val amount = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
@@ -227,8 +235,8 @@ class FoodEditorViewModel @Inject constructor(
                     category = ui.category
                 ),
                 amount = amount,
-                basisType = BasisType.PER_SERVING,
-                basisGrams = null
+                basisType = defaultBasisType,
+                basisGrams = if (defaultBasisType == BasisType.PER_100G) 100.0 else null
             )
         }
 

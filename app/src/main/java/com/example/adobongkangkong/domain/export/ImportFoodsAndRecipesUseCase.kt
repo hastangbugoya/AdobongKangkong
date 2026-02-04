@@ -96,7 +96,7 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
                             brand = f.brand,
                             servingSize = f.servingSize,
                             servingUnit = servingUnit,
-                            gramsPerServing = f.gramsPerServing,
+                            gramsPerServingUnit = f.gramsPerServingUnit,
                             isRecipe = f.isRecipe
                         )
                     )
@@ -109,7 +109,7 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
                         brand = f.brand,
                         servingSize = f.servingSize,
                         servingUnit = servingUnit.name,
-                        gramsPerServing = f.gramsPerServing,
+                        gramsPerServingUnit = f.gramsPerServingUnit,
                         isRecipe = f.isRecipe
                     )
                     foodsUpdated++
@@ -124,31 +124,45 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
                 // Replace nutrients for this food (keeps import deterministic)
                 foodNutrientDao.deleteForFood(foodId)
 
-                val gramsPerServing = f.gramsPerServing?.takeIf { it > 0 }
+                val gramsPerServingUnit = f.gramsPerServingUnit?.takeIf { it > 0 }
 
                 val basisType = when {
-                    gramsPerServing != null -> BasisType.PER_SERVING
+                    // Legacy meaning: nutrients were stored "per serving unit" when gramsPerServingUnit existed
+                    gramsPerServingUnit != null -> BasisType.USDA_REPORTED_SERVING
                     else -> BasisType.PER_100G
                 }
 
-                // Optional warning (preserves your lax import philosophy)
-                if (f.servingUnit != null && gramsPerServing == null) {
+// Optional warning (preserves your lax import philosophy)
+                if (f.servingUnit != null && gramsPerServingUnit == null) {
                     warnings +=
                         "Food '${f.name}' uses serving unit '${f.servingUnit}' but has no grams-per-serving; assuming PER_100G."
                 }
 
                 val rows = mutableListOf<FoodNutrientEntity>()
                 for ((code, amount) in f.nutrientsByCode) {
+
                     val nutrientId = nutrientDao.getIdByCode(code)
                     if (nutrientId == null) {
                         warnings += "Food '${f.name}' has unknown nutrient code '$code' (skipped)."
                         continue
                     }
+
+                    // NEW: unit is required by FoodNutrientEntity now.
+                    // Add this DAO method if you don't have it yet:
+                    // @Query("SELECT unit FROM nutrients WHERE code = :code LIMIT 1")
+                    // suspend fun getUnitByCode(code: String): NutrientUnit?
+                    val unit = nutrientDao.getUnitByCode(code)
+                    if (unit == null) {
+                        warnings += "Food '${f.name}' nutrient code '$code' has no unit in catalog (skipped)."
+                        continue
+                    }
+
                     rows += FoodNutrientEntity(
                         foodId = foodId,
                         nutrientId = nutrientId,
                         nutrientAmountPerBasis = amount,
-                        basisType = basisType        // ✅ this is the key line
+                        unit = unit,
+                        basisType = basisType
                     )
                 }
 
@@ -171,7 +185,7 @@ class ImportFoodsAndRecipesUseCase @Inject constructor(
                                     brand = null,
                                     servingSize = 1.0,
                                     servingUnit = ServingUnit.G,
-                                    gramsPerServing = null,
+                                    gramsPerServingUnit = null,
                                     isRecipe = true
                                 )
                             )

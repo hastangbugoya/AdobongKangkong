@@ -22,7 +22,7 @@ data class FoodExport(
     val brand: String? = null,
     val servingSize: Double,
     val servingUnit: String,
-    val gramsPerServing: Double? = null,
+    val gramsPerServingUnit: Double? = null,
     val isRecipe: Boolean,
     /**
      * Nutrient values keyed by nutrient code (e.g., "PROTEIN_G", "VITAMIN_C").

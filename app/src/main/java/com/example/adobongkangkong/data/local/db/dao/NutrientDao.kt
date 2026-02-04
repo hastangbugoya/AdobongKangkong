@@ -98,4 +98,9 @@ interface NutrientDao {
     @Query("SELECT * FROM nutrients ORDER BY displayName ASC")
     fun observeAllNutrients(): Flow<List<NutrientEntity>>
 
+    @Query("SELECT unit FROM nutrients WHERE id = :nutrientId LIMIT 1")
+    suspend fun getUnitById(nutrientId: Long): NutrientUnit?
+
+    @Query("SELECT unit FROM nutrients WHERE code = :code LIMIT 1")
+    suspend fun getUnitByCode(code: String): NutrientUnit?
 }

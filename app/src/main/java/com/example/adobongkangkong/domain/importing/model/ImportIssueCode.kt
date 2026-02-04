@@ -24,7 +24,7 @@ data class ImportIssue(
     val severity: ImportSeverity,
     val code: ImportIssueCode,
     val rowRef: ImportRowRef,
-    val field: String? = null,         // "foodName", "gramsPerServing", "Cu"
+    val field: String? = null,         // "foodName", "gramsPerServingUnit", "Cu"
     val message: String,
     val rawValue: String? = null
 )

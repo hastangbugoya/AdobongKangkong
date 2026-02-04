@@ -22,13 +22,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
-import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
-import kotlin.math.max
 
 /**
  * Quick-add logging sheet.
@@ -242,7 +240,7 @@ private fun FoodSearchResults(
                     val subtitle = buildString {
                         if (!food.brand.isNullOrBlank()) append(food.brand).append(" • ")
                         append("${food.servingSize.clean()} ${food.servingUnit}")
-                        food.gramsPerServingResolved()?.let { append(" (${it.clean()} g)") }
+                        food.gramsPerServingUnitResolved()?.let { append(" (${it.clean()} g)") }
                     }
                     Text(subtitle)
                 },

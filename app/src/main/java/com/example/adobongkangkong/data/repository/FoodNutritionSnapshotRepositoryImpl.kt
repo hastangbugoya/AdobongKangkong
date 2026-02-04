@@ -23,7 +23,7 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
         val codeById = nutrientCodeById()
         return toFoodNutritionSnapshot(
             foodId = food.id,
-            gramsPerServing = food.gramsPerServing,
+            gramsPerServingUnit = food.gramsPerServingUnit,
             rows = rows,
             nutrientCodeById = codeById
         )
@@ -48,7 +48,7 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
             val rows = rowsByFoodId[food.id].orEmpty()
             val snapshot = toFoodNutritionSnapshot(
                 foodId = food.id,
-                gramsPerServing = food.gramsPerServing,
+                gramsPerServingUnit = food.gramsPerServingUnit,
                 rows = rows,
                 nutrientCodeById = codeById
             )

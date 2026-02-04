@@ -36,7 +36,7 @@ class RecipeRepositoryImpl @Inject constructor(
                 brand = null,
                 servingSize = 1.0,
                 servingUnit = ServingUnit.SERVING,
-                gramsPerServing = null,        // computed dynamically via cooked yield
+                gramsPerServingUnit = null,        // computed dynamically via cooked yield
                 servingsPerPackage = null,
                 isRecipe = true
             )

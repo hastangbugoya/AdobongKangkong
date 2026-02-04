@@ -9,27 +9,41 @@ import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 /**
  * Normalize persisted food nutrient rows into a domain snapshot expressed per 1 gram.
  *
- * - PER_100G    -> amount/100
- * - PER_SERVING -> amount/gramsPerServing (only if gramsPerServing is valid)
+ * Supported normalization:
+ * - PER_100G              -> amount / 100
+ * - USDA_REPORTED_SERVING -> amount / gramsPerServingUnit (only if gramsPerServingUnit is valid)
  *
- * Lax import: if normalization can't be done (e.g., PER_SERVING but missing gramsPerServing),
+ * Lax import: if normalization can't be done (e.g., USDA_REPORTED_SERVING but missing gramsPerServingUnit),
  * those rows are skipped; downstream use cases emit warnings when data is missing.
+ *
+ * Note: PER_100ML cannot be normalized to grams without density, so it is skipped here.
  */
 fun toFoodNutritionSnapshot(
     foodId: Long,
-    gramsPerServing: Double?,
+    gramsPerServingUnit: Double?,
     rows: List<FoodNutrientEntity>,
     nutrientCodeById: Map<Long, String>
 ): FoodNutritionSnapshot {
-    val grams = gramsPerServing?.takeIf { it > 0.0 }
+
+    val grams = gramsPerServingUnit?.takeIf { it > 0.0 }
 
     val perGram = rows.mapNotNull { row ->
         val code = nutrientCodeById[row.nutrientId] ?: return@mapNotNull null
         val key = NutrientKey(code)
 
-        val perGramValue = when (row.basisType) {
-            BasisType.PER_100G -> row.nutrientAmountPerBasis / 100.0
-            BasisType.PER_SERVING -> grams?.let { row.nutrientAmountPerBasis / it }
+        val perGramValue: Double? = when (row.basisType) {
+            BasisType.PER_100G -> {
+                row.nutrientAmountPerBasis / 100.0
+            }
+
+            BasisType.USDA_REPORTED_SERVING -> {
+                grams?.let { row.nutrientAmountPerBasis / it }
+            }
+
+            BasisType.PER_100ML -> {
+                // Can't convert volume-normalized nutrients to grams without density.
+                null
+            }
         }
 
         perGramValue?.let { key to it }
@@ -37,7 +51,7 @@ fun toFoodNutritionSnapshot(
 
     return FoodNutritionSnapshot(
         foodId = foodId,
-        gramsPerServing = gramsPerServing,
+        gramsPerServingUnit = gramsPerServingUnit,
         nutrientsPerGram = perGram.takeIf { it.isNotEmpty() }?.let { NutrientMap(it) }
     )
 }

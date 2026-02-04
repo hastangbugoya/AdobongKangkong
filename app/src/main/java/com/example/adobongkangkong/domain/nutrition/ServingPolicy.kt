@@ -27,22 +27,22 @@ object ServingPolicy {
      * - The food either already has grams-per-serving
      * - OR grams-per-serving can be derived
      *
-     * Currently this delegates to [Food.gramsPerServingResolved].
+     * Currently this delegates to [Food.gramsPerServingUnitResolved].
      */
     fun canUseServings(food: Food): Boolean {
-        return food.gramsPerServingResolved() != null
+        return food.gramsPerServingUnitResolved() != null
     }
 
     /**
      * Returns the resolved grams-per-serving, or null if unavailable.
      *
      * This exists as a semantic wrapper so callers do NOT rely directly
-     * on [Food.gramsPerServingResolved].
+     * on [Food.gramsPerServingUnitResolved].
      *
      * That gives us a clean upgrade path if rules evolve.
      */
     fun gramsPerServing(food: Food): Double? {
-        return food.gramsPerServingResolved()
+        return food.gramsPerServingUnitResolved()
     }
 
     /**

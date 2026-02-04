@@ -62,6 +62,10 @@ class FoodNutrientRepositoryImpl @Inject constructor(
 
     override suspend fun getForFood(foodId: Long): List<FoodNutrientRow> {
         return foodNutrientDao.getForFoodWithMeta(foodId).map { row ->
+
+            // row.basisType comes from DB (String). Default safely for legacy/unknown values.
+            val bt = row.basisType
+
             FoodNutrientRow(
                 nutrient = Nutrient(
                     id = row.nutrientId,
@@ -71,11 +75,15 @@ class FoodNutrientRepositoryImpl @Inject constructor(
                     category = NutrientCategory.fromDb(row.category)
                 ),
                 amount = row.amount,
-                basisType = BasisType.PER_SERVING,
-                basisGrams = null
+                basisType = bt,
+                basisGrams = when (bt) {
+                    BasisType.PER_100G, BasisType.PER_100ML -> 100.0
+                    BasisType.USDA_REPORTED_SERVING -> null
+                }
             )
         }
     }
+
 
     override suspend fun replaceForFood(
         foodId: Long,
@@ -91,10 +99,12 @@ class FoodNutrientRepositoryImpl @Inject constructor(
                     foodId = foodId,
                     nutrientId = row.nutrient.id,
                     nutrientAmountPerBasis = row.amount,
+                    unit = row.nutrient.unit,
                     basisType = row.basisType
                 )
             }
         )
+
     }
 
     override suspend fun deleteOne(foodId: Long, nutrientId: Long) {

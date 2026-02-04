@@ -89,7 +89,7 @@ class CreateSnapshotFoodFromRecipeUseCase @Inject constructor(
             brand = "From recipe", // provenance; or null if you prefer
             servingSize = 1.0,
             servingUnit = ServingUnit.G,
-            gramsPerServing = null,
+            gramsPerServingUnit = null,
             servingsPerPackage = null,
             isRecipe = false,
             isLowSodium = null
@@ -100,13 +100,18 @@ class CreateSnapshotFoodFromRecipeUseCase @Inject constructor(
         // Build nutrient rows AFTER we have batchFoodId
         val nutrientRows: List<FoodNutrientEntity> =
             per100gSnapshot.mapNotNull { (nutrientKeyValue, amtPer100g) ->
+
                 val nutrientId = NutrientCatalog.idOfValue(nutrientKeyValue)
+                    ?: return@mapNotNull null
+
+                val unit = nutrientDao.getUnitById(nutrientId)
                     ?: return@mapNotNull null
 
                 FoodNutrientEntity(
                     foodId = batchFoodId,
                     nutrientId = nutrientId,
                     nutrientAmountPerBasis = amtPer100g,
+                    unit = unit,
                     basisType = BasisType.PER_100G
                 )
             }

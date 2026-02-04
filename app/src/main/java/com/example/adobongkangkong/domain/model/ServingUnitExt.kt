@@ -15,7 +15,7 @@ import kotlin.math.abs
  * - Imperial units use the exact standard values (pt/qt/gal based on Imperial fl oz).
  *
  * These are math-only utilities. Food-specific density (mL↔g) should be derived separately
- * from (gramsPerServing / mlPerServing) when the serving unit is volume-based.
+ * from (gramsPerServingUnit / mlPerServing) when the serving unit is volume-based.
  */
 
 /** True if this unit is fundamentally volume-like (convertible to mL). */
@@ -60,7 +60,7 @@ fun ServingUnit.isMassUnit(): Boolean = when (this) {
 }
 
 /**
- * Units where "1 serving" implies volume-ish or container-ish, and must be backed by gramsPerServing
+ * Units where "1 serving" implies volume-ish or container-ish, and must be backed by gramsPerServingUnit
  * to be safely converted to weight-based nutrition.
  */
 fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
@@ -168,10 +168,10 @@ fun convertMass(amount: Double, from: ServingUnit, to: ServingUnit): Double? {
  *
  * Returns null if the serving unit is not volume-based or if mlPerServing would be zero.
  */
-fun deriveDensityGramsPerMl(gramsPerServing: Double, servingUnit: ServingUnit): Double? {
+fun deriveDensityGramsPerMl(gramsPerServingUnit: Double, servingUnit: ServingUnit): Double? {
     val ml = servingUnit.toMilliliters(1.0) ?: return null
     if (ml == 0.0) return null
-    return gramsPerServing / ml
+    return gramsPerServingUnit / ml
 }
 
 /**

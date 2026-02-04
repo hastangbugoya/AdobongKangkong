@@ -86,7 +86,7 @@ import javax.inject.Inject
  * This design choice has an important implication:
  *
  * - In normal in-app editing, the app should **preserve the existing `FoodEntity.id`**
- *   and update other fields (name/unit/gramsPerServing/etc). That keeps recipes/logs stable.
+ *   and update other fields (name/unit/gramsPerServingUnit/etc). That keeps recipes/logs stable.
  *
  * - If some code path were to **recompute** `stableFoodId(...)` during an edit and write it into `id`,
  *   that would effectively "change the primary key" and could break any references to the old ID
@@ -189,17 +189,93 @@ class FoodsCsvImporter @Inject constructor(
         return row.getOrNull(idx)
     }
 
+    // Replace the old decideBasisType(...) with these helpers + “plan” functions.
+//
+// Assumptions:
+// - ServingUnit has at least G and ML (adjust names if yours differ).
+// - BasisType is the enum you updated in FoodNutrientEntity.kt:
+//     USDA_REPORTED_SERVING, PER_100G, PER_100ML
+// - This is Milestone 0/1 compatible (no UI, just correct basis decisions).
+
+    private fun canComputePer100g(
+        servingUnit: ServingUnit,
+        gramsPerServingUnit: Double?
+    ): Boolean {
+        return when (servingUnit) {
+            ServingUnit.G -> true
+            else -> (gramsPerServingUnit != null && gramsPerServingUnit > 0.0)
+        }
+    }
+
+    private fun canComputePer100ml(servingUnit: ServingUnit): Boolean {
+        return servingUnit == ServingUnit.ML
+    }
+
     /**
-     * Determines the stored nutrient basis for this row.
-     *
-     * Rule:
-     * - If grams-per-serving is known → store nutrients PER_SERVING (CSV values are interpreted per serving).
-     * - Otherwise → store nutrients PER_100G (CSV values are interpreted per 100g).
-     *
-     * This keeps the DB semantically unambiguous and allows domain to normalize to per-gram later.
+     * For USDA imports:
+     * - Always store USDA_REPORTED_SERVING (traceability).
+     * - Add PER_100G only when the USDA serving is mass-based (grams).
+     * - Optionally add PER_100ML when the USDA serving is volume-based (mL).
      */
-    private fun decideBasisType(gramsPerServing: Double?): BasisType =
-        if (gramsPerServing != null && gramsPerServing > 0.0) BasisType.PER_SERVING else BasisType.PER_100G
+    private fun decideBasesForUsdaImport(
+        usdaServingUnit: ServingUnit
+    ): Set<BasisType> {
+        return buildSet {
+            add(BasisType.USDA_REPORTED_SERVING)
+
+            // Only compute per-100 normalization when the USDA serving is in that dimension
+            if (usdaServingUnit == ServingUnit.G) add(BasisType.PER_100G)
+            if (usdaServingUnit == ServingUnit.ML) add(BasisType.PER_100ML) // keep even if unused for now
+        }
+    }
+
+    /**
+     * For manually created foods (non-USDA):
+     * Pick a single "default" storage basis.
+     *
+     * If you can compute per-100g (serving is grams OR unit is backed by gramsPerServingUnit),
+     * prefer PER_100G. Otherwise fall back to a serving-based basis.
+     *
+     * NOTE: Using USDA_REPORTED_SERVING as the serving-based fallback is fine for now.
+     * If you want stricter semantics later, add USER_DEFINED_SERVING to BasisType.
+     */
+    private fun decideDefaultBasisForManualFood(
+        servingUnit: ServingUnit,
+        gramsPerServingUnit: Double?
+    ): BasisType {
+        return if (canComputePer100g(servingUnit, gramsPerServingUnit)) {
+            BasisType.PER_100G
+        } else {
+            BasisType.USDA_REPORTED_SERVING
+        }
+    }
+
+    /**
+     * Utility: when you do compute normalized bases, this gives you the scaling factor.
+     *
+     * Example:
+     * - USDA serving 37 g -> PER_100G scale = 100/37
+     * - USDA serving 240 mL -> PER_100ML scale = 100/240
+     */
+    private fun normalizationScaleFactor(
+        servingSize: Double,
+        servingUnit: ServingUnit,
+        targetBasis: BasisType
+    ): Double? {
+        if (servingSize <= 0.0) return null
+
+        return when (targetBasis) {
+            BasisType.PER_100G ->
+                if (servingUnit == ServingUnit.G) 100.0 / servingSize else null
+
+            BasisType.PER_100ML ->
+                if (servingUnit == ServingUnit.ML) 100.0 / servingSize else null
+
+            BasisType.USDA_REPORTED_SERVING ->
+                1.0
+        }
+    }
+
 
     /**
      * Returns the list of column indices for a given header name.
@@ -353,6 +429,15 @@ class FoodsCsvImporter @Inject constructor(
 
             Log.d(TAG, "Resolved nutrient IDs: nutrientIdByHeader.size=${nutrientIdByHeader.size}")
 
+            // Resolve canonical units by header (matches NutrientEntity upsert above)
+            val nutrientUnitByHeader: Map<String, NutrientUnit> = buildMap {
+                for (def in CsvNutrientCatalog.defs) {
+                    val headerKey = def.csvHeader.trim().lowercase()
+                    if (!headerIndex.containsKey(headerKey)) continue
+                    put(headerKey, NutrientUnit.fromDb(def.unit))
+                }
+            }
+
             val notes = mutableListOf<String>()
 
             // Duplicate Cu handling
@@ -431,11 +516,16 @@ class FoodsCsvImporter @Inject constructor(
                     servingSize = servingSize,
                     servingUnit = servingUnit,
                     servingsPerPackage = null,
-                    gramsPerServing = parsedWeight.grams, // ✅ Strawberry "144g" becomes 144.0 now
+                    gramsPerServingUnit = parsedWeight.grams, // ✅ Strawberry "144g" becomes 144.0 now
                     isRecipe = false
                 )
 
-                val basisType = decideBasisType(parsedWeight.grams)
+                val servingBasisType = BasisType.USDA_REPORTED_SERVING
+
+                val gramsForServing: Double? = when {
+                    servingUnit == ServingUnit.G -> servingSize.takeIf { it > 0.0 }
+                    else -> parsedWeight.grams?.takeIf { it > 0.0 }
+                }
 
                 for ((headerKey, nutrientId) in nutrientIdByHeader) {
                     val raw = cellNormalized(row, headerIndex, headerKey) ?: continue
@@ -455,12 +545,29 @@ class FoodsCsvImporter @Inject constructor(
                         amount
                     } ?: continue
 
+                    val unit = nutrientUnitByHeader[headerKey] ?: continue
+
+                    // Store as serving-based snapshot
                     foodNutrients += FoodNutrientEntity(
                         foodId = foodId,
                         nutrientId = nutrientId,
                         nutrientAmountPerBasis = finalAmount,
-                        basisType = basisType
+                        unit = unit,
+                        basisType = servingBasisType
                     )
+
+                    // If we know grams for the serving, also store per-100g by scaling
+                    if (gramsForServing != null) {
+                        val factor = 100.0 / gramsForServing
+                        foodNutrients += FoodNutrientEntity(
+                            foodId = foodId,
+                            nutrientId = nutrientId,
+                            nutrientAmountPerBasis = finalAmount * factor,
+                            unit = unit,
+                            basisType = BasisType.PER_100G
+                        )
+                    }
+
                 }
             }
 

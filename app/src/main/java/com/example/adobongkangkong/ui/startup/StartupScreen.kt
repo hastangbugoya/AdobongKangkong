@@ -11,7 +11,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @Composable
 fun StartupScreen(
     onDone: () -> Unit,
-    vm: StartupViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    vm: StartupViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
 
@@ -23,14 +23,19 @@ fun StartupScreen(
         if (state.isDone) onDone()
     }
 
-    Surface(Modifier.fillMaxSize()) {
+    Surface(modifier = Modifier.fillMaxSize()) {
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text("working=${state.isWorking} done=${state.isDone}")
+            Text("msg=${state.message ?: "null"}")
+            Text("err=${state.error ?: "null"}")
+            Spacer(Modifier.height(16.dp))
+
             when {
                 state.isWorking -> {
                     CircularProgressIndicator()
@@ -41,8 +46,14 @@ fun StartupScreen(
                 }
 
                 state.error != null -> {
+                    // Show last known status message (if any) + the actual error
+                    if (!state.message.isNullOrBlank()) {
+                        Text(text = state.message!!)
+                        Spacer(Modifier.height(8.dp))
+                    }
+
                     Text(
-                        text = state.message ?: "Unknown Error",
+                        text = state.error ?: "Unknown Error",
                         color = MaterialTheme.colorScheme.error
                     )
                     Spacer(Modifier.height(12.dp))
@@ -52,13 +63,14 @@ fun StartupScreen(
                 }
 
                 state.isDone -> {
-                    // Usually navigation happens via LaunchedEffect,
-                    // but you can show a fallback message if you want
-                    Text("Ready", style = MaterialTheme.typography.titleMedium)
+                    // Usually navigation happens immediately; this is just a fallback.
+                    Text("Ready")
+                }
+
+                else -> {
+                    Text(state.message ?: "Starting…")
                 }
             }
         }
     }
-
 }
-

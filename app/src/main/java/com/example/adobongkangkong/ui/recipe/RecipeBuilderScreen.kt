@@ -1,26 +1,16 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
-import android.graphics.BitmapFactory
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.DropdownMenuItem
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,10 +29,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -53,12 +40,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -69,7 +54,6 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
-import com.example.adobongkangkong.ui.format.ui
 import kotlinx.coroutines.delay
 
 /**
@@ -322,7 +306,7 @@ fun RecipeBuilderScreen(
                     // ------------------------------------------------------------------
                     // IDENTICAL steps to QuickAddBottomSheet (SelectedFoodPanel)
                     // ------------------------------------------------------------------
-                    val gramsPerServing = pickedFood.gramsPerServingResolved()
+                    val gramsPerServingUnit = pickedFood.gramsPerServingUnitResolved()
                     var inputUnit by rememberSaveable(pickedFood.id) { mutableStateOf(ServingUnit.G) }
                     var inputAmount by rememberSaveable(pickedFood.id) { mutableStateOf<Double?>(null) }
 
@@ -331,13 +315,13 @@ fun RecipeBuilderScreen(
                     }
 
                     var gramsAmount by rememberSaveable(pickedFood.id) {
-                        mutableStateOf(gramsPerServing?.let { g -> state.pickedServings * g })
+                        mutableStateOf(gramsPerServingUnit?.let { g -> state.pickedServings * g })
                     }
 
                     // Keep derived fields synced whenever canonical servings changes (same behavior as QuickAdd VM).
-                    LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServing) {
+                    LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServingUnit) {
                         servingUnitAmount = state.pickedServings * pickedFood.servingSize
-                        gramsAmount = gramsPerServing?.let { g -> state.pickedServings * g }
+                        gramsAmount = gramsPerServingUnit?.let { g -> state.pickedServings * g }
                     }
 
                     SelectedFoodPanel(

@@ -9,14 +9,14 @@ class CheckFoodUsableUseCase @Inject constructor() {
 
     fun execute(
         servingUnit: ServingUnit,
-        gramsPerServing: Double?,
+        gramsPerServingUnit: Double?,
         amountInput: AmountInput,
         context: UsageContext
     ): FoodUsageCheck {
         val needsBacking = servingUnit.requiresGramsPerServing()
         val isServingBased = amountInput is AmountInput.ByServings
 
-        if (needsBacking && isServingBased && gramsPerServing == null) {
+        if (needsBacking && isServingBased && gramsPerServingUnit == null) {
             val noun = when (context) {
                 UsageContext.LOGGING -> "log this food by serving"
                 UsageContext.RECIPE -> "use this food in a recipe by servings"

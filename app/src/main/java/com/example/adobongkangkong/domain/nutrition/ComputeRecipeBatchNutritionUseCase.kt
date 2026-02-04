@@ -122,8 +122,8 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
                 return@fold acc
             }
 
-            val gps = snapshot.gramsPerServing
-            if (gps == null || gps <= 0.0) {
+            val gpsu = snapshot.gramsPerServingUnit
+            if (gpsu == null || gpsu <= 0.0) {
                 warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
                 return@fold acc
             }
@@ -133,7 +133,7 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
                 return@fold acc
             }
 
-            val grams = servings * gps
+            val grams = servings * gpsu
             acc + snapshot.nutrientsForGrams(grams)
         }
 

@@ -18,7 +18,7 @@ interface FoodLookupForRecipe {
 data class FoodSnapshot(
     val id: Long,
     val servingUnit: com.example.adobongkangkong.domain.model.ServingUnit,
-    val gramsPerServing: Double?
+    val gramsPerServingUnit: Double?
 )
 
 class AddRecipeIngredientUseCase(
@@ -41,10 +41,10 @@ class AddRecipeIngredientUseCase(
         val food = foodLookup.getFoodById(ingredientFoodId)
             ?: return Result.Error("Ingredient food not found")
 
-        // Gate: servings-based usage for volume-ish units missing gramsPerServing is blocked.
+        // Gate: servings-based usage for volume-ish units missing gramsPerServingUnit is blocked.
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
-            gramsPerServing = food.gramsPerServing,
+            gramsPerServingUnit = food.gramsPerServingUnit,
             amountInput = amountInput,
             context = UsageContext.RECIPE
         )) {
@@ -57,7 +57,7 @@ class AddRecipeIngredientUseCase(
             is AmountInput.ByGrams -> {
                 val r = ServingAmountConverter.gramsToServings(
                     servingUnit = food.servingUnit,
-                    gramsPerServing = food.gramsPerServing,
+                    gramsPerServingUnit = food.gramsPerServingUnit,
                     grams = amountInput.grams
                 )
                 r.getOrElse {
@@ -75,7 +75,7 @@ class AddRecipeIngredientUseCase(
                     is AmountInput.ByGrams -> {
                         val r = ServingAmountConverter.gramsToServings(
                             servingUnit = food.servingUnit,
-                            gramsPerServing = food.gramsPerServing,
+                            gramsPerServingUnit = food.gramsPerServingUnit,
                             grams = amountInput.grams
                         )
                         r.getOrElse {

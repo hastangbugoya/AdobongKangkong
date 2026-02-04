@@ -32,8 +32,11 @@ class DbTypeConverters {
         NutrientCategory.fromDb(value?.trim()?.lowercase().orEmpty())
 
     @TypeConverter fun basisTypeToDb(value: BasisType?): String? = value?.name
-    @TypeConverter fun basisTypeFromDb(value: String?): BasisType =
-        runCatching { BasisType.valueOf(value ?: "") }.getOrDefault(BasisType.PER_SERVING)
+    @TypeConverter
+    fun basisTypeFromDb(value: String?): BasisType =
+        runCatching { BasisType.valueOf(value ?: "") }
+            .getOrDefault(BasisType.USDA_REPORTED_SERVING)
+
 
     // ---- NutrientMap JSON (String <-> Map<String, Double>) ----
 

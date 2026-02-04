@@ -9,8 +9,8 @@ fun servingsFromServingUnits(
 
 fun servingsFromGrams(
     grams: Double,
-    gramsPerServing: Double
-): Double = grams / gramsPerServing
+    gramsPerServingUnit: Double
+): Double = grams / gramsPerServingUnit
 
 fun servingUnitsFromServings(
     servings: Double,
@@ -19,6 +19,6 @@ fun servingUnitsFromServings(
 
 fun gramsFromServings(
     servings: Double,
-    gramsPerServing: Double
-): Double = servings * gramsPerServing
+    gramsPerServingUnit: Double
+): Double = servings * gramsPerServingUnit
 

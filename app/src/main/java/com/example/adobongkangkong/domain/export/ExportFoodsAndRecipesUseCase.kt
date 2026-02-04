@@ -58,7 +58,7 @@ class ExportFoodsAndRecipesUseCase @Inject constructor(
                 brand = food.brand,
                 servingSize = food.servingSize,
                 servingUnit = food.servingUnit.name,
-                gramsPerServing = food.gramsPerServing,
+                gramsPerServingUnit = food.gramsPerServingUnit,
                 isRecipe = food.isRecipe,
                 nutrientsByCode = nutrientsByCode
             )

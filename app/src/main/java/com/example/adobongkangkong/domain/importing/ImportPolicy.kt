@@ -22,7 +22,7 @@ object ImportPolicy {
      *
      * Your current product decision:
      * - DO NOT skip the row
-     * - Keep gramsPerServing = null
+     * - Keep gramsPerServingUnit = null
      * - Emit a WARNING
      * - Enforce later at point-of-use (ServingPolicy)
      */

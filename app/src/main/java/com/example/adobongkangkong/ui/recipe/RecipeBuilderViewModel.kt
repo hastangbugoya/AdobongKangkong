@@ -10,7 +10,7 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ServingPolicy
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -32,12 +32,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 
 
 @HiltViewModel
@@ -254,7 +249,7 @@ class RecipeBuilderViewModel @Inject constructor(
 
             combine(leftFlow, rightFlow, overlayFlow) { left, right, overlay ->
                 val pickedGrams =
-                    left.pickedFood?.gramsPerServingResolved()
+                    left.pickedFood?.gramsPerServingUnitResolved()
                         ?.let { g -> right.pickedServings * g }
 
                 RecipeBuilderState(
@@ -325,7 +320,7 @@ class RecipeBuilderViewModel @Inject constructor(
         if (isEditingGrams) return
 
         val food = pickedFoodFlow.value
-        val g = food?.gramsPerServingResolved()
+        val g = food?.gramsPerServingUnitResolved()
         if (g == null || g <= 0.0) {
             pickedGramsTextFlow.value = ""
             return
@@ -438,7 +433,7 @@ class RecipeBuilderViewModel @Inject constructor(
         // Volume → grams requires density derived from food's serving definition
         val mlInput = unit.toMilliliters(a) ?: return null
 
-        val gPerServing = food.gramsPerServingResolved() ?: return null
+        val gPerServing = food.gramsPerServingUnitResolved() ?: return null
         if (gPerServing <= 0.0) return null
 
         // mL per ONE food serving (servingSize + servingUnit)
@@ -524,7 +519,7 @@ class RecipeBuilderViewModel @Inject constructor(
      */
     fun onPickedGramsChange(grams: Double) {
         val food = pickedFoodFlow.value ?: return
-        val g = food.gramsPerServingResolved() ?: return
+        val g = food.gramsPerServingUnitResolved() ?: return
         if (g <= 0.0) return
 
         val servingsRaw = (grams / g).coerceAtLeast(0.0)
@@ -581,7 +576,7 @@ class RecipeBuilderViewModel @Inject constructor(
             return
         }
 
-        val gramsForLine = food.gramsPerServingResolved()?.let { gPerServing ->
+        val gramsForLine = food.gramsPerServingUnitResolved()?.let { gPerServing ->
             (servings * gPerServing).coerceAtLeast(0.0)
         }
 
@@ -731,7 +726,7 @@ class RecipeBuilderViewModel @Inject constructor(
 
             val food = foodRepo.getById(foodId)
 
-            // Build lookup once so we can get both name + unit + gramsPerServing
+            // Build lookup once so we can get both name + unit + gramsPerServingUnit
             val ids = ingredients.map { it.ingredientFoodId }.distinct()
             val foodById: Map<Long, Food?> =
                 ids.associateWith { id -> foodRepo.getById(id) }
@@ -742,7 +737,7 @@ class RecipeBuilderViewModel @Inject constructor(
 
             ingredientsFlow.value = ingredients.map { line ->
                 val ingFood = foodById[line.ingredientFoodId]
-                val gramsForLine = ingFood?.gramsPerServingResolved()?.let { gPerServing ->
+                val gramsForLine = ingFood?.gramsPerServingUnitResolved()?.let { gPerServing ->
                     (line.ingredientServings * gPerServing).coerceAtLeast(0.0)
                 }
 

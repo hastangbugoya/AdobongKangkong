@@ -72,7 +72,7 @@ class CreateLogEntryUseCase @Inject constructor(
         // Enforce logging rules (volume → grams-per-serving)
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
-            gramsPerServing = food.gramsPerServing,
+            gramsPerServingUnit = food.gramsPerServingUnit,
             amountInput = amountInput,
             context = UsageContext.LOGGING
         )) {
@@ -83,9 +83,9 @@ class CreateLogEntryUseCase @Inject constructor(
         val grams = when (amountInput) {
             is AmountInput.ByGrams -> amountInput.grams
             is AmountInput.ByServings -> {
-                val gps = food.gramsPerServing
+                val gpsu = food.gramsPerServingUnit
                     ?: return Result.Blocked("Set grams-per-serving before logging by servings.")
-                amountInput.servings * gps
+                amountInput.servings * gpsu
             }
         }
 

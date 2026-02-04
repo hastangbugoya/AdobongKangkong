@@ -12,7 +12,7 @@ import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
@@ -261,7 +261,7 @@ class QuickAddViewModel @Inject constructor(
                     InputMode.SERVINGS -> core.servings
                     else -> {
                         val grams = gramsAmount ?: return@let null
-                        val gPerServing = food.gramsPerServingResolved() ?: return@let null
+                        val gPerServing = food.gramsPerServingUnitResolved() ?: return@let null
                         if (gPerServing <= 0.0) return@let null
                         grams / gPerServing
                     }
@@ -394,7 +394,7 @@ class QuickAddViewModel @Inject constructor(
             unit.mlPerUnitOrNull()?.let { mlPerUnit ->
                 val grams = currentGrams
                 val foodMlPerUnit = food.servingUnit.mlPerUnitOrNull()
-                val gPerServing = food.gramsPerServingResolved()
+                val gPerServing = food.gramsPerServingUnitResolved()
                 if (foodMlPerUnit != null && gPerServing != null && gPerServing > 0.0 && food.servingSize > 0.0) {
                     val density = gPerServing / (food.servingSize * foodMlPerUnit)
                     if (density > 0.0) {
@@ -419,7 +419,7 @@ class QuickAddViewModel @Inject constructor(
 
         if (grams != null) {
             // If we can compute grams, sync servings when possible.
-            val gPerServing = food.gramsPerServingResolved()
+            val gPerServing = food.gramsPerServingUnitResolved()
             if (gPerServing != null && gPerServing > 0.0) {
                 servingsFlow.value = (grams / gPerServing).coerceAtLeast(0.0)
             }
@@ -461,7 +461,7 @@ class QuickAddViewModel @Inject constructor(
         inputModeFlow.value = InputMode.GRAMS
 
         // If grams-per-serving is known, keep servings stepper in sync.
-        val gPerServing = food.gramsPerServingResolved()
+        val gPerServing = food.gramsPerServingUnitResolved()
         if (gPerServing != null && gPerServing > 0.0) {
             servingsFlow.value = (gramsClamped / gPerServing).coerceAtLeast(0.0)
         }
@@ -577,7 +577,7 @@ class QuickAddViewModel @Inject constructor(
     ): Double? {
         return when (inputMode) {
             InputMode.SERVINGS -> {
-                val gPerServing = food.gramsPerServingResolved() ?: return null
+                val gPerServing = food.gramsPerServingUnitResolved() ?: return null
                 if (gPerServing <= 0.0) return null
                 servings * gPerServing
             }
@@ -599,7 +599,7 @@ class QuickAddViewModel @Inject constructor(
 
         // Special case: user chooses "SERVING" explicitly (means servings-count).
         if (unit == ServingUnit.SERVING) {
-            val gPerServing = food.gramsPerServingResolved() ?: return null
+            val gPerServing = food.gramsPerServingUnitResolved() ?: return null
             if (gPerServing <= 0.0) return null
             return a * gPerServing
         }
@@ -608,7 +608,7 @@ class QuickAddViewModel @Inject constructor(
         if (unit == food.servingUnit) {
             if (food.servingSize <= 0.0) return null
             val servings = a / food.servingSize
-            val gPerServing = food.gramsPerServingResolved() ?: return null
+            val gPerServing = food.gramsPerServingUnitResolved() ?: return null
             if (gPerServing <= 0.0) return null
             return servings * gPerServing
         }
@@ -618,10 +618,10 @@ class QuickAddViewModel @Inject constructor(
         val foodMlPerUnit = food.servingUnit.mlPerUnitOrNull() ?: return null
         if (food.servingSize <= 0.0) return null
 
-        val gPerServing = food.gramsPerServingResolved() ?: return null
+        val gPerServing = food.gramsPerServingUnitResolved() ?: return null
         if (gPerServing <= 0.0) return null
 
-        // gramsPerServing corresponds to (servingSize * foodServingUnit) volume.
+        // gramsPerServingUnit corresponds to (servingSize * foodServingUnit) volume.
         val mlPerServing = food.servingSize * foodMlPerUnit
         if (mlPerServing <= 0.0) return null
 

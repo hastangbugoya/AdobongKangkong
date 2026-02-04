@@ -21,7 +21,7 @@ data class FoodEditorState(
     val brand: String = "",
     val servingSize: String = "1.0",
     val servingUnit: ServingUnit = ServingUnit.G,
-    val gramsPerServing: String = "",
+    val gramsPerServingUnit: String = "",
     val servingsPerPackage: String = "",
 
     val nutrientRows: List<NutrientRowUi> = emptyList(),
@@ -74,7 +74,7 @@ data class FoodEditorState(
             if (name.isBlank()) return false
 
             // If the unit is volume-like, grams-per-serving is required for deterministic math.
-            if (servingUnit.requiresGramsPerServing() && gramsPerServing.trim().isEmpty()) return false
+            if (servingUnit.requiresGramsPerServing() && gramsPerServingUnit.trim().isEmpty()) return false
 
             // servingSize should be a positive number if present.
             val servingSizeValue = servingSize.toDoubleOrNull()

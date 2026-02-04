@@ -8,13 +8,13 @@ import com.example.adobongkangkong.domain.model.ServingUnit
  * Policy:
  * - If servingUnit is weight-based (G/MG/OZ/LB), "servings" can be interpreted as weight directly.
  *   (Your current DB comment implies this possibility.)
- * - Otherwise, grams <-> servings requires gramsPerServing.
+ * - Otherwise, grams <-> servings requires gramsPerServingUnit.
  */
 object ServingAmountConverter {
 
     fun gramsToServings(
         servingUnit: ServingUnit,
-        gramsPerServing: Double?,
+        gramsPerServingUnit: Double?,
         grams: Double
     ): Result<Double> {
         if (grams <= 0.0) return Result.success(0.0)
@@ -25,8 +25,8 @@ object ServingAmountConverter {
             ServingUnit.OZ -> Result.failure(IllegalStateException("OZ conversion requires explicit policy"))
             ServingUnit.LB -> Result.failure(IllegalStateException("LB conversion requires explicit policy"))
             else -> {
-                val gps = gramsPerServing
-                    ?: return Result.failure(IllegalStateException("Missing gramsPerServing"))
+                val gps = gramsPerServingUnit
+                    ?: return Result.failure(IllegalStateException("Missing gramsPerServingUnit"))
                 Result.success(grams / gps)
             }
         }
@@ -34,7 +34,7 @@ object ServingAmountConverter {
 
     fun servingsToGrams(
         servingUnit: ServingUnit,
-        gramsPerServing: Double?,
+        gramsPerServingUnit: Double?,
         servings: Double
     ): Result<Double> {
         if (servings <= 0.0) return Result.success(0.0)
@@ -45,8 +45,8 @@ object ServingAmountConverter {
             ServingUnit.OZ -> Result.failure(IllegalStateException("OZ conversion requires explicit policy"))
             ServingUnit.LB -> Result.failure(IllegalStateException("LB conversion requires explicit policy"))
             else -> {
-                val gps = gramsPerServing
-                    ?: return Result.failure(IllegalStateException("Missing gramsPerServing"))
+                val gps = gramsPerServingUnit
+                    ?: return Result.failure(IllegalStateException("Missing gramsPerServingUnit"))
                 Result.success(servings * gps)
             }
         }

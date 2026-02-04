@@ -55,7 +55,7 @@ interface FoodDao {
           brand = :brand,
           servingSize = :servingSize,
           servingUnit = :servingUnit,
-          gramsPerServing = :gramsPerServing,
+          gramsPerServingUnit = :gramsPerServingUnit,
           isRecipe = :isRecipe
         WHERE id = :id
         """)
@@ -65,7 +65,7 @@ interface FoodDao {
         brand: String?,
         servingSize: Double,
         servingUnit: String,
-        gramsPerServing: Double?,
+        gramsPerServingUnit: Double?,
         isRecipe: Boolean
     )
 
