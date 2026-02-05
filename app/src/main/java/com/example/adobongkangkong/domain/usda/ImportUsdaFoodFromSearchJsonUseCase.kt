@@ -31,10 +31,17 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
     private val foodNutrients: FoodNutrientRepository,
     private val nutrients: NutrientRepository
 ) {
-    suspend operator fun invoke(searchJson: String): Result {
+    suspend operator fun invoke(searchJson: String, selectedFdcId: Long? = null): Result {
+        Log.d("Meow","ImportUsdaFoodFromSearchJsonUseCase> invoke json:$searchJson fdcid:$selectedFdcId")
         val parsed = UsdaFoodsSearchParser.parse(searchJson)
-        val item = parsed.foods.firstOrNull() ?: return Result.Blocked("No foods in USDA response.")
 
+        val item = when (selectedFdcId) {
+            null -> parsed.foods.firstOrNull()
+            else -> parsed.foods.firstOrNull { it.fdcId == selectedFdcId }
+        } ?: return Result.Blocked(
+            if (selectedFdcId == null) "No foods in USDA response."
+            else "Selected item not found in USDA response (fdcId=$selectedFdcId)."
+        )
         // --- Serving unit (uses ServingUnitExt.kt) ---
         val servingUnit = ServingUnit.fromUsda(item.servingSizeUnit)
             ?: return Result.Blocked("Unsupported USDA servingSizeUnit='${item.servingSizeUnit}'")
@@ -187,7 +194,7 @@ fun NutrientUnit.Companion.fromUsda(unitName: String?): NutrientUnit? {
     }
 }
 
-private fun String.toTitleCase(): String =
+fun String.toTitleCase(): String =
     lowercase()
         .split(" ")
         .joinToString(" ") { word ->

@@ -22,8 +22,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    defaultConfig {
+        buildConfigField("String", "USDA_API_KEY", "\"NW8f6sDOwtWk6EOjKZLefMR6wO3JSX8KkcRDHBUg\"")
+    }
+
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -107,4 +112,10 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // Retrofit
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-scalars:2.11.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 }

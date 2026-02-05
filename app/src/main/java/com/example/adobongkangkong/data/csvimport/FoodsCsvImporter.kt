@@ -117,7 +117,7 @@ class FoodsCsvImporter @Inject constructor(
 ) {
 
     companion object {
-        private const val TAG = "FoodsCsvImporter"
+        private const val TAG = "Meow"
     }
 
     data class Report(

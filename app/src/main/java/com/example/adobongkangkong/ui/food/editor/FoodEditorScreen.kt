@@ -105,7 +105,14 @@ fun FoodEditorScreen(
     // Camera
     bannerCaptureController: BannerCaptureController,
     bannerRefreshTick: Int,
-) {
+
+    // Barcode
+    onOpenBarcodeScanner: () -> Unit,
+    onCloseBarcodeScanner: () -> Unit,
+    onBarcodeScanned: (String) -> Unit,
+    onPickBarcodeCandidate: (Long) -> Unit,
+
+    ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
             .map { it.nutrientId }
@@ -290,6 +297,25 @@ fun FoodEditorScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = onOpenBarcodeScanner) {
+                            Text("Scan barcode")
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        if (state.scannedBarcode.isNotBlank()) {
+                            Text(
+                                text = "Scanned: ${state.scannedBarcode}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
 
                 item {
                     ServingSection(
@@ -421,6 +447,49 @@ fun FoodEditorScreen(
             }
         }
     }
+
+
+
+
+    if (state.isBarcodeScannerOpen) {
+        // Picker overlay (no frills) once we have candidates and > 1
+        if (state.barcodePickItems.size > 1) {
+            AlertDialog(
+                onDismissRequest = onCloseBarcodeScanner,
+                title = { Text("Pick a match") },
+                text = {
+                    LazyColumn {
+                        items(state.barcodePickItems, key = { it.fdcId }) { item ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPickBarcodeCandidate(item.fdcId) }
+                                    .padding(vertical = 10.dp)
+                            ) {
+                                Text(item.description.ifBlank { "(No description)" })
+                                val line2 = listOf(item.brand, item.servingText, item.gtinUpc)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" • ")
+                                if (line2.isNotBlank()) {
+                                    Text(
+                                        line2,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = onCloseBarcodeScanner) { Text("Cancel") }
+                }
+            )
+        }
+    }
+
 
     if (showExitDialog.value) {
         AlertDialog(

@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.food.editor
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,8 @@ import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
+import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
+import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
@@ -42,6 +45,8 @@ class FoodEditorViewModel @Inject constructor(
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
     private val nutrientAliasRepo: NutrientAliasRepository,
     private val flagsRepo: FoodGoalFlagsRepository,
+    private val searchUsdaByBarcode: SearchUsdaFoodsByBarcodeUseCase,
+    private val importUsdaFromSearchJson: ImportUsdaFoodFromSearchJsonUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -82,6 +87,7 @@ class FoodEditorViewModel @Inject constructor(
      * For new foods, a stableId is generated once and stored in state.
      */
     fun load(foodId: Long?, initialName: String?) {
+        Log.d("Meow", "load(FOOD_EDITOR > foodId=$foodId) vm=${System.identityHashCode(this)} currentFoodId=${_state.value.foodId}")
         // If already loaded for this foodId, do nothing.
         val current = _state.value
         if (current.foodId == foodId && (foodId != null)) return
@@ -123,6 +129,7 @@ class FoodEditorViewModel @Inject constructor(
             )
         }
     }
+
 
     fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null, hasUnsavedChanges = true) }
     fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
@@ -341,6 +348,78 @@ class FoodEditorViewModel @Inject constructor(
     private fun Double.roundForUi(): String {
         // simple: 2 decimals; you can tune
         return "%,.2f".format(this).replace(",", "")
+    }
+
+    fun openBarcodeScanner() = update {
+        it.copy(
+            isBarcodeScannerOpen = true,
+            errorMessage = null
+        )
+    }
+
+    fun closeBarcodeScanner() = update {
+        it.copy(
+            isBarcodeScannerOpen = false,
+            pendingUsdaSearchJson = null,
+            barcodePickItems = emptyList()
+        )
+    }
+
+    fun onBarcodeScanned(barcode: String) {
+        Log.d("Meow", "FOOD_EDITOR > onBarcodeScanned($barcode) vm=${System.identityHashCode(this)}")
+        viewModelScope.launch {
+            when (val r = searchUsdaByBarcode(barcode)) {
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {
+                    // Store barcode + JSON + candidates (UI-only)
+                    update {
+                        it.copy(
+                            scannedBarcode = r.scannedBarcode,
+                            pendingUsdaSearchJson = r.searchJson,
+                            barcodePickItems = r.candidates,
+                            isBarcodeScannerOpen = false
+                        )
+                    }
+
+                    if (r.candidates.size == 1) {
+                        // Auto import if unambiguous
+                        onPickBarcodeCandidate(r.candidates.first().fdcId)
+                    }
+                }
+
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked ->
+                    update { it.copy(errorMessage = r.reason) }
+
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed ->
+                    update { it.copy(errorMessage = r.message) }
+            }
+        }
+    }
+
+    fun onPickBarcodeCandidate(fdcId: Long) {
+        val json = state.value.pendingUsdaSearchJson ?: run {
+            update { it.copy(errorMessage = "Missing pending USDA JSON.") }
+            return
+        }
+
+        viewModelScope.launch {
+            when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+                    // Close scanner/picker and load imported food into editor
+                    update {
+                        it.copy(
+                            isBarcodeScannerOpen = false,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null,
+                        )
+                    }
+                    load(foodId = r.foodId, initialName = null)
+                }
+
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked ->
+                    update { it.copy(errorMessage = r.reason) }
+            }
+        }
     }
 
     init {

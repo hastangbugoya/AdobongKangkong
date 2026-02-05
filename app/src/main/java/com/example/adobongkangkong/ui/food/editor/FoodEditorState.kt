@@ -41,7 +41,14 @@ data class FoodEditorState(
     val limit: Boolean = false,
     val isLbDialogOpen: Boolean = false,
     val lbInputText: String = "",
-) {
+
+    // Barcode scan (UI-only, not persisted)
+    val scannedBarcode: String = "",
+    val isBarcodeScannerOpen: Boolean = false,
+    val pendingUsdaSearchJson: String? = null,
+    val barcodePickItems: List<com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase.PickItem> = emptyList(),
+
+    ) {
     /**
      * Convenience flags/fields used by FoodEditorScreen.
      *
