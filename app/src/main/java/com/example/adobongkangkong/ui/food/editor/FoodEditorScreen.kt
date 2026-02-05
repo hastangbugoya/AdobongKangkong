@@ -144,12 +144,12 @@ fun FoodEditorScreen(
                     )
                     val canCaptureBanner = state.foodId != null
                     Spacer(Modifier.width(16.dp))
-                    TextButton(
-                        enabled = canCaptureBanner,
-                        onClick = { bannerCaptureController.open(state.foodId!!) }
-                    ) {
-                        Text("Open banner camera")
-                    }
+//                    TextButton(
+//                        enabled = canCaptureBanner,
+//                        onClick = { bannerCaptureController.open(state.foodId!!) }
+//                    ) {
+//                        Text("Open banner camera")
+//                    }
 
                     if (state.foodId == null) {
                         Text(

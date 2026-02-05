@@ -93,11 +93,33 @@ fun FoodEditorRoute(
                 onClose = viewModel::closeBarcodeScanner,
                 onBarcode = { code ->
                     viewModel.onBarcodeScanned(code)
-                    // optional: close immediately on scan (VM also closes on success)
-                    // viewModel.closeBarcodeScanner()
                 }
             )
         }
     }
 
 }
+/**
+ * FOR-FUTURE-ME (FoodEditorRoute)
+ *
+ * Purpose:
+ * - Route-level wrapper:
+ *   - owns FoodEditorViewModel via hiltViewModel()
+ *   - loads the food/editor data based on nav args
+ *   - passes BannerCaptureController + refresh tick into FoodEditorScreen
+ *   - hosts BarcodeScannerSheet bottom sheet
+ *
+ * Key integration rules:
+ * - Banner capture:
+ *   - FoodEditorScreen calls bannerCaptureController.open(foodId) ONLY when foodId != null.
+ *   - MainScreen’s BannerCaptureHost handles the actual sheet overlay.
+ *
+ * Barcode scanner:
+ * - This route shows ModalBottomSheet when state.isBarcodeScannerOpen.
+ * - Scanner must update VM state (barcode → search json → import → load(foodId)).
+ * - IMPORTANT: BarcodeScannerSheet must unbind CameraX on dispose to avoid breaking banner capture.
+ *
+ * Debug sanity:
+ * - We should see exactly ONE FoodEditorViewModel instance for the route.
+ * - If state updates but UI doesn’t reflect, check collectAsState + load() gating.
+ */

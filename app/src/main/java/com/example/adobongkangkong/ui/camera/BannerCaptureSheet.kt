@@ -317,3 +317,47 @@ private fun fixJpegOrientationInPlace(jpegFile: File) {
         Log.e("BannerCapture", "fixJpegOrientationInPlace failed", it)
     }
 }
+/**
+ * FOR-FUTURE-ME (BannerCaptureSheet)
+ *
+ * Goal:
+ * - Capture a “banner” photo for a Food (3:1 aspect), save to app storage,
+ *   and generate a blurred derivative for UI backgrounds.
+ *
+ * IMPORTANT: CAMERA LIFECYCLE RULES
+ * - PreviewView must be ATTACHED before binding CameraX, otherwise preview can be black.
+ *   (Most common failure: binding in LaunchedEffect before AndroidView attaches.)
+ * - Always unbind CameraX on dispose to prevent camera resource conflicts with other sheets
+ *   (e.g., BarcodeScannerSheet).
+ *
+ * High-level flow:
+ * 1) Create/own a PreviewView.
+ * 2) Acquire ProcessCameraProvider (suspend helper).
+ * 3) Build Preview + ImageCapture use cases.
+ * 4) Bind to lifecycleOwner with a 3:1 ViewPort so the preview matches banner crop intent.
+ * 5) On “Capture”:
+ *    - save JPEG to banner file
+ *    - fix orientation (EXIF / rotate-in-place)
+ *    - generate blurred WebP derivative (small width for cheap UI blur)
+ *    - notify via onCaptured(foodId, uri)
+ *
+ * Storage rules:
+ * - Uses FoodImageStorage to determine canonical locations:
+ *   - bannerJpegFile(foodId)
+ *   - bannerBlurWebpFile(foodId)
+ * - Call ensureAllBannerDirs(foodId) before writing.
+ *
+ * Output rules:
+ * - Banner image is the “source of truth” for rendering.
+ * - Blur derivative is optional but expected by the UI for nice placeholders.
+ *
+ * Known pitfalls:
+ * - Black preview: binding before PreviewView is attached/measured.
+ * - Conflicts with other CameraX uses (barcode scanner): ensure other camera sessions unbind on dispose.
+ * - Rotation: previewView.display may be null early; don’t rely on it unless attached.
+ *
+ * “Locked-down” mindset:
+ * - Keep capture deterministic and local: no uploads, no density guessing, no silent scaling.
+ * - If capture fails, report via onError (don’t swallow).
+ */
+

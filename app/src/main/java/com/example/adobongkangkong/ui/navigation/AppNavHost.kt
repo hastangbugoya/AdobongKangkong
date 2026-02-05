@@ -220,3 +220,23 @@ fun AppNavHost(
         Log.d("NavDbg", "Recipes.builderSample=${NavRoutes.Recipes.builder(recipeId = 123)}")
     }
 }
+/**
+ * FOR-FUTURE-ME — AppNavHost and global controller plumbing
+ *
+ * This NavHost is NOT allowed to create global controllers.
+ * It only *forwards* instances created at MainScreen level.
+ *
+ * BannerCaptureController RULE (critical):
+ * - BannerCaptureController must be created exactly once in MainScreen.
+ * - AppNavHost must receive it as a parameter and pass it through unchanged.
+ * - DO NOT call BannerCaptureController() or remember { BannerCaptureController() } here.
+ *
+ * Why this matters:
+ * - BannerCaptureHost observes the controller instance from MainScreen.
+ * - If a destination uses a different instance, controller.open() will silently do nothing.
+ * - This failure mode has no crash, no log, no warning — just a dead button.
+ *
+ * Mental model:
+ * - Controllers are identity-sensitive.
+ * - If UI doesn’t appear, suspect instance mismatch before suspecting logic.
+ */

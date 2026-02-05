@@ -684,3 +684,46 @@ class FoodsCsvImporter @Inject constructor(
         (lines.size - 1).coerceAtLeast(0)
     }
 }
+
+/**
+ * ============================
+ * FOODS_CSV_IMPORTER – FUTURE-ME NOTES
+ * ============================
+ *
+ * Purpose:
+ * - Import foods from a CSV that contains:
+ *   - food name + serving size/unit + optional grams-per-serving
+ *   - nutrient columns aligned to CsvNutrientCatalog codes
+ *
+ * Historic bug we hit:
+ * - The importer used to write BOTH:
+ *     - USDA_REPORTED_SERVING (raw-per-serving) AND
+ *     - derived PER_100G
+ *   for each nutrient whenever grams-per-serving existed.
+ * - DB schema allows this (PK includes basisType), but UI/editor expects one row per nutrientId.
+ * - Result: duplicates in food_nutrients and LazyColumn crashes (duplicate keys).
+ *
+ * Locked-down canonical rule:
+ * - After import, each food must have ONE basis row per nutrient:
+ *     - If food can be grounded in grams → persist PER_100G only.
+ *     - Else if grounded in ml → persist PER_100ML only.
+ *     - Else → persist USDA_REPORTED_SERVING only (raw), and food is blocked until grounded.
+ *
+ * “Blocked food” nuance:
+ * - If servingUnit is packet/box/bunch/etc without grams backing:
+ *   - Nutrients stored as USDA_REPORTED_SERVING represent “per 1 packet/box/etc”.
+ *   - Food must be treated as unusable until user provides grams-per-unit or volume grounding.
+ *   - When user adds grams/ml later, the entire nutrient list is reprocessed into canonical 100g/100ml.
+ *
+ * Absolute do-not-do:
+ * - Do not store both serving-basis and per100 basis simultaneously.
+ * - It seems helpful for traceability but it breaks mental model + UI assumptions.
+ *
+ * Regression smell tests:
+ * - If after import a food has more than one row per nutrientId → bug.
+ * - If FoodEditor nutrient list contains duplicates → bug likely here or in SaveFoodWithNutrientsUseCase.
+ *
+ * Discipline:
+ * - Avoid inventing identifiers or new unit logic here.
+ * - Use existing ServingUnit/ServingUnitExt helpers and existing BasisType.
+ */
