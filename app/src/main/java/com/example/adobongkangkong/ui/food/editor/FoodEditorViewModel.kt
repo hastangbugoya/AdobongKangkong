@@ -10,6 +10,8 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.isMassUnit
+import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -97,6 +99,7 @@ class FoodEditorViewModel @Inject constructor(
         // If already loaded for this foodId, do nothing.
         val current = _state.value
         if (current.foodId == foodId && (foodId != null)) return
+
         viewModelScope.launch {
             val flags = if (foodId != null) flagsRepo.get(foodId) else null
             val data = getData(foodId)
@@ -120,30 +123,12 @@ class FoodEditorViewModel @Inject constructor(
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
                 nutrientRows = rows.map { r ->
-                    // DO NOT TOUCH THIS (future-you note):
-                    // Editor UI displays PER-SERVING. Storage is often canonical PER_100G.
-                    // Always convert canonical -> display using NutrientBasisScaler (see its tests).
-                    val servingSizeForDisplay = food?.servingSize ?: 1.0
-                    val gramsPerServingUnitForDisplay: Double? =
-                        when (food?.servingUnit) {
-                            ServingUnit.G -> 1.0
-                            else -> food?.gramsPerServingUnit
-                        }?.takeIf { it > 0.0 }
-
-                    val displayAmount = NutrientBasisScaler
-                        .canonicalToDisplayPerServing(
-                            storedAmount = r.amount,
-                            storedBasis = r.basisType,
-                            servingSize = servingSizeForDisplay,
-                            gramsPerServingUnit = gramsPerServingUnitForDisplay
-                        ).amount
-
                     NutrientRowUi(
                         nutrientId = r.nutrient.id,
                         name = r.nutrient.displayName,
                         unit = r.nutrient.unit,
                         category = r.nutrient.category,
-                        amount = displayAmount.toString()
+                        amount = r.amount.toString()
                     )
                 },
                 favorite = flags?.favorite ?: false,
@@ -153,7 +138,6 @@ class FoodEditorViewModel @Inject constructor(
             )
         }
     }
-
 
     fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null, hasUnsavedChanges = true) }
     fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
@@ -224,8 +208,18 @@ class FoodEditorViewModel @Inject constructor(
             x.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
 
         val servingSize = parseDoubleOrNull(s.servingSize) ?: 1.0
-        val gramsPerServingUnit = parseDoubleOrNull(s.gramsPerServingUnit)
+        val gramsPerServingUnitInput = parseDoubleOrNull(s.gramsPerServingUnit)
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
+
+        // Rule: if user provided gramsPerServingUnit, trust it.
+        // If blank AND serving unit is a mass unit (e.g., OZ/LB), auto-compute grams per 1 unit.
+        // If serving unit is G, we don't need gramsPerServingUnit (but for consistency we treat it as 1 g per 1 g).
+        val gramsPerServingUnitFinal: Double? =
+            when {
+                gramsPerServingUnitInput != null && gramsPerServingUnitInput > 0.0 -> gramsPerServingUnitInput
+                s.servingUnit.isMassUnit() && s.servingUnit != ServingUnit.G -> s.servingUnit.toGrams(1.0)
+                else -> null
+            }?.takeIf { it > 0.0 }
 
         // IMPORTANT:
         // - For new foods: id = 0L so Room auto-generates.
@@ -239,43 +233,43 @@ class FoodEditorViewModel @Inject constructor(
             brand = s.brand.trim().ifEmpty { null },
             servingSize = servingSize,
             servingUnit = s.servingUnit,
-            gramsPerServingUnit = gramsPerServingUnit,
+            gramsPerServingUnit = gramsPerServingUnitFinal,
             servingsPerPackage = servingsPerPackage,
             isRecipe = false,
             stableId = stableId,
         )
-        // Decide default basis for MANUAL foods created/edited in the editor.
-        // If we can express the food in grams (either the servingUnit is grams OR the user provided grams-per-unit),
-        // store nutrients as PER_100G. Otherwise store as a serving-based snapshot (USDA_REPORTED_SERVING).
+
+        // Decide default basis for nutrients *stored from this editor*.
+        // Editor amounts are per-serving UI amounts.
+        // If we can ground serving in grams, store canonical PER_100G by converting the UI per-serving amount -> per-100g.
+        // Otherwise store USDA_REPORTED_SERVING amounts as-is (use case can later canonicalize once grounded).
         val defaultBasisType: BasisType =
-            if (s.servingUnit == ServingUnit.G || (gramsPerServingUnit != null && gramsPerServingUnit > 0.0)) {
+            if (s.servingUnit == ServingUnit.G || gramsPerServingUnitFinal != null) {
                 BasisType.PER_100G
             } else {
                 BasisType.USDA_REPORTED_SERVING
             }
+
+        val gramsPerServingUnitEffective: Double? =
+            when (s.servingUnit) {
+                ServingUnit.G -> 1.0
+                else -> gramsPerServingUnitFinal
+            }?.takeIf { it > 0.0 }
+
         val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
-            val amountPerServing = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
-
-            // DO NOT TOUCH THIS (future-you note):
-            // Editor UI edits PER-SERVING values.
-            // If we persist canonical PER_100G, we MUST invert the display scaling here.
-            val gramsPerServingUnitEffective: Double? =
-                when (s.servingUnit) {
-                    ServingUnit.G -> 1.0
-                    else -> gramsPerServingUnit
-                }?.takeIf { it > 0.0 }
+            val uiPerServingAmount = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
 
             val amountToStore =
                 if (defaultBasisType == BasisType.PER_100G) {
                     NutrientBasisScaler.displayPerServingToCanonical(
-                        uiPerServingAmount = amountPerServing,
+                        uiPerServingAmount = uiPerServingAmount,
                         canonicalBasis = BasisType.PER_100G,
                         servingSize = servingSize,
                         gramsPerServingUnit = gramsPerServingUnitEffective
                     ).amount
                 } else {
-                    amountPerServing
+                    uiPerServingAmount
                 }
 
             FoodNutrientRow(
@@ -513,3 +507,14 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 }
+
+/**
+ * FUTURE-YOU NOTE (2026-02-06):
+ *
+ * Editor nutrient inputs are PER-SERVING UI values.
+ *
+ * - If we store PER_100G in DB, we MUST convert UI per-serving -> canonical per-100g (do not just relabel basisType).
+ * - gramsPerServingUnit means: grams per 1 unit of servingUnit (NOT grams for the whole serving).
+ * - If gramsPerServingUnit is blank and servingUnit is a mass unit (OZ/LB), auto-compute grams per 1 unit using ServingUnit.toGrams(1.0).
+ * - Never guess density for volume units (CUP/TBSP/TSP/FLOZ). If not grounded, keep USDA_REPORTED_SERVING.
+ */

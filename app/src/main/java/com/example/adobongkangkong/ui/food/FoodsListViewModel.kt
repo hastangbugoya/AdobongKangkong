@@ -154,7 +154,7 @@ class FoodsListViewModel @Inject constructor(
                     FoodsListRowUiModel(
                         foodId = food.id,
                         name = food.name,
-                        brandText = food.brand?.takeIf { it.isNotBlank() } ?: "—",
+                        brandText = food.brand?.takeIf { it.isNotBlank() } ?: "Generic",
                         caloriesPerServingText = kcalPerServingText,
                         extraMetricText = extraMetricText,
                         isRecipe = food.isRecipe,
@@ -200,23 +200,36 @@ class FoodsListViewModel @Inject constructor(
     ): String {
         if (kcalPer100g == null) return "— kcal"
 
-        val gramsPerServingUnitEffective =
-            if (food.servingUnit == ServingUnit.G) 1.0 else food.gramsPerServingUnit
+        val label = servingLabel(food.servingSize, food.servingUnit)
 
+        // If we know grams-per-unit, we can always compute kcal manually
+        val gramsPerUnit = food.gramsPerServingUnit
+        if (gramsPerUnit != null && gramsPerUnit > 0.0) {
+            val grams =
+                if (food.servingUnit == ServingUnit.G)
+                    food.servingSize
+                else
+                    food.servingSize * gramsPerUnit
+
+            val kcal = (kcalPer100g * grams / 100.0).roundToInt()
+            return "$kcal kcal/$label"
+        }
+
+        // Fallback: try canonical scaler (for safety / future units)
         val result = NutrientBasisScaler.canonicalToDisplayPerServing(
             storedAmount = kcalPer100g,
             storedBasis = BasisType.PER_100G,
             servingSize = food.servingSize,
-            gramsPerServingUnit = gramsPerServingUnitEffective
+            gramsPerServingUnit = gramsPerUnit
         )
 
-        if (!result.didScale) return "— kcal"
-
-        val kcal = result.amount.roundToInt()
-        val label = servingLabel(food.servingSize, food.servingUnit)
-
-        return "$kcal kcal/$label"
+        return if (result.didScale) {
+            "${result.amount.roundToInt()} kcal/$label"
+        } else {
+            "— kcal/$label"
+        }
     }
+
 
 
     private fun servingLabel(servingSize: Double, servingUnit: ServingUnit): String {

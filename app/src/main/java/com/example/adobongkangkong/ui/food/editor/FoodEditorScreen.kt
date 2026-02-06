@@ -486,6 +486,17 @@ fun FoodEditorScreen(
                         )
                     }
                 }
+                if (state.foodId != null) {
+                    item {
+                        Text(
+                            text = "FoodId: ${state.foodId}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
