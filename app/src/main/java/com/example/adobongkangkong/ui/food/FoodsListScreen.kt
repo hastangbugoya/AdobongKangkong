@@ -17,7 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -29,16 +30,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -47,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
-import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.generateBlurDerivative
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
@@ -72,7 +75,6 @@ fun FoodsListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Foods") },
-
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -81,7 +83,6 @@ fun FoodsListScreen(
                         )
                     }
                 },
-
                 actions = {
                     IconButton(
                         onClick = {
@@ -99,7 +100,6 @@ fun FoodsListScreen(
                     }
                 }
             )
-
         }
     ) { padding ->
         Column(
@@ -136,18 +136,25 @@ fun FoodsListScreen(
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+
+            // Sort menu lives here (after the filter row).
+            FoodsSortRow(
+                sort = state.sort,
+                onSortKey = vm::onSortKeyChange,
+                onToggleDirection = vm::onSortDirectionToggle
+            )
+
+            Spacer(Modifier.height(10.dp))
 
             LazyColumn(Modifier.fillMaxSize()) {
-                items(state.items, key = { it.food.id }) { item ->
-                    val preview = state.macroPreviewByFoodId[item.food.id]
+                items(state.rows, key = { it.foodId }) { row ->
                     FoodRow(
-                        food = item.food,
-                        goalFlags = item.goalFlags,
-                        preview
-                    ) {
-                        if (item.food.isRecipe) onEditRecipe(item.food.id) else onEditFood(item.food.id)
-                    }
+                        row = row,
+                        onClick = {
+                            if (row.isRecipe) onEditRecipe(row.foodId) else onEditFood(row.foodId)
+                        }
+                    )
                     HorizontalDivider()
                 }
             }
@@ -156,30 +163,65 @@ fun FoodsListScreen(
 }
 
 @Composable
+private fun FoodsSortRow(
+    sort: FoodSortState,
+    onSortKey: (FoodSortKey) -> Unit,
+    onToggleDirection: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Sort:",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+
+        TextButton(onClick = { expanded = true }) {
+            Text("${sort.key.label} • ${sort.direction.label}")
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        IconButton(onClick = onToggleDirection) {
+            Icon(
+                painter = painterResource(R.drawable.priority_arrows), // replace if needed
+                contentDescription = "Toggle sort direction"
+            )
+        }
+    }
+
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        FoodSortKey.entries.forEach { key ->
+            DropdownMenuItem(
+                text = { Text(key.label) },
+                onClick = {
+                    onSortKey(key)
+                    expanded = false
+                }
+            )
+        }
+    }
+}
+
+@Composable
 private fun FoodRow(
-    food: Food,
-    goalFlags: FoodGoalFlagsEntity?,
-    preview: FoodMacroPreviewUi?,
+    row: FoodsListRowUiModel,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    //to avoid allocating a new FoodImageStorage on each recomposition
     val storage = remember(context) { FoodImageStorage(context) }
 
-    // Load blurred banner derivative (if it exists). This is app-private cache, not Gallery.
-    val blurBitmapState = produceState<Bitmap?>(initialValue = null, key1 = food.id) {
-        val storage = FoodImageStorage(context)
-
-        val bannerFile = storage.bannerJpegFile(food.id)
-        val blurFile = storage.bannerBlurWebpFile(food.id)
+    val blurBitmapState = produceState<Bitmap?>(initialValue = null, key1 = row.foodId) {
+        val bannerFile = storage.bannerJpegFile(row.foodId)
+        val blurFile = storage.bannerBlurWebpFile(row.foodId)
 
         value = withContext(Dispatchers.IO) {
-            // If cache was flushed, recreate blur from the master banner.
             if (!blurFile.exists() && bannerFile.exists()) {
-                storage.ensureBlurDir(food.id)
-
-                // reuse the same blur algorithm you already use in BannerCaptureSheet
-                // (preferably call the same function; if not accessible, copy that function into FoodRow file)
+                storage.ensureBlurDir(row.foodId)
                 generateBlurDerivative(
                     inputJpeg = bannerFile,
                     outputWebp = blurFile,
@@ -188,32 +230,23 @@ private fun FoodRow(
                 )
             }
 
-            if (blurFile.exists()) {
-                BitmapFactory.decodeFile(blurFile.absolutePath)
-            } else {
-                null
-            }
+            if (blurFile.exists()) BitmapFactory.decodeFile(blurFile.absolutePath) else null
         }
     }
-
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
-        // Background (subtle) when available
         blurBitmapState.value?.let { bmp ->
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
-                modifier = Modifier
-                    .matchParentSize(),
-                // Banner is already 3:1; for safety we still crop.
+                modifier = Modifier.matchParentSize(),
                 contentScale = ContentScale.Crop,
                 alpha = 0.22f
             )
-            // A gentle scrim for text contrast
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -224,7 +257,7 @@ private fun FoodRow(
         ListItem(
             headlineContent = {
                 Text(
-                    text = food.name,
+                    text = row.name,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium
@@ -232,36 +265,59 @@ private fun FoodRow(
             },
             supportingContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Brand (if present)
-                    if (!food.brand.isNullOrBlank()) {
-                        Text(
-                            text = food.brand!!,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(6.dp))
-                    }
-
-                    FoodListChipsBlock(
-                        isRecipe = food.isRecipe,
-                        kcal = preview?.caloriesKcal?.round0() ?: "0",
-                        p = preview?.proteinG?.round1() ?: "0",
-                        c = preview?.carbsG?.round1() ?: "0",
-                        f = preview?.fatG?.round1() ?: "0",
-                        sugars = preview?.sugarsG?.round1(),
-                        onOpen = onClick,
+                    // Brand must always be visible (search candidate).
+                    Text(
+                        text = row.brandText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Calories per serving always visible; optional extra metric shown only for macro sort keys.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = row.caloriesPerServingText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1
+                        )
+
+                        row.extraMetricText?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             },
             trailingContent = {
-                // Gives the trailing icons breathing room and keeps them from feeling vertically cramped
                 Column(
                     modifier = Modifier.padding(top = 2.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    FoodGoalFlagsStrip(goalFlags)
+                    // Optional compact type icon when cramped (recipe vs food)
+                    Icon(
+                        painter = painterResource(
+                            if (row.isRecipe) R.drawable.recipe else R.drawable.salad // replace with your icons
+                        ),
+                        contentDescription = if (row.isRecipe) "Recipe" else "Food",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    FoodGoalFlagsStrip(row.goalFlags)
                 }
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -312,67 +368,3 @@ internal fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
         }
     }
 }
-
-
-
-
-@Composable
-fun FoodListChipsBlock(
-    isRecipe: Boolean,
-    kcal: String,
-    p: String,
-    c: String,
-    f: String,
-    sugars: String? = null,
-    onOpen: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-
-        ChipGridRow(
-            left = { TinyChipFill(if (isRecipe) "Recipe" else "Food", onOpen) },
-            mid = { TinyChipFill("kcal $kcal", onOpen) },
-            right = { TinyChipFill("S ${sugars ?: "0"}", onOpen) } // keep width consistent
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        ChipGridRow(
-            left = { TinyChipFill("P $p g", onOpen) },
-            mid = { TinyChipFill("C $c g", onOpen) },
-            right = { TinyChipFill("F $f g", onOpen) }
-        )
-    }
-}
-
-@Composable
-private fun ChipGridRow(
-    left: @Composable () -> Unit,
-    mid: @Composable () -> Unit,
-    right: @Composable () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Box(Modifier.weight(1f)) { left() }
-        Box(Modifier.weight(1f)) { mid() }
-        Box(Modifier.weight(1f)) { right() }
-    }
-}
-
-@Composable
-private fun TinyChipFill(text: String, onOpen: () -> Unit) {
-    AssistChip(
-        onClick = onOpen,
-        enabled = true,
-        label = { Text(text, maxLines = 1) },
-        modifier = Modifier
-            .height(28.dp)
-            .fillMaxWidth() // <- key: chip fills its grid cell
-    )
-}
-
-
-private fun Double.round0() = toInt().toString()
-private fun Double.round1() = "%,.1f".format(this).replace(",", "")

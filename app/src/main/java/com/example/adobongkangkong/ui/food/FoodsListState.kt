@@ -5,15 +5,30 @@ import com.example.adobongkangkong.domain.model.Food
 
 enum class FoodsFilter { ALL, FOODS_ONLY, RECIPES_ONLY }
 
+enum class FoodSortKey(val label: String) {
+    NAME("Name"),
+    CALORIES("Calories"),
+    PROTEIN("Protein"),
+    CARBS("Carbs"),
+    FAT("Fat"),
+    SUGAR("Sugar"), // optional / nice-to-have
+}
+
+enum class SortDirection(val label: String) { ASC("Asc"), DESC("Desc") }
+
+data class FoodSortState(
+    val key: FoodSortKey = FoodSortKey.NAME,
+    val direction: SortDirection = SortDirection.ASC,
+) {
+    val showExtraMetricOnRow: Boolean
+        get() = key in setOf(FoodSortKey.PROTEIN, FoodSortKey.CARBS, FoodSortKey.FAT, FoodSortKey.SUGAR)
+}
+
 data class FoodsListState(
     val query: String = "",
     val filter: FoodsFilter = FoodsFilter.ALL,
-    val items: List<FoodListItemUiModel> = emptyList(),
-    // DO NOT TOUCH THIS (future-you note):
-    // Macro previews are computed in the VM as a separate map keyed by foodId.
-    // We intentionally keep this out of FoodListItemUiModel for now to avoid
-    // forcing a specific loading strategy into UI code.
-    val macroPreviewByFoodId: Map<Long, FoodMacroPreviewUi> = emptyMap(),
+    val sort: FoodSortState = FoodSortState(),
+    val rows: List<FoodsListRowUiModel> = emptyList(),
 )
 
 /** Lightweight macro preview for list rows (per current serving). */
@@ -37,4 +52,15 @@ data class FoodListItemUiModel(
     //
     // See NutrientBasisScaler + its tests before adding anything here.
     // val macroPreview: FoodMacroPreviewUi?
+)
+
+
+data class FoodsListRowUiModel(
+    val foodId: Long,
+    val name: String,
+    val brandText: String, // must always be visible
+    val caloriesPerServingText: String, // must always be visible
+    val extraMetricText: String?, // shown only when sorting by macro (not calories)
+    val isRecipe: Boolean,
+    val goalFlags: FoodGoalFlagsEntity?,
 )
