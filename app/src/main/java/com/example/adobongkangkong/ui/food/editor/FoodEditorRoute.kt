@@ -23,6 +23,7 @@ fun FoodEditorRoute(
     bannerCaptureController: BannerCaptureController,
 ) {
     val state by viewModel.state.collectAsState()
+    val didDelete by viewModel.didDelete.collectAsState()
     LaunchedEffect(Unit) {
         Log.d("Meow", "FOOD_EDITOR_ROUTE vm=${System.identityHashCode(viewModel)}")
     }
@@ -33,6 +34,10 @@ fun FoodEditorRoute(
 
     LaunchedEffect(foodId, initialName) {
         viewModel.load(foodId = foodId, initialName = initialName)
+    }
+
+    LaunchedEffect(didDelete) {
+        if (didDelete) onBack()
     }
 
     FoodEditorScreen(
@@ -63,7 +68,7 @@ fun FoodEditorRoute(
         onSave = {
             viewModel.save { _ -> onDone() }
         },
-        onDeleteFood = null,
+        onDeleteFood = { viewModel.deleteFood() },
 
         aliasSheetNutrientName = aliasName,
         aliasSheetAliases = aliases,
@@ -80,7 +85,7 @@ fun FoodEditorRoute(
         onBarcodeScanned = viewModel::onBarcodeScanned,
         onPickBarcodeCandidate = viewModel::onPickBarcodeCandidate,
 
-    )
+        )
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 

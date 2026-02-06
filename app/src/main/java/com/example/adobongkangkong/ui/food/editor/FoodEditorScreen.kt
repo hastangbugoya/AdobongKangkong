@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -113,7 +114,14 @@ fun FoodEditorScreen(
     onBarcodeScanned: (String) -> Unit,
     onPickBarcodeCandidate: (Long) -> Unit,
 
+    // Delete food
+    onDelete = { viewModel.deleteFood() }
+
     ) {
+
+    val didDelete by viewModel.didDelete.collectAsState()
+    val deleteBlocked by viewModel.deleteBlockedFlow.collectAsState()
+
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
             .map { it.nutrientId }
@@ -445,6 +453,29 @@ fun FoodEditorScreen(
                         )
                     }
                 }
+
+                item {
+                    Button(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete")
+                    }
+                }
+            }
+        }
+
+        LaunchedEffect(didDelete) {
+            if (didDelete) {
+                onBack()
+            }
+        }
+
+        LaunchedEffect(deleteBlocked) {
+            if (deleteBlocked) {
+                snackbarHostState.showSnackbar(
+                    message = "Food is used in one or more recipes and cannot be deleted"
+                )
             }
         }
     }

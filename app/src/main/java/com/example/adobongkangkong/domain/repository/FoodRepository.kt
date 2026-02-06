@@ -14,5 +14,13 @@ interface FoodRepository {
     suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food?
 
     suspend fun isFoodsEmpty(): Boolean
+
+    /**
+     * Deletes a food and all food-owned data (nutrients, goal flags).
+     *
+     * @return true if deleted, false if blocked (e.g., food is referenced by a recipe).
+     */
+    suspend fun deleteFood(foodId: Long): Boolean
 }
+
 

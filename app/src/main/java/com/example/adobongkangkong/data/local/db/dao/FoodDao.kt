@@ -24,6 +24,9 @@ interface FoodDao {
     @Query("SELECT * FROM foods WHERE id = :id")
     suspend fun getById(id: Long): FoodEntity?
 
+    @Query("DELETE FROM foods WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query("SELECT * FROM foods WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<FoodEntity>
 

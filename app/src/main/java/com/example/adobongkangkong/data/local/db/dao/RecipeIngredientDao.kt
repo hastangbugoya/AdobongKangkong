@@ -20,6 +20,12 @@ interface RecipeIngredientDao {
     suspend fun deleteForRecipe(recipeId: Long)
 
     /**
+     * Used for referential-integrity checks (e.g., block deleting foods that are used by recipes).
+     */
+    @Query("SELECT COUNT(*) FROM recipe_ingredient WHERE foodId = :foodId")
+    suspend fun countRecipesUsingFood(foodId: Long): Int
+
+    /**
      * Sets ingredient amount using grams.
      * Enforces mutual exclusivity by nulling [amountServings].
      */

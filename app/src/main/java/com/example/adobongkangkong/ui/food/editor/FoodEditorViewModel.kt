@@ -11,6 +11,7 @@ import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
+import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
@@ -43,6 +44,7 @@ class FoodEditorViewModel @Inject constructor(
     private val getData: GetFoodEditorDataUseCase,
     private val searchNutrients: SearchNutrientsUseCase,
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
+    private val foodRepo: FoodRepository,
     private val nutrientAliasRepo: NutrientAliasRepository,
     private val flagsRepo: FoodGoalFlagsRepository,
     private val searchUsdaByBarcode: SearchUsdaFoodsByBarcodeUseCase,
@@ -58,6 +60,9 @@ class FoodEditorViewModel @Inject constructor(
 
     private val aliasSheetMessageFlow = MutableStateFlow<String?>(null)
     val aliasSheetMessage: StateFlow<String?> = aliasSheetMessageFlow
+
+    private val didDeleteFlow = MutableStateFlow(false)
+    val didDelete: StateFlow<Boolean> = didDeleteFlow
 
     private val aliasSheetNutrientIdFlow = MutableStateFlow<Long?>(null)
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
@@ -220,10 +225,10 @@ class FoodEditorViewModel @Inject constructor(
             isRecipe = false,
             stableId = stableId,
         )
-            // Decide default basis for MANUAL foods created/edited in the editor.
-            // If we can express the food in grams (either the servingUnit is grams OR the user provided grams-per-unit),
-            // store nutrients as PER_100G. Otherwise store as a serving-based snapshot (USDA_REPORTED_SERVING).
-            val defaultBasisType: BasisType =
+        // Decide default basis for MANUAL foods created/edited in the editor.
+        // If we can express the food in grams (either the servingUnit is grams OR the user provided grams-per-unit),
+        // store nutrients as PER_100G. Otherwise store as a serving-based snapshot (USDA_REPORTED_SERVING).
+        val defaultBasisType: BasisType =
             if (s.servingUnit == ServingUnit.G || (gramsPerServingUnit != null && gramsPerServingUnit > 0.0)) {
                 BasisType.PER_100G
             } else {
@@ -262,6 +267,31 @@ class FoodEditorViewModel @Inject constructor(
                 onDone(savedId)
             } catch (t: Throwable) {
                 update { it.copy(errorMessage = t.message ?: "Failed to save food.") }
+            } finally {
+                update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    fun deleteFood() {
+        val foodId = _state.value.foodId ?: return
+
+        viewModelScope.launch {
+            // Reuse isSaving to disable actions while deleting.
+            update { it.copy(isSaving = true, errorMessage = null) }
+            try {
+                val deleted = foodRepo.deleteFood(foodId)
+                if (deleted) {
+                    didDeleteFlow.value = true
+                } else {
+                    update {
+                        it.copy(
+                            errorMessage = "Cannot delete: this food is used in one or more recipes."
+                        )
+                    }
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to delete food.") }
             } finally {
                 update { it.copy(isSaving = false) }
             }
