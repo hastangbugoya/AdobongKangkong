@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,7 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -61,6 +59,16 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 
+/**
+ * FoodEditorScreen (stateless)
+ *
+ * @since 2026-02-05
+ *
+ * Notes for future-you:
+ * - Keep this composable stateless (no ViewModel calls).
+ * - Delete MUST be triggered only via `onDeleteFood?.invoke()`.
+ * - Modal UI blocks (barcode picker, exit dialog, alias sheet) must live inside this function body.
+ */
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,15 +121,7 @@ fun FoodEditorScreen(
     onCloseBarcodeScanner: () -> Unit,
     onBarcodeScanned: (String) -> Unit,
     onPickBarcodeCandidate: (Long) -> Unit,
-
-    // Delete food
-    onDelete = { viewModel.deleteFood() }
-
-    ) {
-
-    val didDelete by viewModel.didDelete.collectAsState()
-    val deleteBlocked by viewModel.deleteBlockedFlow.collectAsState()
-
+) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
             .map { it.nutrientId }
@@ -142,6 +142,48 @@ fun FoodEditorScreen(
     BackHandler { requestExit() }
     // ----------------------------------------------------------------------
 
+    // ---------------- Barcode picker overlay (must be inside composable) ---
+    if (state.isBarcodeScannerOpen) {
+        // If you have camera scanning UI elsewhere, keep it driven by state and callbacks.
+        // This dialog is the "pick a match" flow when candidates > 1.
+        if (state.barcodePickItems.size > 1) {
+            AlertDialog(
+                onDismissRequest = onCloseBarcodeScanner,
+                title = { Text("Pick a match") },
+                text = {
+                    LazyColumn {
+                        items(state.barcodePickItems, key = { it.fdcId }) { item ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPickBarcodeCandidate(item.fdcId) }
+                                    .padding(vertical = 10.dp)
+                            ) {
+                                Text(item.description.ifBlank { "(No description)" })
+                                val line2 = listOf(item.brand, item.servingText, item.gtinUpc)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" • ")
+                                if (line2.isNotBlank()) {
+                                    Text(
+                                        line2,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = onCloseBarcodeScanner) { Text("Cancel") }
+                }
+            )
+        }
+    }
+    // ----------------------------------------------------------------------
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -153,12 +195,6 @@ fun FoodEditorScreen(
                     )
                     val canCaptureBanner = state.foodId != null
                     Spacer(Modifier.width(16.dp))
-//                    TextButton(
-//                        enabled = canCaptureBanner,
-//                        onClick = { bannerCaptureController.open(state.foodId!!) }
-//                    ) {
-//                        Text("Open banner camera")
-//                    }
 
                     if (state.foodId == null) {
                         Text(
@@ -167,11 +203,13 @@ fun FoodEditorScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
                 },
                 navigationIcon = {
                     IconButton(onClick = ::requestExit) {
-                        Icon(painter = painterResource(R.drawable.angle_circle_left), contentDescription = "Back")
+                        Icon(
+                            painter = painterResource(R.drawable.angle_circle_left),
+                            contentDescription = "Back"
+                        )
                     }
                 }
             )
@@ -181,7 +219,7 @@ fun FoodEditorScreen(
                 isSaving = state.isSaving,
                 errorMessage = state.errorMessage,
                 showDelete = (onDeleteFood != null && state.foodId != null),
-                onDelete = { onDeleteFood?.invoke() },
+                onDelete = { onDeleteFood?.invoke() }, // ✅ only uses passed callback
                 onSave = onSave,
                 bannerCaptureController = bannerCaptureController
             )
@@ -211,14 +249,14 @@ fun FoodEditorScreen(
                     val canCaptureBanner = bannerOwnerId != null
 
                     if (canCaptureBanner) {
-                        val file = remember(bannerOwnerId ) {
+                        val file = remember(bannerOwnerId) {
                             com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
-                                .bannerJpegFile(bannerOwnerId )
+                                .bannerJpegFile(bannerOwnerId)
                         }
 
                         val bannerBitmapState = produceState<android.graphics.Bitmap?>(
                             initialValue = null,
-                            key1 = bannerOwnerId ,
+                            key1 = bannerOwnerId,
                             key2 = bannerRefreshTick
                         ) {
                             value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
@@ -238,7 +276,7 @@ fun FoodEditorScreen(
                                 )
 
                                 IconButton(
-                                    onClick = { bannerCaptureController.open(bannerOwnerId ) },
+                                    onClick = { bannerCaptureController.open(bannerOwnerId) },
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
                                         .padding(8.dp)
@@ -251,6 +289,7 @@ fun FoodEditorScreen(
                             }
                         }
                     }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -282,10 +321,7 @@ fun FoodEditorScreen(
                             )
                         }
                     }
-
                 }
-
-
 
                 item {
                     OutlinedTextField(
@@ -306,6 +342,7 @@ fun FoodEditorScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -361,32 +398,31 @@ fun FoodEditorScreen(
                     )
                 }
 
-                // Group nutrient rows by category for readability and large-font safety.
                 val grouped = state.nutrientRows.groupBy { it.category }
 
                 grouped.entries
-                .sortedBy { it.key.name } // optional: stable ordering by enum name
-                .forEach { (category, rows) ->
-                    item {
-                        Text(
-                            text = category.labelForUi(),
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                    .sortedBy { it.key.name }
+                    .forEach { (category, rows) ->
+                        item {
+                            Text(
+                                text = category.labelForUi(),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        items(
+                            items = rows,
+                            key = { it.nutrientId }
+                        ) { row ->
+                            NutrientRowEditor(
+                                row = row,
+                                onAmountChange = { newValue ->
+                                    onNutrientAmountChange(row.nutrientId, newValue)
+                                },
+                                onRemove = { onRemoveNutrient(row.nutrientId) },
+                                isTablet = isTablet
+                            )
+                        }
                     }
-                    items(
-                        items = rows,
-                        key = { it.nutrientId }
-                    ) { row ->
-                        NutrientRowEditor(
-                            row = row,
-                            onAmountChange = { newValue ->
-                                onNutrientAmountChange(row.nutrientId, newValue)
-                            },
-                            onRemove = { onRemoveNutrient(row.nutrientId) },
-                            isTablet = isTablet
-                        )
-                    }
-                }
 
                 item { HorizontalDivider() }
 
@@ -402,7 +438,6 @@ fun FoodEditorScreen(
                         value = state.nutrientSearchQuery,
                         onValueChange = onNutrientSearchQueryChange,
                         label = { Text("Search nutrients") },
-//                        leadingIcon = { Icon(painter = painterResource(R.drawable.circle_ellipsis_vertical), contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -430,7 +465,6 @@ fun FoodEditorScreen(
                             onManageAliases = { onOpenAliasSheet(item.id, item.name) }
                         )
                     }
-
                 } else if (state.nutrientSearchQuery.isNotBlank()) {
                     item {
                         Text(
@@ -441,7 +475,6 @@ fun FoodEditorScreen(
                     }
                 }
 
-                // Optional debugging info (stableId) — keep subtle.
                 if (!state.stableId.isNullOrBlank()) {
                     item {
                         Text(
@@ -453,76 +486,11 @@ fun FoodEditorScreen(
                         )
                     }
                 }
-
-                item {
-                    Button(
-                        onClick = onDelete,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Delete")
-                    }
-                }
-            }
-        }
-
-        LaunchedEffect(didDelete) {
-            if (didDelete) {
-                onBack()
-            }
-        }
-
-        LaunchedEffect(deleteBlocked) {
-            if (deleteBlocked) {
-                snackbarHostState.showSnackbar(
-                    message = "Food is used in one or more recipes and cannot be deleted"
-                )
             }
         }
     }
 
-
-
-
-    if (state.isBarcodeScannerOpen) {
-        // Picker overlay (no frills) once we have candidates and > 1
-        if (state.barcodePickItems.size > 1) {
-            AlertDialog(
-                onDismissRequest = onCloseBarcodeScanner,
-                title = { Text("Pick a match") },
-                text = {
-                    LazyColumn {
-                        items(state.barcodePickItems, key = { it.fdcId }) { item ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onPickBarcodeCandidate(item.fdcId) }
-                                    .padding(vertical = 10.dp)
-                            ) {
-                                Text(item.description.ifBlank { "(No description)" })
-                                val line2 = listOf(item.brand, item.servingText, item.gtinUpc)
-                                    .filter { it.isNotBlank() }
-                                    .joinToString(" • ")
-                                if (line2.isNotBlank()) {
-                                    Text(
-                                        line2,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            HorizontalDivider()
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = onCloseBarcodeScanner) { Text("Cancel") }
-                }
-            )
-        }
-    }
-
-
+    // ---------------- Exit dialog (must be inside composable) -------------
     if (showExitDialog.value) {
         AlertDialog(
             onDismissRequest = { showExitDialog.value = false },
@@ -550,7 +518,9 @@ fun FoodEditorScreen(
             }
         )
     }
+    // ----------------------------------------------------------------------
 
+    // ---------------- Alias sheet (must be inside composable) --------------
     if (aliasSheetNutrientName != null) {
         ManageNutrientAliasesBottomSheet(
             nutrientDisplayName = aliasSheetNutrientName,
@@ -561,6 +531,7 @@ fun FoodEditorScreen(
             onDismiss = onDismissAliasSheet
         )
     }
+    // ----------------------------------------------------------------------
 }
 
 @Composable
@@ -579,52 +550,6 @@ private fun SectionHeader(
         }
     }
 }
-//
-//@Composable
-//private fun FlagsSection(
-//    favorite: Boolean,
-//    eatMore: Boolean,
-//    limit: Boolean,
-//    onToggleFavorite: (Boolean) -> Unit,
-//    onToggleEatMore: (Boolean) -> Unit,
-//    onToggleLimit: (Boolean) -> Unit,
-//    isTablet: Boolean
-//) {
-//    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-//        Text(text = "Flags", style = MaterialTheme.typography.titleMedium)
-//
-//        if (isTablet) {
-//            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-//                FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.weight(1f))
-//                FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.weight(1f))
-//                FlagCheck("Limit", limit, onToggleLimit, Modifier.weight(1f))
-//            }
-//        } else {
-//            FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.fillMaxWidth())
-//            FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.fillMaxWidth())
-//            FlagCheck("Limit", limit, onToggleLimit, Modifier.fillMaxWidth())
-//        }
-//    }
-//}
-//
-//@Composable
-//private fun FlagCheck(
-//    label: String,
-//    checked: Boolean,
-//    onChecked: (Boolean) -> Unit,
-//    modifier: Modifier
-//) {
-//    Row(
-//        modifier = modifier
-//            .clickable { onChecked(!checked) }
-//            .padding(vertical = 6.dp),
-//        verticalAlignment = Alignment.CenterVertically
-//    ) {
-//        Checkbox(checked = checked, onCheckedChange = onChecked)
-//        Spacer(Modifier.width(8.dp))
-//        Text(text = label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-//    }
-//}
 
 @Composable
 private fun NutrientRowEditor(
@@ -633,9 +558,6 @@ private fun NutrientRowEditor(
     onRemove: () -> Unit,
     isTablet: Boolean
 ) {
-    // Layout that survives large fonts:
-    // Line 1: name + unit + delete icon
-    // Line 2: amount field (full width on phone; half width on tablet)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -735,8 +657,6 @@ private fun NutrientSearchResultRow(
     }
 }
 
-
-
 @Composable
 private fun ServingSection(
     servingSize: String,
@@ -784,7 +704,6 @@ private fun ServingSection(
             )
         }
 
-        // gramsPerServingUnit is critical for non-gram units; keep it prominent and full-width.
         OutlinedTextField(
             value = gramsPerServingUnit,
             onValueChange = onGramsPerServingChange,
@@ -803,11 +722,6 @@ private fun ServingSection(
     }
 }
 
-/**
- * Replace this dropdown with your existing ServingUnit picker implementation.
- * I’m keeping it minimal and compile-safe: a clickable text that cycles is NOT ideal.
- * If you already have a proper dropdown composable, swap it in here.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServingUnitDropdown(
@@ -854,7 +768,6 @@ private fun ServingUnitDropdown(
         }
     }
 }
-
 
 /**
  * Sticky bottom bar: always reachable with big fonts and long forms.
