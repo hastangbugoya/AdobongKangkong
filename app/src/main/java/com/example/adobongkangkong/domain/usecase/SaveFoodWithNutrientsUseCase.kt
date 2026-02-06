@@ -143,7 +143,7 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
             }
         }
 
-        return grams.takeIf { it != null && it > 0.0 }
+        return grams?.takeIf { it > 0.0 }
     }
 
     private fun computeMlPerServing(food: Food): Double? {

@@ -345,7 +345,7 @@ internal fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
                 painter = painterResource(R.drawable.star),
                 contentDescription = "Favorite",
                 modifier = Modifier.size(18.dp),
-                tint = FavoriteYellow
+//                tint = FavoriteYellow
             )
         }
 
@@ -354,7 +354,7 @@ internal fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
                 painter = painterResource(R.drawable.social_network),
                 contentDescription = "Eat more",
                 modifier = Modifier.size(18.dp),
-                tint = EatMoreGreen,
+//                tint = EatMoreGreen,
             )
         }
 
@@ -363,7 +363,7 @@ internal fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
                 painter = painterResource(R.drawable.triangle_warning),
                 contentDescription = "Limit",
                 modifier = Modifier.size(18.dp),
-                tint = LimitRed
+//                tint = LimitRed
             )
         }
     }

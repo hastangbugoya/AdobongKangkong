@@ -20,7 +20,7 @@ data class FoodEditorState(
     val name: String = "",
     val brand: String = "",
     val servingSize: String = "1.0",
-    val servingUnit: ServingUnit = ServingUnit.G,
+    val servingUnit: ServingUnit = ServingUnit.SERVING,
     val gramsPerServingUnit: String = "",
     val servingsPerPackage: String = "",
 

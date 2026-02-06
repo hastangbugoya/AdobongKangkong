@@ -118,7 +118,7 @@ class FoodEditorViewModel @Inject constructor(
                 name = food?.name ?: (initialName ?: ""),
                 brand = food?.brand.orEmpty(),
                 servingSize = food?.servingSize?.toString() ?: "1.0",
-                servingUnit = food?.servingUnit ?: ServingUnit.G,
+                servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
                 gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() }
                     ?: food?.gramsPerServingUnit?.toString().orEmpty(),
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
