@@ -1,0 +1,13 @@
+flowchart LR
+%% End to End Nutrient Flow
+%% Date: 2026-02-05
+
+NC["Nutrient Catalog\nNutrientEntity"] --> FA["Nutrient Aliases\nNutrientAliasEntity"]
+NC --> FN["Food Nutrients\nFoodNutrientEntity"]
+F2["Food or Recipe\nFoodEntity"] --> FN
+F2 --> LE["Log Entry\nLogEntryEntity"]
+LE -->|snapshot nutrientsJson| DASH["Dashboard and Timeline"]
+NC --> UT["User Targets\nUserNutrientTargetEntity"]
+NC --> UP["User Pinned\nUserPinnedNutrientEntity"]
+UT --> DASH
+UP --> DASH

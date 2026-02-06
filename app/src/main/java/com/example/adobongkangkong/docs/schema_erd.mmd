@@ -1,0 +1,138 @@
+%% =====================================================================
+%% AdobongKangkong – Consolidated Canonical ERD + Appendices (Mermaid)
+%% Source-of-truth: Room @Entity files + NutriDatabase registration
+%% Date: 2026-02-05
+%% =====================================================================
+
+%% ---------------------------------------------------------------------
+%% 1) Canonical ERD (core schema)
+%% ---------------------------------------------------------------------
+erDiagram
+    foods ||--o{ food_nutrients : has
+    foods ||--o| food_goal_flags : has
+    foods ||--o{ recipes : represents
+    recipes ||--o{ recipe_ingredients : contains
+    foods ||--o{ recipe_ingredients : used_as
+
+    %% Nutrient catalog / aliasing / user settings
+    nutrients ||--o{ food_nutrients : referenced_by
+    nutrients ||--o{ nutrient_aliases : has
+    nutrients ||--o| user_nutrient_targets : targeted_by
+    nutrients ||--o{ user_pinned_nutrients : pinned_as
+
+    %% Logging + batches (logical refs)
+    foods ||--o{ log_entries : "logical (stableId -> foodStableId)"
+    recipe_batches ||--o{ log_entries : "logical (id -> recipeBatchId)"
+    recipes ||--o{ recipe_batches : "logical (recipes.id -> recipe_batches.recipeId)"
+    foods ||--o{ recipe_batches : "logical snapshot (foods.id -> recipe_batches.batchFoodId)"
+
+    foods {
+        long id PK
+        string stableId
+        string name
+        string brand
+        double servingSize
+        ServingUnit servingUnit
+        string householdServingText
+        double servingsPerPackage
+        double gramsPerServingUnit
+        boolean isRecipe
+        boolean isLowSodium
+        long usdaFdcId
+        string usdaGtinUpc
+        string usdaPublishedDate
+        double usdaServingSize
+        ServingUnit usdaServingUnit
+        string usdaHouseholdServingText
+    }
+
+    food_goal_flags {
+        long foodId PK
+        boolean eatMore
+        boolean limit
+        boolean favorite
+        Instant updatedAt
+    }
+
+    food_nutrients {
+        long foodId PK, FK
+        long nutrientId PK, FK
+        BasisType basisType PK
+        double nutrientAmountPerBasis
+        NutrientUnit unit
+    }
+
+    nutrients {
+        long id PK
+        string code
+        string displayName
+        NutrientUnit unit
+        NutrientCategory category
+        boolean isEnergy
+        boolean isMacro
+        boolean isVitamin
+        boolean isMineral
+        boolean isTrackedByDefault
+    }
+
+    nutrient_aliases {
+        long id PK
+        long nutrientId FK
+        string aliasKey
+        string aliasDisplay
+    }
+
+    user_nutrient_targets {
+        long nutrientId PK, FK
+        double minValue
+        double targetValue
+        double maxValue
+        boolean enabled
+        Instant updatedAt
+    }
+
+    user_pinned_nutrients {
+        long slotIndex PK
+        long nutrientId FK
+        Instant updatedAt
+    }
+
+    recipes {
+        long id PK
+        string stableId
+        long foodId FK
+        string name
+        double servingsYield
+        double totalYieldGrams
+        Instant createdAt
+    }
+
+    recipe_ingredients {
+        long id PK
+        long recipeId FK
+        long foodId FK
+        double amountServings
+        double amountGrams
+        int sortOrder
+    }
+
+    recipe_batches {
+        long id PK
+        long recipeId
+        long batchFoodId
+        double cookedYieldGrams
+        double servingsYieldUsed
+        Instant createdAt
+    }
+
+    log_entries {
+        long id PK
+        Instant timestamp
+        string itemName
+        string foodStableId
+        double amount
+        LogUnit unit
+        long recipeBatchId
+        double gramsPerServingCooked
+        string nutrientsJson
+    }

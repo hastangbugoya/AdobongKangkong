@@ -1,0 +1,18 @@
+flowchart LR
+%% Flag Ownership (why flags are keyed by foodId)
+%% Date: 2026-02-05
+
+F["foods\nid PK\nisRecipe true means this food is a recipe"] -->|identity bridge| R["recipes\nfoodId links to foods id"]
+F -->|keyed by foodId| GF["food goal flags\nfoodId PK\nfavorite eatMore limit"]
+
+subgraph Contract["Locked in contract"]
+  C1["FoodGoalFlagsEntity keyed by foodId"]
+  C2["Recipes are represented by a Food row"]
+  C3["Recipe flags are saved and loaded using recipe foodId"]
+end
+
+C1 --> GF
+C2 --> F
+C3 --> GF
+
+U["CreateRecipeUseCase option A\nreturns new recipe foodId"] -->|use returned foodId| GF

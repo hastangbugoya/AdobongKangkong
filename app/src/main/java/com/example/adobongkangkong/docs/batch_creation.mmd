@@ -1,0 +1,10 @@
+flowchart TD
+%% Recipe Batch Creation Flow
+%% Date: 2026-02-05
+
+X["CreateRecipeBatchUseCase invoke\ninputs recipeId cookedYieldGrams servingsYieldUsed"] --> V{"cookedYieldGrams greater than zero"}
+V -- NO --> E["throw IllegalArgumentException"]
+V -- YES --> S1["CreateSnapshotFoodFromRecipeUseCase execute"]
+S1 --> BF["batchFoodId snapshot food id"]
+BF --> S2["Insert RecipeBatchEntity\nrecipeId batchFoodId cookedYieldGrams servingsYieldUsed createdAt"]
+S2 --> OUT["return batchId recipe_batches id"]

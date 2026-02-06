@@ -1,0 +1,21 @@
+flowchart TD
+%% Delete Rules (manual vs cascade)
+%% Date: 2026-02-05
+%% Legend:
+%%   solid arrow = manual delete operations (repo/use case)
+%%   dotted arrow = DB cascade (Room FK onDelete=CASCADE)
+%%   block = guard condition prevents deletion
+
+A["Request deleteFood foodId"] --> G{"Referenced in recipe ingredients"}
+G -- YES --> B["BLOCK DELETE\nReturn false"]
+G -- NO --> N["Proceed"]
+
+N --> M1["MANUAL delete food goal flags\nwhere foodId equals id"]
+N --> M2["MANUAL delete food nutrients\nwhere foodId equals id\n(optional redundancy)"]
+N --> M3["MANUAL delete foods\nwhere id equals foodId"]
+
+M3 -.-> C["DB CASCADE delete food nutrients\nfood_nutrients foodId -> foods id"]
+
+L1["NOT CASCADED today\nrecipes foodId\nrecipe batches batchFoodId\nlog entries foodStableId"]:::note
+
+classDef note fill:#f6f6f6,stroke:#999,color:#333,stroke-dasharray: 3 3;
