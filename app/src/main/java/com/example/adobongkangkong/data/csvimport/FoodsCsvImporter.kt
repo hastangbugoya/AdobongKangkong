@@ -3,6 +3,7 @@ package com.example.adobongkangkong.data.csvimport
 import android.content.res.AssetManager
 import android.util.Log
 import androidx.room.withTransaction
+import com.example.adobongkangkong.BuildConfig
 import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
@@ -467,6 +468,10 @@ class FoodsCsvImporter @Inject constructor(
                 val row = CsvParser.parseLine(lines[i])
 
                 val name = cellNormalized(row, headerIndex, "food")?.trim().orEmpty()
+                assertSingleBasisPerNutrient(
+                    foodName = name,
+                    rows = foodNutrients
+                )
                 if (name.isBlank()) {
                     skipped++
                     continue
@@ -687,6 +692,36 @@ class FoodsCsvImporter @Inject constructor(
         (lines.size - 1).coerceAtLeast(0)
     }
 }
+
+private fun assertSingleBasisPerNutrient(
+    foodName: String,
+    rows: List<FoodNutrientEntity>
+) {
+    if (!BuildConfig.DEBUG) return
+
+    val violations =
+        rows
+            .groupBy { it.nutrientId }
+            .mapNotNull { (nutrientId, group) ->
+                val basisTypes = group.map { it.basisType }.distinct()
+                if (basisTypes.size > 1) {
+                    "nutrientId=$nutrientId bases=$basisTypes"
+                } else null
+            }
+
+    check(violations.isEmpty()) {
+        buildString {
+            appendLine("CSV import invariant violated for food='$foodName'")
+            appendLine("Multiple basis rows detected for same nutrient:")
+            violations.forEach { appendLine(" - $it") }
+            appendLine()
+            appendLine("Rule: a nutrient must have ONLY ONE basis row.")
+            appendLine("If grams-per-serving exists → PER_100G only.")
+            appendLine("Otherwise → USDA_REPORTED_SERVING only.")
+        }
+    }
+}
+
 
 /**
  * ============================

@@ -14,4 +14,13 @@ data class FoodsListState(
 data class FoodListItemUiModel(
     val food: Food,
     val goalFlags: FoodGoalFlagsEntity?
+    // DO NOT FILL YET (future-you note):
+    // This is intentionally omitted for now.
+    // Nutrient / macro previews will likely be added here later once we decide:
+    //  - batch vs per-item loading
+    //  - macro-only vs full nutrient preview
+    //  - serving vs per-100g display rules
+    //
+    // See NutrientBasisScaler + its tests before adding anything here.
+    // val macroPreview: FoodMacroPreviewUi?
 )

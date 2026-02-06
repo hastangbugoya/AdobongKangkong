@@ -10,6 +10,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
@@ -119,12 +120,30 @@ class FoodEditorViewModel @Inject constructor(
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
                 nutrientRows = rows.map { r ->
+                    // DO NOT TOUCH THIS (future-you note):
+                    // Editor UI displays PER-SERVING. Storage is often canonical PER_100G.
+                    // Always convert canonical -> display using NutrientBasisScaler (see its tests).
+                    val servingSizeForDisplay = food?.servingSize ?: 1.0
+                    val gramsPerServingUnitForDisplay: Double? =
+                        when (food?.servingUnit) {
+                            ServingUnit.G -> 1.0
+                            else -> food?.gramsPerServingUnit
+                        }?.takeIf { it > 0.0 }
+
+                    val displayAmount = NutrientBasisScaler
+                        .canonicalToDisplayPerServing(
+                            storedAmount = r.amount,
+                            storedBasis = r.basisType,
+                            servingSize = servingSizeForDisplay,
+                            gramsPerServingUnit = gramsPerServingUnitForDisplay
+                        ).amount
+
                     NutrientRowUi(
                         nutrientId = r.nutrient.id,
                         name = r.nutrient.displayName,
                         unit = r.nutrient.unit,
                         category = r.nutrient.category,
-                        amount = r.amount.toString()
+                        amount = displayAmount.toString()
                     )
                 },
                 favorite = flags?.favorite ?: false,
@@ -236,7 +255,28 @@ class FoodEditorViewModel @Inject constructor(
             }
         val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
-            val amount = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
+            val amountPerServing = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
+
+            // DO NOT TOUCH THIS (future-you note):
+            // Editor UI edits PER-SERVING values.
+            // If we persist canonical PER_100G, we MUST invert the display scaling here.
+            val gramsPerServingUnitEffective: Double? =
+                when (s.servingUnit) {
+                    ServingUnit.G -> 1.0
+                    else -> gramsPerServingUnit
+                }?.takeIf { it > 0.0 }
+
+            val amountToStore =
+                if (defaultBasisType == BasisType.PER_100G) {
+                    NutrientBasisScaler.displayPerServingToCanonical(
+                        uiPerServingAmount = amountPerServing,
+                        canonicalBasis = BasisType.PER_100G,
+                        servingSize = servingSize,
+                        gramsPerServingUnit = gramsPerServingUnitEffective
+                    ).amount
+                } else {
+                    amountPerServing
+                }
 
             FoodNutrientRow(
                 nutrient = Nutrient(
@@ -246,7 +286,7 @@ class FoodEditorViewModel @Inject constructor(
                     unit = ui.unit,
                     category = ui.category
                 ),
-                amount = amount,
+                amount = amountToStore,
                 basisType = defaultBasisType,
                 basisGrams = if (defaultBasisType == BasisType.PER_100G) 100.0 else null
             )
