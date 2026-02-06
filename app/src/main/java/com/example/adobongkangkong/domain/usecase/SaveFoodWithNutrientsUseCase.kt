@@ -22,80 +22,160 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
         rows: List<FoodNutrientRow>
     ): Long {
 
-        val foodId = foods.upsert(food)
+        // Lock-in gramsPerServingUnit for mass units if user/csv left it blank.
+        // Meaning: grams per 1 unit of servingUnit (e.g. 1 oz -> 28.3495g).
+        val foodToPersist = food.withLockedInGroundingIfPossible()
 
-        val canonicalRows = canonicalizeToSingleBasis(food, rows)
+        val foodId = foods.upsert(foodToPersist)
+
+        val canonicalRows = canonicalizeToSingleBasis(foodToPersist, rows)
 
         foodNutrients.replaceForFood(foodId, canonicalRows)
         return foodId
     }
 
+    private fun Food.withLockedInGroundingIfPossible(): Food {
+        val existing = this.gramsPerServingUnit?.takeIf { it > 0.0 }
+        if (existing != null) return this
+
+        // Only lock in for mass units where the conversion is deterministic.
+        // For ServingUnit.G, gramsPerServingUnit is unnecessary; keep null.
+        if (this.servingUnit.isMassUnit() && this.servingUnit != ServingUnit.G) {
+            val gramsPer1Unit = this.servingUnit.toGrams(1.0)
+            if (gramsPer1Unit != null && gramsPer1Unit > 0.0) {
+                return this.copy(gramsPerServingUnit = gramsPer1Unit)
+            }
+        }
+
+        return this
+    }
+
     /**
-     * Ensures we persist a single row per (foodId, nutrientId) by choosing ONE basis:
-     * - PER_100G when the food's serving model can be grounded in grams
-     * - PER_100ML when the food's serving model can be grounded in milliliters
+     * Ensures we persist exactly ONE basis row per nutrient per food by choosing ONE target basis:
+     * - PER_100G when the food can be grounded in grams
+     * - PER_100ML when the food can be grounded in milliliters
      * - Otherwise USDA_REPORTED_SERVING (raw, not safely scalable)
+     *
+     * Also dedupes rows so there is exactly one row per nutrientId in the returned list.
      */
     private fun canonicalizeToSingleBasis(
         food: Food,
         rows: List<FoodNutrientRow>
     ): List<FoodNutrientRow> {
 
-        // If the serving unit is mass-based, we can compute grams-per-serving directly.
-        val gramsPerServing: Double? = when {
+        val gramsPerServing: Double? = computeGramsPerServing(food)
+        val mlPerServing: Double? = computeMlPerServing(food)
+
+        val targetBasis: BasisType =
+            when {
+                gramsPerServing != null -> BasisType.PER_100G
+                mlPerServing != null -> BasisType.PER_100ML
+                else -> BasisType.USDA_REPORTED_SERVING
+            }
+
+        val converted: List<FoodNutrientRow> =
+            when (targetBasis) {
+                BasisType.PER_100G -> {
+                    val factor = 100.0 / gramsPerServing!!
+                    rows.mapNotNull { row ->
+                        when (row.basisType) {
+                            BasisType.PER_100G ->
+                                row.copy(basisType = BasisType.PER_100G, basisGrams = 100.0)
+
+                            BasisType.USDA_REPORTED_SERVING ->
+                                row.copy(
+                                    basisType = BasisType.PER_100G,
+                                    amount = row.amount * factor,
+                                    basisGrams = 100.0
+                                )
+
+                            else -> null
+                        }
+                    }
+                }
+
+                BasisType.PER_100ML -> {
+                    val factor = 100.0 / mlPerServing!!
+                    rows.mapNotNull { row ->
+                        when (row.basisType) {
+                            BasisType.PER_100ML ->
+                                row.copy(basisType = BasisType.PER_100ML, basisGrams = 100.0)
+
+                            BasisType.USDA_REPORTED_SERVING ->
+                                row.copy(
+                                    basisType = BasisType.PER_100ML,
+                                    amount = row.amount * factor,
+                                    basisGrams = 100.0
+                                )
+
+                            else -> null
+                        }
+                    }
+                }
+
+                else -> {
+                    rows.map {
+                        it.copy(basisType = BasisType.USDA_REPORTED_SERVING, basisGrams = null)
+                    }
+                }
+            }
+
+        // Hard guarantee: ONE row per nutrientId (within the chosen basis).
+        // Preference order:
+        // 1) if any row was already in the target basis, keep that (stable)
+        // 2) else keep the first converted row (deterministic)
+        return converted
+            .groupBy { it.nutrient.id }
+            .mapNotNull { (_, group) ->
+                group.firstOrNull { it.basisType == targetBasis } ?: group.firstOrNull()
+            }
+    }
+
+    private fun computeGramsPerServing(food: Food): Double? {
+        val grams = when {
+            // mass units are deterministically grounded by servingSize+unit
             food.servingUnit.isMassUnit() -> food.servingUnit.toGrams(food.servingSize)
-            else -> food.gramsPerServingUnit?.takeIf { it > 0.0 }
-        }?.takeIf { it > 0.0 }
 
-        // If the serving unit is volume-based, we can compute ml-per-serving directly.
-        val mlPerServing: Double? =
-            (if (food.servingUnit.isVolumeUnit()) {
+            // non-mass grounded by grams-per-1-unit (e.g., 125g per bunch)
+            else -> {
+                val gramsPer1Unit = food.gramsPerServingUnit?.takeIf { it > 0.0 } ?: return null
+                food.servingSize * gramsPer1Unit
+            }
+        }
+
+        return grams.takeIf { it != null && it > 0.0 }
+    }
+
+    private fun computeMlPerServing(food: Food): Double? {
+        val ml =
+            if (food.servingUnit.isVolumeUnit()) {
                 food.servingUnit.toMilliliters(food.servingSize)
-            } else {
-                null
-            })?.takeIf { it > 0.0 }
+            } else null
 
-        val targetBasis: BasisType? = when {
-            gramsPerServing != null -> BasisType.PER_100G
-            mlPerServing != null -> BasisType.PER_100ML
-            else -> BasisType.USDA_REPORTED_SERVING
-        }
-
-        return when (targetBasis) {
-            BasisType.PER_100G -> {
-                val factor = 100.0 / gramsPerServing!!
-                rows.mapNotNull { row ->
-                    when (row.basisType) {
-                        BasisType.PER_100G -> row.copy(basisGrams = 100.0)
-                        BasisType.USDA_REPORTED_SERVING -> row.copy(
-                            basisType = BasisType.PER_100G,
-                            amount = row.amount * factor,
-                            basisGrams = 100.0
-                        )
-                        else -> null // ignore incompatible basis types
-                    }
-                }
-            }
-
-            BasisType.PER_100ML -> {
-                val factor = 100.0 / mlPerServing!!
-                rows.mapNotNull { row ->
-                    when (row.basisType) {
-                        BasisType.PER_100ML -> row.copy(basisGrams = 100.0)
-                        BasisType.USDA_REPORTED_SERVING -> row.copy(
-                            basisType = BasisType.PER_100ML,
-                            amount = row.amount * factor,
-                            basisGrams = 100.0
-                        )
-                        else -> null
-                    }
-                }
-            }
-
-            /*BasisType.USDA_REPORTED_SERVING*/ else -> rows.map { it.copy(basisType = BasisType.USDA_REPORTED_SERVING, basisGrams = null) }
-        }
+        return ml?.takeIf { it > 0.0 }
     }
 }
+
+/**
+ * FUTURE-YOU NOTE (2026-02-06):
+ *
+ * Canonical nutrients MUST be single-basis per nutrientId per food.
+ *
+ * - We persist exactly one basis row per nutrient (enforced here before replaceForFood()).
+ * - Target basis selection:
+ *     - If grounded in grams -> PER_100G
+ *     - Else if grounded in mL -> PER_100ML
+ *     - Else -> USDA_REPORTED_SERVING
+ *
+ * - IMPORTANT GRAMMING RULE:
+ *     - If servingUnit is mass: gramsPerServing = toGrams(servingSize)
+ *     - Else if gramsPerServingUnit exists: gramsPerServing = servingSize * gramsPerServingUnit
+ *       (gramsPerServingUnit means grams per 1 unit of servingUnit)
+ *
+ * - We may lock in gramsPerServingUnit for mass units when blank (e.g. oz -> 28.3495g per oz),
+ *   but we never overwrite a user-provided gramsPerServingUnit.
+ */
+
 
 /** 2025/02/03
  * ============================

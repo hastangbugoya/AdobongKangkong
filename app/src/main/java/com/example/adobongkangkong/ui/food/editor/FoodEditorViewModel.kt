@@ -110,7 +110,8 @@ class FoodEditorViewModel @Inject constructor(
                 food?.stableId
                     ?: current.stableId
                     ?: UUID.randomUUID().toString()
-
+            val servingSize = food?.servingSize ?: 1.0
+            val gramsPerServingUnit = food?.gramsPerServingUnit
             _state.value = current.copy(
                 foodId = foodId,
                 stableId = stableId,
@@ -123,12 +124,26 @@ class FoodEditorViewModel @Inject constructor(
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
                 nutrientRows = rows.map { r ->
+                    val displayAmount =
+                        when (r.basisType) {
+                            BasisType.PER_100G -> NutrientBasisScaler
+                                .canonicalToDisplayPerServing(
+                                    storedAmount = r.amount,
+                                    storedBasis = r.basisType,
+                                    servingSize = servingSize,
+                                    gramsPerServingUnit = gramsPerServingUnit
+                                ).amount
+
+                            // if you ever store PER_100ML, use the volume scaler here (you’d need mlPerServingUnit)
+                            else -> r.amount
+                        }
+
                     NutrientRowUi(
                         nutrientId = r.nutrient.id,
                         name = r.nutrient.displayName,
                         unit = r.nutrient.unit,
                         category = r.nutrient.category,
-                        amount = r.amount.toString()
+                        amount = displayAmount.toString()
                     )
                 },
                 favorite = flags?.favorite ?: false,
