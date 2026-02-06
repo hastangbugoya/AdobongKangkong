@@ -32,28 +32,17 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
     suspend fun debugListNutrientCodes(): List<String> =
         db.nutrientDao().getIdCodePairs().map { it.code }
 
-    override suspend fun getSnapshots(foodIds: Set<Long>): Map<Long, FoodNutritionSnapshot> {
+    override suspend fun getSnapshots(
+        foodIds: Set<Long>
+    ): Map<Long, FoodNutritionSnapshot> {
         if (foodIds.isEmpty()) return emptyMap()
 
-        val ids = foodIds.toList()
-        val foods = db.foodDao().getByIds(ids)
-        if (foods.isEmpty()) return emptyMap()
-
-        val codeById = nutrientCodeById()
-
-        val nutrientRows = db.foodNutrientDao(). getForFoods(foods.map { it.id })
-        val rowsByFoodId = nutrientRows.groupBy { it.foodId }
-
-        return foods.associate { food ->
-            val rows = rowsByFoodId[food.id].orEmpty()
-            val snapshot = toFoodNutritionSnapshot(
-                foodId = food.id,
-                gramsPerServingUnit = food.gramsPerServingUnit,
-                rows = rows,
-                nutrientCodeById = codeById
-            )
-            food.id to snapshot
-        }
+        return foodIds
+            .mapNotNull { foodId ->
+                val snapshot = getSnapshot(foodId)
+                snapshot?.let { foodId to it }
+            }
+            .toMap()
     }
 
     private suspend fun nutrientCodeById(): Map<Long, String> {

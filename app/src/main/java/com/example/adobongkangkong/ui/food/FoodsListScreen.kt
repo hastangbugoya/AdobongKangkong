@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -139,9 +140,11 @@ fun FoodsListScreen(
 
             LazyColumn(Modifier.fillMaxSize()) {
                 items(state.items, key = { it.food.id }) { item ->
+                    val preview = state.macroPreviewByFoodId[item.food.id]
                     FoodRow(
                         food = item.food,
-                        goalFlags = item.goalFlags
+                        goalFlags = item.goalFlags,
+                        preview
                     ) {
                         if (item.food.isRecipe) onEditRecipe(item.food.id) else onEditFood(item.food.id)
                     }
@@ -156,6 +159,7 @@ fun FoodsListScreen(
 private fun FoodRow(
     food: Food,
     goalFlags: FoodGoalFlagsEntity?,
+    preview: FoodMacroPreviewUi?,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -206,7 +210,7 @@ private fun FoodRow(
                 modifier = Modifier
                     .matchParentSize(),
                 // Banner is already 3:1; for safety we still crop.
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                contentScale = ContentScale.Crop,
                 alpha = 0.22f
             )
             // A gentle scrim for text contrast
@@ -227,11 +231,7 @@ private fun FoodRow(
                 )
             },
             supportingContent = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     // Brand (if present)
                     if (!food.brand.isNullOrBlank()) {
                         Text(
@@ -239,18 +239,19 @@ private fun FoodRow(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else {
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.height(6.dp))
                     }
 
-                    // Type chip-like label
-                    AssistChip(
-                        onClick = { /* no-op */ },
-                        label = { Text(if (food.isRecipe) "Recipe" else "Food") },
-                        enabled = false
+                    FoodListChipsBlock(
+                        isRecipe = food.isRecipe,
+                        kcal = preview?.caloriesKcal?.round0() ?: "0",
+                        p = preview?.proteinG?.round1() ?: "0",
+                        c = preview?.carbsG?.round1() ?: "0",
+                        f = preview?.fatG?.round1() ?: "0",
+                        sugars = preview?.sugarsG?.round1(),
+                        onOpen = onClick,
                     )
                 }
             },
@@ -313,3 +314,65 @@ internal fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
 }
 
 
+
+
+@Composable
+fun FoodListChipsBlock(
+    isRecipe: Boolean,
+    kcal: String,
+    p: String,
+    c: String,
+    f: String,
+    sugars: String? = null,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+
+        ChipGridRow(
+            left = { TinyChipFill(if (isRecipe) "Recipe" else "Food", onOpen) },
+            mid = { TinyChipFill("kcal $kcal", onOpen) },
+            right = { TinyChipFill("S ${sugars ?: "0"}", onOpen) } // keep width consistent
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        ChipGridRow(
+            left = { TinyChipFill("P $p g", onOpen) },
+            mid = { TinyChipFill("C $c g", onOpen) },
+            right = { TinyChipFill("F $f g", onOpen) }
+        )
+    }
+}
+
+@Composable
+private fun ChipGridRow(
+    left: @Composable () -> Unit,
+    mid: @Composable () -> Unit,
+    right: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(Modifier.weight(1f)) { left() }
+        Box(Modifier.weight(1f)) { mid() }
+        Box(Modifier.weight(1f)) { right() }
+    }
+}
+
+@Composable
+private fun TinyChipFill(text: String, onOpen: () -> Unit) {
+    AssistChip(
+        onClick = onOpen,
+        enabled = true,
+        label = { Text(text, maxLines = 1) },
+        modifier = Modifier
+            .height(28.dp)
+            .fillMaxWidth() // <- key: chip fills its grid cell
+    )
+}
+
+
+private fun Double.round0() = toInt().toString()
+private fun Double.round1() = "%,.1f".format(this).replace(",", "")

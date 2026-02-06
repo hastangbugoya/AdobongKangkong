@@ -8,7 +8,21 @@ enum class FoodsFilter { ALL, FOODS_ONLY, RECIPES_ONLY }
 data class FoodsListState(
     val query: String = "",
     val filter: FoodsFilter = FoodsFilter.ALL,
-    val items: List<FoodListItemUiModel> = emptyList()
+    val items: List<FoodListItemUiModel> = emptyList(),
+    // DO NOT TOUCH THIS (future-you note):
+    // Macro previews are computed in the VM as a separate map keyed by foodId.
+    // We intentionally keep this out of FoodListItemUiModel for now to avoid
+    // forcing a specific loading strategy into UI code.
+    val macroPreviewByFoodId: Map<Long, FoodMacroPreviewUi> = emptyMap(),
+)
+
+/** Lightweight macro preview for list rows (per current serving). */
+data class FoodMacroPreviewUi(
+    val caloriesKcal: Double,
+    val proteinG: Double,
+    val carbsG: Double,
+    val fatG: Double,
+    val sugarsG: Double? = null,
 )
 
 data class FoodListItemUiModel(
