@@ -97,7 +97,7 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
     }
 }
 
-/**
+/** 2025/02/03
  * ============================
  * SAVE_FOOD_WITH_NUTRIENTS_USECASE – FUTURE-ME NOTES
  * ============================
@@ -144,4 +144,111 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
  * Change discipline:
  * - Do not invent identifiers. Use existing BasisType / ServingUnit utilities.
  * - Keep minimal surface area: canonicalize here and keep repository/DAO dumb.
+ */
+/** 2025/02/05
+ * ============================================================================
+ * FOR-FUTURE-ME NOTES (SaveFoodWithNutrientsUseCase)
+ * ============================================================================
+ *
+ * WHAT THIS USE CASE DOES
+ * -----------------------
+ * This is the single “commit point” for a Food + its nutrient rows:
+ *
+ *   1) Upsert the Food row (creates id if new)
+ *   2) Normalize/augment nutrient rows into the DB’s basis model
+ *   3) Replace all food_nutrients rows for that foodId in one shot
+ *
+ * It intentionally does NOT:
+ * - decide whether a food is “usable” (that’s a separate validation/use case)
+ * - manage flags (favorite/eatMore/limit) (FoodEditor handles via FoodGoalFlagsRepository)
+ * - interpret “serving text” for math (household text is display-only)
+ *
+ * DESIGN GOAL / MINDSET
+ * ---------------------
+ * We want deterministic math and minimal surprises:
+ *
+ * - If we can safely normalize to PER_100G or PER_100ML, we do it here.
+ * - If we can’t (container-ish units without weight/density), we keep USDA_REPORTED_SERVING.
+ *
+ * This use case is the “basis expansion” layer: it takes whatever the editor/importer
+ * provides and ensures the DB has the canonical forms needed for later conversions.
+ *
+ * IMPORTANT CURRENT BEHAVIOR
+ * --------------------------
+ * The current implementation ALWAYS:
+ *   - Persists the input row "as-is" (add(row))
+ * THEN conditionally adds derived rows:
+ *   - From USDA_REPORTED_SERVING → PER_100G when gramsPerServingUnit is known (> 0)
+ *   - From USDA_REPORTED_SERVING → PER_100ML when servingUnit == ML
+ *
+ * This means the DB can contain multiple rows per (foodId, nutrientId) because
+ * the FoodNutrientEntity primary key includes basisType:
+ *
+ *   (foodId, nutrientId, basisType)
+ *
+ * So “duplicates” in UI are expected unless the UI filters by basisType.
+ *
+ * LOCKED-DOWN RULES WE AGREED ON (CANONICALIZATION)
+ * ------------------------------------------------
+ * Long-term canonical rule (what we WANT):
+ *   - Prefer storing ONE canonical basis (PER_100G for mass-backed foods; PER_100ML for liquid)
+ *   - Serving basis rows become OPTIONAL / expendable when we have:
+ *       FoodEntity.servingSize + servingUnit + (gramsPerServingUnit or density bridge)
+ *
+ * BUT: some units (PACKET/BOX/BUNCH/etc) have no inherent grams or mL.
+ * For those, USDA_REPORTED_SERVING acts as:
+ *   - “raw label data per 1 unit”
+ *   - a flag that the user must provide weight/volume before the food is usable.
+ *
+ * In that model, conversion happens when the user later supplies gramsPerServingUnit
+ * (or a volume definition + density). At that time we can rewrite nutrients to PER_100*
+ * and (optionally) remove the USDA_REPORTED_SERVING rows.
+ *
+ * SO WHY DO WE STILL KEEP “AS-IS” ROWS RIGHT NOW?
+ * -----------------------------------------------
+ * Because:
+ * - Imports (USDA/CSV) may come in serving-based, and we don’t want to lose raw provenance.
+ * - Some foods are intentionally not convertible yet (no gramsPerServingUnit).
+ * - Keeping as-is lets the user see something immediately and gives the validator
+ *   a clean way to detect “not grounded”.
+ *
+ * NOTE: If we decide to enforce “ONLY ONE basis row per nutrient”, this file is the place
+ * to do it — but that requires a coordinated change:
+ *   - update FoodEditorData / FoodNutrientRepository.getForFood() to request a specific basis
+ *   - update any computations (recipes/logging) to use canonical basis only
+ *   - update imports so they feed only canonical basis when possible
+ *
+ * KNOWN PITFALL: UI “DUPLICATE NUTRIENTS”
+ * ---------------------------------------
+ * If the editor loads nutrients via FoodNutrientRepository.getForFood(foodId) and
+ * that repository returns *all* basis types, the UI will show duplicates in the
+ * nutrients LazyColumn.
+ *
+ * The fix is NOT here unless we change policy.
+ * The fix is usually:
+ *   - Choose/display ONE basis in GetFoodEditorDataUseCase / FoodNutrientRepository.getForFood()
+ *     (e.g., prefer PER_100G/PER_100ML; fallback to USDA_REPORTED_SERVING)
+ *
+ * WHY replaceForFood() IS A DELETE + UPSERT
+ * ----------------------------------------
+ * replaceForFood() deletes all existing rows then upserts the new list.
+ * That ensures:
+ * - no stale rows survive basis changes
+ * - we don’t have to diff updates
+ * - we can change basis policy later without complicated migrations in this layer
+ *
+ * WHEN TO CHANGE THIS FILE
+ * ------------------------
+ * Change here only when basis policy changes globally.
+ *
+ * Examples of legit changes:
+ * - stop persisting the “as-is” row when we successfully derive canonical basis
+ * - derive PER_100ML for volume units beyond ML once we have density support
+ * - enforce “only one basis stored” by filtering/rewriting here
+ *
+ * Examples of NOT-legit changes:
+ * - filtering rows for UI presentation (belongs in query/usecase returning editor data)
+ * - adding per-nutrient rounding/formatting (UI concern)
+ *
+ * ============================================================================
  */

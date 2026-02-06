@@ -58,6 +58,7 @@ import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
+import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -332,7 +333,7 @@ fun FoodEditorScreen(
                 }
 
                 item {
-                    FlagsSection(
+                    GoalFlagsSection(
                         favorite = state.favorite,
                         eatMore = state.eatMore,
                         limit = state.limit,
@@ -547,52 +548,52 @@ private fun SectionHeader(
         }
     }
 }
-
-@Composable
-private fun FlagsSection(
-    favorite: Boolean,
-    eatMore: Boolean,
-    limit: Boolean,
-    onToggleFavorite: (Boolean) -> Unit,
-    onToggleEatMore: (Boolean) -> Unit,
-    onToggleLimit: (Boolean) -> Unit,
-    isTablet: Boolean
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "Flags", style = MaterialTheme.typography.titleMedium)
-
-        if (isTablet) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.weight(1f))
-                FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.weight(1f))
-                FlagCheck("Limit", limit, onToggleLimit, Modifier.weight(1f))
-            }
-        } else {
-            FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.fillMaxWidth())
-            FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.fillMaxWidth())
-            FlagCheck("Limit", limit, onToggleLimit, Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun FlagCheck(
-    label: String,
-    checked: Boolean,
-    onChecked: (Boolean) -> Unit,
-    modifier: Modifier
-) {
-    Row(
-        modifier = modifier
-            .clickable { onChecked(!checked) }
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(checked = checked, onCheckedChange = onChecked)
-        Spacer(Modifier.width(8.dp))
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-    }
-}
+//
+//@Composable
+//private fun FlagsSection(
+//    favorite: Boolean,
+//    eatMore: Boolean,
+//    limit: Boolean,
+//    onToggleFavorite: (Boolean) -> Unit,
+//    onToggleEatMore: (Boolean) -> Unit,
+//    onToggleLimit: (Boolean) -> Unit,
+//    isTablet: Boolean
+//) {
+//    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+//        Text(text = "Flags", style = MaterialTheme.typography.titleMedium)
+//
+//        if (isTablet) {
+//            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+//                FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.weight(1f))
+//                FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.weight(1f))
+//                FlagCheck("Limit", limit, onToggleLimit, Modifier.weight(1f))
+//            }
+//        } else {
+//            FlagCheck("Favorite", favorite, onToggleFavorite, Modifier.fillMaxWidth())
+//            FlagCheck("Eat more", eatMore, onToggleEatMore, Modifier.fillMaxWidth())
+//            FlagCheck("Limit", limit, onToggleLimit, Modifier.fillMaxWidth())
+//        }
+//    }
+//}
+//
+//@Composable
+//private fun FlagCheck(
+//    label: String,
+//    checked: Boolean,
+//    onChecked: (Boolean) -> Unit,
+//    modifier: Modifier
+//) {
+//    Row(
+//        modifier = modifier
+//            .clickable { onChecked(!checked) }
+//            .padding(vertical = 6.dp),
+//        verticalAlignment = Alignment.CenterVertically
+//    ) {
+//        Checkbox(checked = checked, onCheckedChange = onChecked)
+//        Spacer(Modifier.width(8.dp))
+//        Text(text = label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+//    }
+//}
 
 @Composable
 private fun NutrientRowEditor(

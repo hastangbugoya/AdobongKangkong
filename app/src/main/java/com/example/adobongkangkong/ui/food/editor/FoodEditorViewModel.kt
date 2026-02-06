@@ -367,6 +367,7 @@ class FoodEditorViewModel @Inject constructor(
 
     fun onBarcodeScanned(barcode: String) {
         Log.d("Meow", "FOOD_EDITOR > onBarcodeScanned($barcode) vm=${System.identityHashCode(this)}")
+        update { it.copy(isBarcodeScannerOpen = false) }
         viewModelScope.launch {
             when (val r = searchUsdaByBarcode(barcode)) {
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {

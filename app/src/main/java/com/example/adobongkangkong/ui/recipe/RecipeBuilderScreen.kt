@@ -1,6 +1,7 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
+import android.R.attr.maxWidth
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
@@ -44,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -54,6 +56,7 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
+import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import kotlinx.coroutines.delay
 
 /**
@@ -256,7 +259,20 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
-
+            item { Spacer(Modifier.height(4.dp)) }
+            item {
+                val configuration = LocalConfiguration.current
+                val isTablet = configuration.screenWidthDp >= 600
+                GoalFlagsSection(
+                    favorite = state.favorite,
+                    eatMore = state.eatMore,
+                    limit = state.limit,
+                    onToggleFavorite = vm::onFavoriteChange,
+                    onToggleEatMore = vm::onEatMoreChange,
+                    onToggleLimit = vm::onLimitChange,
+                    isTablet = isTablet
+                )
+            }
             state.errorMessage?.let { err ->
                 item {
                     Text(

@@ -109,7 +109,23 @@ private fun BarcodeScannerPreview(
     val scanner = remember { BarcodeScanning.getClient(options) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    DisposableEffect(Unit) { onDispose { cameraExecutor.shutdown() } }
+
+    var cameraProviderRef by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                cameraProviderRef?.unbindAll()
+            } catch (_: Throwable) {
+                // ignore
+            }
+            try {
+                scanner.close()
+            } catch (_: Throwable) {
+                // ignore
+            }
+            cameraExecutor.shutdown()
+        }
+    }
 
     Box(modifier = modifier) {
         AndroidView(

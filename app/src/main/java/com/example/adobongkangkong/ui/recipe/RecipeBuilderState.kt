@@ -49,4 +49,8 @@ data class RecipeBuilderState(
 
     // monitor user changes values
     val hasUnsavedChanges: Boolean = false,
+
+    val favorite: Boolean = false,
+    val eatMore: Boolean = false,
+    val limit: Boolean = false,
 )

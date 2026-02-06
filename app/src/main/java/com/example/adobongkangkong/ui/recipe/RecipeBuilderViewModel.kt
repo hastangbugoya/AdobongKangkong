@@ -11,6 +11,7 @@ import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ServingPolicy
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
+import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -40,6 +41,7 @@ class RecipeBuilderViewModel @Inject constructor(
     private val foodRepo: FoodRepository,
     private val recipeRepo: RecipeRepository,
     private val createRecipe: CreateRecipeUseCase,
+    private val flagsRepository: FoodGoalFlagsRepository,
     observePreview: ObserveRecipeMacroPreviewUseCase,
 ) : ViewModel() {
 
@@ -77,8 +79,11 @@ class RecipeBuilderViewModel @Inject constructor(
     private val pickedServingsFlow = MutableStateFlow(1.0)
     private val pickedServingsTextFlow = MutableStateFlow("1.0")
     private val pickedGramsTextFlow = MutableStateFlow("")
-
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
+
+    private val favoriteFlow = MutableStateFlow(false)
+    private val eatMoreFlow = MutableStateFlow(false)
+    private val limitFlow = MutableStateFlow(false)
 
     val ingredientTotalGrams: StateFlow<Double> =
         ingredientsFlow
@@ -166,7 +171,10 @@ class RecipeBuilderViewModel @Inject constructor(
         val blockingSheet: BlockingSheetModel?,
         val blockedFoodId: Long?,
         val navigateToEditFoodId: Long?,
-        val hasUnsavedChanges: Boolean
+        val hasUnsavedChanges: Boolean,
+        val favorite: Boolean,
+        val eatMore: Boolean,
+        val limit: Boolean
     )
 
     val state: StateFlow<RecipeBuilderState> =
@@ -232,20 +240,27 @@ class RecipeBuilderViewModel @Inject constructor(
                     )
                 }
 
-            val overlayFlow: Flow<Overlay> =
-                combine(
-                    blockingSheetFlow,
-                    blockedFoodIdFlow,
-                    navigateToEditFoodIdFlow,
-                    hasUnsavedChangesFlow
-                ) { blockingSheet, blockedFoodId, navFoodId, hasUnsavedChangesFlow ->
-                    Overlay(
-                        blockingSheet = blockingSheet,
-                        blockedFoodId = blockedFoodId,
-                        navigateToEditFoodId = navFoodId,
-                        hasUnsavedChangesFlow
-                    )
-                }
+            val flagsFlow = combine(favoriteFlow, eatMoreFlow, limitFlow) { f, e, l ->
+                Triple(f, e, l)
+            }
+
+            val overlayFlow = combine(
+                blockingSheetFlow,
+                blockedFoodIdFlow,
+                navigateToEditFoodIdFlow,
+                hasUnsavedChangesFlow,
+                flagsFlow
+            ) { blockingSheet, blockedFoodId, navFoodId, hasUnsavedChanges, flags ->
+                Overlay(
+                    blockingSheet = blockingSheet,
+                    blockedFoodId = blockedFoodId,
+                    navigateToEditFoodId = navFoodId,
+                    hasUnsavedChanges = hasUnsavedChanges,
+                    favorite = flags.first,
+                    eatMore = flags.second,
+                    limit = flags.third
+                )
+            }
 
             combine(leftFlow, rightFlow, overlayFlow) { left, right, overlay ->
                 val pickedGrams =
@@ -276,7 +291,10 @@ class RecipeBuilderViewModel @Inject constructor(
                     blockingSheet = overlay.blockingSheet,
                     blockedFoodId = overlay.blockedFoodId,
                     navigateToEditFoodId = overlay.navigateToEditFoodId,
-                    hasUnsavedChanges = overlay.hasUnsavedChanges
+                    hasUnsavedChanges = overlay.hasUnsavedChanges,
+                    favorite = overlay.favorite,
+                    eatMore = overlay.eatMore,
+                    limit = overlay.limit,
                 )
             }.stateIn(
                 viewModelScope,
@@ -284,6 +302,21 @@ class RecipeBuilderViewModel @Inject constructor(
                 RecipeBuilderState()
             )
         }
+
+    fun onFavoriteChange(v: Boolean) {
+        favoriteFlow.value = v
+        markDirty()
+    }
+
+    fun onEatMoreChange(v: Boolean) {
+        eatMoreFlow.value = v
+        markDirty()
+    }
+
+    fun onLimitChange(v: Boolean) {
+        limitFlow.value = v
+        markDirty()
+    }
 
     private fun markDirty() {
         hasUnsavedChangesFlow.value = true
@@ -653,7 +686,7 @@ class RecipeBuilderViewModel @Inject constructor(
                 val editingFoodId = editFoodId
 
                 if (editingFoodId == null) {
-                    createRecipe(
+                    val newFoodId = createRecipe(
                         RecipeDraft(
                             name = name,
                             servingsYield = servingsYield,
@@ -665,6 +698,14 @@ class RecipeBuilderViewModel @Inject constructor(
                                 )
                             }
                         )
+                    )
+
+                    // Save flags separately (keyed by foodId, including recipes).
+                    flagsRepository.setFlags(
+                        foodId = newFoodId,
+                        favorite = favoriteFlow.value,
+                        eatMore = eatMoreFlow.value,
+                        limit = limitFlow.value
                     )
                 } else {
                     recipeRepo.updateRecipeByFoodId(
@@ -682,6 +723,15 @@ class RecipeBuilderViewModel @Inject constructor(
                     foodRepo.getById(editingFoodId)?.let { food ->
                         foodRepo.upsert(food.copy(name = name, isRecipe = true))
                     }
+
+                    // Save flags separately (keyed by foodId, including recipes).
+                    flagsRepository.setFlags(
+                        foodId = editingFoodId,
+                        favorite = favoriteFlow.value,
+                        eatMore = eatMoreFlow.value,
+                        limit = limitFlow.value
+                    )
+
                 }
 
                 onDone()
@@ -726,6 +776,12 @@ class RecipeBuilderViewModel @Inject constructor(
 
             val food = foodRepo.getById(foodId)
 
+            // ✅ Load goal flags for this recipe (recipes are foods; flags are keyed by foodId)
+            val flags = flagsRepository.get(foodId)
+            favoriteFlow.value = flags?.favorite ?: false
+            eatMoreFlow.value = flags?.eatMore ?: false
+            limitFlow.value = flags?.limit ?: false
+
             // Build lookup once so we can get both name + unit + gramsPerServingUnit
             val ids = ingredients.map { it.ingredientFoodId }.distinct()
             val foodById: Map<Long, Food?> =
@@ -757,6 +813,51 @@ class RecipeBuilderViewModel @Inject constructor(
             hasUnsavedChangesFlow.value = false
         }
     }
-
 }
-
+/** 2025-02-05
+ * ViewModel for creating and editing recipes.
+ *
+ * ⚠️ READ THIS BEFORE MODIFYING ⚠️
+ *
+ * ## Core model rules (locked in)
+ * - A **Recipe is represented by a Food row** where `Food.isRecipe = true`.
+ * - All recipe identity in the app ultimately flows through **foodId**, not recipeId.
+ * - `FoodGoalFlagsEntity` (favorite / eatMore / limit) is **keyed by foodId**.
+ * - Therefore, recipe goal flags MUST ALWAYS be saved and loaded using the
+ *   recipe's **foodId**.
+ *
+ * ## Create vs Edit semantics
+ * - **Create**
+ *   - `CreateRecipeUseCase` (Option A) returns the newly created recipe’s **foodId**.
+ *   - That returned `foodId` must be used immediately to persist `FoodGoalFlags`.
+ *
+ * - **Edit**
+ *   - `editFoodId` is already known.
+ *   - Flags must be updated using that same `foodId`.
+ *
+ * 🚫 Do NOT invent identifiers.
+ * 🚫 Do NOT key flags by recipeId.
+ *
+ * ## Flag persistence contract
+ * This ViewModel mirrors `FoodEditorViewModel` behavior exactly:
+ * - Flags are persisted via `FoodGoalFlagsRepository.setFlags(foodId, ...)`
+ * - Flags are loaded via `FoodGoalFlagsRepository.get(foodId)`
+ *
+ * ## loadForEdit()
+ * - Must load goal flags using the recipe’s **foodId**
+ * - Must populate:
+ *   - `favoriteFlow`
+ *   - `eatMoreFlow`
+ *   - `limitFlow`
+ *
+ * If this step is skipped, editing an existing recipe will silently reset flags
+ * on the next save.
+ *
+ * ## Common foot-guns (don’t repeat)
+ * - ❌ Using recipeId for anything user-facing
+ * - ❌ Forgetting to persist flags after create
+ * - ❌ Assuming recipes have a separate flag model
+ * - ❌ Treating recipes differently from foods for goal flags
+ *
+ * When in doubt: **recipes ARE foods** — follow the food path.
+ */
