@@ -547,16 +547,11 @@ class FoodsCsvImporter @Inject constructor(
 
                     val unit = nutrientUnitByHeader[headerKey] ?: continue
 
-                    // Store as serving-based snapshot
-                    foodNutrients += FoodNutrientEntity(
-                        foodId = foodId,
-                        nutrientId = nutrientId,
-                        nutrientAmountPerBasis = finalAmount,
-                        unit = unit,
-                        basisType = servingBasisType
-                    )
-
-                    // If we know grams for the serving, also store per-100g by scaling
+                    // Canonicalize import nutrients:
+                    // - If we can resolve grams-per-serving, store ONLY PER_100G (canonical internal basis).
+                    // - Otherwise, fall back to USDA_REPORTED_SERVING (we cannot safely normalize).
+                    //
+                    // This prevents duplicate (foodId, nutrientId) rows across basisType.
                     if (gramsForServing != null) {
                         val factor = 100.0 / gramsForServing
                         foodNutrients += FoodNutrientEntity(
@@ -565,6 +560,14 @@ class FoodsCsvImporter @Inject constructor(
                             nutrientAmountPerBasis = finalAmount * factor,
                             unit = unit,
                             basisType = BasisType.PER_100G
+                        )
+                    } else {
+                        foodNutrients += FoodNutrientEntity(
+                            foodId = foodId,
+                            nutrientId = nutrientId,
+                            nutrientAmountPerBasis = finalAmount,
+                            unit = unit,
+                            basisType = servingBasisType
                         )
                     }
 

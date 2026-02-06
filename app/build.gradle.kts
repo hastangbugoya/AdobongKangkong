@@ -93,7 +93,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Unit testing
+    // Local JVM unit tests
     testImplementation("junit:junit:4.13.2")
+
+    // Optional but very useful for Kotlin-friendly assertions
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
 
     // Android instrumented testing
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
