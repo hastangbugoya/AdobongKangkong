@@ -38,6 +38,7 @@ data class FoodEntity(
      * - 1 G (mass-based foods)
      * - 240 ML (volume-based foods)
      * - 1 PACKET (custom unit), optionally mass-backed via gramsPerServingUnit
+     * - 1 CAN (custom unit), optionally volume-backed via mlPerServingUnit
      */
     val servingSize: Double = 1.0,
     val servingUnit: ServingUnit = ServingUnit.G,
@@ -60,13 +61,29 @@ data class FoodEntity(
      *
      * Examples:
      * - servingUnit=PACKET, gramsPerServingUnit=28.0  => 1 packet = 28g
-     * - servingUnit=CUP,    gramsPerServingUnit=246.0 => 1 cup = 246g
+     * - servingUnit=CUP,    gramsPerServingUnit=246.0 => 1 cup = 246g (user-provided; no density guessing)
      *
      * Notes:
      * - If servingUnit == G, this should typically be null.
-     * - This intentionally avoids density inference for ML foods; if user wants grams, they provide it.
+     * - Never infer grams from mL (no density guessing).
      */
     val gramsPerServingUnit: Double? = null,
+
+    /**
+     * Optional volume backing for non-mL serving units.
+     *
+     * Meaning:
+     *   1 × servingUnit == mlPerServingUnit milliliters
+     *
+     * Examples:
+     * - servingUnit=CAN,    mlPerServingUnit=473.0  => 1 can = 473 mL
+     * - servingUnit=BOTTLE, mlPerServingUnit=500.0  => 1 bottle = 500 mL
+     *
+     * Notes:
+     * - If servingUnit == ML, this should typically be null.
+     * - Never infer mL from grams (no density guessing).
+     */
+    val mlPerServingUnit: Double? = null,
 
     // Treat recipes as foods so they can be logged identically
     val isRecipe: Boolean = false,

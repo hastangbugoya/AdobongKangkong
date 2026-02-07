@@ -183,3 +183,17 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
         )
     }
 }
+
+/**
+ * AI NOTE — READ BEFORE REFACTORING (2026-02-06)
+ *
+ * I previously broke this file by guessing repository APIs and snapshot fields.
+ * The real RecipeRepository API here is:
+ * - getRecipeByFoodId(recipeFoodId)
+ * - getIngredients(recipeId)
+ *
+ * Do NOT add volume logic here until the domain.recipes.FoodNutritionSnapshot actually supports it in this codebase.
+ * If I want recipe ingredients to support liquids later:
+ * - First update FoodNutritionSnapshot + mapper to include mlPerServingUnit + nutrientsPerMilliliter
+ * - Then update computeFromServingsLines to branch grams vs mL (still no density guessing).
+ */

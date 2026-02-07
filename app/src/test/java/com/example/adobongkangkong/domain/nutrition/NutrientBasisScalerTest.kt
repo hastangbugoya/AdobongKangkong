@@ -5,7 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
-import kotlin.test.junit.JUnitAsserter.assertTrue
 
 class NutrientBasisScalerTest {
 
@@ -140,6 +139,19 @@ class NutrientBasisScalerTest {
     }
 
     @Test
+    fun missing_ml_per100ml_should_not_scale() {
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = 8.0,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            mlPerServingUnit = null
+        )
+
+        assertFalse(toDisplay.didScale)
+        assertEquals(8.0, toDisplay.amount, 0.0)
+    }
+
+    @Test
     fun ui_contract_editor_and_list_show_same_per_serving_values_after_canonical_storage() {
         val servingSize = 1.0
         val gramsPerServingUnit = 453.59237 // 1 lb
@@ -178,7 +190,4 @@ class NutrientBasisScalerTest {
             )
         }
     }
-
-
-
 }

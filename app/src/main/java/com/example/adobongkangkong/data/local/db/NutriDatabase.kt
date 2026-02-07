@@ -3,6 +3,8 @@ package com.example.adobongkangkong.data.local.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
@@ -23,13 +25,14 @@ import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
 import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
+import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
-import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
-import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
 import com.example.adobongkangkong.data.local.db.entity.UserNutrientTargetEntity
 import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
+
 @Database(
     entities = [
         FoodEntity::class,
@@ -46,11 +49,12 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         UserNutrientTargetEntity::class,
         UserPinnedNutrientEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(DbTypeConverters::class)
 abstract class NutriDatabase : RoomDatabase() {
+
     abstract fun foodDao(): FoodDao
     abstract fun nutrientDao(): NutrientDao
     abstract fun foodNutrientDao(): FoodNutrientDao
@@ -65,4 +69,19 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun foodGoalFlagsDao(): FoodGoalFlagsDao
     abstract fun userNutrientTargetDao(): UserNutrientTargetDao
     abstract fun userPinnedNutrientDao(): UserPinnedNutrientDao
+
+    companion object {
+        /**
+         * Adds foods.mlPerServingUnit as a first-class volume bridge.
+         *
+         * FUTURE-YOU NOTE (2026-02-06):
+         * - This column enables volume-grounded foods (e.g., CAN/BOTTLE) to canonicalize nutrients to PER_100ML
+         *   without ever requiring grams (no density guessing).
+         */
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE foods ADD COLUMN mlPerServingUnit REAL")
+            }
+        }
+    }
 }

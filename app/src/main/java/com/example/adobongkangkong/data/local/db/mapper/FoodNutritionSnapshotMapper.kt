@@ -7,51 +7,63 @@ import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 
 /**
- * Normalize persisted food nutrient rows into a domain snapshot expressed per 1 gram.
+ * Normalize persisted food nutrient rows into a domain snapshot expressed per 1 gram OR per 1 mL.
  *
  * Supported normalization:
- * - PER_100G              -> amount / 100
- * - USDA_REPORTED_SERVING -> amount / gramsPerServingUnit (only if gramsPerServingUnit is valid)
+ * - PER_100G  -> amount / 100  => nutrientsPerGram
+ * - PER_100ML -> amount / 100  => nutrientsPerMilliliters
  *
- * Lax import: if normalization can't be done (e.g., USDA_REPORTED_SERVING but missing gramsPerServingUnit),
- * those rows are skipped; downstream use cases emit warnings when data is missing.
- *
- * Note: PER_100ML cannot be normalized to grams without density, so it is skipped here.
+ * USDA_REPORTED_SERVING should be canonicalized earlier (before rows reach snapshot creation).
+ * If it appears here, we intentionally ignore it rather than guessing a bridge.
  */
 fun toFoodNutritionSnapshot(
     foodId: Long,
     gramsPerServingUnit: Double?,
+    mlPerServingUnit: Double?,
     rows: List<FoodNutrientEntity>,
     nutrientCodeById: Map<Long, String>
 ): FoodNutritionSnapshot {
 
-    val grams = gramsPerServingUnit?.takeIf { it > 0.0 }
+    val perGram = mutableMapOf<NutrientKey, Double>()
+    val perMilliliter = mutableMapOf<NutrientKey, Double>()
 
-    val perGram = rows.mapNotNull { row ->
-        val code = nutrientCodeById[row.nutrientId] ?: return@mapNotNull null
+    for (row in rows) {
+        val code = nutrientCodeById[row.nutrientId] ?: continue
         val key = NutrientKey(code)
 
-        val perGramValue: Double? = when (row.basisType) {
+        when (row.basisType) {
             BasisType.PER_100G -> {
-                row.nutrientAmountPerBasis / 100.0
-            }
-
-            BasisType.USDA_REPORTED_SERVING -> {
-                grams?.let { row.nutrientAmountPerBasis / it }
+                perGram[key] = row.nutrientAmountPerBasis / 100.0
             }
 
             BasisType.PER_100ML -> {
-                // Can't convert volume-normalized nutrients to grams without density.
-                null
+                perMilliliter[key] = row.nutrientAmountPerBasis / 100.0
+            }
+
+            BasisType.USDA_REPORTED_SERVING -> {
+                // Intentionally ignored: canonicalization must happen earlier.
             }
         }
-
-        perGramValue?.let { key to it }
-    }.toMap()
+    }
 
     return FoodNutritionSnapshot(
         foodId = foodId,
         gramsPerServingUnit = gramsPerServingUnit,
-        nutrientsPerGram = perGram.takeIf { it.isNotEmpty() }?.let { NutrientMap(it) }
+        mlPerServingUnit = mlPerServingUnit,
+        nutrientsPerGram = perGram.takeIf { it.isNotEmpty() }?.let { NutrientMap(it) },
+        nutrientsPerMilliliter = perMilliliter.takeIf { it.isNotEmpty() }?.let { NutrientMap(it) }
     )
 }
+
+/**
+ * AI NOTE — READ BEFORE REFACTORING (2026-02-06)
+ *
+ * Snapshot model in this project is per-1-unit density:
+ * - nutrientsPerGram (mass) and/or nutrientsPerMilliliters (volume)
+ *
+ * Do NOT reintroduce per100g/per100ml snapshot fields here.
+ * PER_100G and PER_100ML rows normalize to per-1 (divide by 100).
+ *
+ * Never attempt grams <-> mL conversion here. Density is intentionally absent.
+ * USDA_REPORTED_SERVING is ignored here on purpose: if it shows up, canonicalization upstream is broken.
+ */

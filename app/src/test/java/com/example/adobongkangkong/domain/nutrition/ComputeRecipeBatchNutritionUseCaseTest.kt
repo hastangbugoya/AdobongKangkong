@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
 class ComputeRecipeBatchNutritionUseCaseTest {
     private class FakeRecipeRepo(
         private val headerByFoodId: Map<Long, RecipeHeader>,
@@ -56,24 +57,28 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         val foodA = FoodNutritionSnapshot(
             foodId = 101L,
             gramsPerServingUnit = 50.0,
+            mlPerServingUnit = null,
             nutrientsPerGram = NutrientMap.fromCodeMap(
                 mapOf(
                     "kcal" to 1.0,
                     "protein_g" to 0.1
                 )
-            )
+            ),
+            nutrientsPerMilliliter = null
         )
 
         // Food B: 25g per serving, 2 kcal per gram, 0.0 protein per gram
         val foodB = FoodNutritionSnapshot(
             foodId = 202L,
             gramsPerServingUnit = 25.0,
+            mlPerServingUnit = null,
             nutrientsPerGram = NutrientMap.fromCodeMap(
                 mapOf(
                     "kcal" to 2.0,
                     "protein_g" to 0.0
                 )
-            )
+            ),
+            nutrientsPerMilliliter = null
         )
 
         // Ingredient lines are servings-based:
@@ -139,7 +144,9 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         val food = FoodNutritionSnapshot(
             foodId = 1L,
             gramsPerServingUnit = 10.0,
-            nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 1.0))
+            mlPerServingUnit = null,
+            nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 1.0)),
+            nutrientsPerMilliliter = null
         )
 
         val recipeFoodId = 10L
@@ -176,7 +183,9 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         val food = FoodNutritionSnapshot(
             foodId = 7L,
             gramsPerServingUnit = 100.0,
-            nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 1.0))
+            mlPerServingUnit = null,
+            nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 1.0)),
+            nutrientsPerMilliliter = null
         )
 
         val snapshotRepo = FakeSnapshotRepo(mapOf(7L to food))
@@ -206,7 +215,9 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         val foodMissingGpsu = FoodNutritionSnapshot(
             foodId = 1L,
             gramsPerServingUnit = null, // <-- key
-            nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 10.0))
+            mlPerServingUnit = null,
+            nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 10.0)),
+            nutrientsPerMilliliter = null
         )
 
         val recipeFoodId = 55L
@@ -238,3 +249,15 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         assertTrue(result.warnings.any { it is RecipeNutritionWarning.MissingGramsPerServing })
     }
 }
+
+/**
+ * AI NOTE — READ BEFORE REFACTORING (2026-02-06)
+ *
+ * These tests intentionally construct FoodNutritionSnapshot directly.
+ * Snapshot constructor params are now required even for grams-only tests:
+ * - mlPerServingUnit
+ * - nutrientsPerMilliliters
+ *
+ * If I add more snapshot fields later, I must update every test construction site.
+ * For grams-only tests, keep the new volume params = null; do NOT invent density or conversions.
+ */

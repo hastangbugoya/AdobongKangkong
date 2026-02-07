@@ -43,13 +43,6 @@ object BuildDraftFromParsedItem {
             else "Selected item not found in USDA response (fdcId=$selectedFdcId)."
         )
 
-        return fromParsedItem(item = item, nutrients = nutrients)
-    }
-
-    suspend fun fromParsedItem(
-        item: UsdaFoodSearchItem,
-        nutrients: NutrientRepository
-    ): Result {
         val servingUnit = ServingUnit.fromUsda(item.servingSizeUnit)
             ?: return Result.Blocked("Unsupported USDA servingSizeUnit='${item.servingSizeUnit}'")
 
@@ -80,10 +73,11 @@ object BuildDraftFromParsedItem {
             servingUnit = servingUnit,
             servingsPerPackage = null,
             gramsPerServingUnit = gramsPerServingUnit,
+            mlPerServingUnit = null, // ✅ new param; draft builder does not infer/parse volume bridge here
             stableId = stableId,
             brand = brand,
             isRecipe = false,
-            isLowSodium = null
+            isLowSodium = null,
         )
 
         // Map USDA nutrients → CSV nutrients (USDA_REPORTED_SERVING only)
@@ -91,6 +85,7 @@ object BuildDraftFromParsedItem {
         for (n in item.foodNutrients) {
             val usdaNumber = n.nutrientNumber ?: continue
             val csvCode = UsdaToCsvNutrientMap.byUsdaNumber[usdaNumber] ?: continue
+
             val nutrient = nutrients.getByCode(csvCode) ?: continue
             val amt = n.value ?: continue
 
@@ -102,24 +97,31 @@ object BuildDraftFromParsedItem {
             )
         }
 
-        val allRows = buildList {
-            addAll(servingRows)
-
-            // Add derived PER_100G only when serving is grams (same rule)
-            if (servingUnit == ServingUnit.G && servingSize > 0.0) {
-                val factor = 100.0 / servingSize
-                addAll(
-                    servingRows.map { r ->
-                        r.copy(
-                            basisType = BasisType.PER_100G,
-                            amount = r.amount * factor,
-                            basisGrams = 100.0
-                        )
-                    }
-                )
-            }
-        }
-
-        return Result.Success(Draft(food = food, rows = allRows))
+        return Result.Success(
+            Draft(
+                food = food,
+                rows = servingRows
+            )
+        )
     }
+
+    private fun String.toTitleCase(): String =
+        lowercase()
+            .split(" ")
+            .joinToString(" ") { word ->
+                word.replaceFirstChar { it.uppercase() }
+            }
 }
+
+/**
+ * AI NOTE — READ BEFORE REFACTORING (2026-02-06)
+ *
+ * I will see mlPerServingUnit and be tempted to "fill it in" for USDA drafts.
+ * Do NOT invent it. This draft builder currently mirrors the *simple* USDA servingSize+unit mapping only.
+ *
+ * Rules I must not violate:
+ * - mlPerServingUnit is a volume bridge for non-mL units (e.g., CAN/BOTTLE). For ServingUnit.ML it is usually null.
+ * - Never guess density; never convert grams <-> mL.
+ * - If I later extend this draft to parse householdServingFullText ("1 can (473 mL)"),
+ *   I must also add the corresponding mlPerServingUnit=473 and switch display unit to CAN—mirroring ImportUsdaFoodFromSearchJsonUseCase.
+ */

@@ -252,6 +252,8 @@ class FoodEditorViewModel @Inject constructor(
             servingsPerPackage = servingsPerPackage,
             isRecipe = false,
             stableId = stableId,
+            mlPerServingUnit = null,
+            isLowSodium = null,
         )
 
         // Decide default basis for nutrients *stored from this editor*.
