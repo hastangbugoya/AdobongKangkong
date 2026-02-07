@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -409,10 +410,10 @@ fun FoodEditorScreen(
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
-                        items(
+                        itemsIndexed(
                             items = rows,
-                            key = { it.nutrientId }
-                        ) { row ->
+                            key = { index: Int, row: NutrientRowUi -> "${row.nutrientId}_$index" }
+                        ) { _: Int, row: NutrientRowUi ->
                             NutrientRowEditor(
                                 row = row,
                                 onAmountChange = { newValue ->
@@ -422,6 +423,7 @@ fun FoodEditorScreen(
                                 isTablet = isTablet
                             )
                         }
+
                     }
 
                 item { HorizontalDivider() }
