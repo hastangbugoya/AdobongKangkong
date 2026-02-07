@@ -76,4 +76,17 @@ class CheckFoodUsableUseCaseTest {
 
         assertTrue(result is FoodUsageCheck.Ok)
     }
+
+    @Test
+    fun usda_household_can_but_truth_is_grams_is_ok_when_grams_bridge_exists() {
+        val result = useCase.execute(
+            servingUnit = ServingUnit.CAN,
+            gramsPerServingUnit = 355.0, // e.g., "1 can" is 355g (mass truth)
+            mlPerServingUnit = null,
+            amountInput = AmountInput.ByServings(servings = 1.0),
+            context = UsageContext.LOGGING
+        )
+
+        assertTrue(result is FoodUsageCheck.Ok)
+    }
 }
