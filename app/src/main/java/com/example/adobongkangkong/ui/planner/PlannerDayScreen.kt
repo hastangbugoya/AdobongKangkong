@@ -218,17 +218,12 @@ private fun PlannedItemRow(
 }
 
 private fun itemTitle(item: PlannedItem): String {
-    // If you added PlannedItem.title in domain, prefer it:
-    val titleProp = try {
-        val field = item::class.members.firstOrNull { it.name == "title" }
-        (field?.call(item) as? String)?.takeIf { it.isNotBlank() }
-    } catch (_: Throwable) { null }
-
-    return titleProp ?: when (item.sourceType) {
+    return item.title?.takeIf { it.isNotBlank() } ?: when (item.sourceType) {
         PlannedItemSource.FOOD -> "Food #${item.sourceId}"
         PlannedItemSource.RECIPE -> "Recipe #${item.sourceId}"
     }
 }
+
 
 private fun qtySummary(item: PlannedItem): String {
     val parts = buildList {

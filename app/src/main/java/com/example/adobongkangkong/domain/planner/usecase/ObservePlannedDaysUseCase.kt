@@ -137,6 +137,10 @@ class ObservePlannedDaysUseCase @Inject constructor(
             .distinct()
             .toList()
 
+//        android.util.Log.d("PlannerTitles", "ObservePlannedDaysUseCase> resolveItemTitles> foodIds=$foodIds")
+//        val foods = if (foodIds.isEmpty()) emptyList() else foodDao.getByIds(foodIds)
+//        android.util.Log.d("PlannerTitles", "ObservePlannedDaysUseCase> resolveItemTitles> foodsFromDb=${foods.map { it.id to it.name }}")
+
         val batchIds: List<Long> = allItems
             .asSequence()
             .filter { it.type == PlannedItemSource.RECIPE }
@@ -179,13 +183,15 @@ class ObservePlannedDaysUseCase @Inject constructor(
             .sortedWith(compareBy<PlannedItemEntity> { it.sortOrder }.thenBy { it.id })
             .map { mapItem(it, titleMapByItemId) }
 
-        val title: String? = when (slot) {
-            MealSlot.CUSTOM -> meal.customLabel?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException(
-                    "PlannedMealEntity(${meal.id}) is CUSTOM but customLabel is null/blank"
-                )
-            else -> null
-        }
+        val title: String? =
+            meal.nameOverride?.takeIf { it.isNotBlank() }
+                ?: when (slot) {
+                    MealSlot.CUSTOM -> meal.customLabel?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalStateException(
+                            "PlannedMealEntity(${meal.id}) is CUSTOM but customLabel is null/blank"
+                        )
+                    else -> null
+                }
 
         return PlannedMeal(
             id = meal.id,
