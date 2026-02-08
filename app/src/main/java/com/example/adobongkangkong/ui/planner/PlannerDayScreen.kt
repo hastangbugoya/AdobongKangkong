@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.example.adobongkangkong.R
@@ -31,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
+import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.StateFlow
 
@@ -61,8 +63,11 @@ fun PlannerDayScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { onEvent(PlannerDayEvent.PickDate) }) {
-                        Text("Date")
+                    IconButton(onClick = { onEvent(PlannerDayEvent.PickDate) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.tasks),
+                            contentDescription = "Open date picker"
+                        )
                     }
                 }
             )
@@ -135,17 +140,19 @@ private fun DateStrip(
     dateText: String,
     onPrev: () -> Unit,
     onNext: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        TextButton(onClick = onPrev) { Text("<") }
-        Text(dateText, style = MaterialTheme.typography.titleMedium)
-        TextButton(onClick = onNext) { Text(">") }
-    }
+){
+    CenteredChevronHeader(
+        text = dateText,
+        onPrev = onPrev,
+        onNext = onNext,
+        prevIcon = painterResource(R.drawable.angle_small_left),
+        nextIcon = painterResource(R.drawable.angle_small_right),
+        prevContentDescription = "Previous day",
+        nextContentDescription = "Next day",
+        spacing = 4.dp
+    )
 }
+
 
 @Composable
 private fun SlotHeader(

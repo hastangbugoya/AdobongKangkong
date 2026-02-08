@@ -2,8 +2,10 @@ package com.example.adobongkangkong.ui.heatmap
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +21,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 
 
 @Composable
@@ -28,37 +31,26 @@ fun MonthHeader(
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
-    val formatter = remember {
-        // Example: "January 2026"
-        DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
-    }
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.Center
     ) {
-        IconButton(onClick = onPrevMonth) {
-            Icon(
-                painter = painterResource(id = R.drawable.angle_small_left),
-                contentDescription = "Previous month"
-            )
+        val formatter = remember {
+            DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
         }
-
-        Text(
-            text = month.atDay(1).format(formatter),
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center
+        val text = month.atDay(1).format(formatter)
+        CenteredChevronHeader(
+            text = text,
+            onPrev = onPrevMonth,
+            onNext = onNextMonth,
+            prevIcon = painterResource(id = R.drawable.angle_small_left),
+            nextIcon = painterResource(id = R.drawable.angle_small_right),
+            modifier = modifier,
+            prevContentDescription = "Previous month",
+            nextContentDescription = "Next month",
         )
-
-        IconButton(onClick = onNextMonth) {
-            Icon(
-                painter = painterResource(id = R.drawable.angle_small_right),
-                contentDescription = "Next month"
-            )
-        }
     }
 }
