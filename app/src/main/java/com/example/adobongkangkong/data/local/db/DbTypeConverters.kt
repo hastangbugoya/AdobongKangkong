@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.local.db
 
 import androidx.room.TypeConverter
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.model.LogUnit
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
@@ -56,4 +57,12 @@ class DbTypeConverters {
     @TypeConverter
     fun stringToLogUnit(value: String?): LogUnit =
         value?.let { runCatching { LogUnit.valueOf(it) }.getOrNull() } ?: LogUnit.ITEM
+
+    // MealSlot <-> String (store enum.name, NOT display)
+    @TypeConverter
+    fun mealSlotToDb(value: MealSlot?): String? = value?.name
+
+    @TypeConverter
+    fun mealSlotFromDb(value: String?): MealSlot? =
+        value?.let { runCatching { MealSlot.valueOf(it) }.getOrNull() }
 }

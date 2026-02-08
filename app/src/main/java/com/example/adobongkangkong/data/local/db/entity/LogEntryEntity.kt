@@ -56,5 +56,7 @@ data class LogEntryEntity(
     val gramsPerServingCooked: Double? = null,
 
     /** Final totals for this log event as JSON (your NutrientMap totals). */
-    val nutrientsJson: String
+    val nutrientsJson: String,
+
+    val mealSlot: MealSlot? = null
 )
