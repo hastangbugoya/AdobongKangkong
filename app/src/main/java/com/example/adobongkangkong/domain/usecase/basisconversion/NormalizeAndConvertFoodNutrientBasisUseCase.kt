@@ -3,7 +3,6 @@ package com.example.adobongkangkong.domain.usecase.basisconversion
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
-import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toGrams
@@ -11,7 +10,7 @@ import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 
 /**
- * 2026-02-07 — FOR JEFF (top KDoc)
+ * 2026-02-07 — FOR DEV (top KDoc)
  *
  * Purpose
  * - This is the “orchestrator” use case that lets you *switch* a food’s canonical nutrient basis.
