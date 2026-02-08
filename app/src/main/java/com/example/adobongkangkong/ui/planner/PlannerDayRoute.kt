@@ -21,28 +21,25 @@ fun PlannerDayRoute(
         state = viewModel.state,
         onEvent = { event ->
             when (event) {
+                // Navigation-only events live here
                 PlannerDayEvent.Back -> onBack()
 
-                PlannerDayEvent.PickDate -> onPickDate(viewModel.state.value.date)
+                PlannerDayEvent.PickDate ->
+                    onPickDate(viewModel.state.value.date)
 
-                PlannerDayEvent.PrevDay -> onNavigateToDate(viewModel.state.value.date.minusDays(1))
-                PlannerDayEvent.NextDay -> onNavigateToDate(viewModel.state.value.date.plusDays(1))
+                PlannerDayEvent.PrevDay ->
+                    onNavigateToDate(viewModel.state.value.date.minusDays(1))
 
-                // Local-only events handled by VM/UI
-                is PlannerDayEvent.AddMeal,
-                PlannerDayEvent.DismissAddSheet,
-                is PlannerDayEvent.UpdateAddSheetCustomLabel,
-                is PlannerDayEvent.UpdateAddSheetName,
-                PlannerDayEvent.CreateMealIfNeeded -> viewModel.onEvent(event)
+                PlannerDayEvent.NextDay ->
+                    onNavigateToDate(viewModel.state.value.date.plusDays(1))
 
                 // Not navigating yet
                 is PlannerDayEvent.OpenMeal -> {
                     // no-op for now
                 }
 
-                PlannerDayEvent.CreateAnotherMeal -> {
-
-                }
+                // Everything else is planner logic -> ViewModel
+                else -> viewModel.onEvent(event)
             }
         }
     )

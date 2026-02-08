@@ -21,5 +21,18 @@ sealed interface PlannerDayEvent {
     data object CreateMealIfNeeded : PlannerDayEvent
 
     data object CreateAnotherMeal : PlannerDayEvent
-}
 
+    // Add item to planned meal
+    data class StartAddItem(val mode: AddItemMode) : PlannerDayEvent
+    data object CancelAddItem : PlannerDayEvent
+    data object ConfirmAddItem : PlannerDayEvent
+
+    data class UpdateAddQuery(val value: String) : PlannerDayEvent
+    data class SelectSearchResult(val id: Long, val title: String) : PlannerDayEvent
+
+    data class UpdateAddGrams(val value: String) : PlannerDayEvent
+    data class UpdateAddServings(val value: String) : PlannerDayEvent
+
+    // Remove an item from a planned meal
+    data class RemovePlannedItem(val itemId: Long) : PlannerDayEvent
+}
