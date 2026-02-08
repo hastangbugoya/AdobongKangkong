@@ -57,6 +57,7 @@ import kotlin.math.max
 import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
+import com.example.adobongkangkong.ui.navigation.NavRoutes
 import java.time.Instant
 import java.time.LocalDate
 
@@ -70,7 +71,8 @@ fun DashboardScreen(
     onOpenFoods: () -> Unit,
     onOpenHeatmap: () -> Unit,
     onOpenDayLog: (LocalDate) -> Unit = {},
-    onOpenMeowLogs: () -> Unit
+    onOpenMeowLogs: () -> Unit,
+    onOpenPlanner: () -> Unit,
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -193,6 +195,7 @@ fun DashboardScreen(
                 onExport = { exportLauncher.launch("adobongkangkong_export.zip") },
                 onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
                 onOpenMeowLogs = onOpenMeowLogs,
+                onOpenPlanner = onOpenPlanner
             )
         }
     }

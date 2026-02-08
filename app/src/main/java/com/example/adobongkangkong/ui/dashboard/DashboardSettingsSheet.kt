@@ -53,6 +53,7 @@ fun DashboardSettingsSheet(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onOpenMeowLogs: () -> Unit,
+    onOpenPlanner: () -> Unit
 ) {
     var slot0Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(0)?.value) }
     var slot1Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(1)?.value) }
@@ -238,6 +239,16 @@ fun DashboardSettingsSheet(
         }
 
         Spacer(Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                onDismiss()
+                onOpenPlanner()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Meal Planner")
+        }
     }
 }
 

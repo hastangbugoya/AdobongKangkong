@@ -16,6 +16,7 @@ import com.example.adobongkangkong.ui.debug.MeowLogScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
 import com.example.adobongkangkong.ui.heatmap.HeatmapScreen
+import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import com.example.adobongkangkong.ui.startup.StartupViewModel
@@ -73,7 +74,10 @@ fun AppNavHost(
                 },
                 onOpenMeowLogs = {
                     navController.navigate(NavRoutes.Debug.meowLogs)
-                }
+                },
+                onOpenPlanner = {
+                    navController.navigate(NavRoutes.Planner.plannerDay(LocalDate.now().toString()))
+                },
             )
         }
 
@@ -222,6 +226,29 @@ fun AppNavHost(
         composable(route = NavRoutes.Debug.meowLogs) {
             MeowLogScreen(
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = NavRoutes.Planner.plannerDay,
+            arguments = listOf(navArgument("dateIso") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val dateIso = backStackEntry.arguments?.getString("dateIso")
+                ?.takeIf { it.isNotBlank() }
+                ?: LocalDate.now().toString()
+
+            val date = runCatching { LocalDate.parse(dateIso) }
+                .getOrElse { LocalDate.now() }
+
+            PlannerDayRoute(
+                date = date,
+                onBack = { navController.popBackStack() },
+                onPickDate = { /* TODO: date picker later */ },
+                onNavigateToDate = { newDate ->
+                    navController.navigate(NavRoutes.Planner.plannerDay(newDate.toString())) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 

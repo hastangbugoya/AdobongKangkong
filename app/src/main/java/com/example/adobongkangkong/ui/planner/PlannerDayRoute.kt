@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.planner
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.LocalDate
 
@@ -10,29 +11,39 @@ fun PlannerDayRoute(
     onBack: () -> Unit,
     onPickDate: (LocalDate) -> Unit,
     onNavigateToDate: (LocalDate) -> Unit,
-    onAddToPlan: (date: LocalDate, slot: com.example.adobongkangkong.data.local.db.entity.MealSlot) -> Unit,
-    onOpenMeal: (mealId: Long) -> Unit,
     viewModel: PlannerDayViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(date) {
+        viewModel.setDate(date)
+    }
+
     PlannerDayScreen(
         state = viewModel.state,
         onEvent = { event ->
             when (event) {
                 PlannerDayEvent.Back -> onBack()
 
-                PlannerDayEvent.PickDate -> onPickDate(viewModel.state.date)
+                PlannerDayEvent.PickDate -> onPickDate(viewModel.state.value.date)
 
-                PlannerDayEvent.PrevDay -> onNavigateToDate(viewModel.state.date.minusDays(1))
-                PlannerDayEvent.NextDay -> onNavigateToDate(viewModel.state.date.plusDays(1))
+                PlannerDayEvent.PrevDay -> onNavigateToDate(viewModel.state.value.date.minusDays(1))
+                PlannerDayEvent.NextDay -> onNavigateToDate(viewModel.state.value.date.plusDays(1))
 
-                is PlannerDayEvent.AddMeal -> onAddToPlan(viewModel.state.date, event.slot)
+                // Local-only events handled by VM/UI
+                is PlannerDayEvent.AddMeal,
+                PlannerDayEvent.DismissAddSheet,
+                is PlannerDayEvent.UpdateAddSheetCustomLabel,
+                is PlannerDayEvent.UpdateAddSheetName,
+                PlannerDayEvent.CreateMealIfNeeded -> viewModel.onEvent(event)
 
-                is PlannerDayEvent.OpenMeal -> onOpenMeal(event.mealId)
-                PlannerDayEvent.DismissAddSheet -> { }
+                // Not navigating yet
+                is PlannerDayEvent.OpenMeal -> {
+                    // no-op for now
+                }
+
+                PlannerDayEvent.CreateAnotherMeal -> {
+
+                }
             }
         }
     )
-
-    // Keep VM in sync with the route date (supports prev/next/picker navigation).
-    viewModel.setDate(date)
 }

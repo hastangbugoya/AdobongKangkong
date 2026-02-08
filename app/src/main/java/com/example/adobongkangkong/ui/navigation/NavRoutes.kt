@@ -70,6 +70,12 @@ object NavRoutes {
         const val meowLogs: String = "debug/meowLogs"
     }
 
+    object Planner {
+        const val plannerDay = "planner/{dateIso}"
+        fun plannerDay(dateIso: String): String = "planner/$dateIso"
+    }
+
+
 }
 
 

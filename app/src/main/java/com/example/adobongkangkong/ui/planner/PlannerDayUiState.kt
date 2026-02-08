@@ -9,11 +9,8 @@ data class PlannerDayUiState(
     val isLoading: Boolean = false,
     val day: PlannedDay? = null,
     val errorMessage: String? = null,
-    val addSheetSlot: MealSlot? = null
-){
-    /**
-     * UI convenience: always provide all slots, even if day is null/empty.
-     */
+    val addSheet: AddSheetState? = null
+) {
     val mealsBySlot: Map<MealSlot, List<com.example.adobongkangkong.domain.planner.model.PlannedMeal>>
         get() {
             val base = MealSlot.entries.associateWith { emptyList<com.example.adobongkangkong.domain.planner.model.PlannedMeal>() }
