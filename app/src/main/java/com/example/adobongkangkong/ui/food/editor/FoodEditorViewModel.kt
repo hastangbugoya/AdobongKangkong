@@ -68,18 +68,6 @@ class FoodEditorViewModel @Inject constructor(
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
     val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
 
-    val banner: StateFlow<BannerSource> =
-        state
-            .map { s ->
-                s.bannerUri?.let { BannerSource.UriBanner(it) }
-                    ?: BannerSource.ResourceBanner(R.drawable.foods_banner)
-            }
-            .stateIn(
-                viewModelScope,
-                SharingStarted.WhileSubscribed(5_000),
-                BannerSource.ResourceBanner(R.drawable.foods_banner)
-            )
-
     @OptIn(FlowPreview::class)
     private val nutrientResultsFlow =
         nutrientQueryFlow

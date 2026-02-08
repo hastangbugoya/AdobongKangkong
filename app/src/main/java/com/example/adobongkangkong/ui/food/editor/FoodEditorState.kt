@@ -61,8 +61,6 @@ data class FoodEditorState(
     val groundingMode: GroundingMode = GroundingMode.SOLID,
     val originalServingUnit: ServingUnit? = null,
     val basisType: BasisType? = null,
-
-    val bannerUri: Uri? = null
 ) {
     /**
      * Convenience flags/fields used by FoodEditorScreen.

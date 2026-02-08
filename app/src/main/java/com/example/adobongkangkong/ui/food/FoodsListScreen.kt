@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -70,6 +72,7 @@ fun FoodsListScreen(
     vm: FoodsListViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
+    val listState = rememberLazyListState()
 
     Scaffold(
         topBar = {
@@ -147,7 +150,10 @@ fun FoodsListScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                state = listState
+            ) {
                 items(state.rows, key = { it.foodId }) { row ->
                     FoodRow(
                         row = row,
@@ -159,6 +165,9 @@ fun FoodsListScreen(
                 }
             }
         }
+    }
+    LaunchedEffect(state.sort.key, state.sort.direction) {
+        listState.scrollToItem(0)
     }
 }
 
