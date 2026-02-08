@@ -27,10 +27,9 @@ class AddPlannedFoodItemUseCase @Inject constructor(
         require(foodId > 0) { "foodId must be > 0" }
         requireValidQuantity(grams, servings)
 
-        val finalSortOrder = sortOrder ?: run {
-            val max = items.getMaxSortOrderForMeal(mealId)
-            max + 1
-        }
+        // Append by default without needing a DB read for "max sort order".
+        // Reads should order by (sortOrder ASC, id ASC).
+        val finalSortOrder = sortOrder ?: Int.MAX_VALUE
 
         val entity = PlannedItemEntity(
             mealId = mealId,
