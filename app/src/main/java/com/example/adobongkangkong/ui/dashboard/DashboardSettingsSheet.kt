@@ -51,7 +51,8 @@ fun DashboardSettingsSheet(
 
     onSync: () -> Unit,
     onExport: () -> Unit,
-    onImport: () -> Unit
+    onImport: () -> Unit,
+    onOpenMeowLogs: () -> Unit,
 ) {
     var slot0Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(0)?.value) }
     var slot1Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(1)?.value) }
@@ -223,6 +224,18 @@ fun DashboardSettingsSheet(
                 onImport()
             }
         )
+
+        Spacer(Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                onDismiss()
+                onOpenMeowLogs()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Meow Logs")
+        }
 
         Spacer(Modifier.height(16.dp))
     }

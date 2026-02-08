@@ -2,6 +2,7 @@ package com.example.adobongkangkong
 
 import android.app.Application
 import android.util.Log
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodByBarcodeUseCase
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
 import dagger.hilt.android.HiltAndroidApp
@@ -32,5 +33,6 @@ class AdobongKangkongApp: Application() {
 //                    Log.e("USDA_TEST", "Failed: ${r.message}")
 //            }
 //        }
+        MeowLog.init(this)
     }
 }

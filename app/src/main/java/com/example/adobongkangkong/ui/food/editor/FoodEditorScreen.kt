@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -54,6 +57,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
@@ -122,6 +126,10 @@ fun FoodEditorScreen(
     onCloseBarcodeScanner: () -> Unit,
     onBarcodeScanned: (String) -> Unit,
     onPickBarcodeCandidate: (Long) -> Unit,
+
+    // Basis
+    onPickBasisType: (BasisType) -> Unit,
+    onDismissGroundingDialog: () -> Unit,
 ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
@@ -183,6 +191,24 @@ fun FoodEditorScreen(
             )
         }
     }
+
+    if (state.isGroundingDialogOpen) {
+        AlertDialog(
+            onDismissRequest = onDismissGroundingDialog,
+            title = { Text("Serving unit needs a basis") },
+            text = { Text("Is this measured by mass (solids) or volume (liquids)?") },
+            confirmButton = {
+                TextButton(onClick = { onPickBasisType(BasisType.PER_100G) }) {
+                    Text("Mass (PER 100g)")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onPickBasisType(BasisType.PER_100ML) }) {
+                    Text("Volume (PER 100mL)")
+                }
+            }
+        )
+    }
     // ----------------------------------------------------------------------
 
     Scaffold(
@@ -194,16 +220,6 @@ fun FoodEditorScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val canCaptureBanner = state.foodId != null
-                    Spacer(Modifier.width(16.dp))
-
-                    if (state.foodId == null) {
-                        Text(
-                            "Save the food first to enable banner capture.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = ::requestExit) {
@@ -249,45 +265,79 @@ fun FoodEditorScreen(
                     val bannerOwnerId = state.foodId
                     val canCaptureBanner = bannerOwnerId != null
 
-                    if (canCaptureBanner) {
-                        val file = remember(bannerOwnerId) {
+                    val bannerFile = if (canCaptureBanner) {
+                        remember(bannerOwnerId) {
                             com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
                                 .bannerJpegFile(bannerOwnerId)
                         }
+                    } else null
 
-                        val bannerBitmapState = produceState<android.graphics.Bitmap?>(
+                    val hasStoredBanner = bannerFile?.exists() == true
+
+                    val bannerBitmapState = if (canCaptureBanner) {
+                        produceState<android.graphics.Bitmap?>(
                             initialValue = null,
                             key1 = bannerOwnerId,
                             key2 = bannerRefreshTick
                         ) {
+                            val file = bannerFile!!
                             value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
                         }
+                    } else {
+                        null
+                    }
 
-                        bannerBitmapState.value?.let { bmp ->
-                            androidx.compose.foundation.layout.Box(
+                    val bmp = bannerBitmapState?.value
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(3f / 1f)
+                            .clipToBounds()
+                    ) {
+                        // Banner image (real banner if decoded; otherwise placeholder)
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = null,
+                                alignment = Alignment.Center,
+                                modifier = Modifier.matchParentSize(),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(R.drawable.foods_banner),
+                                contentDescription = null,
+                                alignment = Alignment.Center,
+                                modifier = Modifier.matchParentSize(),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        }
+
+                        // Always allow changing banner once the item has an id.
+                        if (canCaptureBanner) {
+                            IconButton(
+                                onClick = { bannerCaptureController.open(bannerOwnerId!!) },
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(3f / 1f)
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp)
                             ) {
-                                Image(
-                                    bitmap = bmp.asImageBitmap(),
-                                    contentDescription = null,
-                                    modifier = Modifier.matchParentSize(),
-                                    contentScale = ContentScale.Crop
+                                Icon(
+                                    painter = painterResource(android.R.drawable.ic_menu_camera),
+                                    contentDescription = "Change banner"
                                 )
-
-                                IconButton(
-                                    onClick = { bannerCaptureController.open(bannerOwnerId) },
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(8.dp)
-                                ) {
-                                    Icon(
-                                        painter = painterResource(android.R.drawable.ic_menu_camera),
-                                        contentDescription = "Change banner"
-                                    )
-                                }
                             }
+                        }
+
+                        // If a stored banner exists but decoding hasn't finished yet, show a subtle spinner
+                        // so the user understands the placeholder will be replaced.
+                        if (hasStoredBanner && bmp == null) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(10.dp)
+                                    .size(50.dp),
+                                strokeWidth = 2.dp
+                            )
                         }
                     }
 

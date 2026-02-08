@@ -1,9 +1,16 @@
 package com.example.adobongkangkong.ui.food.editor
 
+import android.net.Uri
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.requiresGramsPerServing
+
+enum class GroundingMode {
+    SOLID,
+    LIQUID
+}
 
 data class NutrientRowUi(
     val nutrientId: Long,
@@ -22,6 +29,7 @@ data class FoodEditorState(
     val servingSize: String = "1.0",
     val servingUnit: ServingUnit = ServingUnit.SERVING,
     val gramsPerServingUnit: String = "",
+    val mlPerServingUnit: String = "",
     val servingsPerPackage: String = "",
 
     val nutrientRows: List<NutrientRowUi> = emptyList(),
@@ -48,7 +56,14 @@ data class FoodEditorState(
     val pendingUsdaSearchJson: String? = null,
     val barcodePickItems: List<com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase.PickItem> = emptyList(),
 
-    ) {
+    // Solid-vs-liquid grounding prompt (UI-only)
+    val isGroundingDialogOpen: Boolean = false,
+    val groundingMode: GroundingMode = GroundingMode.SOLID,
+    val originalServingUnit: ServingUnit? = null,
+    val basisType: BasisType? = null,
+
+    val bannerUri: Uri? = null
+) {
     /**
      * Convenience flags/fields used by FoodEditorScreen.
      *
@@ -80,8 +95,8 @@ data class FoodEditorState(
             if (isSaving) return false
             if (name.isBlank()) return false
 
-            // If the unit is volume-like, grams-per-serving is required for deterministic math.
-            if (servingUnit.requiresGramsPerServing() && gramsPerServingUnit.trim().isEmpty()) return false
+            // We intentionally do NOT block save when a unit is ambiguous (cup/tbsp/fl oz/etc.)
+            // because the ViewModel can prompt the user for SOLID vs LIQUID grounding.
 
             // servingSize should be a positive number if present.
             val servingSizeValue = servingSize.toDoubleOrNull()
@@ -103,5 +118,5 @@ data class NutrientSearchResultUi(
     val name: String,
     val unit: NutrientUnit,
     val category: NutrientCategory,
-    val aliases: List<String> = emptyList<String>()
+    val aliases: List<String> = emptyList()
 )

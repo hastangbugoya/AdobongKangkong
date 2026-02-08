@@ -66,6 +66,10 @@ object NavRoutes {
         }
     }
 
+    object Debug {
+        const val meowLogs: String = "debug/meowLogs"
+    }
+
 }
 
 

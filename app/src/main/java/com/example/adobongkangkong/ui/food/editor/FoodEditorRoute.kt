@@ -84,6 +84,9 @@ fun FoodEditorRoute(
         onCloseBarcodeScanner = viewModel::closeBarcodeScanner,
         onBarcodeScanned = viewModel::onBarcodeScanned,
         onPickBarcodeCandidate = viewModel::onPickBarcodeCandidate,
+        onPickBasisType = viewModel::onPickBasisType,
+        onDismissGroundingDialog = viewModel::closeGroundingDialog,
+
 
         )
 

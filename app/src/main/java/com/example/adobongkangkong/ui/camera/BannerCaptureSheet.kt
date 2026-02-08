@@ -2,14 +2,18 @@ package com.example.adobongkangkong.ui.camera
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.Manifest
 import android.graphics.Matrix
 import androidx.exifinterface.media.ExifInterface
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.util.Rational
 import android.view.Surface
 import android.view.ViewGroup
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -52,10 +56,26 @@ fun BannerCaptureSheet(
     onCaptured: (foodId: Long, uri: Uri) -> Unit,
     onError: (Throwable) -> Unit,
 ) {
-    val context = LocalContext.current.applicationContext
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val mainExecutor: Executor = remember { ContextCompat.getMainExecutor(context) }
+
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val requestCameraPermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+    }
 
     val storage = remember { FoodImageStorage(context) }
 
@@ -70,12 +90,17 @@ fun BannerCaptureSheet(
         }
     }
 
-    var isBinding by remember { mutableStateOf(true) }
+
+    var isBinding by remember { mutableStateOf(hasCameraPermission) }
     var isCapturing by remember { mutableStateOf(false) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
-    LaunchedEffect(previewView) {
+    LaunchedEffect(previewView, hasCameraPermission) {
+        if (!hasCameraPermission) {
+            isBinding = false
+            return@LaunchedEffect
+        }
         isBinding = true
         runCatching {
             val provider = getCameraProvider(context, mainExecutor)
@@ -151,6 +176,20 @@ fun BannerCaptureSheet(
                     factory = { previewView }
                 )
 
+
+                if (!hasCameraPermission) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        Text(
+                            text = "Camera permission is required to preview and capture a banner.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+
                 if (isBinding) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -172,8 +211,12 @@ fun BannerCaptureSheet(
                 }
 
                 Button(
-                    enabled = !isBinding && !isCapturing && imageCapture != null,
+                    enabled = !isCapturing && (!hasCameraPermission || (!isBinding && imageCapture != null)),
                     onClick = {
+                        if (!hasCameraPermission) {
+                            requestCameraPermission.launch(Manifest.permission.CAMERA)
+                            return@Button
+                        }
                         val capture = imageCapture ?: return@Button
                         scope.launch {
                             isCapturing = true
@@ -211,7 +254,13 @@ fun BannerCaptureSheet(
                         }
                     }
                 ) {
-                    Text(if (isCapturing) "Capturing…" else "Capture")
+                    Text(
+                        when {
+                            !hasCameraPermission -> "Grant camera"
+                            isCapturing -> "Capturing…"
+                            else -> "Capture"
+                        }
+                    )
                 }
             }
         }

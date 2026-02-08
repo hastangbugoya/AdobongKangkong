@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.AliasAddResult
 import com.example.adobongkangkong.domain.model.Food
@@ -12,6 +13,7 @@ import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.toGrams
+import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -21,9 +23,10 @@ import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
+import com.example.adobongkangkong.ui.common.banner.BannerSource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import java.util.UUID
+import javax.inject.Inject
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,12 +39,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/**
- * Food editor state holder.
- *
- * Key rule: Food.stableId is generated ONCE for new foods and then persists forever.
- * This allows logs/import/export to remain stable even if Room primary keys change.
- */
 @HiltViewModel
 class FoodEditorViewModel @Inject constructor(
     private val getData: GetFoodEditorDataUseCase,
@@ -71,6 +68,18 @@ class FoodEditorViewModel @Inject constructor(
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
     val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
 
+    val banner: StateFlow<BannerSource> =
+        state
+            .map { s ->
+                s.bannerUri?.let { BannerSource.UriBanner(it) }
+                    ?: BannerSource.ResourceBanner(R.drawable.foods_banner)
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                BannerSource.ResourceBanner(R.drawable.foods_banner)
+            )
+
     @OptIn(FlowPreview::class)
     private val nutrientResultsFlow =
         nutrientQueryFlow
@@ -79,7 +88,7 @@ class FoodEditorViewModel @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { q ->
                 if (q.isBlank()) flowOf(emptyList())
-                else searchNutrients(q, limit = 80) // Flow<List<Nutrient>>
+                else searchNutrients(q, limit = 80)
             }
 
     val selectedAliases: StateFlow<List<String>> =
@@ -90,13 +99,7 @@ class FoodEditorViewModel @Inject constructor(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /**
-     * Loads editor data for an existing food, or initializes defaults for a new food.
-     * For new foods, a stableId is generated once and stored in state.
-     */
     fun load(foodId: Long?, initialName: String?) {
-        Log.d("Meow", "load(FOOD_EDITOR > foodId=$foodId) vm=${System.identityHashCode(this)} currentFoodId=${_state.value.foodId}")
-        // If already loaded for this foodId, do nothing.
         val current = _state.value
         if (current.foodId == foodId && (foodId != null)) return
 
@@ -110,8 +113,11 @@ class FoodEditorViewModel @Inject constructor(
                 food?.stableId
                     ?: current.stableId
                     ?: UUID.randomUUID().toString()
+
             val servingSize = food?.servingSize ?: 1.0
             val gramsPerServingUnit = food?.gramsPerServingUnit
+            val mlPerServingUnit = food?.mlPerServingUnit
+
             _state.value = current.copy(
                 foodId = foodId,
                 stableId = stableId,
@@ -121,6 +127,8 @@ class FoodEditorViewModel @Inject constructor(
                 servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
                 gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() }
                     ?: food?.gramsPerServingUnit?.toString().orEmpty(),
+                mlPerServingUnit = current.mlPerServingUnit.takeIf { it.isNotBlank() }
+                    ?: food?.mlPerServingUnit?.toString().orEmpty(),
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
                 nutrientRows = rows.map { r ->
@@ -134,7 +142,17 @@ class FoodEditorViewModel @Inject constructor(
                                     gramsPerServingUnit = gramsPerServingUnit
                                 ).amount
 
-                            // if you ever store PER_100ML, use the volume scaler here (you’d need mlPerServingUnit)
+                            BasisType.PER_100ML -> NutrientBasisScaler
+                                .canonicalToDisplayPerServingVolume(
+                                    storedAmount = r.amount,
+                                    storedBasis = r.basisType,
+                                    servingSize = servingSize,
+                                    mlPerServingUnit = mlPerServingUnitEffective(
+                                        servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
+                                        mlPerServingUnit = mlPerServingUnit
+                                    )
+                                ).amount
+
                             else -> r.amount
                         }
 
@@ -154,14 +172,35 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
+    fun onPickBasisType(type: BasisType) { update { it.copy(basisType = type, isGroundingDialogOpen = false) } }
+
+    fun closeGroundingDialog() { update { it.copy(isGroundingDialogOpen = false) }}
+
     fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null, hasUnsavedChanges = true) }
     fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
     fun onServingSizeChange(v: String) = update { it.copy(servingSize = v, hasUnsavedChanges = true) }
     fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v, hasUnsavedChanges = true) }
     fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServingUnit = v, hasUnsavedChanges = true) }
+    fun onMlPerServingChange(v: String) = update { it.copy(mlPerServingUnit = v, hasUnsavedChanges = true) }
     fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v, hasUnsavedChanges = true) }
 
-    // Flags
+    fun onGroundingModeChange(v: GroundingMode) {
+        update { s ->
+            val next = s.copy(groundingMode = v)
+
+            // Convenience: if LIQUID + known volume unit, prefill ml-per-1-unit using pure volume conversion.
+            if (v == GroundingMode.LIQUID && next.mlPerServingUnit.isBlank()) {
+                val auto = next.servingUnit.toMilliliters(1.0)
+                if (auto != null && auto > 0.0) {
+                    return@update next.copy(mlPerServingUnit = auto.roundForUi())
+                }
+            }
+            next
+        }
+    }
+
+    fun dismissGroundingDialog() = update { it.copy(isGroundingDialogOpen = false) }
+
     fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v, hasUnsavedChanges = true) }
     fun onEatMoreChange(v: Boolean) = update { it.copy(eatMore = v, hasUnsavedChanges = true) }
     fun onLimitChange(v: Boolean) = update { it.copy(limit = v, hasUnsavedChanges = true) }
@@ -218,17 +257,26 @@ class FoodEditorViewModel @Inject constructor(
             update { it.copy(errorMessage = "Food name is required.") }
             return
         }
+        val unit = s.servingUnit
+        val needsBasis =
+            (isAmbiguousForGrounding(unit)) &&
+                    s.basisType == null
+
+        if (needsBasis) {
+            update {
+                it.copy(isGroundingDialogOpen = true)
+            }
+            return
+        }
 
         fun parseDoubleOrNull(x: String): Double? =
             x.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
 
         val servingSize = parseDoubleOrNull(s.servingSize) ?: 1.0
         val gramsPerServingUnitInput = parseDoubleOrNull(s.gramsPerServingUnit)
+        val mlPerServingUnitInput = parseDoubleOrNull(s.mlPerServingUnit)
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
-        // Rule: if user provided gramsPerServingUnit, trust it.
-        // If blank AND serving unit is a mass unit (e.g., OZ/LB), auto-compute grams per 1 unit.
-        // If serving unit is G, we don't need gramsPerServingUnit (but for consistency we treat it as 1 g per 1 g).
         val gramsPerServingUnitFinal: Double? =
             when {
                 gramsPerServingUnitInput != null && gramsPerServingUnitInput > 0.0 -> gramsPerServingUnitInput
@@ -236,9 +284,36 @@ class FoodEditorViewModel @Inject constructor(
                 else -> null
             }?.takeIf { it > 0.0 }
 
-        // IMPORTANT:
-        // - For new foods: id = 0L so Room auto-generates.
-        // - stableId must be generated once and persisted.
+        val mlPerServingUnitFinal: Double? =
+            when {
+                mlPerServingUnitInput != null && mlPerServingUnitInput > 0.0 -> mlPerServingUnitInput
+                // Safe volume conversion (no density): ml per 1 unit when the unit has a defined volume.
+                // NOTE: this will be used only when the user chose LIQUID (see finalMlBridge below).
+                else -> s.servingUnit.toMilliliters(1.0)
+            }?.takeIf { it > 0.0 }
+
+        val needsGroundingPrompt =
+            isAmbiguousForGrounding(s.servingUnit) &&
+                    gramsPerServingUnitFinal == null &&
+                    mlPerServingUnitFinal == null
+
+        if (needsGroundingPrompt) {
+            update { it.copy(isGroundingDialogOpen = true) }
+            return
+        }
+
+        val finalGramsBridge: Double? =
+            when {
+                s.groundingMode == GroundingMode.LIQUID -> null
+                else -> gramsPerServingUnitFinal
+            }
+
+        val finalMlBridge: Double? =
+            when {
+                s.groundingMode == GroundingMode.SOLID -> null
+                else -> mlPerServingUnitFinal
+            }
+
         val id = s.foodId ?: 0L
         val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
@@ -248,20 +323,18 @@ class FoodEditorViewModel @Inject constructor(
             brand = s.brand.trim().ifEmpty { null },
             servingSize = servingSize,
             servingUnit = s.servingUnit,
-            gramsPerServingUnit = gramsPerServingUnitFinal,
+            gramsPerServingUnit = finalGramsBridge,
             servingsPerPackage = servingsPerPackage,
             isRecipe = false,
             stableId = stableId,
-            mlPerServingUnit = null,
+            mlPerServingUnit = finalMlBridge,
             isLowSodium = null,
         )
 
-        // Decide default basis for nutrients *stored from this editor*.
-        // Editor amounts are per-serving UI amounts.
-        // If we can ground serving in grams, store canonical PER_100G by converting the UI per-serving amount -> per-100g.
-        // Otherwise store USDA_REPORTED_SERVING amounts as-is (use case can later canonicalize once grounded).
         val defaultBasisType: BasisType =
-            if (s.servingUnit == ServingUnit.G || gramsPerServingUnitFinal != null) {
+            if (isVolumeGrounded(servingUnit = s.servingUnit, mlPerServingUnit = finalMlBridge)) {
+                BasisType.PER_100ML
+            } else if (s.servingUnit == ServingUnit.G || finalGramsBridge != null) {
                 BasisType.PER_100G
             } else {
                 BasisType.USDA_REPORTED_SERVING
@@ -270,36 +343,53 @@ class FoodEditorViewModel @Inject constructor(
         val gramsPerServingUnitEffective: Double? =
             when (s.servingUnit) {
                 ServingUnit.G -> 1.0
-                else -> gramsPerServingUnitFinal
+                else -> finalGramsBridge
             }?.takeIf { it > 0.0 }
+
+        val mlPerServingUnitEffective: Double? =
+            mlPerServingUnitEffective(
+                servingUnit = s.servingUnit,
+                mlPerServingUnit = finalMlBridge
+            )
 
         val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
             val uiPerServingAmount = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
 
             val amountToStore =
-                if (defaultBasisType == BasisType.PER_100G) {
-                    NutrientBasisScaler.displayPerServingToCanonical(
+                when (defaultBasisType) {
+                    BasisType.PER_100G -> NutrientBasisScaler.displayPerServingToCanonical(
                         uiPerServingAmount = uiPerServingAmount,
                         canonicalBasis = BasisType.PER_100G,
                         servingSize = servingSize,
                         gramsPerServingUnit = gramsPerServingUnitEffective
                     ).amount
-                } else {
-                    uiPerServingAmount
+
+                    BasisType.PER_100ML -> NutrientBasisScaler.displayPerServingToCanonicalVolume(
+                        uiPerServingAmount = uiPerServingAmount,
+                        canonicalBasis = BasisType.PER_100ML,
+                        servingSize = servingSize,
+                        mlPerServingUnit = mlPerServingUnitEffective
+                    ).amount
+
+                    else -> uiPerServingAmount
                 }
 
             FoodNutrientRow(
                 nutrient = Nutrient(
                     id = ui.nutrientId,
-                    code = "", // editor doesn’t need code to save
+                    code = "",
                     displayName = ui.name,
                     unit = ui.unit,
                     category = ui.category
                 ),
                 amount = amountToStore,
                 basisType = defaultBasisType,
-                basisGrams = if (defaultBasisType == BasisType.PER_100G) 100.0 else null
+                basisGrams = when (defaultBasisType) {
+                    BasisType.PER_100G -> 100.0
+                    BasisType.PER_100ML -> 100.0
+                    else -> null
+                }
             )
         }
 
@@ -307,7 +397,6 @@ class FoodEditorViewModel @Inject constructor(
             update { it.copy(isSaving = true, errorMessage = null, stableId = stableId) }
             try {
                 val savedId = saveFoodWithNutrients(food, rows)
-                // Save flags separately
                 flagsRepo.setFlags(
                     foodId = savedId,
                     favorite = s.favorite,
@@ -328,18 +417,13 @@ class FoodEditorViewModel @Inject constructor(
         val foodId = _state.value.foodId ?: return
 
         viewModelScope.launch {
-            // Reuse isSaving to disable actions while deleting.
             update { it.copy(isSaving = true, errorMessage = null) }
             try {
                 val deleted = foodRepo.deleteFood(foodId)
                 if (deleted) {
                     didDeleteFlow.value = true
                 } else {
-                    update {
-                        it.copy(
-                            errorMessage = "Cannot delete: this food is used in one or more recipes."
-                        )
-                    }
+                    update { it.copy(errorMessage = "Cannot delete: this food is used in one or more recipes.") }
                 }
             } catch (t: Throwable) {
                 update { it.copy(errorMessage = t.message ?: "Failed to delete food.") }
@@ -386,57 +470,45 @@ class FoodEditorViewModel @Inject constructor(
         _state.value = block(_state.value)
     }
 
-    fun openLbDialog() = update {
-        it.copy(isLbDialogOpen = true, lbInputText = "")
-    }
-
-    fun closeLbDialog() = update {
-        it.copy(isLbDialogOpen = false)
-    }
-
-    fun onLbInputChange(v: String) = update {
-        it.copy(lbInputText = v)
-    }
-
-    fun confirmLbToGrams() {
-        val raw = state.value.lbInputText
-        val pounds = raw.toPoundsOrNull()
-            ?: run {
-                update { it.copy(errorMessage = "Enter pounds like 1.5") }
-                return
-            }
-
-        val grams = pounds * 453.59237
-
-        // if your grams field is string-backed:
-        onGramsPerServingChange(grams.roundForUi())
-
-        // close dialog
-        update { it.copy(isLbDialogOpen = false) }
-    }
-
-    private fun String.toPoundsOrNull(): Double? {
-        // accepts: "1.5", "1.5lb", " 1.5 lb "
-        val cleaned = trim()
-            .lowercase()
-            .replace("lbs", "")
-            .replace("lb", "")
-            .trim()
-
-        return cleaned.toDoubleOrNull()
-    }
-
     private fun Double.roundForUi(): String {
-        // simple: 2 decimals; you can tune
         return "%,.2f".format(this).replace(",", "")
     }
 
-    fun openBarcodeScanner() = update {
-        it.copy(
-            isBarcodeScannerOpen = true,
-            errorMessage = null
-        )
+    private fun isAmbiguousForGrounding(unit: ServingUnit): Boolean {
+        return when (unit) {
+            ServingUnit.TSP_US,
+            ServingUnit.TBSP_US,
+            ServingUnit.FL_OZ_US,
+            ServingUnit.CUP_US,
+            ServingUnit.CUP_METRIC,
+            ServingUnit.CUP_JP,
+            ServingUnit.RCCUP,
+            ServingUnit.TSP,
+            ServingUnit.TBSP,
+            ServingUnit.CUP,
+            ServingUnit.CAN,
+            ServingUnit.BOTTLE,
+            ServingUnit.JAR -> true
+            else -> false
+        }
     }
+
+    private fun isVolumeGrounded(servingUnit: ServingUnit, mlPerServingUnit: Double?): Boolean {
+        // Do NOT treat “cup/tbsp/fl oz” as volume-grounded by default.
+        // Those units are ambiguous for user-entered foods; only ml/L or an explicit ml bridge is volume grounding.
+        return mlPerServingUnit != null || servingUnit == ServingUnit.ML || servingUnit == ServingUnit.L
+    }
+
+    private fun mlPerServingUnitEffective(servingUnit: ServingUnit, mlPerServingUnit: Double?): Double? {
+        return when (servingUnit) {
+            ServingUnit.ML -> 1.0
+            ServingUnit.L -> 1000.0
+            else -> mlPerServingUnit
+        }?.takeIf { it > 0.0 }
+    }
+
+    // Barcode flow (unchanged)
+    fun openBarcodeScanner() = update { it.copy(isBarcodeScannerOpen = true, errorMessage = null) }
 
     fun closeBarcodeScanner() = update {
         it.copy(
@@ -447,12 +519,10 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     fun onBarcodeScanned(barcode: String) {
-        Log.d("Meow", "FOOD_EDITOR > onBarcodeScanned($barcode) vm=${System.identityHashCode(this)}")
         update { it.copy(isBarcodeScannerOpen = false) }
         viewModelScope.launch {
             when (val r = searchUsdaByBarcode(barcode)) {
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {
-                    // Store barcode + JSON + candidates (UI-only)
                     update {
                         it.copy(
                             scannedBarcode = r.scannedBarcode,
@@ -461,16 +531,12 @@ class FoodEditorViewModel @Inject constructor(
                             isBarcodeScannerOpen = false
                         )
                     }
-
                     if (r.candidates.size == 1) {
-                        // Auto import if unambiguous
                         onPickBarcodeCandidate(r.candidates.first().fdcId)
                     }
                 }
-
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked ->
                     update { it.copy(errorMessage = r.reason) }
-
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Failed ->
                     update { it.copy(errorMessage = r.message) }
             }
@@ -486,7 +552,6 @@ class FoodEditorViewModel @Inject constructor(
         viewModelScope.launch {
             when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
                 is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
-                    // Close scanner/picker and load imported food into editor
                     update {
                         it.copy(
                             isBarcodeScannerOpen = false,
@@ -497,7 +562,6 @@ class FoodEditorViewModel @Inject constructor(
                     }
                     load(foodId = r.foodId, initialName = null)
                 }
-
                 is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked ->
                     update { it.copy(errorMessage = r.reason) }
             }
@@ -528,10 +592,9 @@ class FoodEditorViewModel @Inject constructor(
 /**
  * FUTURE-YOU NOTE (2026-02-06):
  *
- * Editor nutrient inputs are PER-SERVING UI values.
- *
- * - If we store PER_100G in DB, we MUST convert UI per-serving -> canonical per-100g (do not just relabel basisType).
- * - gramsPerServingUnit means: grams per 1 unit of servingUnit (NOT grams for the whole serving).
- * - If gramsPerServingUnit is blank and servingUnit is a mass unit (OZ/LB), auto-compute grams per 1 unit using ServingUnit.toGrams(1.0).
- * - Never guess density for volume units (CUP/TBSP/TSP/FLOZ). If not grounded, keep USDA_REPORTED_SERVING.
+ * - Editor nutrient inputs are PER-SERVING UI values.
+ * - Canonical math must stay out of UI: VM converts per-serving -> PER_100G or PER_100ML.
+ * - Ambiguous volume units (cup/tbsp/fl oz/can/bottle) must prompt SOLID vs LIQUID
+ *   instead of assuming PER_100ML.
+ * - Never guess density. Never grams↔mL conversions.
  */

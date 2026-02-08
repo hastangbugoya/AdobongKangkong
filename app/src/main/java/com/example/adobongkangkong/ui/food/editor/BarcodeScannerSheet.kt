@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.util.Log
+import com.example.adobongkangkong.core.log.MeowLog
 import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,10 +60,6 @@ fun BarcodeScannerSheet(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermission = granted }
 
-    LaunchedEffect(Unit) {
-        if (!hasPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -73,10 +69,10 @@ fun BarcodeScannerSheet(
         Spacer(Modifier.height(8.dp))
 
         if (!hasPermission) {
-            Text("Camera permission is required to scan barcodes.")
+            Text("Camera permission is required to scan barcodes.", modifier = Modifier.padding(8.dp))
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                Text("Grant permission")
+                Text("Grant camera")
             }
             return@Column
         }
@@ -115,13 +111,13 @@ private fun BarcodeScannerPreview(
         onDispose {
             try {
                 cameraProviderRef?.unbindAll()
-            } catch (_: Throwable) {
-                // ignore
+            } catch (t: Throwable) {
+                MeowLog.e("BarcodeScannerSheet onDispose: unbindAll failed", t)
             }
             try {
                 scanner.close()
-            } catch (_: Throwable) {
-                // ignore
+            } catch (t: Throwable) {
+                MeowLog.e("BarcodeScannerSheet onDispose: scanner.close failed", t)
             }
             cameraExecutor.shutdown()
         }
@@ -179,8 +175,8 @@ private fun BarcodeScannerPreview(
                             camera.cameraControl.startFocusAndMetering(action)
                         }
 
-                    } catch (_: Throwable) {
-                        // ignore
+                    } catch (t: Throwable) {
+                        MeowLog.e("BarcodeScannerSheet: startFocusAndMetering failed", t)
                     }
                 }, ContextCompat.getMainExecutor(ctx))
 

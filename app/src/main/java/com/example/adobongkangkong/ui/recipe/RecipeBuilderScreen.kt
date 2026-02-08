@@ -58,6 +58,14 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import kotlinx.coroutines.delay
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 
 /**
  * Recipe builder / editor screen.
@@ -202,8 +210,61 @@ fun RecipeBuilderScreen(
                 val canCaptureBanner = bannerOwnerId != null
 
                 val bannerFile = remember(bannerOwnerId) {
-                        if (editFoodId == null) null else FoodImageStorage(context).bannerJpegFile(editFoodId)
+                    if (editFoodId == null) null else FoodImageStorage(context).bannerJpegFile(editFoodId)
+                }
+
+                val bannerBitmapState = if (canCaptureBanner) {
+                    val file = bannerFile!!
+
+                    produceState<android.graphics.Bitmap?>(
+                        initialValue = null,
+                        key1 = bannerOwnerId,
+                        key2 = bannerRefreshTick
+                    ) {
+                        value = if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
                     }
+                } else {
+                    null
+                }
+
+                val bmp = bannerBitmapState?.value
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(3f / 1f)
+                        .clipToBounds()
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = null,
+                            alignment = Alignment.Center,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.FillWidth
+                        )
+
+                        IconButton(
+                            onClick = { bannerCaptureController.open(bannerOwnerId!!) },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(android.R.drawable.ic_menu_camera),
+                                contentDescription = "Change banner"
+                            )
+                        }
+                    } else {
+                        Image(
+                            painter = painterResource(R.drawable.recipe_banner),
+                            contentDescription = null,
+                            alignment = Alignment.Center,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.FillWidth
+                        )
+                    }
+                }
 
                 Column(
                     modifier = Modifier
@@ -572,4 +633,3 @@ fun RecipeBuilderScreen(
     }
 
 }
-

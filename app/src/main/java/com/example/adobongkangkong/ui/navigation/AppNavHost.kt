@@ -12,6 +12,7 @@ import androidx.navigation.navArgument
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.daylog.DayLogScreen
+import com.example.adobongkangkong.ui.debug.MeowLogScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
 import com.example.adobongkangkong.ui.heatmap.HeatmapScreen
@@ -69,6 +70,9 @@ fun AppNavHost(
                 },
                 onOpenDayLog = { date: LocalDate ->
                     navController.navigate(NavRoutes.DayLog.dayLog(date))
+                },
+                onOpenMeowLogs = {
+                    navController.navigate(NavRoutes.Debug.meowLogs)
                 }
             )
         }
@@ -212,6 +216,12 @@ fun AppNavHost(
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
                 bannerRefreshTick = bannerRefreshTick,
                 bannerCaptureController = bannerCaptureController
+            )
+        }
+
+        composable(route = NavRoutes.Debug.meowLogs) {
+            MeowLogScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 
