@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.domain.mealprep.usecase
+package com.example.adobongkangkong.domain.planner.usecase
 
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import javax.inject.Inject

@@ -7,25 +7,25 @@ import androidx.room.PrimaryKey
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 
 @Entity(
-    tableName = "planned_items",
+    tableName = "meal_template_items",
     foreignKeys = [
         ForeignKey(
-            entity = PlannedMealEntity::class,
+            entity = MealTemplateEntity::class,
             parentColumns = ["id"],
-            childColumns = ["mealId"],
+            childColumns = ["templateId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [
-        Index(value = ["mealId"]),
-        Index(value = ["mealId", "sortOrder"])
+        Index(value = ["templateId"]),
+        Index(value = ["templateId", "sortOrder"])
     ]
 )
-data class PlannedItemEntity(
+data class MealTemplateItemEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
 
-    val mealId: Long,
+    val templateId: Long,
 
     /** FOOD | RECIPE_BATCH */
     val type: PlannedItemSource,
@@ -36,6 +36,5 @@ data class PlannedItemEntity(
     val grams: Double? = null,
     val servings: Double? = null,
 
-    /** Order within the meal */
     val sortOrder: Int
 )

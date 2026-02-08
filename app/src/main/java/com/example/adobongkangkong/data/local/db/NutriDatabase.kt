@@ -11,6 +11,9 @@ import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.ImportIssueDao
 import com.example.adobongkangkong.data.local.db.dao.ImportRunDao
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
+import com.example.adobongkangkong.data.local.db.dao.MealTemplateDao
+import com.example.adobongkangkong.data.local.db.dao.MealTemplateItemDao
+import com.example.adobongkangkong.data.local.db.dao.MealTemplatePrefsDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientAliasDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedItemDao
@@ -27,6 +30,9 @@ import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
 import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
+import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
+import com.example.adobongkangkong.data.local.db.entity.MealTemplateItemEntity
+import com.example.adobongkangkong.data.local.db.entity.MealTemplatePrefsEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
@@ -54,9 +60,12 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
         UserPinnedNutrientEntity::class,
         PlannedMealEntity::class,
         PlannedItemEntity::class,
-    ],
-    version = 4,
-    exportSchema = true
+        MealTemplateEntity::class,
+        MealTemplateItemEntity::class,
+        MealTemplatePrefsEntity::class
+],
+    version = 5,
+    exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
 abstract class NutriDatabase : RoomDatabase() {
@@ -77,7 +86,9 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun userPinnedNutrientDao(): UserPinnedNutrientDao
     abstract fun plannedMealDao(): PlannedMealDao
     abstract fun plannedItemDao(): PlannedItemDao
-
+    abstract fun mealTemplateDao(): MealTemplateDao
+    abstract fun mealTemplateItemDao(): MealTemplateItemDao
+    abstract fun mealTemplatePrefsDao(): MealTemplatePrefsDao
 
     companion object {
         /**
@@ -92,5 +103,25 @@ abstract class NutriDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE foods ADD COLUMN mlPerServingUnit REAL")
             }
         }
+        /**
+         * DATABASE VERSION NOTES
+         *
+         * v5
+         * - Meal prep planner iteration
+         *   - planned_meals
+         *   - planned_items
+         * - Meal templates
+         *   - meal_templates
+         *   - meal_template_items
+         */
+
+        /**
+         * DB VERSION REMINDER
+         *
+         * Pending (NOT REGISTERED YET):
+         * - MealTemplatePrefsEntity (favorite + bias)
+         *
+         * Register + bump DB version to 6 together.
+         */
     }
 }

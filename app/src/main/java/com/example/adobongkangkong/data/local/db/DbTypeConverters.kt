@@ -3,13 +3,14 @@ package com.example.adobongkangkong.data.local.db
 import androidx.room.TypeConverter
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.data.local.db.entity.MealTemplateBias
 import com.example.adobongkangkong.domain.model.LogUnit
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
+import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import java.time.Instant
 
@@ -65,4 +66,22 @@ class DbTypeConverters {
     @TypeConverter
     fun mealSlotFromDb(value: String?): MealSlot? =
         value?.let { runCatching { MealSlot.valueOf(it) }.getOrNull() }
+
+    // MealTemplateBias <-> String (store enum.name, NOT display)
+    @TypeConverter
+    fun mealTemplateBiasToDb(value: MealTemplateBias?): String? = value?.name
+
+    @TypeConverter
+    fun mealTemplateBiasFromDb(value: String?): MealTemplateBias? =
+        value?.let { runCatching { MealTemplateBias.valueOf(it) }.getOrNull() }
+
+    @TypeConverter
+    fun plannedItemSourceToString(value: PlannedItemSource?): String? {
+        return value?.name
+    }
+
+    @TypeConverter
+    fun stringToPlannedItemSource(value: String?): PlannedItemSource? {
+        return value?.let { PlannedItemSource.valueOf(it) }
+    }
 }

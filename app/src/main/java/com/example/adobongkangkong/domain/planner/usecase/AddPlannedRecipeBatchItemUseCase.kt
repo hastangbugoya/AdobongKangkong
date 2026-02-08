@@ -1,30 +1,31 @@
-package com.example.adobongkangkong.domain.mealprep.usecase
+package com.example.adobongkangkong.domain.planner.usecase
 
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
+import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import javax.inject.Inject
 
 /**
- * Adds a FOOD planned item under an existing planned meal.
+ * Adds a RECIPE_BATCH planned item under an existing planned meal.
  *
  * Quantity semantics mirror existing logging:
  * - grams and servings are nullable
- * - higher layers can enforce rules; this layer stays minimal
+ * - caller provides at least one
  *
  * sortOrder is assigned automatically unless explicitly provided.
  */
-class AddPlannedFoodItemUseCase @Inject constructor(
+class AddPlannedRecipeBatchItemUseCase @Inject constructor(
     private val items: PlannedItemRepository
 ) {
     suspend operator fun invoke(
         mealId: Long,
-        foodId: Long,
+        recipeBatchId: Long,
         grams: Double? = null,
         servings: Double? = null,
         sortOrder: Int? = null
     ): Long {
         require(mealId > 0) { "mealId must be > 0" }
-        require(foodId > 0) { "foodId must be > 0" }
+        require(recipeBatchId > 0) { "recipeBatchId must be > 0" }
         requireValidQuantity(grams, servings)
 
         // Append by default without needing a DB read for "max sort order".
@@ -33,8 +34,8 @@ class AddPlannedFoodItemUseCase @Inject constructor(
 
         val entity = PlannedItemEntity(
             mealId = mealId,
-            type = "FOOD",
-            refId = foodId,
+            type = PlannedItemSource.RECIPE,
+            refId = recipeBatchId,
             grams = grams,
             servings = servings,
             sortOrder = finalSortOrder

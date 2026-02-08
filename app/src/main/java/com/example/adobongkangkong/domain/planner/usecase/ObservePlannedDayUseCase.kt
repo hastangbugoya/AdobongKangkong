@@ -1,6 +1,6 @@
-package com.example.adobongkangkong.domain.mealprep.usecase
+package com.example.adobongkangkong.domain.planner.usecase
 
-import com.example.adobongkangkong.domain.mealprep.model.PlannedDay
+import com.example.adobongkangkong.domain.planner.model.PlannedDay
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 

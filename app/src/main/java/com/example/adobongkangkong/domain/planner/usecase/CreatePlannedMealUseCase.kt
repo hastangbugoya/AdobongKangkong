@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.domain.mealprep.usecase
+package com.example.adobongkangkong.domain.planner.usecase
 
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity

@@ -1,15 +1,15 @@
 package com.example.adobongkangkong.domain.mealprep.model
 
-sealed interface PlannedItem {
+sealed interface MealTemplateItem {
     val quantity: PlannedQuantity
 }
 
-data class FoodPlannedItem(
+data class FoodMealTemplateItem(
     val foodId: Long,
     override val quantity: PlannedQuantity
-) : PlannedItem
+) : MealTemplateItem
 
-data class RecipeBatchPlannedItem(
+data class RecipeBatchMealTemplateItem(
     val recipeBatchId: Long,
     override val quantity: PlannedQuantity
-) : PlannedItem
+) : MealTemplateItem
