@@ -7,17 +7,20 @@ import javax.inject.Inject
 /**
  * Deletes a planned meal ONLY if it has zero planned items.
  *
- * This is functional cleanup: it prevents "stuck empty meals" in the day planner.
- * Cascade delete is fine here (there are no items).
+ * This is functional cleanup for "stuck empty meals".
+ * Safe by design: meals with items are never deleted.
  */
 class RemoveEmptyPlannedMealUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
     private val items: PlannedItemRepository
 ) {
     suspend operator fun invoke(mealId: Long) {
-        require(mealId > 0L) { "mealId must be > 0" }
+        if (mealId <= 0L) return
 
+        // Ensure the meal still exists
         val meal = meals.getById(mealId) ?: return
+
+        // Only delete if there are no planned items
         val children = items.getItemsForMeal(mealId)
         if (children.isEmpty()) {
             meals.delete(meal)

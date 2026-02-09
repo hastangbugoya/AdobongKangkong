@@ -78,7 +78,8 @@ class PlannerDayViewModel @Inject constructor(
 
             is PlannerDayEvent.AddMeal -> openAddSheet(slot = event.slot)
 
-            PlannerDayEvent.DismissAddSheet -> _state.update { it.copy(addSheet = null) }
+            // ✅ NEW: Auto-clean created empty meal when user dismisses sheet
+            PlannerDayEvent.DismissAddSheet -> dismissAddSheetWithCleanup()
 
             is PlannerDayEvent.UpdateAddSheetName -> _state.update { s ->
                 val sheet = s.addSheet ?: return@update s
@@ -168,14 +169,12 @@ class PlannerDayViewModel @Inject constructor(
 
             PlannerDayEvent.ConfirmAddItem -> addSelectedFoodToMeal()
 
-            // ✅ Remove empty meal container (functional cleanup)
+            // Remove empty meal container (functional cleanup) — if you already wired this event, keep it
             is PlannerDayEvent.RemoveEmptyPlannedMeal -> removeEmptyMeal(event.mealId)
 
-            // ✅ Remove + Undo plumbing (works for FOOD and RECIPE items)
+            // Remove + Undo plumbing (works for FOOD and RECIPE items)
             is PlannerDayEvent.RemovePlannedItem -> removeItemWithUndo(event.itemId)
-
             is PlannerDayEvent.UndoRemovePlannedItem -> undoRemove(event.undoId)
-
             is PlannerDayEvent.UndoSnackbarConsumed -> {
                 _state.update { s ->
                     if (s.undo?.id == event.undoId) s.copy(undo = null) else s
@@ -187,10 +186,29 @@ class PlannerDayViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Close the add sheet. If a meal container was created and is still empty, delete it.
+     * This prevents "stuck empty meals" when user bails out mid-flow.
+     */
+    private fun dismissAddSheetWithCleanup() {
+        val mealIdToCleanup = _state.value.addSheet?.createdMealId
+        _state.update { it.copy(addSheet = null) }
+
+        if (mealIdToCleanup != null && mealIdToCleanup > 0L) {
+            viewModelScope.launch {
+                try {
+                    removeEmptyPlannedMeal(mealIdToCleanup)
+                } catch (t: Throwable) {
+                    // Don't block dismissal; just surface error if you want
+                    _state.update { it.copy(errorMessage = t.message ?: "Failed to clean up empty meal") }
+                }
+            }
+        }
+    }
+
     private fun removeEmptyMeal(mealId: Long) {
         if (mealId <= 0L) return
 
-        // Guard: only allow removing empty meals from UI.
         val day = _state.value.day
         val isEmpty = day?.mealsBySlot?.values
             ?.asSequence()
@@ -308,7 +326,6 @@ class PlannerDayViewModel @Inject constructor(
 
     private fun removeItemWithUndo(itemId: Long) {
         if (itemId <= 0) return
-
         val title = findPlannedItemTitle(itemId) ?: "item"
 
         viewModelScope.launch {
