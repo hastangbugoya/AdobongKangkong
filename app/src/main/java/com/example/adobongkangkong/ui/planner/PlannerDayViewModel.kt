@@ -4,11 +4,14 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedFoodItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedRecipeBatchItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDayUseCase
-import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemUseCase
+import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMealUseCase
+import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
+import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,10 +28,14 @@ import kotlinx.coroutines.launch
 class PlannerDayViewModel @Inject constructor(
     private val observePlannedDay: ObservePlannedDayUseCase,
     private val createPlannedMeal: CreatePlannedMealUseCase,
+    private val removeEmptyPlannedMeal: RemoveEmptyPlannedMealUseCase,
     private val addPlannedFoodItem: AddPlannedFoodItemUseCase,
     private val addPlannedRecipeItem: AddPlannedRecipeBatchItemUseCase,
     private val searchFoods: SearchFoodsUseCase,
-    private val removePlannedItem: RemovePlannedItemUseCase,
+
+    // Undo plumbing (items)
+    private val removePlannedItemForUndo: RemovePlannedItemForUndoUseCase,
+    private val restorePlannedItem: RestorePlannedItemUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
@@ -36,6 +43,10 @@ class PlannerDayViewModel @Inject constructor(
 
     private var observeJob: Job? = null
     private var searchJob: Job? = null
+
+    // Single-level undo (minimal + functional)
+    private var lastUndoId: Long = 0L
+    private var lastRemovedSnapshot: PlannedItemEntity? = null
 
     fun setDate(date: LocalDate) {
         if (_state.value.date == date && observeJob != null) return
@@ -62,25 +73,22 @@ class PlannerDayViewModel @Inject constructor(
             PlannerDayEvent.PrevDay,
             PlannerDayEvent.NextDay,
             is PlannerDayEvent.OpenMeal -> {
-                // Route handles these (or no-ops for now)
+                // Route handles these (or they are no-ops for now)
             }
 
-            is PlannerDayEvent.AddMeal -> openAddSheet(event.slot)
+            is PlannerDayEvent.AddMeal -> openAddSheet(slot = event.slot)
 
-            PlannerDayEvent.DismissAddSheet ->
-                _state.update { it.copy(addSheet = null) }
+            PlannerDayEvent.DismissAddSheet -> _state.update { it.copy(addSheet = null) }
 
-            is PlannerDayEvent.UpdateAddSheetName ->
-                _state.update { s ->
-                    val sheet = s.addSheet ?: return@update s
-                    s.copy(addSheet = sheet.copy(nameOverride = event.value))
-                }
+            is PlannerDayEvent.UpdateAddSheetName -> _state.update { s ->
+                val sheet = s.addSheet ?: return@update s
+                s.copy(addSheet = sheet.copy(nameOverride = event.value))
+            }
 
-            is PlannerDayEvent.UpdateAddSheetCustomLabel ->
-                _state.update { s ->
-                    val sheet = s.addSheet ?: return@update s
-                    s.copy(addSheet = sheet.copy(customLabel = event.value))
-                }
+            is PlannerDayEvent.UpdateAddSheetCustomLabel -> _state.update { s ->
+                val sheet = s.addSheet ?: return@update s
+                s.copy(addSheet = sheet.copy(customLabel = event.value))
+            }
 
             PlannerDayEvent.CreateMealIfNeeded -> createMealIfNeeded()
 
@@ -92,88 +100,114 @@ class PlannerDayViewModel @Inject constructor(
                 createMealIfNeeded()
             }
 
-            is PlannerDayEvent.StartAddItem -> {
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            addItemMode = event.mode,
-                            query = "",
-                            results = emptyList(),
-                            selectedRefId = null,
-                            selectedTitle = null,
-                            gramsText = "",
-                            servingsText = "",
-                            addItemError = null
-                        )
-                    )
-                }
+            is PlannerDayEvent.StartAddItem -> _state.update { s ->
+                val sh = s.addSheet ?: return@update s
+                s.copy(addSheet = sh.copy(
+                    addItemMode = event.mode,
+                    query = "",
+                    results = emptyList(),
+                    selectedRefId = null,
+                    selectedTitle = null,
+                    gramsText = "",
+                    servingsText = "",
+                    addItemError = null
+                ))
             }
 
             PlannerDayEvent.CancelAddItem -> {
                 searchJob?.cancel()
                 _state.update { s ->
                     val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            addItemMode = AddItemMode.NONE,
-                            query = "",
-                            results = emptyList(),
-                            selectedRefId = null,
-                            selectedTitle = null,
-                            gramsText = "",
-                            servingsText = "",
-                            isSearching = false,
-                            isAddingItem = false,
-                            addItemError = null
-                        )
-                    )
+                    s.copy(addSheet = sh.copy(
+                        addItemMode = AddItemMode.NONE,
+                        query = "",
+                        results = emptyList(),
+                        selectedRefId = null,
+                        selectedTitle = null,
+                        gramsText = "",
+                        servingsText = "",
+                        isSearching = false,
+                        isAddingItem = false,
+                        addItemError = null
+                    ))
                 }
             }
 
             is PlannerDayEvent.UpdateAddQuery -> {
                 _state.update { s ->
                     val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            query = event.value,
-                            isSearching = true,
-                            addItemError = null,
-                            selectedRefId = null,
-                            selectedTitle = null
-                        )
-                    )
+                    s.copy(addSheet = sh.copy(
+                        query = event.value,
+                        isSearching = true,
+                        addItemError = null,
+                        selectedRefId = null,
+                        selectedTitle = null
+                    ))
                 }
                 refreshFoodSearch()
             }
 
-            is PlannerDayEvent.SelectSearchResult ->
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            selectedRefId = event.id,
-                            selectedTitle = event.title,
-                            addItemError = null
-                        )
-                    )
-                }
+            is PlannerDayEvent.SelectSearchResult -> _state.update { s ->
+                val sh = s.addSheet ?: return@update s
+                s.copy(addSheet = sh.copy(
+                    selectedRefId = event.id,
+                    selectedTitle = event.title,
+                    addItemError = null
+                ))
+            }
 
-            is PlannerDayEvent.UpdateAddGrams ->
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(addSheet = sh.copy(gramsText = event.value, addItemError = null))
-                }
+            is PlannerDayEvent.UpdateAddGrams -> _state.update { s ->
+                val sh = s.addSheet ?: return@update s
+                s.copy(addSheet = sh.copy(gramsText = event.value, addItemError = null))
+            }
 
-            is PlannerDayEvent.UpdateAddServings ->
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(addSheet = sh.copy(servingsText = event.value, addItemError = null))
-                }
+            is PlannerDayEvent.UpdateAddServings -> _state.update { s ->
+                val sh = s.addSheet ?: return@update s
+                s.copy(addSheet = sh.copy(servingsText = event.value, addItemError = null))
+            }
 
             PlannerDayEvent.ConfirmAddItem -> addSelectedFoodToMeal()
 
-            is PlannerDayEvent.RemovePlannedItem -> removeItem(event.itemId)
+            // ✅ Remove empty meal container (functional cleanup)
+            is PlannerDayEvent.RemoveEmptyPlannedMeal -> removeEmptyMeal(event.mealId)
+
+            // ✅ Remove + Undo plumbing (works for FOOD and RECIPE items)
+            is PlannerDayEvent.RemovePlannedItem -> removeItemWithUndo(event.itemId)
+
+            is PlannerDayEvent.UndoRemovePlannedItem -> undoRemove(event.undoId)
+
+            is PlannerDayEvent.UndoSnackbarConsumed -> {
+                _state.update { s ->
+                    if (s.undo?.id == event.undoId) s.copy(undo = null) else s
+                }
+                if (event.undoId == lastUndoId) {
+                    lastRemovedSnapshot = null
+                }
+            }
+        }
+    }
+
+    private fun removeEmptyMeal(mealId: Long) {
+        if (mealId <= 0L) return
+
+        // Guard: only allow removing empty meals from UI.
+        val day = _state.value.day
+        val isEmpty = day?.mealsBySlot?.values
+            ?.asSequence()
+            ?.flatten()
+            ?.firstOrNull { it.id == mealId }
+            ?.items
+            ?.isEmpty()
+            ?: false
+
+        if (!isEmpty) return
+
+        viewModelScope.launch {
+            try {
+                removeEmptyPlannedMeal(mealId)
+            } catch (t: Throwable) {
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to remove meal") }
+            }
         }
     }
 
@@ -251,40 +285,74 @@ class PlannerDayViewModel @Inject constructor(
 
                 _state.update { st ->
                     val sht = st.addSheet ?: return@update st
-                    st.copy(
-                        addSheet = sht.copy(
-                            isAddingItem = false,
-                            selectedRefId = null,
-                            selectedTitle = null,
-                            gramsText = "",
-                            servingsText = "",
-                            addItemError = null
-                        )
-                    )
+                    st.copy(addSheet = sht.copy(
+                        isAddingItem = false,
+                        selectedRefId = null,
+                        selectedTitle = null,
+                        gramsText = "",
+                        servingsText = "",
+                        addItemError = null
+                    ))
                 }
             } catch (t: Throwable) {
                 _state.update { st ->
                     val sht = st.addSheet ?: return@update st
-                    st.copy(
-                        addSheet = sht.copy(
-                            isAddingItem = false,
-                            addItemError = t.message ?: "Failed to add food."
-                        )
-                    )
+                    st.copy(addSheet = sht.copy(
+                        isAddingItem = false,
+                        addItemError = t.message ?: "Failed to add food."
+                    ))
                 }
             }
         }
     }
 
-    private fun removeItem(itemId: Long) {
+    private fun removeItemWithUndo(itemId: Long) {
         if (itemId <= 0) return
+
+        val title = findPlannedItemTitle(itemId) ?: "item"
+
         viewModelScope.launch {
             try {
-                removePlannedItem(itemId)
+                val snapshot = removePlannedItemForUndo(itemId)
+                lastRemovedSnapshot = snapshot
+
+                lastUndoId += 1
+                val undoId = lastUndoId
+
+                _state.update { it.copy(undo = UndoUiState(id = undoId, message = "Removed $title")) }
             } catch (t: Throwable) {
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to remove item") }
             }
         }
+    }
+
+    private fun undoRemove(undoId: Long) {
+        if (undoId != lastUndoId) return
+        val snapshot = lastRemovedSnapshot ?: return
+
+        viewModelScope.launch {
+            try {
+                restorePlannedItem(snapshot)
+            } catch (t: Throwable) {
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to undo") }
+            } finally {
+                lastRemovedSnapshot = null
+                _state.update { s ->
+                    if (s.undo?.id == undoId) s.copy(undo = null) else s
+                }
+            }
+        }
+    }
+
+    private fun findPlannedItemTitle(itemId: Long): String? {
+        val day = _state.value.day ?: return null
+        return day.mealsBySlot.values
+            .asSequence()
+            .flatten()
+            .flatMap { it.items.asSequence() }
+            .firstOrNull { it.id == itemId }
+            ?.title
+            ?.takeIf { it.isNotBlank() }
     }
 
     private fun openAddSheet(slot: MealSlot) {

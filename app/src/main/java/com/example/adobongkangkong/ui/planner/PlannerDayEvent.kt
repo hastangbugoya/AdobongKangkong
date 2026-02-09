@@ -33,6 +33,12 @@ sealed interface PlannerDayEvent {
     data class UpdateAddGrams(val value: String) : PlannerDayEvent
     data class UpdateAddServings(val value: String) : PlannerDayEvent
 
+    // Remove an EMPTY planned meal container
+    data class RemoveEmptyPlannedMeal(val mealId: Long) : PlannerDayEvent
+
     // Remove an item from a planned meal
     data class RemovePlannedItem(val itemId: Long) : PlannerDayEvent
+
+    data class UndoRemovePlannedItem(val undoId: Long) : PlannerDayEvent
+    data class UndoSnackbarConsumed(val undoId: Long) : PlannerDayEvent
 }
