@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,11 +28,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -163,6 +168,15 @@ fun PlannerDayScreen(
             onEvent = onEvent
         )
     }
+
+    val dupSheet = s.duplicateSheet
+    if (dupSheet != null) {
+        DuplicateMealBottomSheet(
+            sheet = dupSheet,
+            onEvent = onEvent
+        )
+    }
+
 }
 
 @Composable
@@ -571,3 +585,90 @@ private fun FoodSearchResultRow(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DuplicateMealBottomSheet(
+    sheet: DuplicateSheetState,
+    onEvent: (PlannerDayEvent) -> Unit
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = { onEvent(PlannerDayEvent.DismissDuplicateSheet) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Duplicate meal", style = MaterialTheme.typography.titleLarge)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onEvent(PlannerDayEvent.DuplicateAddToday) }) { Text("Today") }
+                TextButton(onClick = { onEvent(PlannerDayEvent.DuplicateAddTomorrow) }) { Text("Tomorrow") }
+                TextButton(onClick = { showPicker = true }) { Text("Pick date…") }
+            }
+
+            if (sheet.selectedDates.isEmpty()) {
+                Text("Select at least one date.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    sheet.selectedDates.forEach { d ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(d.toString(), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(
+                                onClick = { onEvent(PlannerDayEvent.DuplicateRemoveDate(d.toString())) }
+                            ) { Text("Remove") }
+                        }
+                    }
+                }
+            }
+
+            sheet.errorMessage?.let { msg ->
+                Text(msg, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = sheet.selectedDates.isNotEmpty() && !sheet.isDuplicating,
+                onClick = { onEvent(PlannerDayEvent.ConfirmDuplicateDates) }
+            ) {
+                Text(if (sheet.isDuplicating) "Duplicating…" else "Duplicate")
+            }
+        }
+    }
+
+    if (showPicker) {
+        val pickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val millis = pickerState.selectedDateMillis
+                        if (millis != null) {
+                            val picked = java.time.Instant.ofEpochMilli(millis)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toLocalDate()
+                            onEvent(PlannerDayEvent.DuplicateAddDate(picked.toString()))
+                        }
+                        showPicker = false
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+

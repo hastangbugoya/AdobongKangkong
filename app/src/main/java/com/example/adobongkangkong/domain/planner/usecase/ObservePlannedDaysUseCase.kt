@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 
 class ObservePlannedDaysUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
@@ -50,7 +49,8 @@ class ObservePlannedDaysUseCase @Inject constructor(
         val date = LocalDate.parse(dateIso)
 
         return observeInternal(dateIso, dateIso).map { days ->
-            days.firstOrNull() ?: PlannedDay(
+            // ✅ Robust: even if upstream ever emits multiple days, pick the requested date.
+            days.firstOrNull { it.date == date } ?: PlannedDay(
                 date = date,
                 mealsBySlot = emptyMealsBySlot()
             )
@@ -78,21 +78,16 @@ class ObservePlannedDaysUseCase @Inject constructor(
                     }
                 }
 
-                // First, combine all meal+items flows into a single sorted list of MealAndItems rows
-                val rowsFlow: Flow<List<MealAndItems>> =
-                    combine(perMealFlows) { array ->
-                        array
-                            .toList()
-                            .sortedWith(
-                                compareBy<MealAndItems> { LocalDate.parse(it.meal.date) }
-                                    .thenBy { it.meal.sortOrder }
-                                    .thenBy { it.meal.id }
-                            )
-                    }
+                combine(perMealFlows) { array ->
+                    val rows: List<MealAndItems> = array
+                        .toList()
+                        .sortedWith(
+                            compareBy<MealAndItems> { LocalDate.parse(it.meal.date) }
+                                .thenBy { it.meal.sortOrder }
+                                .thenBy { it.meal.id }
+                        )
 
-                // Then, in a suspend stage, resolve titles and build PlannedDay(s)
-                rowsFlow.mapLatest { rows ->
-                    val titleMap = resolveItemTitles(rows)
+                    val titleByItemId: Map<Long, String> = resolveItemTitles(rows)
 
                     rows
                         .groupBy { LocalDate.parse(it.meal.date) }
@@ -101,7 +96,7 @@ class ObservePlannedDaysUseCase @Inject constructor(
                             val plannedMeals: List<PlannedMeal> = mealsForDayRows
                                 .sortedWith(compareBy<MealAndItems> { it.meal.sortOrder }.thenBy { it.meal.id })
                                 .map { (mealEntity, itemEntities) ->
-                                    mapMeal(mealEntity, itemEntities, titleMap)
+                                    mapMeal(mealEntity, itemEntities, titleByItemId)
                                 }
 
                             PlannedDay(
@@ -121,77 +116,27 @@ class ObservePlannedDaysUseCase @Inject constructor(
         val items: List<PlannedItemEntity>
     )
 
-    /**
-     * Build a map of (PlannedItemEntity.id -> display title) for all items currently observed.
-     *
-     * FOOD: title from FoodEntity.name
-     * RECIPE: assumes sourceId is recipeBatchId -> look up RecipeBatchEntity -> recipeId -> RecipeEntity.name
-     */
-    private suspend fun resolveItemTitles(rows: List<MealAndItems>): Map<Long, String> {
-        val allItems: List<PlannedItemEntity> = rows.flatMap { it.items }
-
-        val foodIds: List<Long> = allItems
-            .asSequence()
-            .filter { it.type == PlannedItemSource.FOOD }
-            .map { it.refId }
-            .distinct()
-            .toList()
-
-//        android.util.Log.d("PlannerTitles", "ObservePlannedDaysUseCase> resolveItemTitles> foodIds=$foodIds")
-//        val foods = if (foodIds.isEmpty()) emptyList() else foodDao.getByIds(foodIds)
-//        android.util.Log.d("PlannerTitles", "ObservePlannedDaysUseCase> resolveItemTitles> foodsFromDb=${foods.map { it.id to it.name }}")
-
-        val batchIds: List<Long> = allItems
-            .asSequence()
-            .filter { it.type == PlannedItemSource.RECIPE }
-            .map { it.refId }
-            .distinct()
-            .toList()
-
-        // FOOD titles in one query
-        val foodTitleById: Map<Long, String> =
-            if (foodIds.isEmpty()) emptyMap()
-            else foodDao.getByIds(foodIds).associate { it.id to it.name }
-
-        // RECIPE titles via batch -> recipe -> name
-        val recipeTitleByBatchId: MutableMap<Long, String> = mutableMapOf()
-        for (batchId in batchIds) {
-            val batch = recipeBatchDao.getById(batchId) ?: continue
-            val recipe = recipeDao.getById(batch.recipeId) ?: continue
-            recipeTitleByBatchId[batchId] = recipe.name
-        }
-
-        // Map itemId -> title
-        return allItems.associateNotNull { item ->
-            val title = when (item.type) {
-                PlannedItemSource.FOOD -> foodTitleById[item.refId]
-                PlannedItemSource.RECIPE -> recipeTitleByBatchId[item.refId]
-            }
-            if (title.isNullOrBlank()) null else (item.id to title)
-        }
-    }
-
     private fun mapMeal(
         meal: PlannedMealEntity,
         itemEntities: List<PlannedItemEntity>,
-        titleMapByItemId: Map<Long, String>
+        titleByItemId: Map<Long, String>
     ): PlannedMeal {
         val parsedDate = LocalDate.parse(meal.date)
         val slot = meal.slot
 
         val plannedItems: List<PlannedItem> = itemEntities
             .sortedWith(compareBy<PlannedItemEntity> { it.sortOrder }.thenBy { it.id })
-            .map { mapItem(it, titleMapByItemId) }
+            .map { entity ->
+                mapItem(entity, titleByItemId[entity.id])
+            }
 
-        val title: String? =
-            meal.nameOverride?.takeIf { it.isNotBlank() }
-                ?: when (slot) {
-                    MealSlot.CUSTOM -> meal.customLabel?.takeIf { it.isNotBlank() }
-                        ?: throw IllegalStateException(
-                            "PlannedMealEntity(${meal.id}) is CUSTOM but customLabel is null/blank"
-                        )
-                    else -> null
-                }
+        val title: String? = when (slot) {
+            MealSlot.CUSTOM -> meal.customLabel?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException(
+                    "PlannedMealEntity(${meal.id}) is CUSTOM but customLabel is null/blank"
+                )
+            else -> null
+        }
 
         return PlannedMeal(
             id = meal.id,
@@ -202,22 +147,55 @@ class ObservePlannedDaysUseCase @Inject constructor(
         )
     }
 
-    private fun mapItem(
-        entity: PlannedItemEntity,
-        titleMapByItemId: Map<Long, String>
-    ): PlannedItem {
+    private fun mapItem(entity: PlannedItemEntity, resolvedTitle: String?): PlannedItem {
         return PlannedItem(
             id = entity.id,
             sourceType = entity.type,
             sourceId = entity.refId,
             qtyGrams = entity.grams,
             qtyServings = entity.servings,
-            title = titleMapByItemId[entity.id]
+            title = resolvedTitle
         )
     }
 
+    private suspend fun resolveItemTitles(rows: List<MealAndItems>): Map<Long, String> {
+        val allItems: List<PlannedItemEntity> = rows.flatMap { it.items }
+
+        val foodIds: List<Long> = allItems
+            .asSequence()
+            .filter { it.type == PlannedItemSource.FOOD }
+            .map { it.refId }
+            .distinct()
+            .toList()
+
+        val batchIds: List<Long> = allItems
+            .asSequence()
+            .filter { it.type == PlannedItemSource.RECIPE }
+            .map { it.refId }
+            .distinct()
+            .toList()
+
+        val foodTitleById: Map<Long, String> =
+            if (foodIds.isEmpty()) emptyMap()
+            else foodDao.getByIds(foodIds).associate { it.id to it.name }
+
+        val recipeTitleByBatchId: MutableMap<Long, String> = mutableMapOf()
+        for (batchId in batchIds) {
+            val batch = recipeBatchDao.getById(batchId) ?: continue
+            val recipe = recipeDao.getById(batch.recipeId) ?: continue
+            recipeTitleByBatchId[batchId] = recipe.name
+        }
+
+        return allItems.associateNotNull { item ->
+            val title = when (item.type) {
+                PlannedItemSource.FOOD -> foodTitleById[item.refId]
+                PlannedItemSource.RECIPE -> recipeTitleByBatchId[item.refId]
+            }
+            if (title.isNullOrBlank()) null else (item.id to title)
+        }
+    }
+
     private fun emptyMealsBySlot(): Map<MealSlot, List<PlannedMeal>> {
-        // Ensure UI can render all sections without special-casing missing keys.
         return MealSlot.entries.associateWith { emptyList() }
     }
 
@@ -226,13 +204,13 @@ class ObservePlannedDaysUseCase @Inject constructor(
         forEach { (slot, meals) -> base[slot] = meals }
         return base
     }
+}
 
-    private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair<K, V>?): Map<K, V> {
-        val out = LinkedHashMap<K, V>()
-        for (e in this) {
-            val p = transform(e) ?: continue
-            out[p.first] = p.second
-        }
-        return out
+private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair<K, V>?): Map<K, V> {
+    val result = LinkedHashMap<K, V>()
+    for (element in this) {
+        val pair = transform(element) ?: continue
+        result[pair.first] = pair.second
     }
+    return result
 }

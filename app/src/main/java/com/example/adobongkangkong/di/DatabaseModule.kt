@@ -55,4 +55,6 @@ object DatabaseModule {
 
     @Provides fun provideMealTemplatePrefsDao(db: NutriDatabase): MealTemplatePrefsDao = db.mealTemplatePrefsDao()
 
+    @Provides fun providesFoodBarcodeDao(db: NutriDatabase): FoodBarcodeDao = db.foodBarcodeEntityDao()
+
 }

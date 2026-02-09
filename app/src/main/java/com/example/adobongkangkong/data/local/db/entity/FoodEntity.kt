@@ -96,6 +96,7 @@ data class FoodEntity(
     val usdaFdcId: Long? = null,
     val usdaGtinUpc: String? = null,
     val usdaPublishedDate: String? = null,
+    val usdaModifiedDate: String? = null,
 
     /**
      * USDA-reported serving preserved for traceability even if user edits the food later.

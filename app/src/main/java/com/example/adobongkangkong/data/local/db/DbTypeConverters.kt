@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.data.local.db
 
 import androidx.room.TypeConverter
+import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateBias
@@ -84,4 +85,14 @@ class DbTypeConverters {
     fun stringToPlannedItemSource(value: String?): PlannedItemSource? {
         return value?.let { PlannedItemSource.valueOf(it) }
     }
+
+    // BarcodeMappingSource <-> String
+    @TypeConverter
+    fun barcodeMappingSourceToDb(value: BarcodeMappingSource?): String? = value?.name
+
+    @TypeConverter
+    fun barcodeMappingSourceFromDb(value: String?): BarcodeMappingSource? =
+        value?.let { runCatching { BarcodeMappingSource.valueOf(it) }.getOrNull() }
+
+
 }

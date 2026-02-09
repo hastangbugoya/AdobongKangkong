@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
@@ -64,7 +65,7 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
         MealTemplateItemEntity::class,
         MealTemplatePrefsEntity::class
 ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -89,6 +90,8 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun mealTemplateDao(): MealTemplateDao
     abstract fun mealTemplateItemDao(): MealTemplateItemDao
     abstract fun mealTemplatePrefsDao(): MealTemplatePrefsDao
+
+    abstract fun foodBarcodeEntityDao(): FoodBarcodeDao
 
     companion object {
         /**
@@ -122,6 +125,52 @@ abstract class NutriDatabase : RoomDatabase() {
          * - MealTemplatePrefsEntity (favorite + bias)
          *
          * Register + bump DB version to 6 together.
+         */
+        /**
+         * v6
+         * - Add food_barcodes mapping table (barcode -> food)
+         * - Add foods.usdaModifiedDate for USDA revision tracking
+         */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1) Add foods.usdaModifiedDate
+                db.execSQL("ALTER TABLE foods ADD COLUMN usdaModifiedDate TEXT")
+
+                // 2) Create food_barcodes table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS food_barcodes (
+                        barcode TEXT NOT NULL,
+                        foodId INTEGER NOT NULL,
+                        source TEXT NOT NULL,
+                        usdaFdcId INTEGER,
+                        usdaPublishedDateIso TEXT,
+                        assignedAtEpochMs INTEGER NOT NULL,
+                        lastSeenAtEpochMs INTEGER NOT NULL,
+                        PRIMARY KEY(barcode),
+                        FOREIGN KEY(foodId) REFERENCES foods(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+
+                // 3) Indexes
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_food_barcodes_foodId ON food_barcodes(foodId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_food_barcodes_usdaFdcId ON food_barcodes(usdaFdcId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_food_barcodes_source ON food_barcodes(source)")
+            }
+        }
+        /**
+         * DB v6
+         * - Adds persistent barcode identity via new mapping table `food_barcodes`.
+         *   - barcode is UNIQUE and resolves to exactly one foodId at a time.
+         *   - mapping source supports USDA vs USER_ASSIGNED, with USDA taking precedence on scan.
+         *   - stores USDA metadata (fdcId + publishedDate ISO) on the mapping for version gating.
+         * - Adds `foods.usdaModifiedDate` (ISO yyyy-MM-dd) to track USDA refresh metadata.
+         *
+         * Migration: 5 -> 6
+         * - ALTER TABLE foods ADD COLUMN usdaModifiedDate TEXT
+         * - CREATE TABLE food_barcodes (...)
+         * - CREATE INDEX ... (foodId, usdaFdcId, source)
          */
     }
 }

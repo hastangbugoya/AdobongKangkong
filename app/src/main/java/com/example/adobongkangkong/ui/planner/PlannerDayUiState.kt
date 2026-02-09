@@ -11,6 +11,7 @@ data class PlannerDayUiState(
     val day: PlannedDay? = null,
     val errorMessage: String? = null,
     val addSheet: AddSheetState? = null,
+    val duplicateSheet: DuplicateSheetState? = null,
 
     /**
      * One-shot snackbar request for "Removed • Undo".
@@ -25,6 +26,13 @@ data class PlannerDayUiState(
             return base.toMutableMap().apply { putAll(actual) }
         }
 }
+
+data class DuplicateSheetState(
+    val sourceMealId: Long,
+    val selectedDates: List<LocalDate>,
+    val isDuplicating: Boolean = false,
+    val errorMessage: String? = null
+)
 
 data class UndoUiState(
     val id: Long,

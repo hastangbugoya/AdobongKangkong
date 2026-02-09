@@ -429,6 +429,10 @@ fun FoodEditorScreen(
                 }
 
                 item {
+                    Text("BasisType: ${state.basisType?.name}")
+                }
+
+                item {
                     GoalFlagsSection(
                         favorite = state.favorite,
                         eatMore = state.eatMore,

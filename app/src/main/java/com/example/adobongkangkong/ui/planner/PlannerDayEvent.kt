@@ -19,7 +19,6 @@ sealed interface PlannerDayEvent {
 
     // Sheet action
     data object CreateMealIfNeeded : PlannerDayEvent
-
     data object CreateAnotherMeal : PlannerDayEvent
 
     // Add item to planned meal
@@ -42,5 +41,15 @@ sealed interface PlannerDayEvent {
     data class UndoRemovePlannedItem(val undoId: Long) : PlannerDayEvent
     data class UndoSnackbarConsumed(val undoId: Long) : PlannerDayEvent
 
+    // Existing entry point from the meal card ("Duplicate" button)
     data class DuplicateMeal(val mealId: Long) : PlannerDayEvent
+
+    // Duplicate -> choose date(s)
+    data class OpenDuplicateSheet(val mealId: Long) : PlannerDayEvent
+    data object DismissDuplicateSheet : PlannerDayEvent
+    data object DuplicateAddToday : PlannerDayEvent
+    data object DuplicateAddTomorrow : PlannerDayEvent
+    data class DuplicateAddDate(val dateIso: String) : PlannerDayEvent
+    data class DuplicateRemoveDate(val dateIso: String) : PlannerDayEvent
+    data object ConfirmDuplicateDates : PlannerDayEvent
 }

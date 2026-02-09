@@ -201,6 +201,7 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             is PlannerDayEvent.RemoveEmptyPlannedMeal -> {
+                clearUndoIfForMeal(event.mealId)
                 removeEmptyMeal(event.mealId)
             }
 
@@ -222,21 +223,41 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             is PlannerDayEvent.DuplicateMeal -> {
-                viewModelScope.launch {
-                    try {
-                        duplicateMeal(
-                            sourceMealId = event.mealId,
-                            targetDateIso = _state.value.date.toString()
-                        )
-                    } catch (t: Throwable) {
-                        _state.update {
-                            it.copy(errorMessage = t.message ?: "Failed to duplicate meal")
-                        }
-                    }
-                }
+                // Default behavior: open duplicate sheet with "today" pre-selected.
+                openDuplicateSheet(event.mealId)
+            }
+
+            is PlannerDayEvent.OpenDuplicateSheet -> {
+                openDuplicateSheet(event.mealId)
+            }
+
+            PlannerDayEvent.DismissDuplicateSheet -> {
+                _state.update { it.copy(duplicateSheet = null) }
+            }
+
+            PlannerDayEvent.DuplicateAddToday -> {
+                addDuplicateDate(_state.value.date)
+            }
+
+            PlannerDayEvent.DuplicateAddTomorrow -> {
+                addDuplicateDate(_state.value.date.plusDays(1))
+            }
+
+            is PlannerDayEvent.DuplicateAddDate -> {
+                addDuplicateDate(LocalDate.parse(event.dateIso))
+            }
+
+            is PlannerDayEvent.DuplicateRemoveDate -> {
+                removeDuplicateDate(LocalDate.parse(event.dateIso))
+            }
+
+            PlannerDayEvent.ConfirmDuplicateDates -> {
+                confirmDuplicateDates()
             }
         }
     }
+
+
 
     /**
      * Dismiss the add-sheet. If a meal container was created but no items were added,
@@ -497,4 +518,84 @@ class PlannerDayViewModel @Inject constructor(
             }
         }
     }
+
+    private fun openDuplicateSheet(mealId: Long) {
+        if (mealId <= 0L) return
+
+        val today = _state.value.date
+        _state.update { s ->
+            s.copy(
+                duplicateSheet = DuplicateSheetState(
+                    sourceMealId = mealId,
+                    selectedDates = listOf(today)
+                ),
+                errorMessage = null
+            )
+        }
+    }
+
+    private fun addDuplicateDate(date: LocalDate) {
+        _state.update { s ->
+            val sheet = s.duplicateSheet ?: return@update s
+            val next = (sheet.selectedDates + date).distinct().sorted()
+            s.copy(duplicateSheet = sheet.copy(selectedDates = next, errorMessage = null))
+        }
+    }
+
+    private fun removeDuplicateDate(date: LocalDate) {
+        _state.update { s ->
+            val sheet = s.duplicateSheet ?: return@update s
+            val next = sheet.selectedDates.filterNot { it == date }
+            s.copy(duplicateSheet = sheet.copy(selectedDates = next, errorMessage = null))
+        }
+    }
+
+    private fun confirmDuplicateDates() {
+        val snapshot = _state.value.duplicateSheet ?: return
+        if (snapshot.isDuplicating) return
+        if (snapshot.selectedDates.isEmpty()) return
+
+        _state.update { s ->
+            val sh = s.duplicateSheet ?: return@update s
+            s.copy(duplicateSheet = sh.copy(isDuplicating = true, errorMessage = null))
+        }
+
+        viewModelScope.launch {
+            try {
+                for (d in snapshot.selectedDates) {
+                    duplicateMeal(
+                        sourceMealId = snapshot.sourceMealId,
+                        targetDateIso = d.toString()
+                    )
+                }
+                _state.update { it.copy(duplicateSheet = null) }
+            } catch (t: Throwable) {
+                _state.update { s ->
+                    val sh = s.duplicateSheet
+                    if (sh == null) s.copy(errorMessage = t.message ?: "Failed to duplicate meal")
+                    else s.copy(
+                        duplicateSheet = sh.copy(
+                            isDuplicating = false,
+                            errorMessage = t.message ?: "Failed to duplicate meal"
+                        )
+                    )
+                }
+            } finally {
+                _state.update { s ->
+                    val sh = s.duplicateSheet ?: return@update s
+                    if (sh.isDuplicating) s.copy(duplicateSheet = sh.copy(isDuplicating = false)) else s
+                }
+            }
+        }
+    }
+
+    private fun clearUndoIfForMeal(mealId: Long) {
+        val snapshot = lastRemovedSnapshot ?: return
+        if (snapshot.mealId != mealId) return
+
+        // The parent meal is about to be deleted; any pending undo would fail FK restore.
+        lastRemovedSnapshot = null
+        _state.update { s -> if (s.undo != null) s.copy(undo = null) else s }
+    }
+
 }
