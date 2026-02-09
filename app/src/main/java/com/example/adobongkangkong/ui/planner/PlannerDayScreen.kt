@@ -144,7 +144,8 @@ fun PlannerDayScreen(
                         PlannedMealCard(
                             meal = meal,
                             onRemoveItem = { itemId -> onEvent(PlannerDayEvent.RemovePlannedItem(itemId)) },
-                            onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) }
+                            onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) },
+                            onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) }
                         )
                     }
                 }
@@ -222,7 +223,8 @@ private fun EmptySlotCard(
 private fun PlannedMealCard(
     meal: PlannedMeal,
     onRemoveItem: (Long) -> Unit,
-    onRemoveEmptyMeal: (Long) -> Unit
+    onRemoveEmptyMeal: (Long) -> Unit,
+    onDuplicateMeal: (Long) -> Unit
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
 
@@ -250,6 +252,7 @@ private fun PlannedMealCard(
                     TextButton(onClick = { onRemoveEmptyMeal(meal.id) }) {
                         Text("Remove meal")
                     }
+
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -262,6 +265,12 @@ private fun PlannedMealCard(
                     }
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().align(Alignment.End),
+                        onClick = { onDuplicateMeal(meal.id)}
+                    ) {
+                        Text("Duplicate")
                     }
                 }
             }

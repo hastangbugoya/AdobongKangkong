@@ -41,4 +41,6 @@ sealed interface PlannerDayEvent {
 
     data class UndoRemovePlannedItem(val undoId: Long) : PlannerDayEvent
     data class UndoSnackbarConsumed(val undoId: Long) : PlannerDayEvent
+
+    data class DuplicateMeal(val mealId: Long) : PlannerDayEvent
 }

@@ -8,6 +8,7 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedFoodItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedRecipeBatchItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCase
+import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDayUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
@@ -36,6 +37,8 @@ class PlannerDayViewModel @Inject constructor(
     // Undo plumbing (items)
     private val removePlannedItemForUndo: RemovePlannedItemForUndoUseCase,
     private val restorePlannedItem: RestorePlannedItemUseCase,
+
+    private val duplicateMeal: DuplicatePlannedMealUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
@@ -215,6 +218,21 @@ class PlannerDayViewModel @Inject constructor(
                 }
                 if (event.undoId == lastUndoId) {
                     lastRemovedSnapshot = null
+                }
+            }
+
+            is PlannerDayEvent.DuplicateMeal -> {
+                viewModelScope.launch {
+                    try {
+                        duplicateMeal(
+                            sourceMealId = event.mealId,
+                            targetDateIso = _state.value.date.toString()
+                        )
+                    } catch (t: Throwable) {
+                        _state.update {
+                            it.copy(errorMessage = t.message ?: "Failed to duplicate meal")
+                        }
+                    }
                 }
             }
         }
