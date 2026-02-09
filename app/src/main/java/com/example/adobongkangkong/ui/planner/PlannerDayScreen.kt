@@ -33,6 +33,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
@@ -311,6 +315,9 @@ private fun AddToPlanBottomSheet(
     sheet: AddSheetState,
     onEvent: (PlannerDayEvent) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     ModalBottomSheet(onDismissRequest = { onEvent(PlannerDayEvent.DismissAddSheet) }) {
         Column(
             modifier = Modifier
@@ -347,7 +354,10 @@ private fun AddToPlanBottomSheet(
                         Text(sheet.errorMessage, style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(8.dp))
                         TextButton(
-                            onClick = { onEvent(PlannerDayEvent.CreateMealIfNeeded) },
+                            onClick = {
+                                focusManager.clearFocus(force = true)
+                                onEvent(PlannerDayEvent.CreateMealIfNeeded)
+                          },
                             enabled = !sheet.isCreating
                         ) {
                             Text(if (sheet.isCreating) "Creating…" else "Retry create meal")
@@ -427,13 +437,24 @@ private fun FoodAddSection(
     sheet: AddSheetState,
     onEvent: (PlannerDayEvent) -> Unit
 ) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Run when we enter FOOD mode (or re-enter it)
+    LaunchedEffect(sheet.addItemMode) {
+        if (sheet.addItemMode == AddItemMode.FOOD) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
     Text("Search foods", style = MaterialTheme.typography.titleMedium)
 
     TextField(
         value = sheet.query,
         onValueChange = { onEvent(PlannerDayEvent.UpdateAddQuery(it)) },
         label = { Text("Search") },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
         singleLine = true
     )
 
