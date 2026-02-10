@@ -97,6 +97,9 @@ fun FoodEditorRoute(
         onPickBarcodeCandidate = viewModel::onPickBarcodeCandidate,
         onPickBasisType = viewModel::onPickBasisType,
         onDismissGroundingDialog = viewModel::closeGroundingDialog,
+        mlPerServingUnit = state.mlPerServingUnit,
+        onMlPerServingChange = viewModel::onMlPerServingChange,
+        basisType = state.basisType,
     )
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

@@ -173,7 +173,15 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    fun onPickBasisType(type: BasisType) { update { it.copy(basisType = type, isGroundingDialogOpen = false) } }
+    fun onPickBasisType(type: BasisType) { update {
+        it.copy(
+            hasUnsavedChanges = it.basisType != type || it.gramsPerServingUnit.isNotBlank() || it.mlPerServingUnit.isNotBlank(),
+            basisType = type,
+            // Invariant: only keep the bridge for the active basis
+            gramsPerServingUnit = if (type == BasisType.PER_100ML) "" else it.gramsPerServingUnit,
+            mlPerServingUnit = if (type == BasisType.PER_100G) "" else it.mlPerServingUnit,
+        )
+    } }
 
     fun closeGroundingDialog() { update { it.copy(isGroundingDialogOpen = false) }}
 
@@ -182,6 +190,7 @@ class FoodEditorViewModel @Inject constructor(
     fun onServingSizeChange(v: String) = update { it.copy(servingSize = v, hasUnsavedChanges = true) }
     fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v, hasUnsavedChanges = true) }
     fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServingUnit = v, hasUnsavedChanges = true) }
+
     fun onMlPerServingChange(v: String) = update { it.copy(mlPerServingUnit = v, hasUnsavedChanges = true) }
     fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v, hasUnsavedChanges = true) }
 

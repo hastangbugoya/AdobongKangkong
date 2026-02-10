@@ -1,9 +1,8 @@
 package com.example.adobongkangkong.data.usda
 
-import kotlinx.serialization.SerialName
+import com.example.adobongkangkong.domain.usda.model.UsdaFoodSearchItem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import com.example.adobongkangkong.domain.usda.model.UsdaFoodSearchItem
 
 // 1) Minimal DTOs for /fdc/v1/foods/search
 

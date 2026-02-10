@@ -130,6 +130,10 @@ fun FoodEditorScreen(
     // Basis
     onPickBasisType: (BasisType) -> Unit,
     onDismissGroundingDialog: () -> Unit,
+
+    mlPerServingUnit: String,
+    onMlPerServingChange: (String) -> Unit,
+    basisType: BasisType?,
 ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
@@ -424,7 +428,11 @@ fun FoodEditorScreen(
                         onServingUnitChange = onServingUnitChange,
                         onGramsPerServingChange = onGramsPerServingChange,
                         onServingsPerPackageChange = onServingsPerPackageChange,
-                        isTablet = isTablet
+                        isTablet = isTablet,
+                        mlPerServingUnit = state.mlPerServingUnit,
+                        onMlPerServingChange = onGramsPerServingChange,
+                        basisType = state.basisType,
+
                     )
                 }
 
@@ -729,11 +737,14 @@ private fun ServingSection(
     servingSize: String,
     servingUnit: ServingUnit,
     gramsPerServingUnit: String,
+    mlPerServingUnit: String,
     servingsPerPackage: String,
     onServingSizeChange: (String) -> Unit,
     onServingUnitChange: (ServingUnit) -> Unit,
     onGramsPerServingChange: (String) -> Unit,
+    onMlPerServingChange: (String) -> Unit,
     onServingsPerPackageChange: (String) -> Unit,
+    basisType: BasisType?,
     isTablet: Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -771,13 +782,26 @@ private fun ServingSection(
             )
         }
 
-        OutlinedTextField(
-            value = gramsPerServingUnit,
-            onValueChange = onGramsPerServingChange,
-            label = { Text("Grams per serving") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+        val useMlBridge = basisType == BasisType.PER_100ML || mlPerServingUnit.isNotBlank()
+
+        if (useMlBridge) {
+            OutlinedTextField(
+                value = mlPerServingUnit,
+                onValueChange = onMlPerServingChange,
+                label = { Text("mL per serving") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            OutlinedTextField(
+                value = gramsPerServingUnit,
+                onValueChange = onGramsPerServingChange,
+                label = { Text("Grams per serving") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
 
         OutlinedTextField(
             value = servingsPerPackage,
