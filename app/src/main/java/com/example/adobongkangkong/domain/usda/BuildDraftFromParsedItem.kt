@@ -2,7 +2,7 @@ package com.example.adobongkangkong.domain.usda
 
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.usda.UsdaFoodsSearchParser
-import com.example.adobongkangkong.data.usda.UsdaFoodSearchItem
+import com.example.adobongkangkong.domain.usda.model.UsdaFoodSearchItem
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.ServingUnit

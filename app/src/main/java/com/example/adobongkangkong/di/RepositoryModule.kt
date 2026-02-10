@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.di
 
 
+import com.example.adobongkangkong.data.repository.FoodBarcodeRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodGoalFlagsRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodNutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodNutritionSnapshotRepositoryImpl
@@ -13,6 +14,7 @@ import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryIm
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserNutrientTargetRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserPinnedNutrientRepositoryImpl
+import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
@@ -109,5 +111,9 @@ abstract class RepositoryModule {
         impl: UserPinnedNutrientRepositoryImpl
     ): UserPinnedNutrientRepository
 
-
+    @Binds
+    @Singleton
+    abstract fun bindFoodBarcodeRepository(
+        impl: FoodBarcodeRepositoryImpl
+    ): FoodBarcodeRepository
 }

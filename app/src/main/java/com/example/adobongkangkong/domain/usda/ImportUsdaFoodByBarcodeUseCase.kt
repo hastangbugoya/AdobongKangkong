@@ -21,7 +21,13 @@ class ImportUsdaFoodByBarcodeUseCase @Inject constructor(
 
         return when (val r = importFromJson(json)) {
             is ImportUsdaFoodFromSearchJsonUseCase.Result.Success ->
-                Result.Success(r.foodId)
+                Result.Success(
+                    r.foodId,
+                    fdcId = r.fdcId,
+                    gtinUpc = r.gtinUpc,
+                    publishedDateIso = r.publishedDateIso,
+                    modifiedDateIso = r.modifiedDateIso,
+                )
 
             is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked ->
                 Result.Blocked(r.reason)
@@ -29,7 +35,13 @@ class ImportUsdaFoodByBarcodeUseCase @Inject constructor(
     }
 
     sealed class Result {
-        data class Success(val foodId: Long) : Result()
+        data class Success(
+            val foodId: Long,
+            val fdcId: Long,
+            val gtinUpc: String?,
+            val publishedDateIso: String?,
+            val modifiedDateIso: String?
+        ) : Result()
         data class Blocked(val reason: String) : Result()
         data class Failed(val message: String) : Result()
     }

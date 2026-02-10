@@ -3,6 +3,7 @@ package com.example.adobongkangkong.data.usda
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import com.example.adobongkangkong.domain.usda.model.UsdaFoodSearchItem
 
 // 1) Minimal DTOs for /fdc/v1/foods/search
 
@@ -14,23 +15,6 @@ data class UsdaFoodsSearchResponse(
     val foods: List<UsdaFoodSearchItem> = emptyList()
 )
 
-@Serializable
-data class UsdaFoodSearchItem(
-    val fdcId: Long,
-    val description: String? = null,
-    val dataType: String? = null,
-    val gtinUpc: String? = null,
-    val brandOwner: String? = null,
-    val brandName: String? = null,
-    val ingredients: String? = null,
-    val publishedDate: String? = null,
-    val servingSizeUnit: String? = null,
-    val servingSize: Double? = null,
-    val householdServingFullText: String? = null,
-    val packageWeight: String? = null,
-    val foodCategory: String? = null,
-    val foodNutrients: List<UsdaFoodNutrient> = emptyList()
-)
 
 @Serializable
 data class UsdaFoodNutrient(

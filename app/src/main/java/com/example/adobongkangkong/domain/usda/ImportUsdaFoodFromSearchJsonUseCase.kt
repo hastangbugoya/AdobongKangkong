@@ -15,6 +15,7 @@ import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.domain.usda.model.UsdaFoodSearchItem
 import kotlinx.serialization.Serializable
 import java.util.UUID
 import javax.inject.Inject
@@ -171,7 +172,13 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             id
         }
 
-        return Result.Success(foodId)
+        return Result.Success(
+            foodId = foodId,
+            fdcId = item.fdcId,
+            gtinUpc = item.gtinUpc?.trim()?.takeIf { it.isNotBlank() },
+            publishedDateIso = item.publishedDate?.trim()?.takeIf { it.isNotBlank() },
+            modifiedDateIso = item.modifiedDate?.trim()?.takeIf { it.isNotBlank() }
+        )
     }
 
     private fun isMassGrounded(food: Food): Boolean {
@@ -298,7 +305,13 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
     }
 
     sealed class Result {
-        data class Success(val foodId: Long) : Result()
+        data class Success(
+            val foodId: Long,
+            val fdcId: Long,
+            val gtinUpc: String?,
+            val publishedDateIso: String?,
+            val modifiedDateIso: String?
+        ) : Result()
         data class Blocked(val reason: String) : Result()
     }
 }
@@ -309,19 +322,19 @@ data class UsdaFoodsSearchResponse(
     val foods: List<UsdaFoodSearchItem> = emptyList()
 )
 
-@Serializable
-data class UsdaFoodSearchItem(
-    val fdcId: Long,
-    val description: String? = null,
-    val gtinUpc: String? = null,
-    val brandOwner: String? = null,
-    val brandName: String? = null,
-    val ingredients: String? = null,
-    val servingSizeUnit: String? = null,
-    val servingSize: Double? = null,
-    val householdServingFullText: String? = null,
-    val foodNutrients: List<UsdaFoodNutrient> = emptyList()
-)
+//@Serializable
+//data class UsdaFoodSearchItem(
+//    val fdcId: Long,
+//    val description: String? = null,
+//    val gtinUpc: String? = null,
+//    val brandOwner: String? = null,
+//    val brandName: String? = null,
+//    val ingredients: String? = null,
+//    val servingSizeUnit: String? = null,
+//    val servingSize: Double? = null,
+//    val householdServingFullText: String? = null,
+//    val foodNutrients: List<UsdaFoodNutrient> = emptyList()
+//)
 
 @Serializable
 data class UsdaFoodNutrient(

@@ -25,6 +25,7 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.dao.SummaryDao
 import com.example.adobongkangkong.data.local.db.dao.UserNutrientTargetDao
 import com.example.adobongkangkong.data.local.db.dao.UserPinnedNutrientDao
+import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
@@ -63,7 +64,8 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
         PlannedItemEntity::class,
         MealTemplateEntity::class,
         MealTemplateItemEntity::class,
-        MealTemplatePrefsEntity::class
+        MealTemplatePrefsEntity::class,
+        FoodBarcodeEntity::class
 ],
     version = 6,
     exportSchema = true,
