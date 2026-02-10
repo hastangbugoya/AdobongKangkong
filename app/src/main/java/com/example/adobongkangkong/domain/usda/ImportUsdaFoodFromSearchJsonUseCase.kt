@@ -111,7 +111,12 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             stableId = stableId.ifBlank { UUID.randomUUID().toString() },
             brand = brand,
             isRecipe = false,
-            isLowSodium = null
+            isLowSodium = null,
+
+            usdaFdcId = item.fdcId,
+            usdaGtinUpc = item.gtinUpc?.trim()?.takeIf { it.isNotBlank() },
+            usdaPublishedDate = item.publishedDate?.trim()?.takeIf { it.isNotBlank() },
+            usdaModifiedDate = item.modifiedDate?.trim()?.takeIf { it.isNotBlank() }
         )
 
         val servingRows: List<FoodNutrientRow> = item.foodNutrients.mapNotNull { n ->
@@ -315,36 +320,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         data class Blocked(val reason: String) : Result()
     }
 }
-
-@Serializable
-data class UsdaFoodsSearchResponse(
-    val totalHits: Int = 0,
-    val foods: List<UsdaFoodSearchItem> = emptyList()
-)
-
-//@Serializable
-//data class UsdaFoodSearchItem(
-//    val fdcId: Long,
-//    val description: String? = null,
-//    val gtinUpc: String? = null,
-//    val brandOwner: String? = null,
-//    val brandName: String? = null,
-//    val ingredients: String? = null,
-//    val servingSizeUnit: String? = null,
-//    val servingSize: Double? = null,
-//    val householdServingFullText: String? = null,
-//    val foodNutrients: List<UsdaFoodNutrient> = emptyList()
-//)
-
-@Serializable
-data class UsdaFoodNutrient(
-    val nutrientId: Long,
-    val nutrientName: String? = null,
-    val unitName: String? = null,
-    val value: Double? = null,
-    val nutrientNumber: String? = null,
-)
-
 fun String.toTitleCase(): String =
     lowercase()
         .split(" ")

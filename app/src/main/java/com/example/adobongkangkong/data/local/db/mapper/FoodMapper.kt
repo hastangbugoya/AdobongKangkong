@@ -14,7 +14,11 @@ internal fun Food.toEntity() = FoodEntity(
     mlPerServingUnit = mlPerServingUnit,
     servingsPerPackage = servingsPerPackage,
     isRecipe = isRecipe,
-    isLowSodium = isLowSodium
+    isLowSodium = isLowSodium,
+    usdaFdcId = usdaFdcId,
+    usdaGtinUpc = usdaGtinUpc,
+    usdaPublishedDate = usdaPublishedDate,
+    usdaModifiedDate = usdaModifiedDate,
 )
 
 internal fun FoodEntity.toDomain() = Food(
@@ -28,5 +32,9 @@ internal fun FoodEntity.toDomain() = Food(
     mlPerServingUnit = mlPerServingUnit,
     servingsPerPackage = servingsPerPackage,
     isRecipe = isRecipe,
-    isLowSodium = isLowSodium
+    isLowSodium = isLowSodium,
+    usdaFdcId = usdaFdcId,
+    usdaGtinUpc = usdaGtinUpc,
+    usdaPublishedDate = usdaPublishedDate,
+    usdaModifiedDate = usdaModifiedDate,
 )

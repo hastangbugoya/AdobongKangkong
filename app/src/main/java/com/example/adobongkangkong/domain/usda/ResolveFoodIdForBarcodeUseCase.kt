@@ -11,6 +11,9 @@ import javax.inject.Inject
  * 1) Normalize digits
  * 2) Try USDA import
  *    - if success: ensure mapping points to USDA-backed food (USDA wins, overwrites USER_ASSIGNED)
+ *    - store usdaFdcId + usdaPublishedDateIso on mapping (publishedDate is the version gate)
+ *    - refresh gate: if USDA publishedDate is not newer than stored, treat as "no refresh needed"
+ *      (we still update lastSeen + ensure mapping points to USDA food)
  * 3) If USDA returns nothing/blocked/failed: fallback to local mapping (if present)
  */
 class ResolveFoodIdForBarcodeUseCase @Inject constructor(
@@ -22,32 +25,60 @@ class ResolveFoodIdForBarcodeUseCase @Inject constructor(
         val barcode = normalizeDigits(rawBarcode)
         if (barcode.isBlank()) return Result.Blocked("Blank barcode")
 
-        // 1) Try USDA
+        // Read existing mapping once (used for assignedAt preservation + refresh gate)
+        val existing = barcodes.getByBarcode(barcode)
+
+        // 1) Try USDA first
         when (val usda = importUsdaFoodByBarcode(barcode)) {
             is ImportUsdaFoodByBarcodeUseCase.Result.Success -> {
-                val foodId = usda.foodId
+                val newPublished = usda.publishedDateIso?.trim()?.takeIf { it.isNotBlank() }
+                val oldPublished = existing?.usdaPublishedDateIso?.trim()?.takeIf { it.isNotBlank() }
 
-                // Pull USDA metadata from stored Food (import already persisted it)
-                val food = foods.getById(foodId)
+                // Refresh gate: newPublished must be strictly newer than oldPublished.
+                // ISO yyyy-MM-dd compares lexicographically correctly.
+                val needsRefresh = when {
+                    newPublished == null -> false
+                    oldPublished == null -> true
+                    else -> newPublished > oldPublished
+                }
 
-                // These property names should exist in your domain Food mapper since FoodEntity has them in v6.
-                val usdaFdcId = tryGetLong(food, "usdaFdcId")
-                val publishedDate = tryGetString(food, "usdaPublishedDate")
+                // assignedAt semantics:
+                // - If mapping already USDA -> preserve assignedAt.
+                // - If mapping was USER_ASSIGNED (or absent) and now USDA wins -> assignedAt becomes now.
+                val assignedAt = when {
+                    existing == null -> nowEpochMs
+                    existing.source == BarcodeMappingSource.USDA -> existing.assignedAtEpochMs
+                    else -> nowEpochMs
+                }
 
-                // USDA wins: overwrite mapping for this barcode → points to USDA food
+                // Always ensure mapping points to USDA food and lastSeen updates.
+                // Only update publishedDate on mapping if:
+                // - we need refresh, OR
+                // - there was no stored publishedDate yet.
+                val publishedToStore = when {
+                    needsRefresh -> newPublished
+                    oldPublished == null -> newPublished
+                    else -> oldPublished
+                }
+
                 val entity = FoodBarcodeEntity(
                     barcode = barcode,
-                    foodId = foodId,
+                    foodId = usda.foodId,
                     source = BarcodeMappingSource.USDA,
-                    usdaFdcId = usdaFdcId,
-                    usdaPublishedDateIso = publishedDate,
-                    assignedAtEpochMs = nowEpochMs,
+                    usdaFdcId = usda.fdcId,
+                    usdaPublishedDateIso = publishedToStore,
+                    assignedAtEpochMs = assignedAt,
                     lastSeenAtEpochMs = nowEpochMs,
                 )
-                barcodes.upsertAndTouch(entity, nowEpochMs)
 
+                barcodes.upsert(entity)
+
+                // NOTE:
+                // - The actual Food refresh (foods table fields) should happen inside the USDA import path.
+                // - The "needsRefresh" signal exists here if you later want to avoid expensive work.
+                //   Currently, ImportUsdaFoodByBarcodeUseCase already ran before we get here.
                 return Result.Resolved(
-                    foodId = foodId,
+                    foodId = usda.foodId,
                     normalizedBarcode = barcode,
                     source = BarcodeMappingSource.USDA
                 )
@@ -68,7 +99,7 @@ class ResolveFoodIdForBarcodeUseCase @Inject constructor(
 
         barcodes.touchLastSeen(barcode, nowEpochMs)
 
-        val mapping = barcodes.getByBarcode(barcode)
+        val mapping = existing ?: barcodes.getByBarcode(barcode)
         return Result.Resolved(
             foodId = mappedFoodId,
             normalizedBarcode = barcode,
@@ -93,30 +124,5 @@ class ResolveFoodIdForBarcodeUseCase @Inject constructor(
         val sb = StringBuilder(trimmed.length)
         for (c in trimmed) if (c in '0'..'9') sb.append(c)
         return sb.toString()
-    }
-
-    /**
-     * Tight-scope fallback: we avoid depending on the Food model source file here.
-     * If your domain Food exposes these properties directly (likely), we can replace these helpers
-     * with `food.usdaFdcId` / `food.usdaPublishedDate` and delete reflection entirely.
-     */
-    private fun tryGetLong(food: Any?, prop: String): Long? {
-        if (food == null) return null
-        return try {
-            val f = food::class.members.firstOrNull { it.name == prop } ?: return null
-            (f.call(food) as? Long)
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    private fun tryGetString(food: Any?, prop: String): String? {
-        if (food == null) return null
-        return try {
-            val f = food::class.members.firstOrNull { it.name == prop } ?: return null
-            (f.call(food) as? String)
-        } catch (_: Throwable) {
-            null
-        }
     }
 }
