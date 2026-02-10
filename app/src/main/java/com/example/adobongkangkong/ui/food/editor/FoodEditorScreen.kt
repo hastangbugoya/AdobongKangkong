@@ -561,6 +561,14 @@ fun FoodEditorScreen(
                         )
                     }
                 }
+                item {
+                    Text("State", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = state.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

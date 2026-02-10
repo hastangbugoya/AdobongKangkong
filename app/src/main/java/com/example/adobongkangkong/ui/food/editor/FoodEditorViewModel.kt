@@ -118,6 +118,21 @@ class FoodEditorViewModel @Inject constructor(
             val servingSize = food?.servingSize ?: 1.0
             val gramsPerServingUnit = food?.gramsPerServingUnit
             val mlPerServingUnit = food?.mlPerServingUnit
+            val inferredBasisType: BasisType? =
+                current.basisType
+                    ?: when {
+                        rows.any { it.basisType == BasisType.PER_100ML } -> BasisType.PER_100ML
+                        rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
+                        else -> {
+                            // No nutrient basis to infer from; fall back to bridges / serving unit.
+                            when {
+                                (food?.mlPerServingUnit != null) -> BasisType.PER_100ML
+                                (food?.gramsPerServingUnit != null) -> BasisType.PER_100G
+                                (food?.servingUnit ?: ServingUnit.SERVING).toMilliliters(1.0) != null -> BasisType.PER_100ML
+                                else -> BasisType.PER_100G
+                            }
+                        }
+                    }
 
             _state.value = current.copy(
                 foodId = foodId,
@@ -126,6 +141,7 @@ class FoodEditorViewModel @Inject constructor(
                 brand = food?.brand.orEmpty(),
                 servingSize = food?.servingSize?.toString() ?: "1.0",
                 servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
+                basisType = inferredBasisType,
                 gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() }
                     ?: food?.gramsPerServingUnit?.toString().orEmpty(),
                 mlPerServingUnit = current.mlPerServingUnit.takeIf { it.isNotBlank() }
