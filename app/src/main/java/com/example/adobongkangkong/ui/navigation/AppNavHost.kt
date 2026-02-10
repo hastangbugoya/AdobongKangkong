@@ -150,6 +150,44 @@ fun AppNavHost(
             )
         }
 
+        // ------------------------------------------------------------
+        // Foods — assign barcode to existing food
+        // ------------------------------------------------------------
+
+        composable(
+            route = NavRoutes.Foods.pickBarcode,
+            arguments = listOf(
+                navArgument("barcode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { entry ->
+            val barcode = entry.arguments?.getString("barcode").orEmpty()
+
+            FoodsListScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+
+                // User picks an existing food → assign barcode
+                onEditFood = { pickedFoodId ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("barcode_assign_foodId", pickedFoodId)
+
+                    navController.popBackStack()
+                },
+
+                // Disabled in picker mode
+                onEditRecipe = { /* no-op */ },
+                onCreateFood = { /* no-op */ },
+                onCreateRecipe = { /* no-op */ }
+            )
+        }
+
+
         composable(
             route = NavRoutes.Foods.edit,
             arguments = listOf(navArgument("foodId") { type = NavType.LongType })
@@ -161,6 +199,9 @@ fun AppNavHost(
                 initialName = null,
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
+                onAssignBarcodeToExisting = { barcode ->
+                    navController.navigate(NavRoutes.Foods.pickBarcode(barcode))
+                },
                 bannerCaptureController = bannerCaptureController,
                 bannerRefreshTick = bannerRefreshTick,
             )
@@ -173,20 +214,31 @@ fun AppNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = ""
+                },
+                navArgument("barcode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
                 }
             )
         ) { entry ->
             val initialName = entry.arguments?.getString("name").orEmpty().ifBlank { null }
+            val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
 
             FoodEditorRoute(
                 foodId = null,
                 initialName = initialName,
+                initialBarcode = initialBarcode,
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
+                onAssignBarcodeToExisting = { barcode ->
+                    navController.navigate(NavRoutes.Foods.pickBarcode(barcode))
+                },
                 bannerCaptureController = bannerCaptureController,
                 bannerRefreshTick = bannerRefreshTick,
             )
         }
+
 
         // ------------------------------------------------------------
         // Recipes

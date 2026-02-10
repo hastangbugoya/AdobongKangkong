@@ -16,9 +16,11 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
 fun FoodEditorRoute(
     foodId: Long?,
     initialName: String?,
+    initialBarcode: String? = null,
     bannerRefreshTick: Int,
     onBack: () -> Unit,
     onDone: () -> Unit,
+    onAssignBarcodeToExisting: (String) -> Unit = {},
     viewModel: FoodEditorViewModel = hiltViewModel(),
     bannerCaptureController: BannerCaptureController,
 ) {
@@ -34,6 +36,15 @@ fun FoodEditorRoute(
 
     LaunchedEffect(foodId, initialName) {
         viewModel.load(foodId = foodId, initialName = initialName)
+    }
+
+    // NEW (minimal): if route was opened with a barcode, reuse the existing scan handler.
+    LaunchedEffect(initialBarcode) {
+        initialBarcode
+            ?.takeIf { it.isNotBlank() }
+            ?.let { code ->
+                viewModel.onBarcodeScanned(code)
+            }
     }
 
     LaunchedEffect(didDelete) {
@@ -86,9 +97,7 @@ fun FoodEditorRoute(
         onPickBarcodeCandidate = viewModel::onPickBarcodeCandidate,
         onPickBasisType = viewModel::onPickBasisType,
         onDismissGroundingDialog = viewModel::closeGroundingDialog,
-
-
-        )
+    )
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -105,29 +114,13 @@ fun FoodEditorRoute(
             )
         }
     }
-
 }
+
 /**
  * FOR-FUTURE-ME (FoodEditorRoute)
  *
  * Purpose:
  * - Route-level wrapper:
  *   - owns FoodEditorViewModel via hiltViewModel()
- *   - loads the food/editor data based on nav args
- *   - passes BannerCaptureController + refresh tick into FoodEditorScreen
- *   - hosts BarcodeScannerSheet bottom sheet
- *
- * Key integration rules:
- * - Banner capture:
- *   - FoodEditorScreen calls bannerCaptureController.open(foodId) ONLY when foodId != null.
- *   - MainScreen’s BannerCaptureHost handles the actual sheet overlay.
- *
- * Barcode scanner:
- * - This route shows ModalBottomSheet when state.isBarcodeScannerOpen.
- * - Scanner must update VM state (barcode → search json → import → load(foodId)).
- * - IMPORTANT: BarcodeScannerSheet must unbind CameraX on dispose to avoid breaking banner capture.
- *
- * Debug sanity:
- * - We should see exactly ONE FoodEditorViewModel instance for the route.
- * - If state updates but UI doesn’t reflect, check collectAsState + load() gating.
+ *   - loads the food/editor data based on
  */

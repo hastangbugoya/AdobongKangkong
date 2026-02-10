@@ -5,7 +5,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
 import com.example.adobongkangkong.domain.model.AliasAddResult
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
@@ -15,6 +17,7 @@ import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
+import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
@@ -49,11 +52,21 @@ class FoodEditorViewModel @Inject constructor(
     private val flagsRepo: FoodGoalFlagsRepository,
     private val searchUsdaByBarcode: SearchUsdaFoodsByBarcodeUseCase,
     private val importUsdaFromSearchJson: ImportUsdaFoodFromSearchJsonUseCase,
+    private val foodBarcodeRepo: FoodBarcodeRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FoodEditorState())
     val state: StateFlow<FoodEditorState> = _state
+
+    private val savedState = savedStateHandle
+
+    private val assignBarcodeToExistingFlow = MutableStateFlow<String?>(null)
+    val assignBarcodeToExistingBarcode: StateFlow<String?> = assignBarcodeToExistingFlow
+
+    fun consumeAssignBarcodeToExistingRequest() {
+        assignBarcodeToExistingFlow.value = null
+    }
 
     @OptIn(FlowPreview::class)
     private val nutrientQueryFlow = MutableStateFlow("")
@@ -525,8 +538,15 @@ class FoodEditorViewModel @Inject constructor(
                 }
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked ->
                     update { it.copy(errorMessage = r.reason) }
-                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed ->
-                    update { it.copy(errorMessage = r.message) }
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed ->{
+                    update {
+                        it.copy(
+                            scannedBarcode = barcode,
+                            errorMessage = r.message
+                        )
+                    }
+                    assignBarcodeToExistingFlow.value = barcode
+                }
             }
         }
     }
@@ -571,7 +591,52 @@ class FoodEditorViewModel @Inject constructor(
                             )
                         }
                     )
+
                 }
+            }
+        }
+        viewModelScope.launch {
+            savedState.getStateFlow<Long?>("barcode_assign_foodId", savedState.get<Long>("barcode_assign_foodId")).collect { pickedFoodId ->
+                Log.d("Meow", "BarcodeAssign> pickedFoodId=$pickedFoodId")
+                if (pickedFoodId == null) return@collect
+
+                val barcode = state.value.scannedBarcode?.trim().orEmpty()
+                if (barcode.isBlank()) {
+                    // Clear the one-shot result so we don't loop.
+                    savedState["barcode_assign_foodId"] = null
+                    return@collect
+                }
+
+                val now = System.currentTimeMillis()
+
+                foodBarcodeRepo.upsertAndTouch(
+                    entity = FoodBarcodeEntity(
+                        barcode = barcode,
+                        foodId = pickedFoodId,
+                        source = BarcodeMappingSource.USER_ASSIGNED,
+                        usdaFdcId = null,
+                        usdaPublishedDateIso = null,
+                        assignedAtEpochMs = now,
+                        lastSeenAtEpochMs = now
+                    ),
+                    nowEpochMs = now
+                )
+
+                // Clear the one-shot result so we don't re-handle it.
+                savedState["barcode_assign_foodId"] = null
+
+                // Clean up any pending USDA UI state (keep minimal).
+                update {
+                    it.copy(
+                        pendingUsdaSearchJson = null,
+                        barcodePickItems = emptyList(),
+                        errorMessage = null,
+                        isBarcodeScannerOpen = false
+                    )
+                }
+
+                // Open the picked food in the editor.
+                load(foodId = pickedFoodId, initialName = null)
             }
         }
     }

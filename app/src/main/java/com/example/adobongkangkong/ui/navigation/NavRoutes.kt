@@ -3,7 +3,6 @@ package com.example.adobongkangkong.ui.navigation
 import java.time.LocalDate
 
 object NavRoutes {
-
     object Dashboard {
         const val route: String = "dashboard"
         // Dashboard -> DayLog uses DayLog.dayLog(date)
@@ -29,21 +28,39 @@ object NavRoutes {
         private const val BASE = "food"
         private const val ARG_FOOD_ID = "foodId"
         private const val ARG_NAME = "name"
+        private const val ARG_BARCODE = "barcode"
+
+        // Picker result is returned via SavedStateHandle; barcode is passed via route arg.
+        private const val PICK_BASE = "food/pickBarcode"
+        const val pickBarcode: String = "$PICK_BASE?$ARG_BARCODE={$ARG_BARCODE}"
 
         const val list: String = BASE
         const val details: String = "$BASE/{$ARG_FOOD_ID}"
         const val edit: String = "$BASE/edit/{$ARG_FOOD_ID}"
-        const val new: String = "$BASE/new?$ARG_NAME={$ARG_NAME}"
+
+        // New food supports optional prefill name + optional prefill barcode
+        const val new: String = "$BASE/new?$ARG_NAME={$ARG_NAME}&$ARG_BARCODE={$ARG_BARCODE}"
 
         fun details(foodId: Long): String = "$BASE/$foodId"
         fun edit(foodId: Long): String = "$BASE/edit/$foodId"
 
-        fun new(prefillName: String? = null): String {
+        fun new(prefillName: String? = null, prefillBarcode: String? = null): String {
+            fun enc(s: String?): String {
+                val v = s.orEmpty()
+                return java.net.URLEncoder.encode(
+                    v,
+                    java.nio.charset.StandardCharsets.UTF_8.toString()
+                )
+            }
+            return "$BASE/new?$ARG_NAME=${enc(prefillName)}&$ARG_BARCODE=${enc(prefillBarcode)}"
+        }
+
+        fun pickBarcode(barcode: String): String {
             val encoded = java.net.URLEncoder.encode(
-                prefillName.orEmpty(),
+                barcode,
                 java.nio.charset.StandardCharsets.UTF_8.toString()
             )
-            return "$BASE/new?$ARG_NAME=$encoded"
+            return "$PICK_BASE?$ARG_BARCODE=$encoded"
         }
     }
 
@@ -74,8 +91,6 @@ object NavRoutes {
         const val plannerDay = "planner/{dateIso}"
         fun plannerDay(dateIso: String): String = "planner/$dateIso"
     }
-
-
 }
 
 
