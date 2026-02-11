@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.log
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
@@ -305,6 +306,7 @@ class QuickAddViewModel @Inject constructor(
         selectedFoodFlow.value = food
         servingsFlow.value = 1.0
         inputModeFlow.value = InputMode.SERVINGS
+        Log.d("Meow", "QuickAdd init foodId=${food.id} name=${food.name} gramsPerServing=${food.gramsPerServingUnitResolved()}")
 
         // Default input unit: prefer the food serving unit when it is convertible, otherwise grams.
         inputUnitFlow.value = when (food.servingUnit) {
@@ -488,10 +490,37 @@ class QuickAddViewModel @Inject constructor(
 
     fun openCreateBatchDialog() {
         isCreateBatchDialogOpenFlow.value = true
-        yieldGramsTextFlow.value = ""
-        servingsYieldTextFlow.value = ""
         errorFlow.value = null
+
+        val food = selectedFoodFlow.value
+
+        if (food != null && food.isRecipe) {
+            val servingsDefault = selectedRecipeServingsYieldDefaultFlow.value
+            val gramsPerServing = food.gramsPerServingUnitResolved()
+
+            // Prefill servings used with the recipe default servingsYield (editable)
+            servingsYieldTextFlow.value =
+                servingsDefault?.let { formatCompact(it) }.orEmpty()
+
+            // Prefill cooked yield grams with total-ingredient-weight estimate (editable)
+            yieldGramsTextFlow.value =
+                if (servingsDefault != null && gramsPerServing != null) {
+                    formatCompact(servingsDefault * gramsPerServing)
+                } else {
+                    ""
+                }
+        } else {
+            // Non-recipe: keep current behavior (blank)
+            yieldGramsTextFlow.value = ""
+            servingsYieldTextFlow.value = ""
+        }
     }
+
+    private fun formatCompact(v: Double): String {
+        val s = "%.2f".format(v)
+        return s.trimEnd('0').trimEnd('.')
+    }
+
 
     fun closeCreateBatchDialog() {
         isCreateBatchDialogOpenFlow.value = false

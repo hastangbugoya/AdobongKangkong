@@ -751,34 +751,35 @@ private fun NutrientTallyList(rows: List<NutrientRowUi>) {
             Text(cat.displayName, style = MaterialTheme.typography.titleSmall)
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 list.forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(color = MaterialTheme.colorScheme.secondaryContainer)
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = row.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = row.unit.symbol,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                             Text(
-                                text = row.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = row.amount,
+                                style = MaterialTheme.typography.bodyLarge
                             )
-                            Text(
-                                text = row.unit.symbol,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Text(
-                            text = row.amount,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
 
-                        Divider(
-                            modifier = Modifier.padding(start = 0.dp).weight(0.8f),
-                            color = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        }
+                        Divider(modifier = Modifier.padding(2.dp), thickness = 1.dp)
                     }
                 }
             }

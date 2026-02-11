@@ -74,6 +74,16 @@ interface FoodDao {
         isRecipe: Boolean
     )
 
+    @Query("""
+    UPDATE foods SET
+      gramsPerServingUnit = :gramsPerServingUnit
+    WHERE id = :id
+    """)
+    suspend fun updateGramsPerServingUnit(
+        id: Long,
+        gramsPerServingUnit: Double?
+    )
+
 
 
 }

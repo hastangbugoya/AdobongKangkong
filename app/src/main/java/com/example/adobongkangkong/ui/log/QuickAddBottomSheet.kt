@@ -355,7 +355,7 @@ private fun CreateBatchDialog(
                 OutlinedTextField(
                     value = servingsYieldText,
                     onValueChange = onServingsYieldChange,
-                    label = { Text("Servings used (optional)") },
+                    label = { Text("Servings for batch (optional)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

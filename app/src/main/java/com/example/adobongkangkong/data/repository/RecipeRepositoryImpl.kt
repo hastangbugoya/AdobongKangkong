@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.repository
 
 import androidx.room.withTransaction
 import com.example.adobongkangkong.data.local.db.NutriDatabase
+import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
@@ -28,7 +29,8 @@ class RecipeRepositoryImpl @Inject constructor(
     private val recipeDao: RecipeDao,
     private val ingredientDao: RecipeIngredientDao,
     private val computeRecipeNutritionForSnapshot: ComputeRecipeNutritionForSnapshotUseCase,
-    private val foodNutrientDao: FoodNutrientDao
+    private val foodNutrientDao: FoodNutrientDao,
+    private val foodDao: FoodDao,
 
 ) : RecipeRepository {
 
@@ -155,6 +157,17 @@ class RecipeRepositoryImpl @Inject constructor(
 
         recipeDao.insert(existing.copy(servingsYield = servingsYield, totalYieldGrams = totalYieldGrams))
 
+        val gramsPerServing = totalYieldGrams
+            ?.takeIf { it > 0.0 && servingsYield > 0.0 }
+            ?.div(servingsYield)
+            ?.takeIf { it > 0.0 }
+
+        foodDao.updateGramsPerServingUnit(
+            id = foodId,
+            gramsPerServingUnit = gramsPerServing
+        )
+
+        // Keep the recipe-as-food gramsPerServingUnit in sync so Quick Add prefills correctly.
         ingredientDao.deleteForRecipe(recipeId)
         ingredientDao.insertAll(
             ingredients.map { line ->

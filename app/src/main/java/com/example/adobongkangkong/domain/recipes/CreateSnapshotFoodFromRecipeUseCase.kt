@@ -84,8 +84,10 @@ class CreateSnapshotFoodFromRecipeUseCase @Inject constructor(
             }
 
         // Create the loggable batch food snapshot
+        val ts = java.time.ZonedDateTime.ofInstant(createdAt, java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy h:mm a"))
         val batchFood = FoodEntity(
-            name = "${recipeEntity.name} (Batch)",
+            name = "${recipeEntity.name} (${ts})",
             brand = "From recipe", // provenance; or null if you prefer
             servingSize = 1.0,
             servingUnit = ServingUnit.G,

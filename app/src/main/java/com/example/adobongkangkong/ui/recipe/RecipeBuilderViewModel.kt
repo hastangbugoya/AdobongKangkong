@@ -139,15 +139,14 @@ class RecipeBuilderViewModel @Inject constructor(
     // -----------------------------
 
     private fun maybeAutoPrefillTotalYieldGramsFromIngredients() {
-        if (didAutoPrefillTotalYieldGrams) return
         if (didUserEditTotalYieldGrams) return
-        if (totalYieldGramsFlow.value != null) return
 
         val grams = ingredientsFlow.value.sumOf { it.grams ?: 0.0 }
-        if (grams > 0.0) {
-            totalYieldGramsFlow.value = grams
-            didAutoPrefillTotalYieldGrams = true
-        }
+        if (grams <= 0.0) return
+
+        // Keep auto-updating as long as user hasn't manually set the field.
+        totalYieldGramsFlow.value = grams
+        didAutoPrefillTotalYieldGrams = true
     }
 
     private data class Left(
@@ -397,6 +396,8 @@ class RecipeBuilderViewModel @Inject constructor(
 
             try {
                 // Build a minimal domain Recipe for nutrition computation.
+                val fallbackTotalYieldGrams = totalYieldGramsFlow.value
+                    ?: lines.sumOf { it.grams ?: 0.0 }
                 val recipe = com.example.adobongkangkong.domain.recipes.Recipe(
                     id = 0L,
                     name = nameFlow.value,
@@ -407,7 +408,7 @@ class RecipeBuilderViewModel @Inject constructor(
                         )
                     },
                     servingsYield = servingsYieldFlow.value,
-                    totalYieldGrams = totalYieldGramsFlow.value ?: 0.0
+                    totalYieldGrams = fallbackTotalYieldGrams
                 )
 
                 val result = computeRecipeNutrition(recipe)
@@ -439,8 +440,13 @@ class RecipeBuilderViewModel @Inject constructor(
 
                 nutrientTallyRowsFlow.value = rows
 
-                val warn = result.warnings.firstOrNull()
+                val warn = result.warnings.firstOrNull { w ->
+                    w is RecipeNutritionWarning.MissingFood ||
+                            w is RecipeNutritionWarning.MissingGramsPerServing ||
+                            w is RecipeNutritionWarning.MissingNutrientsPerGram
+                }
                 nutrientTallyErrorFlow.value = warn?.let { warningToMessage(it) }
+
             } catch (t: Throwable) {
                 nutrientTallyErrorFlow.value = t.message ?: "Failed to compute nutrient tally."
             } finally {
@@ -835,7 +841,7 @@ class RecipeBuilderViewModel @Inject constructor(
             errorFlow.value = null
             try {
                 val editingFoodId = editFoodId
-
+                Log.d("Meow", "SAVE RECIPE totalYieldGrams=${totalYieldGramsFlow.value} ingredientSum=${ingredientsFlow.value.sumOf { it.grams ?: 0.0 }}")
                 if (editingFoodId == null) {
                     val newFoodId = createRecipe(
                         RecipeDraft(
