@@ -28,7 +28,7 @@ data class RecipeEntity(
 
     val name: String,
 
-    // how many servings this batch yields (portions)
+    // how many servings a batch yields (portions)
     val servingsYield: Double,
 
     /**

@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.recipe
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.domain.model.Food
@@ -34,6 +35,13 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
+import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
+import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
+import kotlin.math.abs
 
 
 @HiltViewModel
@@ -42,6 +50,8 @@ class RecipeBuilderViewModel @Inject constructor(
     private val recipeRepo: RecipeRepository,
     private val createRecipe: CreateRecipeUseCase,
     private val flagsRepository: FoodGoalFlagsRepository,
+    private val computeRecipeNutrition: ComputeRecipeNutritionForSnapshotUseCase,
+    private val nutrientRepo: NutrientRepository,
     observePreview: ObserveRecipeMacroPreviewUseCase,
 ) : ViewModel() {
 
@@ -101,10 +111,15 @@ class RecipeBuilderViewModel @Inject constructor(
     private val blockedFoodIdFlow = MutableStateFlow<Long?>(null)
     private val navigateToEditFoodIdFlow = MutableStateFlow<Long?>(null)
 
+
+    private val nutrientTallyRowsFlow = MutableStateFlow<List<NutrientRowUi>>(emptyList())
+    private val nutrientTallyLoadingFlow = MutableStateFlow(false)
+    private val nutrientTallyErrorFlow = MutableStateFlow<String?>(null)
+
     private val previewFlow: StateFlow<RecipeMacroPreview> =
         observePreview(
             ingredients = ingredientsFlow.map { list ->
-                list.map { it.foodId to it.servings }
+                list.map { it.foodId to (it.grams ?: 0.0) }
             }
         ).stateIn(
             viewModelScope,
@@ -154,7 +169,10 @@ class RecipeBuilderViewModel @Inject constructor(
     private data class RightB(
         val preview: RecipeMacroPreview,
         val isSaving: Boolean,
-        val error: String?
+        val error: String?,
+        val nutrientTallyRows: List<NutrientRowUi>,
+        val nutrientTallyLoading: Boolean,
+        val nutrientTallyErrorMessage: String?
     )
 
     private data class RightBase(
@@ -164,7 +182,10 @@ class RecipeBuilderViewModel @Inject constructor(
         val ingredients: List<RecipeIngredientUi>,
         val preview: RecipeMacroPreview,
         val isSaving: Boolean,
-        val error: String?
+        val error: String?,
+        val nutrientTallyRows: List<NutrientRowUi>,
+        val nutrientTallyLoading: Boolean,
+        val nutrientTallyErrorMessage: String?
     )
 
     private data class Overlay(
@@ -223,9 +244,31 @@ class RecipeBuilderViewModel @Inject constructor(
                 }
 
             val rightBFlow: Flow<RightB> =
-                combine(previewFlow, isSavingFlow, errorFlow) { preview, isSaving, error ->
-                    RightB(preview = preview, isSaving = isSaving, error = error)
+                combine(previewFlow, isSavingFlow) { preview, isSaving ->
+                    preview to isSaving
+                }.combine(errorFlow) { (preview, isSaving), error ->
+                    Triple(preview, isSaving, error)
+                }.combine(nutrientTallyRowsFlow) { (preview, isSaving, error), rows ->
+                    listOf(preview, isSaving, error, rows)
+                }.combine(nutrientTallyLoadingFlow) { list, loading ->
+                    list + loading
+                }.combine(nutrientTallyErrorFlow) { list, tallyError ->
+                    val preview = list[0] as com.example.adobongkangkong.domain.model.RecipeMacroPreview
+                    val isSaving = list[1] as Boolean
+                    val error = list[2] as String?
+                    val rows = list[3] as List<NutrientRowUi>
+                    val loading = list[4] as Boolean
+
+                    RightB(
+                        preview = preview,
+                        isSaving = isSaving,
+                        error = error,
+                        nutrientTallyRows = rows,
+                        nutrientTallyLoading = loading,
+                        nutrientTallyErrorMessage = tallyError
+                    )
                 }
+
 
             val rightFlow: Flow<RightBase> =
                 combine(rightAFlow, rightBFlow) { a, b ->
@@ -236,7 +279,10 @@ class RecipeBuilderViewModel @Inject constructor(
                         ingredients = a.ingredients,
                         preview = b.preview,
                         isSaving = b.isSaving,
-                        error = b.error
+                        error = b.error,
+                        nutrientTallyRows = b.nutrientTallyRows,
+                        nutrientTallyLoading = b.nutrientTallyLoading,
+                        nutrientTallyErrorMessage = b.nutrientTallyErrorMessage
                     )
                 }
 
@@ -288,6 +334,10 @@ class RecipeBuilderViewModel @Inject constructor(
 
                     preview = right.preview,
 
+                    nutrientTallyRows = right.nutrientTallyRows,
+                    nutrientTallyLoading = right.nutrientTallyLoading,
+                    nutrientTallyErrorMessage = right.nutrientTallyErrorMessage,
+
                     blockingSheet = overlay.blockingSheet,
                     blockedFoodId = overlay.blockedFoodId,
                     navigateToEditFoodId = overlay.navigateToEditFoodId,
@@ -295,6 +345,7 @@ class RecipeBuilderViewModel @Inject constructor(
                     favorite = overlay.favorite,
                     eatMore = overlay.eatMore,
                     limit = overlay.limit,
+
                 )
             }.stateIn(
                 viewModelScope,
@@ -321,6 +372,104 @@ class RecipeBuilderViewModel @Inject constructor(
     private fun markDirty() {
         hasUnsavedChangesFlow.value = true
     }
+
+
+    // -----------------------------
+    // Nutrient tally (read-only)
+    // -----------------------------
+    private fun recomputeNutrientTally() {
+        Log.d("Meow","RecipeBuilderViewModel> recomputeNutrientTally > Ingredients count:${ingredientsFlow.value.size}")
+        viewModelScope.launch {
+            val lines = ingredientsFlow.value
+            if (lines.isEmpty()) {
+                nutrientTallyRowsFlow.value = emptyList()
+                nutrientTallyErrorFlow.value = null
+                nutrientTallyLoadingFlow.value = false
+                return@launch
+            }
+
+            lines.forEach {
+                Log.d("Meow","RecipeBuilderViewModel> recomputeNutrientTally> Ingredient: ${it.foodName}")
+            }
+
+            nutrientTallyLoadingFlow.value = true
+            nutrientTallyErrorFlow.value = null
+
+            try {
+                // Build a minimal domain Recipe for nutrition computation.
+                val recipe = com.example.adobongkangkong.domain.recipes.Recipe(
+                    id = 0L,
+                    name = nameFlow.value,
+                    ingredients = lines.map { line ->
+                        com.example.adobongkangkong.domain.recipes.RecipeIngredient(
+                            foodId = line.foodId,
+                            servings = line.servings
+                        )
+                    },
+                    servingsYield = servingsYieldFlow.value,
+                    totalYieldGrams = totalYieldGramsFlow.value ?: 0.0
+                )
+
+                val result = computeRecipeNutrition(recipe)
+
+                // Convert totals (NutrientKey -> amount) into FoodEditor-style rows.
+                val rows = buildList {
+                    for ((key, v) in result.totals.entries()) {
+                        if (abs(v) <= 0.0) continue
+
+                        val nutrient = nutrientRepo.getByCode(key.value) ?: continue
+                        Log.d("Meow","RecipeBuilderViewModel> recomputeNutrientTally> adding ${nutrient.displayName}")
+                        add(
+                            NutrientRowUi(
+                                nutrientId = nutrient.id,
+                                name = nutrient.displayName,
+                                aliases = nutrient.aliases,
+                                unit = nutrient.unit,
+                                category = nutrient.category,
+                                amount = formatTallyAmount(v)
+                            )
+                        )
+                    }
+                }.sortedWith(
+                    compareBy<NutrientRowUi> { it.category.sortOrder }
+                        .thenBy { it.name.lowercase() }
+                )
+
+                    .toList()
+
+                nutrientTallyRowsFlow.value = rows
+
+                val warn = result.warnings.firstOrNull()
+                nutrientTallyErrorFlow.value = warn?.let { warningToMessage(it) }
+            } catch (t: Throwable) {
+                nutrientTallyErrorFlow.value = t.message ?: "Failed to compute nutrient tally."
+            } finally {
+                nutrientTallyLoadingFlow.value = false
+            }
+        }
+    }
+
+    private fun formatTallyAmount(v: Double): String {
+        val absV = abs(v)
+        return when {
+            absV >= 100 -> "%,.0f".format(v)
+            absV >= 10 -> "%,.1f".format(v)
+            else -> "%,.2f".format(v)
+        }
+    }
+
+    private fun warningToMessage(w: RecipeNutritionWarning): String =
+        when (w) {
+            RecipeNutritionWarning.MissingServingsYield -> "Missing servings-yield."
+            RecipeNutritionWarning.MissingTotalYieldGrams -> "Missing total-yield grams."
+            is RecipeNutritionWarning.InvalidServingsYield -> "Invalid servings-yield: ${w.value}"
+            is RecipeNutritionWarning.InvalidTotalYieldGrams -> "Invalid total-yield grams: ${w.value}"
+            is RecipeNutritionWarning.MissingFood -> "Missing food for foodId=${w.foodId}"
+            is RecipeNutritionWarning.MissingGramsPerServing -> "Missing grams-per-serving for foodId=${w.foodId}"
+            is RecipeNutritionWarning.MissingNutrientsPerGram -> "Missing per-gram nutrients for foodId=${w.foodId}"
+            is RecipeNutritionWarning.IngredientServingsNonPositive -> "Ingredient servings must be > 0 (foodId=${w.foodId})"
+        }
+
 
     // -----------------------------
     // Events
@@ -639,6 +788,7 @@ class RecipeBuilderViewModel @Inject constructor(
             )
         )
         ingredientsFlow.value = next
+        recomputeNutrientTally()
         maybeAutoPrefillTotalYieldGramsFromIngredients()
         markDirty()
         isEditingGrams = false
@@ -657,6 +807,7 @@ class RecipeBuilderViewModel @Inject constructor(
         list.removeAt(index)
         ingredientsFlow.value = list
         maybeAutoPrefillTotalYieldGramsFromIngredients()
+        recomputeNutrientTally()
         markDirty()
     }
 
@@ -805,6 +956,7 @@ class RecipeBuilderViewModel @Inject constructor(
                     grams = gramsForLine
                 )
             }
+            recomputeNutrientTally()
             if (totalYieldGramsFlow.value == null) {
                 maybeAutoPrefillTotalYieldGramsFromIngredients()
             } else {

@@ -41,15 +41,23 @@ class FoodNutrientRepositoryImpl @Inject constructor(
             // You already have this DAO method. :contentReference[oaicite:2]{index=2}
             val nutrients = foodNutrientDao.getForFood(foodId)
 
-            fun amountFor(nutrientId: Long?): Double {
+            fun amountPerGramFor(nutrientId: Long?): Double {
                 if (nutrientId == null) return 0.0
-                return nutrients.firstOrNull { it.nutrientId == nutrientId }?.nutrientAmountPerBasis ?: 0.0
+
+                val row = nutrients.firstOrNull { it.nutrientId == nutrientId } ?: return 0.0
+
+                return when (row.basisType) {
+                    BasisType.PER_100G,
+                    BasisType.PER_100ML -> row.nutrientAmountPerBasis / 100.0
+                    else -> row.nutrientAmountPerBasis
+                }
             }
 
-            totalCalories += amountFor(caloriesId) * servings
-            totalProtein += amountFor(proteinId) * servings
-            totalCarbs += amountFor(carbsId) * servings
-            totalFat += amountFor(fatId) * servings
+
+            totalCalories += amountPerGramFor(caloriesId) * servings
+            totalProtein += amountPerGramFor(proteinId) * servings
+            totalCarbs += amountPerGramFor(carbsId) * servings
+            totalFat += amountPerGramFor(fatId) * servings
         }
 
         return RecipeMacroPreview(

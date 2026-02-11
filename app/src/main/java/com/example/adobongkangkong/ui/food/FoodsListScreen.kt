@@ -163,6 +163,9 @@ fun FoodsListScreen(
                     )
                     HorizontalDivider()
                 }
+                item {
+                    Text(state.toString(), style = MaterialTheme.typography.bodySmall )
+                }
             }
         }
     }

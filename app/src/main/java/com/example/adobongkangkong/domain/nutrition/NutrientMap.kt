@@ -9,7 +9,7 @@ package com.example.adobongkangkong.domain.nutrition
  */
 @JvmInline
 value class NutrientMap(
-    private val amounts: Map<NutrientKey, Double>,
+    val amounts: Map<NutrientKey, Double>,
 ) {
 
     fun asMap(): Map<String, Double> = toCodeMap()

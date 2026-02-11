@@ -60,12 +60,28 @@ import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import kotlinx.coroutines.delay
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Divider
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clip
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
+import androidx.compose.material3.CircularProgressIndicator
 
 /**
  * Recipe builder / editor screen.
@@ -100,8 +116,6 @@ fun RecipeBuilderScreen(
 
     val ingredientTotalGrams by vm.ingredientTotalGrams.collectAsState()
 
-    val listState = rememberLazyListState()
-
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
 
     fun requestExit() {
@@ -113,6 +127,13 @@ fun RecipeBuilderScreen(
     }
 
     BackHandler { requestExit() }
+
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val listState = rememberLazyListState()
+    val bringAddIntoView = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+
     // --------------------------------------------------------------------------
     // Deterministic scroll: when a food is picked, bring the "Picked" section into view.
     LaunchedEffect(state.pickedFood?.id) {
@@ -130,7 +151,18 @@ fun RecipeBuilderScreen(
             idx += 1 // search field
             if (state.results.isNotEmpty()) idx += 1 // results list
 
-            listState.animateScrollToItem(idx)
+            // Nudge a bit so the input area (Amount/Grams/Add ingredient) is actually visible.
+            delay(16)
+            listState.animateScrollBy(with(density) { 220.dp.toPx() })
+
+            // If the keyboard is showing, nudge down a bit so the bottom of SelectedFoodPanel
+            // (especially the "Add ingredient" button) sits above the IME.
+            if (imeBottomPx > 0) {
+                delay(16)
+                listState.animateScrollBy(with(density) { 180.dp.toPx() })
+            }
+            delay(32)
+            bringAddIntoView.bringIntoView()
         }
     }
 
@@ -377,7 +409,6 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
-
             state.pickedFood?.let { pickedFood ->
                 item {
                     // ------------------------------------------------------------------
@@ -401,41 +432,56 @@ fun RecipeBuilderScreen(
                         gramsAmount = gramsPerServingUnit?.let { g -> state.pickedServings * g }
                     }
 
-                    SelectedFoodPanel(
-                        food = pickedFood,
-                        servings = state.pickedServings,
-                        servingUnitAmount = servingUnitAmount,
-                        gramsAmount = gramsAmount,
-                        inputUnit = inputUnit,
-                        inputAmount = inputAmount,
-                        errorMessage = state.errorMessage,
-                        onBack = vm::clearSelection,
-                        onServingsChanged = { s ->
-                            vm.onServingsChanged(s)
-                        },
-                        onServingUnitAmountChanged = { amt ->
-                            servingUnitAmount = amt
-                            vm.onServingUnitAmountChanged(amt)
-                        },
-                        onGramsChanged = { g ->
-                            gramsAmount = g
-                            vm.onGramsChanged(g)
-                        },
-                        onInputUnitChanged = { u ->
-                            inputUnit = u
-                            vm.onInputUnitChanged(u)
-                        },
-                        onInputAmountChanged = { amt ->
-                            inputAmount = amt
-                            vm.onInputAmountChanged(amt)
-                        },
-                        onPackage = { mult ->
-                            vm.onPackageClicked(mult)
-                        },
-                        onEditFoodInEditor = { onEditFood(pickedFood.id) },
-                        primaryButtonLabel = "Add ingredient",
-                        onPrimaryAction = vm::addPickedIngredient
-                    )
+                    val shape = RoundedCornerShape(16.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(shape)
+//                            .background(MaterialTheme.colorScheme.surfaceVariant, shape)
+                            .border(1.dp, MaterialTheme.colorScheme.primary, shape)
+                            .padding(12.dp)
+                    ) {
+                        SelectedFoodPanel(
+                            food = pickedFood,
+                            servings = state.pickedServings,
+                            servingUnitAmount = servingUnitAmount,
+                            gramsAmount = gramsAmount,
+                            inputUnit = inputUnit,
+                            inputAmount = inputAmount,
+                            errorMessage = state.errorMessage,
+                            onBack = vm::clearSelection,
+                            onServingsChanged = { s ->
+                                vm.onServingsChanged(s)
+                            },
+                            onServingUnitAmountChanged = { amt ->
+                                servingUnitAmount = amt
+                                vm.onServingUnitAmountChanged(amt)
+                            },
+                            onGramsChanged = { g ->
+                                gramsAmount = g
+                                vm.onGramsChanged(g)
+                            },
+                            onInputUnitChanged = { u ->
+                                inputUnit = u
+                                vm.onInputUnitChanged(u)
+                            },
+                            onInputAmountChanged = { amt ->
+                                inputAmount = amt
+                                vm.onInputAmountChanged(amt)
+                            },
+                            onPackage = { mult ->
+                                vm.onPackageClicked(mult)
+                            },
+                            onEditFoodInEditor = { onEditFood(pickedFood.id) },
+                            primaryButtonLabel = "Add ingredient",
+                            onPrimaryAction = vm::addPickedIngredient
+                        )
+                        Spacer(
+                            modifier = Modifier
+                                .height(1.dp)
+                                .bringIntoViewRequester(bringAddIntoView)
+                        )
+                    }
                 }
             }
 
@@ -448,51 +494,75 @@ fun RecipeBuilderScreen(
                 } else {
                     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         state.ingredients.forEachIndexed { index, ing ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
-                                val amountText = if (unitLabel.isNotBlank()) {
-                                    "${"%,.2f".format(ing.servings)} $unitLabel"
-                                } else {
-                                    "${"%,.2f".format(ing.servings)} servings"
-                                }
-                                val gramsText = ing.grams?.let { g -> " (≈ ${"%,.1f".format(g)} g)" }.orEmpty()
-
-                                // NEW: compute entered-as string (only if present)
-                                val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
-                                val enteredAs = if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
-                                    "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit"
-                                } else null
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        "${ing.foodName} • $amountText$gramsText",
-                                        maxLines = 2
-                                    )
 
-                                    if (enteredAs != null) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        // Primary: food name
                                         Text(
-                                            enteredAs,
+                                            text = ing.foodName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        // Secondary: amount + grams
+                                        val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
+                                        val amountText = if (unitLabel.isNotBlank()) {
+                                            "${"%,.2f".format(ing.servings)} $unitLabel"
+                                        } else {
+                                            "${"%,.2f".format(ing.servings)} servings"
+                                        }
+                                        val gramsText = ing.grams?.let { g ->
+                                            " • ≈ ${"%,.0f".format(g)} g"
+                                        }.orEmpty()
+
+                                        Text(
+                                            text = amountText + gramsText,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1
                                         )
+
+                                        // Tertiary: entered-as hint
+                                        val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
+                                        if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
+                                            Text(
+                                                text = "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    IconButton(
+                                        onClick = { vm.removeIngredientAt(index) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.trash),
+                                            contentDescription = "Remove ingredient",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
 
-                                IconButton(onClick = { vm.removeIngredientAt(index) }) {
-                                    Icon(
-                                        painterResource(id = R.drawable.trash),
-                                        contentDescription = "Remove"
-                                    )
-                                }
+                                Divider(
+                                    modifier = Modifier.padding(start = 0.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                )
                             }
                         }
+
 
                     }
                 }
@@ -500,7 +570,6 @@ fun RecipeBuilderScreen(
 
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Preview", style = MaterialTheme.typography.titleMedium) }
-            val noDivZero = state.servingsYield > 0
             item {
                 val servings = state.servingsYield
                 val noDivZero = servings > 0
@@ -596,8 +665,45 @@ fun RecipeBuilderScreen(
                 }
             }
 
+            item { Spacer(Modifier.height(12.dp)) }
+            item {
+                Text("Nutrient tally", style = MaterialTheme.typography.titleMedium)
+
+                val errorMessage = state.nutrientTallyErrorMessage
+
+                if (state.nutrientTallyLoading) {
+                    Spacer(Modifier.height(8.dp))
+                    CircularProgressIndicator()
+                } else if (errorMessage != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else if (state.nutrientTallyRows.isEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Add ingredients to see nutrient totals.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    NutrientTallyList(rows = state.nutrientTallyRows)
+                }
+            }
 
 
+            item {
+                Text("State", style = MaterialTheme.typography.bodyMedium)
+
+                Divider(
+                    modifier = Modifier.padding(start = 0.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Text(state.toString(), style = MaterialTheme.typography.bodySmall)
+            }
             item { Spacer(Modifier.height(16.dp)) }
         }
     }
@@ -632,4 +738,50 @@ fun RecipeBuilderScreen(
         )
     }
 
+}
+
+
+@Composable
+private fun NutrientTallyList(rows: List<NutrientRowUi>) {
+    val grouped = rows.groupBy { it.category }
+        .toSortedMap(compareBy { it.sortOrder })
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        grouped.forEach { (cat, list) ->
+            Text(cat.displayName, style = MaterialTheme.typography.titleSmall)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                list.forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = row.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = row.unit.symbol,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(
+                            text = row.amount,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        Divider(
+                            modifier = Modifier.padding(start = 0.dp).weight(0.8f),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

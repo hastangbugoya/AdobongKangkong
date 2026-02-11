@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.recipe
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 
 data class RecipeIngredientUi(
     val foodId: Long,
@@ -53,4 +54,9 @@ data class RecipeBuilderState(
     val favorite: Boolean = false,
     val eatMore: Boolean = false,
     val limit: Boolean = false,
+
+    // Nutrient tally (read-only, computed on ingredient add/remove)
+    val nutrientTallyRows: List<NutrientRowUi> = emptyList(),
+    val nutrientTallyLoading: Boolean = false,
+    val nutrientTallyErrorMessage: String? = null,
 )

@@ -9,6 +9,8 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.recipes.ComputeRecipeKcalForFoodIdUseCase
+import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
 import com.example.adobongkangkong.domain.recipes.nutrientsForGrams
 import com.example.adobongkangkong.domain.recipes.nutrientsForMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
@@ -33,6 +35,7 @@ class FoodsListViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
     private val snapshotRepo: FoodNutritionSnapshotRepository,
+    private val computeRecipeKcalForFoodId : ComputeRecipeKcalForFoodIdUseCase
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -63,6 +66,9 @@ class FoodsListViewModel @Inject constructor(
             }
         }
 
+
+
+
     /**
      * Canonical per-100 macro cache for the current visible list.
      *
@@ -76,6 +82,7 @@ class FoodsListViewModel @Inject constructor(
     private val per100ByFoodIdFlow: Flow<Map<Long, Per100Macros>> =
         filteredFoodsFlow.mapLatest { foods ->
             val ids = foods.map { it.id }.toSet()
+
             if (ids.isEmpty()) return@mapLatest emptyMap()
 
             val snapshotsById = snapshotRepo.getSnapshots(ids)
@@ -139,7 +146,30 @@ class FoodsListViewModel @Inject constructor(
             .combine(per100ByFoodIdFlow) { partial, per100ById ->
                 val (q, filter, sort, foods, flagsById) = partial
 
-                val rowsUnsorted = foods.map { food ->
+                val rowsUnsorted = ArrayList<FoodsListRowUiModel>(foods.size)
+                for (food in foods) {
+                    if (food.isRecipe) {
+                        val kcalText =
+                            when (val r = computeRecipeKcalForFoodId(food.id)) {
+                                is ComputeRecipeKcalForFoodIdUseCase.Result.Success ->
+                                    "B=${r.totalKcal}/S=${r.perServingKcal} kcal"
+                                else -> "B=—/S=— kcal"
+                            }
+
+                        rowsUnsorted.add(
+                            FoodsListRowUiModel(
+                                foodId = food.id,
+                                name = food.name,
+                                brandText = food.brand?.takeIf { it.isNotBlank() } ?: "Generic",
+                                caloriesPerServingText = kcalText,
+                                extraMetricText = null,
+                                isRecipe = true,
+                                goalFlags = flagsById[food.id]
+                            )
+                        )
+                        continue
+                    }
+
                     val macros100 = per100ById[food.id]
 
                     val kcalPerServingText =
@@ -168,16 +198,19 @@ class FoodsListViewModel @Inject constructor(
                             }
                         } else null
 
-                    FoodsListRowUiModel(
-                        foodId = food.id,
-                        name = food.name,
-                        brandText = food.brand?.takeIf { it.isNotBlank() } ?: "Generic",
-                        caloriesPerServingText = kcalPerServingText,
-                        extraMetricText = extraMetricText,
-                        isRecipe = food.isRecipe,
-                        goalFlags = flagsById[food.id]
+                    rowsUnsorted.add(
+                        FoodsListRowUiModel(
+                            foodId = food.id,
+                            name = food.name,
+                            brandText = food.brand?.takeIf { it.isNotBlank() } ?: "Generic",
+                            caloriesPerServingText = kcalPerServingText,
+                            extraMetricText = extraMetricText,
+                            isRecipe = false,
+                            goalFlags = flagsById[food.id]
+                        )
                     )
                 }
+
 
                 val sortedRows = sortRows(
                     rows = rowsUnsorted,
@@ -216,10 +249,50 @@ class FoodsListViewModel @Inject constructor(
         basis: BasisType?,
         kcalPer100: Double?
     ): String {
+
+        if (food.isRecipe) {
+            val servingKcal: Int? = when (basis) {
+                BasisType.PER_100G -> {
+                    val gramsPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 }
+                    val grams: Double? =
+                        if (food.servingUnit == ServingUnit.G) food.servingSize
+                        else gramsPerUnit?.let { food.servingSize * it }
+
+                    if (grams != null && kcalPer100 != null) (kcalPer100 * grams / 100.0).roundToInt()
+                    else {
+                        val result = NutrientBasisScaler.canonicalToDisplayPerServing(
+                            storedAmount = kcalPer100 ?: return "B=—/S=— kcal",
+                            storedBasis = BasisType.PER_100G,
+                            servingSize = food.servingSize,
+                            gramsPerServingUnit = gramsPerUnit
+                        )
+                        if (result.didScale) result.amount.roundToInt() else null
+                    }
+                }
+
+                BasisType.PER_100ML -> {
+                    val mlPerUnit = food.mlPerServingUnit?.takeIf { it > 0.0 }
+                    val ml: Double? =
+                        if (food.servingUnit == ServingUnit.ML) food.servingSize
+                        else mlPerUnit?.let { food.servingSize * it }
+
+                    if (ml != null && kcalPer100 != null) (kcalPer100 * ml / 100.0).roundToInt() else null
+                }
+
+                else -> null
+            }
+
+            val s = servingKcal
+            val batchServings = food.servingsPerPackage?.takeIf { it > 0.0 }
+            val b = if (s != null && batchServings != null) (s * batchServings).roundToInt() else null
+
+            val bText = b?.toString() ?: "—"
+            val sText = s?.toString() ?: "—"
+            return "B=$bText/S=$sText kcal"
+        }
         if (basis == null || kcalPer100 == null) return "— kcal"
-
+        if (food.isRecipe) return "B=—/S=— kcal"
         val label = servingLabel(food.servingSize, food.servingUnit)
-
         return when (basis) {
             BasisType.PER_100G -> {
                 val gramsPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 }

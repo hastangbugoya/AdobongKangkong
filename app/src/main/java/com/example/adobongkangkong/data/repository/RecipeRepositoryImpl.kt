@@ -2,22 +2,34 @@ package com.example.adobongkangkong.data.repository
 
 import androidx.room.withTransaction
 import com.example.adobongkangkong.data.local.db.NutriDatabase
+import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
+import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
 import com.example.adobongkangkong.domain.repository.RecipeHeader
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.domain.nutrition.NutrientMap
+import com.example.adobongkangkong.data.local.db.dao.NutrientDao
+import com.example.adobongkangkong.domain.recipes.Recipe
+import com.example.adobongkangkong.domain.recipes.RecipeIngredient
 import javax.inject.Inject
+
 
 class RecipeRepositoryImpl @Inject constructor(
     private val db: NutriDatabase,
     private val recipeDao: RecipeDao,
-    private val ingredientDao: RecipeIngredientDao
+    private val ingredientDao: RecipeIngredientDao,
+    private val computeRecipeNutritionForSnapshot: ComputeRecipeNutritionForSnapshotUseCase,
+    private val foodNutrientDao: FoodNutrientDao
+
 ) : RecipeRepository {
 
     override suspend fun createRecipe(draft: RecipeDraft): Long = db.withTransaction {
@@ -36,8 +48,10 @@ class RecipeRepositoryImpl @Inject constructor(
                 brand = null,
                 servingSize = 1.0,
                 servingUnit = ServingUnit.SERVING,
-                gramsPerServingUnit = null,        // computed dynamically via cooked yield
-                servingsPerPackage = null,
+                gramsPerServingUnit = draft.totalYieldGrams
+                    ?.takeIf { it > 0.0 }
+                    ?.let { total -> total / draft.servingsYield },
+                servingsPerPackage = draft.servingsYield,
                 isRecipe = true
             )
         )
@@ -63,6 +77,51 @@ class RecipeRepositoryImpl @Inject constructor(
                 )
             }
         )
+
+// ---- Persist computed recipe nutrition for snapshot resolution ----
+        // Persist computed recipe nutrients into food_nutrients so list/snapshots can resolve macros.
+        val domainRecipe = Recipe(
+            id = recipeId,
+            name = draft.name,
+            ingredients = draft.ingredients.map { ing ->
+                RecipeIngredient(
+                    foodId = ing.foodId,
+                    servings = ing.ingredientServings
+                )
+            },
+            servingsYield = draft.servingsYield,
+            totalYieldGrams = draft.totalYieldGrams
+        )
+
+        val nutrition = computeRecipeNutritionForSnapshot(recipe = domainRecipe)
+
+        val perCookedGram = nutrition.perCookedGram
+        if (perCookedGram != null && !perCookedGram.isEmpty()) {
+            val nutrientDao: NutrientDao = db.nutrientDao()
+
+            // Replace existing nutrients for this recipe foodId.
+            foodNutrientDao.deleteForFood(recipeFoodId)
+
+            val rows = perCookedGram.entries().mapNotNull { (key, amountPerGram) ->
+                val code = key.value
+                val nutrientId = nutrientDao.getIdByCode(code) ?: return@mapNotNull null
+                val unit = nutrientDao.getUnitByCode(code) ?: return@mapNotNull null
+
+                FoodNutrientEntity(
+                    foodId = recipeFoodId,
+                    nutrientId = nutrientId,
+                    nutrientAmountPerBasis = amountPerGram * 100.0, // per gram -> per 100g
+                    unit = unit,
+                    basisType = BasisType.PER_100G
+                )
+            }
+
+            if (rows.isNotEmpty()) {
+                foodNutrientDao.upsertAll(rows)
+            }
+        }
+
+// ---- End nutrition persistence ----
 
         recipeId
     }
@@ -107,7 +166,49 @@ class RecipeRepositoryImpl @Inject constructor(
                 )
             }
         )
+        // Refresh persisted recipe nutrients after edits so list/snapshots stay correct.
+        val domainRecipe = Recipe(
+            id = recipeId,
+            name = existing.name,
+            ingredients = ingredients.map { line ->
+                RecipeIngredient(
+                    foodId = line.ingredientFoodId,
+                    servings = line.ingredientServings
+                )
+            },
+            servingsYield = servingsYield,
+            totalYieldGrams = totalYieldGrams
+        )
+
+        val computed = computeRecipeNutritionForSnapshot(recipe = domainRecipe)
+        val perCookedGram = computed.perCookedGram
+
+        if (perCookedGram != null && !perCookedGram.isEmpty()) {
+            val nutrientDao: NutrientDao = db.nutrientDao()
+
+            foodNutrientDao.deleteForFood(foodId)
+
+            val rows = perCookedGram.entries().mapNotNull { (key, amountPerGram) ->
+                val code = key.value
+                val nutrientId = nutrientDao.getIdByCode(code) ?: return@mapNotNull null
+                val unit = nutrientDao.getUnitByCode(code) ?: return@mapNotNull null
+
+                FoodNutrientEntity(
+                    foodId = foodId,
+                    nutrientId = nutrientId,
+                    nutrientAmountPerBasis = amountPerGram * 100.0,
+                    unit = unit,
+                    basisType = BasisType.PER_100G
+                )
+            }
+
+            if (rows.isNotEmpty()) {
+                foodNutrientDao.upsertAll(rows)
+            }
+        }
+
     }
+
 }
 /**
  * ============================================================================
