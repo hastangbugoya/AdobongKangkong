@@ -148,7 +148,7 @@ class FoodEditorViewModel @Inject constructor(
                     ?: food?.mlPerServingUnit?.toString().orEmpty(),
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
-                nutrientRows = rows.map { r ->
+                nutrientRows = sortNutrientRows(rows.map { r ->
                     val displayAmount =
                         when (r.basisType) {
                             BasisType.PER_100G -> NutrientBasisScaler
@@ -180,7 +180,7 @@ class FoodEditorViewModel @Inject constructor(
                         category = r.nutrient.category,
                         amount = displayAmount.toString()
                     )
-                },
+                }),
                 favorite = flags?.favorite ?: false,
                 eatMore = flags?.eatMore ?: false,
                 limit = flags?.limit ?: false,
@@ -265,15 +265,31 @@ class FoodEditorViewModel @Inject constructor(
             if (s.nutrientRows.any { it.nutrientId == n.id }) s
             else s.copy(
                 hasUnsavedChanges = true,
-                nutrientRows = (s.nutrientRows + NutrientRowUi(
+                nutrientRows = sortNutrientRows((s.nutrientRows + NutrientRowUi(
                     nutrientId = n.id,
                     name = n.name,
                     unit = n.unit,
                     category = n.category,
                     amount = ""
-                )).sortedWith(compareBy({ it.category }, { it.name }))
+                )))
             )
         }
+    }
+
+    private fun sortNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
+        fun macroRank(name: String): Int = when (name.trim().lowercase()) {
+            "calories" -> 0
+            "carbohydrates" -> 2
+            "protein" -> 1
+            "fat" -> 3
+            else -> Int.MAX_VALUE
+        }
+
+        return rows.sortedWith(
+            compareBy<NutrientRowUi> { macroRank(it.name) }
+                .thenBy { it.category.sortOrder }
+                .thenBy { it.name.lowercase() }
+        )
     }
 
     fun save(onDone: (Long) -> Unit) {

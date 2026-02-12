@@ -42,6 +42,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -63,6 +64,7 @@ import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
+import com.example.adobongkangkong.ui.common.sectionedByCategory
 
 /**
  * FoodEditorScreen (stateless)
@@ -252,7 +254,7 @@ fun FoodEditorScreen(
                 .padding(padding)
         ) {
             val isTablet = maxWidth > 600.dp
-
+            val initialAmounts = remember { mutableStateMapOf<Long, String>() }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -430,14 +432,10 @@ fun FoodEditorScreen(
                         onServingsPerPackageChange = onServingsPerPackageChange,
                         isTablet = isTablet,
                         mlPerServingUnit = state.mlPerServingUnit,
-                        onMlPerServingChange = onGramsPerServingChange,
+                        onMlPerServingChange = onMlPerServingChange,
                         basisType = state.basisType,
 
                     )
-                }
-
-                item {
-                    Text("BasisType: ${state.basisType?.name}")
                 }
 
                 item {
@@ -461,32 +459,27 @@ fun FoodEditorScreen(
                     )
                 }
 
-                val grouped = state.nutrientRows.groupBy { it.category }
+                sectionedByCategory(
+                    items = state.nutrientRows,
+                    categoryOf = { it.category },
+                    keyOf = { index, row -> "${row.nutrientId}_$index" },
+                    header = { category -> /* header */ }
+                ) { _, row ->
+                    val initial = initialAmounts.getOrPut(row.nutrientId) { row.amount }
+                    val isChanged = row.amount != initial
 
-                grouped.entries
-                    .sortedBy { it.key.name }
-                    .forEach { (category, rows) ->
-                        item {
-                            Text(
-                                text = category.labelForUi(),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                        itemsIndexed(
-                            items = rows,
-                            key = { index: Int, row: NutrientRowUi -> "${row.nutrientId}_$index" }
-                        ) { _: Int, row: NutrientRowUi ->
-                            NutrientRowEditor(
-                                row = row,
-                                onAmountChange = { newValue ->
-                                    onNutrientAmountChange(row.nutrientId, newValue)
-                                },
-                                onRemove = { onRemoveNutrient(row.nutrientId) },
-                                isTablet = isTablet
-                            )
-                        }
+                    NutrientRowEditor(
+                        row = row,
+                        isChanged = isChanged,
+                        onAmountChange = { newValue -> onNutrientAmountChange(row.nutrientId, newValue) },
+                        onRemove = {
+                            initialAmounts.remove(row.nutrientId)
+                            onRemoveNutrient(row.nutrientId)
+                        },
+                        isTablet = isTablet
+                    )
+                }
 
-                    }
 
                 item { HorizontalDivider() }
 
@@ -637,6 +630,7 @@ private fun SectionHeader(
 @Composable
 private fun NutrientRowEditor(
     row: NutrientRowUi,
+    isChanged: Boolean,
     onAmountChange: (String) -> Unit,
     onRemove: () -> Unit,
     isTablet: Boolean
@@ -675,7 +669,16 @@ private fun NutrientRowEditor(
         OutlinedTextField(
             value = row.amount,
             onValueChange = onAmountChange,
-            label = { Text("Amount") },
+            supportingText = {
+                if (isChanged) {
+                    Text(
+                        text = "Value edited",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            label = { Text("Amount")},
             singleLine = true,
             modifier = if (isTablet) Modifier.fillMaxWidth(0.6f) else Modifier.fillMaxWidth()
         )
