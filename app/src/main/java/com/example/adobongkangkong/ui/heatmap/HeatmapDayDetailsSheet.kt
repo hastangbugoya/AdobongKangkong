@@ -25,6 +25,7 @@ fun HeatmapDayDetailsSheet(
     nutrientDisplayName: String?,
     nutrientUnit: String?,
     onViewLogs: (LocalDate) -> Unit,
+    onShare: () -> Unit,
     onClose: () -> Unit
 ) {
     val dateFmt = DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy")
@@ -78,6 +79,12 @@ fun HeatmapDayDetailsSheet(
                 onClick = { onViewLogs(day.date) }
             ) {
                 Text("View logs")
+            }
+            OutlinedButton(
+                modifier = Modifier.weight(1f),
+                onClick = onShare
+            ) {
+                Text("Share")
             }
             OutlinedButton(
                 modifier = Modifier.weight(1f),

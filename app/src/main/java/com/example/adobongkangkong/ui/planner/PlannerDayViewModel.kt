@@ -236,15 +236,42 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             PlannerDayEvent.DuplicateAddToday -> {
-                addDuplicateDate(_state.value.date)
+//                addDuplicateDate(_state.value.date)
+                // One-tap shortcut: replace selection with ONLY today, then duplicate once.
+                val date = _state.value.date
+                _state.update { s ->
+                    val sheet = s.duplicateSheet ?: return@update s
+                    s.copy(duplicateSheet = sheet.copy(selectedDates = listOf(date), errorMessage = null))
+                }
+                confirmDuplicateDates()
             }
 
             PlannerDayEvent.DuplicateAddTomorrow -> {
-                addDuplicateDate(_state.value.date.plusDays(1))
+//                addDuplicateDate(_state.value.date.plusDays(1))
+                // One-tap shortcut: replace selection with ONLY tomorrow, then duplicate once.
+                val date = _state.value.date.plusDays(1)
+                _state.update { s ->
+                    val sheet = s.duplicateSheet ?: return@update s
+                    s.copy(duplicateSheet = sheet.copy(selectedDates = listOf(date), errorMessage = null))
+                }
+                confirmDuplicateDates()
             }
 
             is PlannerDayEvent.DuplicateAddDate -> {
-                addDuplicateDate(LocalDate.parse(event.dateIso))
+//                addDuplicateDate(LocalDate.parse(event.dateIso))
+                val date = LocalDate.parse(event.dateIso)
+
+                _state.update { s ->
+                    val sheet = s.duplicateSheet ?: return@update s
+                    s.copy(
+                        duplicateSheet = sheet.copy(
+                            selectedDates = listOf(date),
+                            errorMessage = null
+                        )
+                    )
+                }
+
+                confirmDuplicateDates()
             }
 
             is PlannerDayEvent.DuplicateRemoveDate -> {

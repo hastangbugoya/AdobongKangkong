@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.ui.heatmap
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -25,7 +25,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
@@ -40,16 +39,19 @@ import java.util.Locale
 data class CalendarCell(
     val date: LocalDate?,
     val status: TargetStatus? = null,
-    val value: Double? = null
+    val value: Double? = null,
+    val hasPlannedMeals: Boolean = false,
 )
 
 @Composable
 fun MonthlyHeatmapCalendar(
     month: YearMonth,
     days: List<HeatmapDay>,
+    plannedDates: Set<LocalDate> = emptySet(),
     modifier: Modifier = Modifier,
     selectedDate: LocalDate? = null,
-    onDayClick: (HeatmapDay) -> Unit
+    onDayClick: (HeatmapDay) -> Unit,
+    onDateClick: ((LocalDate) -> Unit)? = null
 ) {
     val daysByDate = remember(days) { days.associateBy { it.date } }
 
@@ -58,8 +60,8 @@ fun MonthlyHeatmapCalendar(
         days.maxOfOrNull { it.value ?: 0.0 } ?: 0.0
     }
 
-    val cells = remember(month, daysByDate) {
-        buildCalendarCells(month, daysByDate)
+    val cells = remember(month, daysByDate, plannedDates) {
+        buildCalendarCells(month, daysByDate, plannedDates)
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -73,7 +75,7 @@ fun MonthlyHeatmapCalendar(
             contentPadding = PaddingValues(2.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            userScrollEnabled = false // grid fits its content; parent can scroll
+            userScrollEnabled = false
         ) {
             items(cells) { cell ->
                 HeatmapDayCell(
@@ -82,8 +84,9 @@ fun MonthlyHeatmapCalendar(
                     isSelected = (cell.date != null && cell.date == selectedDate),
                     onClick = {
                         val date = cell.date ?: return@HeatmapDayCell
-                        val model = daysByDate[date] ?: return@HeatmapDayCell
-                        onDayClick(model)
+                        val model = daysByDate[date]
+                        if (model != null) onDayClick(model)
+                        else onDateClick?.invoke(date)
                     }
                 )
             }
@@ -94,7 +97,6 @@ fun MonthlyHeatmapCalendar(
 @Composable
 private fun WeekdayHeader(modifier: Modifier = Modifier) {
     val labels = remember {
-        // Sunday-first labels
         listOf(
             DayOfWeek.SUNDAY,
             DayOfWeek.MONDAY,
@@ -141,7 +143,7 @@ private fun HeatmapDayCell(
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else null
 
     Surface(
-        color = bg, // <-- this is the important part (no modifier.background needed)
+        color = bg,
         shape = shape,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -155,20 +157,40 @@ private fun HeatmapDayCell(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
+            // Day number
             Text(
                 text = cell.date?.dayOfMonth?.toString() ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
+
+            // Planned-meals indicator (tiny dot in the top-right)
+            if (cell.date != null && cell.hasPlannedMeals) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(6.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        shape = RoundedCornerShape(50),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                    ) {}
+                }
+            }
         }
     }
-
 }
-
 
 private fun buildCalendarCells(
     month: YearMonth,
-    daysByDate: Map<LocalDate, HeatmapDay>
+    daysByDate: Map<LocalDate, HeatmapDay>,
+    plannedDates: Set<LocalDate>
 ): List<CalendarCell> {
     val first = month.atDay(1)
 
@@ -187,9 +209,7 @@ private fun buildCalendarCells(
     val totalDays = month.lengthOfMonth()
     val cells = ArrayList<CalendarCell>(leadingBlanks + totalDays + 7)
 
-    repeat(leadingBlanks) {
-        cells += CalendarCell(date = null)
-    }
+    repeat(leadingBlanks) { cells += CalendarCell(date = null) }
 
     for (d in 1..totalDays) {
         val date = month.atDay(d)
@@ -197,17 +217,14 @@ private fun buildCalendarCells(
         cells += CalendarCell(
             date = date,
             status = model?.status ?: TargetStatus.NO_TARGET,
-            value = model?.value
+            value = model?.value,
+            hasPlannedMeals = plannedDates.contains(date)
         )
     }
 
     // Pad to full weeks so the grid looks clean
     val remainder = cells.size % 7
-    if (remainder != 0) {
-        repeat(7 - remainder) {
-            cells += CalendarCell(date = null)
-        }
-    }
+    if (remainder != 0) repeat(7 - remainder) { cells += CalendarCell(date = null) }
 
     return cells
 }

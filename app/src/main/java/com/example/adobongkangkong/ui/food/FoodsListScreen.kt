@@ -73,6 +73,7 @@ fun FoodsListScreen(
 ) {
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
+    val query by vm.query.collectAsState()
 
     Scaffold(
         topBar = {
@@ -112,7 +113,7 @@ fun FoodsListScreen(
                 .padding(16.dp)
         ) {
             OutlinedTextField(
-                value = state.query,
+                value = query,
                 onValueChange = vm::onQueryChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Search") },

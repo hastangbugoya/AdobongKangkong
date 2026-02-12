@@ -16,6 +16,7 @@ import com.example.adobongkangkong.domain.recipes.nutrientsForMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -41,6 +43,8 @@ class FoodsListViewModel @Inject constructor(
     private val queryFlow = MutableStateFlow("")
     private val filterFlow = MutableStateFlow(FoodsFilter.ALL)
     private val sortFlow = MutableStateFlow(FoodSortState())
+
+    val query: StateFlow<String> = queryFlow
 
     private val resultsFlow: Flow<List<Food>> =
         queryFlow
@@ -226,6 +230,7 @@ class FoodsListViewModel @Inject constructor(
                 )
 
             }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FoodsListState())
 
     fun onQueryChange(v: String) { queryFlow.value = v }

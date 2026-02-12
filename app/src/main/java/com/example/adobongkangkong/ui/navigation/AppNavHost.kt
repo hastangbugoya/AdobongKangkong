@@ -87,6 +87,9 @@ fun AppNavHost(
 
         composable(NavRoutes.Heatmap.route) {
             HeatmapScreen(
+                onNavigateToPlannerDay = { date ->
+                    navController.navigate(NavRoutes.Planner.plannerDay(date.toString()))
+                },
                 onNavigateToDayLog = { date ->
                     navController.navigate(NavRoutes.DayLog.dayLog(date))
                 },

@@ -52,6 +52,8 @@ import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.StateFlow
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.math.round
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -640,7 +642,7 @@ private fun DuplicateMealBottomSheet(
                 enabled = sheet.selectedDates.isNotEmpty() && !sheet.isDuplicating,
                 onClick = { onEvent(PlannerDayEvent.ConfirmDuplicateDates) }
             ) {
-                Text(if (sheet.isDuplicating) "Duplicating…" else "Duplicate")
+                Text(if (sheet.isDuplicating) "Saving duplicate(s)…" else "Save duplicate(s)")
             }
         }
     }
@@ -654,8 +656,8 @@ private fun DuplicateMealBottomSheet(
                     onClick = {
                         val millis = pickerState.selectedDateMillis
                         if (millis != null) {
-                            val picked = java.time.Instant.ofEpochMilli(millis)
-                                .atZone(java.time.ZoneId.systemDefault())
+                            val picked = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneOffset.UTC)
                                 .toLocalDate()
                             onEvent(PlannerDayEvent.DuplicateAddDate(picked.toString()))
                         }
