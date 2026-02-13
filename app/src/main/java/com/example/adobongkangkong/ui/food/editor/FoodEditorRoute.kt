@@ -72,6 +72,9 @@ fun FoodEditorRoute(
             viewModel.addNutrient(item)
         },
 
+        onDeleteFood = { viewModel.deleteFood() },
+        onHardDeleteFood = { viewModel.hardDeleteFoodPermanently() },
+
         onToggleFavorite = viewModel::onFavoriteChange,
         onToggleEatMore = viewModel::onEatMoreChange,
         onToggleLimit = viewModel::onLimitChange,
@@ -79,7 +82,6 @@ fun FoodEditorRoute(
         onSave = {
             viewModel.save { _ -> onDone() }
         },
-        onDeleteFood = { viewModel.deleteFood() },
 
         aliasSheetNutrientName = aliasName,
         aliasSheetAliases = aliases,

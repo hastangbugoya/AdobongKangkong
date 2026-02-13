@@ -24,8 +24,10 @@ import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
+import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
+import com.example.adobongkangkong.domain.usecase.SoftDeleteFoodUseCase
 import com.example.adobongkangkong.ui.common.banner.BannerSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
@@ -53,6 +55,8 @@ class FoodEditorViewModel @Inject constructor(
     private val searchUsdaByBarcode: SearchUsdaFoodsByBarcodeUseCase,
     private val importUsdaFromSearchJson: ImportUsdaFoodFromSearchJsonUseCase,
     private val foodBarcodeRepo: FoodBarcodeRepository,
+    private val softDeleteFood: SoftDeleteFoodUseCase,
+    private val hardDeleteFoodIfUnused: HardDeleteFoodIfUnusedUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -455,25 +459,25 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    fun deleteFood() {
-        val foodId = _state.value.foodId ?: return
-
-        viewModelScope.launch {
-            update { it.copy(isSaving = true, errorMessage = null) }
-            try {
-                val deleted = foodRepo.deleteFood(foodId)
-                if (deleted) {
-                    didDeleteFlow.value = true
-                } else {
-                    update { it.copy(errorMessage = "Cannot delete: this food is used in one or more recipes.") }
-                }
-            } catch (t: Throwable) {
-                update { it.copy(errorMessage = t.message ?: "Failed to delete food.") }
-            } finally {
-                update { it.copy(isSaving = false) }
-            }
-        }
-    }
+//    fun deleteFood() {
+//        val foodId = _state.value.foodId ?: return
+//
+//        viewModelScope.launch {
+//            update { it.copy(isSaving = true, errorMessage = null) }
+//            try {
+//                val deleted = foodRepo.deleteFood(foodId)
+//                if (deleted) {
+//                    didDeleteFlow.value = true
+//                } else {
+//                    update { it.copy(errorMessage = "Cannot delete: this food is used in one or more recipes.") }
+//                }
+//            } catch (t: Throwable) {
+//                update { it.copy(errorMessage = t.message ?: "Failed to delete food.") }
+//            } finally {
+//                update { it.copy(isSaving = false) }
+//            }
+//        }
+//    }
 
     fun openAliasSheet(nutrientId: Long, nutrientName: String) {
         aliasSheetNutrientIdFlow.value = nutrientId
@@ -505,6 +509,49 @@ class FoodEditorViewModel @Inject constructor(
         viewModelScope.launch {
             nutrientAliasRepo.deleteAlias(id, alias)
             update { it.copy(hasUnsavedChanges = true) }
+        }
+    }
+
+
+    fun deleteFood() {
+        val foodId = _state.value.foodId ?: return
+
+        viewModelScope.launch {
+            update { it.copy(isSaving = true, errorMessage = null) }
+            try {
+                when (softDeleteFood(foodId)) {
+                    is SoftDeleteFoodUseCase.Result.Success -> didDeleteFlow.value = true
+                    is SoftDeleteFoodUseCase.Result.NotFound -> update { it.copy(errorMessage = "Food not found.") }
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to delete food.") }
+            } finally {
+                update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    fun hardDeleteFoodPermanently() {
+        val foodId = _state.value.foodId ?: return
+
+        viewModelScope.launch {
+            update { it.copy(isSaving = true, errorMessage = null) }
+            try {
+                when (val r = hardDeleteFoodIfUnused(foodId)) {
+                    is HardDeleteFoodIfUnusedUseCase.Result.Success -> didDeleteFlow.value = true
+                    is HardDeleteFoodIfUnusedUseCase.Result.NotFound -> update { it.copy(errorMessage = "Food not found.") }
+                    is HardDeleteFoodIfUnusedUseCase.Result.Blocked -> {
+                        val msg =
+                            if (r.reasons.isNotEmpty()) r.reasons.joinToString("\n")
+                            else "Cannot delete permanently: this food is still referenced."
+                        update { it.copy(errorMessage = msg) }
+                    }
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to delete food permanently.") }
+            } finally {
+                update { it.copy(isSaving = false) }
+            }
         }
     }
 

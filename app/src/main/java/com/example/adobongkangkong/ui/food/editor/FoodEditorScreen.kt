@@ -110,6 +110,7 @@ fun FoodEditorScreen(
     // Save/Delete
     onSave: () -> Unit,
     onDeleteFood: (() -> Unit)? = null,
+    onHardDeleteFood: (() -> Unit)? = null,
 
     // Alias sheet
     aliasSheetNutrientName: String?,
@@ -146,6 +147,8 @@ fun FoodEditorScreen(
 
     // ---------------- Navigate-away warning (state-driven) ----------------
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
+
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     fun requestExit() {
         if (state.hasUnsavedChanges && !state.isSaving) {
@@ -198,6 +201,72 @@ fun FoodEditorScreen(
             )
         }
     }
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete food?") },
+            text = {
+                Text(
+                    "Delete hides this food from lists, but keeps logs and history. " +
+                            "Delete permanently is only allowed if it is unused."
+                )
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                            onDeleteFood?.invoke()
+                        }
+                    ) { Text("Delete") }
+
+                    if (onHardDeleteFood != null) {
+                        TextButton(
+                            onClick = {
+                                showDeleteDialog = false
+                                onHardDeleteFood()
+                            }
+                        ) { Text("Delete permanently") }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        if (!state.errorMessage.isNullOrBlank()) {
+            Text(
+                text = state.errorMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (showDeleteDialog) {
+                OutlinedButton(
+                    onClick = { showDeleteDialog = true },
+                    enabled = !state.isSaving,
+                    modifier = Modifier.weight(1f)
+                ) { Text("Delete") }
+            }
+
+            Button(
+                onClick = onSave,
+                enabled = !state.isSaving,
+                modifier = Modifier.weight(1f)
+            ) { Text(if (state.isSaving) "Saving…" else "Save") }
+        }
+    }
 
     if (state.isGroundingDialogOpen) {
         AlertDialog(
@@ -243,7 +312,7 @@ fun FoodEditorScreen(
                 isSaving = state.isSaving,
                 errorMessage = state.errorMessage,
                 showDelete = (onDeleteFood != null && state.foodId != null),
-                onDelete = { onDeleteFood?.invoke() }, // ✅ only uses passed callback
+                onDelete = {showDeleteDialog = true }, // ✅ only uses passed callback
                 onSave = onSave,
                 bannerCaptureController = bannerCaptureController
             )
@@ -555,6 +624,7 @@ fun FoodEditorScreen(
                         )
                     }
                 }
+                Log.d("Meow", "${state.name} : ${state.toString()}")
                 item {
                     Text("State", style = MaterialTheme.typography.bodyMedium)
                     Text(
@@ -562,7 +632,6 @@ fun FoodEditorScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Log.d("Meow", "${state.name} : ${state.toString()}")
                 }
             }
         }

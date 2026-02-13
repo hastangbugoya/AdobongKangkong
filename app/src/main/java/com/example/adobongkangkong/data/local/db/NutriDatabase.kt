@@ -31,7 +31,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         MealTemplatePrefsEntity::class,
         FoodBarcodeEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
