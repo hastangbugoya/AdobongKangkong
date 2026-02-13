@@ -18,4 +18,11 @@ interface RecipeBatchDao {
 
     @Query("SELECT * FROM recipe_batches WHERE id = :batchId")
     suspend fun getById(batchId: Long): RecipeBatchEntity?
+
+    // -------------------------
+    // Dependency counts
+    // -------------------------
+
+    @Query("SELECT COUNT(*) FROM recipe_batches WHERE batchFoodId = :foodId")
+    suspend fun countByBatchFoodId(foodId: Long): Int
 }

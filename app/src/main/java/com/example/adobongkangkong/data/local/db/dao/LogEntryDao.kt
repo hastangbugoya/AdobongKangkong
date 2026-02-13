@@ -21,7 +21,6 @@ data class TodayLogRow(
 @Dao
 interface LogEntryDao {
 
-
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entry: LogEntryEntity): Long
 
@@ -64,4 +63,11 @@ interface LogEntryDao {
 
     @Query("SELECT * FROM log_entries WHERE id = :id")
     suspend fun getById(id: Long): LogEntryEntity?
+
+    // -------------------------
+    // Dependency counts
+    // -------------------------
+
+    @Query("SELECT COUNT(*) FROM log_entries WHERE foodStableId = :stableId")
+    suspend fun countByFoodStableId(stableId: String): Int
 }

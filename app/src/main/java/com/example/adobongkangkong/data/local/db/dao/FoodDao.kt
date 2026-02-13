@@ -20,7 +20,6 @@ interface FoodDao {
     @Upsert
     suspend fun upsert(item: FoodEntity)
 
-
     @Query("SELECT * FROM foods WHERE id = :id")
     suspend fun getById(id: Long): FoodEntity?
 
@@ -33,26 +32,25 @@ interface FoodDao {
     @Query("""
                 SELECT * FROM foods
                 WHERE
-                  LOWER(name) LIKE '%' || LOWER(:query) || '%'
-                  OR LOWER(COALESCE(brand, '')) LIKE '%' || LOWER(:query) || '%'
+                  isDeleted = 0
+                  AND (
+                    LOWER(name) LIKE '%' || LOWER(:query) || '%'
+                    OR LOWER(COALESCE(brand, '')) LIKE '%' || LOWER(:query) || '%'
+                  )
                 ORDER BY isRecipe DESC, name ASC
                 LIMIT :limit
             """)
     fun search(query: String, limit: Int = 50): Flow<List<FoodEntity>>
 
-
-
-
     @Query("SELECT COUNT(*) FROM foods")
     suspend fun countFoods(): Int
 
-    @Query("SELECT * FROM foods ORDER BY isRecipe DESC, name ASC")
+    @Query("SELECT * FROM foods WHERE isDeleted = 0 ORDER BY isRecipe DESC, name ASC")
     suspend fun getAll(): List<FoodEntity>
 
     // Import
     @Query("SELECT id FROM foods WHERE stableId = :stableId LIMIT 1")
     suspend fun getIdByStableId(stableId: String): Long?
-
 
     @Query("""
         UPDATE foods SET
@@ -84,6 +82,21 @@ interface FoodDao {
         gramsPerServingUnit: Double?
     )
 
+    // -------------------------
+    // Soft delete helpers
+    // -------------------------
 
+    @Query("""
+        UPDATE foods
+        SET isDeleted = 1,
+            deletedAtEpochMs = :deletedAtEpochMs
+        WHERE id = :id
+    """)
+    suspend fun softDeleteById(
+        id: Long,
+        deletedAtEpochMs: Long
+    )
 
+    @Query("SELECT stableId FROM foods WHERE id = :id LIMIT 1")
+    suspend fun getStableIdById(id: Long): String?
 }

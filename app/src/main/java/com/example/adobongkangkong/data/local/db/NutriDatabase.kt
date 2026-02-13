@@ -5,45 +5,9 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
-import com.example.adobongkangkong.data.local.db.dao.FoodDao
-import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
-import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
-import com.example.adobongkangkong.data.local.db.dao.ImportIssueDao
-import com.example.adobongkangkong.data.local.db.dao.ImportRunDao
-import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
-import com.example.adobongkangkong.data.local.db.dao.MealTemplateDao
-import com.example.adobongkangkong.data.local.db.dao.MealTemplateItemDao
-import com.example.adobongkangkong.data.local.db.dao.MealTemplatePrefsDao
-import com.example.adobongkangkong.data.local.db.dao.NutrientAliasDao
-import com.example.adobongkangkong.data.local.db.dao.NutrientDao
-import com.example.adobongkangkong.data.local.db.dao.PlannedItemDao
-import com.example.adobongkangkong.data.local.db.dao.PlannedMealDao
-import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
-import com.example.adobongkangkong.data.local.db.dao.RecipeDao
-import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
-import com.example.adobongkangkong.data.local.db.dao.SummaryDao
-import com.example.adobongkangkong.data.local.db.dao.UserNutrientTargetDao
-import com.example.adobongkangkong.data.local.db.dao.UserPinnedNutrientDao
-import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
-import com.example.adobongkangkong.data.local.db.entity.FoodEntity
-import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
-import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
-import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
-import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
-import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
-import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
-import com.example.adobongkangkong.data.local.db.entity.MealTemplateItemEntity
-import com.example.adobongkangkong.data.local.db.entity.MealTemplatePrefsEntity
-import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
-import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
-import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
-import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
-import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
-import com.example.adobongkangkong.data.local.db.entity.UserNutrientTargetEntity
-import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
-import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
-import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
+import com.example.adobongkangkong.data.local.db.entity.*
+import com.example.adobongkangkong.data.local.db.dao.*
+
 
 @Database(
     entities = [
@@ -66,7 +30,7 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
         MealTemplateItemEntity::class,
         MealTemplatePrefsEntity::class,
         FoodBarcodeEntity::class
-],
+    ],
     version = 6,
     exportSchema = true,
 )
@@ -174,5 +138,17 @@ abstract class NutriDatabase : RoomDatabase() {
          * - CREATE TABLE food_barcodes (...)
          * - CREATE INDEX ... (foodId, usdaFdcId, source)
          */
+        /**
+         * v7
+         * - Soft delete support for foods
+         *   - foods.isDeleted (INTEGER NOT NULL DEFAULT 0)
+         *   - foods.deletedAtEpochMs (INTEGER NULL)
+         */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE foods ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE foods ADD COLUMN deletedAtEpochMs INTEGER")
+            }
+        }
     }
 }

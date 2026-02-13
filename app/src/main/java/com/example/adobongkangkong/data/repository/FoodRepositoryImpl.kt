@@ -3,22 +3,32 @@ package com.example.adobongkangkong.data.repository
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
+import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
+import com.example.adobongkangkong.data.local.db.dao.PlannedItemDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
-import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.mapper.toDomain
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.data.local.db.mapper.toEntity
 import com.example.adobongkangkong.domain.logging.model.FoodRef
+import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
+import com.example.adobongkangkong.domain.repository.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 import javax.inject.Inject
 
 class FoodRepositoryImpl @Inject constructor(
     private val foodDao: FoodDao,
     private val foodNutrientDao: FoodNutrientDao,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
-    private val recipeIngredientDao: RecipeIngredientDao
+    private val recipeIngredientDao: RecipeIngredientDao,
+    private val logEntryDao: LogEntryDao,
+    private val plannedItemDao: PlannedItemDao,
+    private val recipeBatchDao: RecipeBatchDao,
+    private val foodImageStorage: FoodImageStorage
 ) : FoodRepository {
 
     override fun search(query: String, limit: Int): Flow<List<Food>> =
@@ -35,28 +45,83 @@ class FoodRepositoryImpl @Inject constructor(
             ?: error("Upsert failed: no row found for stableId='${entity.stableId}'")
     }
 
-
     override suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food? {
         val entity = foodDao.getById(foodId) ?: return null
-
         return FoodRef.Food(foodId = entity.id)
     }
 
+    /**
+     * Default delete behavior: SOFT delete.
+     *
+     * Kept for compatibility with existing callers.
+     */
     override suspend fun deleteFood(foodId: Long): Boolean {
+        val now = System.currentTimeMillis()
+        foodDao.softDeleteById(id = foodId, deletedAtEpochMs = now)
+        return true
+    }
+
+    override suspend fun softDeleteFood(foodId: Long) {
+        // Idempotent: if missing, no-op.
+        val now = Instant.now().toEpochMilli()
+        foodDao.softDeleteById(id = foodId, deletedAtEpochMs = now)
+    }
+
+    override suspend fun getFoodHardDeleteBlockers(foodId: Long): FoodHardDeleteBlockers {
+        val entity = foodDao.getById(foodId)
+            ?: return FoodHardDeleteBlockers(
+                isRecipeFood = false,
+                logsUsingStableId = 0,
+                plannedItemsUsingFoodId = 0,
+                recipeIngredientsUsingFoodId = 0,
+                recipeBatchesUsingBatchFoodId = 0
+            )
+
+        val stableId = entity.stableId
+
+        // Logs reference stableId (not foodId)
+        val logsCount = logEntryDao.countByFoodStableId(stableId)
+
+        // Planner references (FOOD refId is foodId)
+        val plannedCount = plannedItemDao.countByTypeAndRefId(
+            type = PlannedItemSource.FOOD,
+            refId = foodId
+        )
+
+        // Food used as ingredient
+        val ingredientCount = recipeIngredientDao.countRecipesUsingFood(foodId)
+
+        // Food used as a batch snapshot
+        val batchSnapshotCount = recipeBatchDao.countByBatchFoodId(foodId)
+
+        // IMPORTANT: Hard delete for recipe-foods needs RecipeDao cleanup too.
+        // We refuse hard delete here rather than guessing.
+        val isRecipeFood = entity.isRecipe
+
+        return FoodHardDeleteBlockers(
+            isRecipeFood = isRecipeFood,
+            logsUsingStableId = logsCount,
+            plannedItemsUsingFoodId = plannedCount,
+            recipeIngredientsUsingFoodId = ingredientCount,
+            recipeBatchesUsingBatchFoodId = batchSnapshotCount
+        )
+    }
+
+    override suspend fun hardDeleteFood(foodId: Long) {
+        // Execute-only. Policy enforced by use case.
+
         // Delete owned rows first to avoid orphans (and to work even without FK cascades).
-        // 🚫 Block delete if food is used by any recipe
-        val usageCount = recipeIngredientDao.countRecipesUsingFood(foodId)
-        if (usageCount > 0) {
-            return false
-        }
         foodNutrientDao.deleteForFood(foodId)
         foodGoalFlagsDao.clear(foodId)
+
+        // Delete food row
         foodDao.deleteById(foodId)
 
-        return true
+        // Media cleanup (best-effort)
+        foodImageStorage.deleteBanner(foodId)
     }
 
     override suspend fun isFoodsEmpty(): Boolean =
         foodDao.countFoods() == 0
-
 }
+

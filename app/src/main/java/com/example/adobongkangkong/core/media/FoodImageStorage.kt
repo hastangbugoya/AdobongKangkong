@@ -1,7 +1,9 @@
 package com.example.adobongkangkong.feature.camera
 
 import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import javax.inject.Inject
 
 /**
  * Centralized, policy-locked storage rules for food images.
@@ -9,8 +11,8 @@ import java.io.File
  * DO NOT add MediaStore, URIs, or gallery logic here.
  * Paths are deterministic and derived from foodId.
  */
-class FoodImageStorage(
-    private val context: Context
+class FoodImageStorage @Inject constructor(
+    @ApplicationContext private val context: Context
 ) {
 
     /* ---------------- Banner (master) ---------------- */

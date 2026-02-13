@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
+import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -48,4 +49,11 @@ interface PlannedItemDao {
 
     @Query("SELECT COALESCE(MAX(sortOrder), -1) FROM planned_items WHERE mealId = :mealId")
     suspend fun getMaxSortOrderForMeal(mealId: Long): Int
+
+    // -------------------------
+    // Dependency counts
+    // -------------------------
+
+    @Query("SELECT COUNT(*) FROM planned_items WHERE type = :type AND refId = :refId")
+    suspend fun countByTypeAndRefId(type: PlannedItemSource, refId: Long): Int
 }

@@ -90,6 +90,24 @@ data class FoodEntity(
     val isLowSodium: Boolean? = null,
 
     // -------------------------
+    // Soft delete
+    // -------------------------
+
+    /**
+     * Soft delete flag.
+     *
+     * - Default "Delete" should set this to true and hide the food from normal search/lists.
+     * - Logs are safe because they snapshot itemName + nutrientsJson and store foodStableId.
+     */
+    val isDeleted: Boolean = false,
+
+    /**
+     * Optional deletion timestamp for debugging / future "Recently deleted" UI.
+     * Stored as epoch millis (nullable).
+     */
+    val deletedAtEpochMs: Long? = null,
+
+    // -------------------------
     // USDA traceability (optional)
     // -------------------------
 
