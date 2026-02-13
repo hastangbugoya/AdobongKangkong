@@ -27,10 +27,11 @@ data class PlannedItemEntity(
 
     val mealId: Long,
 
-    /** FOOD | RECIPE_BATCH */
+    /** FOOD | RECIPE | RECIPE_BATCH */
     val type: PlannedItemSource,
 
-    /** foodId or recipeBatchId depending on type */
+
+    /** foodId (FOOD), recipeFoodId/recipeId (RECIPE), or recipeBatchId (RECIPE_BATCH) */
     val refId: Long,
 
     val grams: Double? = null,

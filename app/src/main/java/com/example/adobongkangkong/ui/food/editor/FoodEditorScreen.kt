@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.food.editor
 
 import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -561,6 +562,7 @@ fun FoodEditorScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Log.d("Meow", "${state.name} : ${state.toString()}")
                 }
             }
         }

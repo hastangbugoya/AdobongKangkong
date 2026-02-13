@@ -353,15 +353,18 @@ private fun AddToPlanBottomSheet(
             Text("Add to plan", style = MaterialTheme.typography.titleLarge)
             Text("${sheet.slot.display} • $dateText", style = MaterialTheme.typography.bodySmall)
 
-            if (sheet.slot == MealSlot.CUSTOM) {
+//            if (sheet.slot == MealSlot.CUSTOM) {
+            if (sheet.customLabel != null && sheet.customLabel.isNotEmpty()) {
                 TextField(
                     value = sheet.customLabel.orEmpty(),
                     onValueChange = { onEvent(PlannerDayEvent.UpdateAddSheetCustomLabel(it)) },
                     label = { Text("Custom slot label") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.labelMedium
                 )
             }
+//            }
 
             TextField(
                 value = sheet.nameOverride.orEmpty(),

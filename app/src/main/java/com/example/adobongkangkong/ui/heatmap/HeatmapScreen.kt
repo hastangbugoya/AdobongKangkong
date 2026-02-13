@@ -45,14 +45,15 @@ fun HeatmapScreen(
     val selectedDay by vm.selectedDay.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
 
-    // Subscribe so plannedDates stays warm; also needed for calendar dots
+    // NEW: subscribe so plannedDates stays warm; also needed for calendar dots
     val plannedDates by vm.plannedDates.collectAsState()
+
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
 
-    LaunchedEffect(selectedDay, selectedDate) {
-        if (selectedDay != null || selectedDate != null) sheetState.show()
+    LaunchedEffect(selectedDay) {
+        if (selectedDay != null) sheetState.show()
     }
 
     Column(Modifier.fillMaxWidth()) {
@@ -94,8 +95,8 @@ fun HeatmapScreen(
             MonthlyHeatmapCalendar(
                 month = month,
                 days = days,
-                plannedDates = plannedDates,
-                selectedDate = selectedDay?.date ?: selectedDate,
+                plannedDates = plannedDates, // NEW
+                selectedDate = selectedDay?.date,
                 onDayClick = vm::onDayClicked,
                 onDateClick = vm::onDateClicked,
                 modifier = Modifier.padding(horizontal = 12.dp)
@@ -109,13 +110,14 @@ fun HeatmapScreen(
             onDismissRequest = vm::dismissDayDetails
         ) {
             val date = selectedDay?.date ?: selectedDate!!
+            val hasPlanner = plannedDates.contains(date)
 
             if (selectedDay != null) {
+                // ---- Consumption details (existing behavior) ----
                 val option = options.firstOrNull { it.key == selectedDay!!.nutrientKey }
                 val nutrientName = option?.displayName ?: selectedDay!!.nutrientKey.value
                 val nutrientUnit = option?.unit
 
-                // Existing behavior (consumption details + share)
                 HeatmapDayDetailsSheet(
                     day = selectedDay!!,
                     nutrientDisplayName = nutrientName,
@@ -148,38 +150,42 @@ fun HeatmapScreen(
                     },
                     onClose = vm::dismissDayDetails
                 )
-            } else {
-                // Planner-only day (no nutrient selected / no heatmap model available)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Text(
-                        text = date.toString(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        text = "Select a nutrient to view consumption totals.",
-                        modifier = Modifier.fillMaxWidth()
-                    )
+
+                if (hasPlanner) {
                     Spacer(Modifier.size(12.dp))
                     Button(
                         onClick = {
                             vm.dismissDayDetails()
                             onNavigateToPlannerDay(date)
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
                     ) {
                         Text("Open planner")
                     }
-                    Spacer(Modifier.size(8.dp))
-                    Button(
-                        onClick = vm::dismissDayDetails,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Close")
+                }
+
+                // Future: we can add a button here to open Dashboard for `date`
+                // (or a dashboard panel embedded in the sheet) without changing domain logic.
+            } else {
+                // ---- Planner-only day (no consumption heatmap model for this date) ----
+                Column(Modifier.padding(horizontal = 12.dp)) {
+                    Text(date.toString())
+                    Spacer(Modifier.size(12.dp))
+
+                    if (hasPlanner) {
+                        Button(
+                            onClick = {
+                                vm.dismissDayDetails()
+                                onNavigateToPlannerDay(date)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open planner")
+                        }
+                    } else {
+                        Text("No planned meals for this day.")
                     }
                 }
             }

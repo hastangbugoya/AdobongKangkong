@@ -170,6 +170,14 @@ class ObservePlannedDaysUseCase @Inject constructor(
 
         val batchIds: List<Long> = allItems
             .asSequence()
+            .filter { it.type == PlannedItemSource.RECIPE_BATCH }
+            .map { it.refId }
+            .distinct()
+            .toList()
+
+
+        val recipeIds: List<Long> = allItems
+            .asSequence()
             .filter { it.type == PlannedItemSource.RECIPE }
             .map { it.refId }
             .distinct()
@@ -178,6 +186,12 @@ class ObservePlannedDaysUseCase @Inject constructor(
         val foodTitleById: Map<Long, String> =
             if (foodIds.isEmpty()) emptyMap()
             else foodDao.getByIds(foodIds).associate { it.id to it.name }
+
+        val recipeTitleById: MutableMap<Long, String> = mutableMapOf()
+        for (recipeId in recipeIds) {
+            val recipe = recipeDao.getById(recipeId) ?: continue
+            recipeTitleById[recipeId] = recipe.name
+        }
 
         val recipeTitleByBatchId: MutableMap<Long, String> = mutableMapOf()
         for (batchId in batchIds) {
@@ -189,7 +203,8 @@ class ObservePlannedDaysUseCase @Inject constructor(
         return allItems.associateNotNull { item ->
             val title = when (item.type) {
                 PlannedItemSource.FOOD -> foodTitleById[item.refId]
-                PlannedItemSource.RECIPE -> recipeTitleByBatchId[item.refId]
+                PlannedItemSource.RECIPE -> recipeTitleById[item.refId]
+                PlannedItemSource.RECIPE_BATCH -> recipeTitleByBatchId[item.refId]
             }
             if (title.isNullOrBlank()) null else (item.id to title)
         }
