@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.usda
 
+import android.util.Log
 import androidx.room.withTransaction
 import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.data.local.db.entity.BasisType
@@ -55,10 +56,17 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             else "Selected item not found in USDA response (fdcId=$selectedFdcId)."
         )
 
-        val stableId = when {
+        // Prefer a stable ID for new inserts, but if we already have a row for this FDC id,
+        // KEEP the existing stableId to avoid breaking log references.
+        val computedStableId = when {
             !item.gtinUpc.isNullOrBlank() -> "usda:gtin:${item.gtinUpc.trim()}"
             else -> "usda:fdc:${item.fdcId}"
         }
+
+        // ♻️ Revive-on-import (critical for UNIQUE usdaFdcId)
+        val existing = db.foodDao().getByUsdaFdcId(item.fdcId)
+        val revivedId = existing?.id ?: 0L
+        val finalStableId = existing?.stableId ?: computedStableId
 
         val brand: String? =
             item.brandName?.trim()?.toTitleCase().takeIf { !it.isNullOrBlank() }
@@ -82,9 +90,12 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         val household = parseHouseholdServing(item.householdServingFullText)
 
         // LOCKED-IN USDA RULE:
-        // If household text is parseable, we store servingSize=1 for display.
-        val finalServingSize: Double = if (household != null) 1.0 else rawServingSize
+        // If household text is parseable, we store servingSize=household.size and servingUnit=household.unit for display.
+        // This makes "1 serving" match the label serving (best for quick logs + recipes).
+        val finalServingSize: Double = household?.size ?: rawServingSize
         val finalServingUnit: ServingUnit = household?.unit ?: rawServingUnit
+
+        Log.d("USDA_IMPORT", "household=$household rawServingSize=$rawServingSize rawServingUnit=$rawServingUnit")
 
         val gramsPerServingUnit: Double? = computeGramsBridgePer1Unit(
             householdSize = household?.size,
@@ -92,6 +103,17 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             rawSize = rawServingSize,
             rawUnit = rawServingUnit
         )
+        if (household != null && household.size > 0.0) {
+            val rawG = rawServingUnit.toGrams(rawServingSize)
+            val bridgedServingG = gramsPerServingUnit?.let { finalServingSize * it }
+
+            if (rawG != null && bridgedServingG != null && kotlin.math.abs(bridgedServingG - rawG) > 0.5) {
+                Log.w(
+                    "Meow",
+                    "USDA_IMPORT > Bridge mismatch (mass): finalServingSize*gramsPerServingUnit=$bridgedServingG vs rawG=$rawG"
+                )
+            }
+        }
 
         val mlPerServingUnit: Double? = computeMlBridgePer1Unit(
             householdSize = household?.size,
@@ -100,19 +122,40 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             rawUnit = rawServingUnit
         )
 
+        Log.d(
+            "USDA_IMPORT",
+            """
+    finalServingSize=$finalServingSize
+    finalServingUnit=$finalServingUnit
+    mlPerServingUnit=$mlPerServingUnit
+    computedServingMl=${finalServingSize * (mlPerServingUnit ?: 0.0)}
+    rawServing=($rawServingSize $rawServingUnit)
+    household=$household
+    """.trimIndent()
+        )
+        if (household != null && household.size > 0.0) {
+            val rawMl = rawServingUnit.toMilliliters(rawServingSize)
+            val bridgedServingMl = mlPerServingUnit?.let { finalServingSize * it }
+            if (rawMl != null && bridgedServingMl != null && kotlin.math.abs(bridgedServingMl - rawMl) > 0.5) {
+                Log.w("Meow", "USDA_IMPORT > Bridge mismatch: finalServingSize*mlPerServingUnit=$bridgedServingMl vs rawMl=$rawMl")
+            }
+        }
+        Log.d("Meow","usdaFdcId = ${item.fdcId},\n" +
+                "            usdaGtinUpc = ${(item.gtinUpc?.trim()?.takeIf { it.isNotBlank() })}, \n" +
+                "            usdaPublishedDate = ${(item.publishedDate?.trim()?.takeIf { it.isNotBlank() })},\n" +
+                "            usdaModifiedDate = ${(item.modifiedDate?.trim()?.takeIf { it.isNotBlank() })}")
         val food = Food(
-            id = 0L,
+            id = revivedId,
             name = normalizedName,
             servingSize = finalServingSize,
             servingUnit = finalServingUnit,
             servingsPerPackage = null,
             gramsPerServingUnit = gramsPerServingUnit,
             mlPerServingUnit = mlPerServingUnit,
-            stableId = stableId.ifBlank { UUID.randomUUID().toString() },
+            stableId = finalStableId.ifBlank { UUID.randomUUID().toString() },
             brand = brand,
             isRecipe = false,
             isLowSodium = null,
-
             usdaFdcId = item.fdcId,
             usdaGtinUpc = item.gtinUpc?.trim()?.takeIf { it.isNotBlank() },
             usdaPublishedDate = item.publishedDate?.trim()?.takeIf { it.isNotBlank() },
@@ -146,7 +189,7 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
                     r.copy(
                         basisType = BasisType.PER_100G,
                         amount = r.amount * factor,
-                        basisGrams = 100.0
+                        basisGrams = 100.0,
                     )
                 }
             }
@@ -157,11 +200,12 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
                     "USDA import: failed to compute ml-per-serving for volume-grounded food."
                 )
                 val factor = 100.0 / mlPerServing
+                Log.d("USDA_IMPORT", "mlPerServing=$mlPerServing factor=$factor")
                 servingRows.map { r ->
                     r.copy(
                         basisType = BasisType.PER_100ML,
                         amount = r.amount * factor,
-                        basisGrams = 100.0
+                        basisGrams = null
                     )
                 }
             }
@@ -173,6 +217,9 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
 
         val foodId = db.withTransaction {
             val id = foods.upsert(food)
+            canonicalRows.firstOrNull { it.nutrient.displayName == "Calories" }?.let {
+                Log.d("USDA_IMPORT", "CANONICAL_WRITE Calories: basis=${it.basisType} amount=${it.amount}")
+            }
             foodNutrients.replaceForFood(id, canonicalRows)
             id
         }
@@ -275,8 +322,9 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         if (displayUnit.isMassUnit()) return null
 
         val gramsTotal = rawUnit.toGrams(rawSize)?.takeIf { it > 0.0 } ?: return null
-        // Since we persist servingSize=1 for parseable household text, do NOT divide by householdSize.
-        return gramsTotal
+
+        // Bridge must be per 1 display-unit (since we persist servingSize=1 when household is parseable).
+        return (gramsTotal / householdSize).takeIf { it > 0.0 }
     }
 
     /**
@@ -301,12 +349,10 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         if (householdSize == null) return null
         if (!rawUnit.isVolumeUnit()) return null
 
-        // Even if displayUnit is a volume unit (e.g., CUP/FLOZ), USDA mL is the truth.
-        // Preserve the USDA serving mL via the bridge.
         val mlTotal = rawUnit.toMilliliters(rawSize)?.takeIf { it > 0.0 } ?: return null
 
-        // Since we persist servingSize=1 for parseable household text, do NOT divide by householdSize.
-        return mlTotal
+        // Bridge must be per 1 display-unit (since we persist servingSize=1 when household is parseable).
+        return (mlTotal / householdSize).takeIf { it > 0.0 }
     }
 
     sealed class Result {
@@ -371,15 +417,4 @@ fun String.toTitleCase(): String =
  * Discipline:
  * - Minimal change policy: do not invent new parsers/IDs.
  * - Use existing ServingUnit.fromUsda + existing BasisType values.
- */
-
-/**
- * AI NOTE (2026-02-06):
- *
- * USDA LIQUIDS TRUTH-vs-DISPLAY (LOCKED-IN):
- * - If householdServingFullText is parseable, we persist servingSize=1 and servingUnit=<parsed unit> for display,
- *   and we preserve USDA truth (servingSizeUnit=MLT + servingSize=X) via mlPerServingUnit=X.
- * - Even if the parsed unit is a volume unit (CUP/FLOZ), mlPerServingUnit MUST win for canonical math.
- *   Never rely on CUP<->mL conversions for USDA truth.
- * - No grams<->mL conversions. No density guessing.
  */

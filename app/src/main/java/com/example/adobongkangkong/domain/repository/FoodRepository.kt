@@ -2,6 +2,7 @@ package com.example.adobongkangkong.domain.repository
 
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import kotlinx.coroutines.flow.Flow
 
 interface FoodRepository {
@@ -35,21 +36,9 @@ interface FoodRepository {
     suspend fun getFoodHardDeleteBlockers(foodId: Long): FoodHardDeleteBlockers
 
     suspend fun hardDeleteFood(foodId: Long)
-}
 
-data class FoodHardDeleteBlockers(
-    val isRecipeFood: Boolean,
-    val logsUsingStableId: Int,
-    val plannedItemsUsingFoodId: Int,
-    val recipeIngredientsUsingFoodId: Int,
-    val recipeBatchesUsingBatchFoodId: Int
-) {
-    val isBlocked: Boolean =
-        isRecipeFood ||
-                logsUsingStableId > 0 ||
-                plannedItemsUsingFoodId > 0 ||
-                recipeIngredientsUsingFoodId > 0 ||
-                recipeBatchesUsingBatchFoodId > 0
+    suspend fun cleanupOrphanFoodMedia(): Int
+
 }
 
 

@@ -190,4 +190,58 @@ class NutrientBasisScalerTest {
             )
         }
     }
+    @Test
+    fun fl_oz_label_serving_round_trip_per100ml_8_floz_equals_240ml() {
+        // Orange juice label serving: 8 fl oz = 240 mL (using your rounded bridge)
+        // Persisted model after importer fix:
+        // - servingSize = 8 (serving is the label serving)
+        // - mlPerServingUnit = 30 (mL per 1 fl oz)
+        val servingSize = 8.0
+        val mlPerServingUnit = 30.0
+        val caloriesPerServing = 46.0 // USDA per label serving (8 fl oz / 240 mL)
+
+        // UI per-serving -> canonical PER_100ML
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonicalVolume(
+            uiPerServingAmount = caloriesPerServing,
+            canonicalBasis = BasisType.PER_100ML,
+            servingSize = servingSize,
+            mlPerServingUnit = mlPerServingUnit
+        )
+
+        assertTrue(toCanonical.didScale)
+
+        // Expected: 46 * 100 / (8*30) = 19.166666666666668
+        val expectedPer100ml = caloriesPerServing * 100.0 / (servingSize * mlPerServingUnit)
+        assertEquals(expectedPer100ml, toCanonical.amount, 1e-12)
+
+        // canonical PER_100ML -> UI per-serving (8 fl oz)
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = toCanonical.amount,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = servingSize,
+            mlPerServingUnit = mlPerServingUnit
+        )
+
+        assertTrue(toDisplay.didScale)
+        assertEquals(caloriesPerServing, toDisplay.amount, 1e-9)
+    }
+
+    @Test
+    fun fl_oz_single_unit_display_from_per100ml_scales_to_1_floz() {
+        // If canonical is truly per 100 mL, then 1 fl oz (~30 mL bridge) should be 0.3x of per-100mL.
+        val servingSize = 1.0
+        val mlPerServingUnit = 30.0
+        val storedPer100ml = 19.166666666666668 // from the previous test's expected per100ml
+
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = storedPer100ml,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = servingSize,
+            mlPerServingUnit = mlPerServingUnit
+        )
+
+        assertTrue(toDisplay.didScale)
+        // 19.1667 * 30 / 100 = 5.75 kcal per 1 fl oz
+        assertEquals(5.75, toDisplay.amount, 1e-9)
+    }
 }

@@ -56,7 +56,6 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun mealTemplateDao(): MealTemplateDao
     abstract fun mealTemplateItemDao(): MealTemplateItemDao
     abstract fun mealTemplatePrefsDao(): MealTemplatePrefsDao
-
     abstract fun foodBarcodeEntityDao(): FoodBarcodeDao
 
     companion object {
@@ -148,6 +147,10 @@ abstract class NutriDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE foods ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE foods ADD COLUMN deletedAtEpochMs INTEGER")
+                // ✅ Enforce one Food row per USDA FDC id (NULLs allowed; multiple NULLs are OK in SQLite)
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_foods_usdaFdcId_unique ON foods(usdaFdcId)"
+                )
             }
         }
     }

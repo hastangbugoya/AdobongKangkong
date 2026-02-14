@@ -120,8 +120,18 @@ class FoodEditorViewModel @Inject constructor(
                     ?: UUID.randomUUID().toString()
 
             val servingSize = food?.servingSize ?: 1.0
+
+            val servingUnit = food?.servingUnit ?: ServingUnit.SERVING
             val gramsPerServingUnit = food?.gramsPerServingUnit
             val mlPerServingUnit = food?.mlPerServingUnit
+
+            val gramsPerServingUnitEffectiveForDisplay: Double? =
+                when (servingUnit) {
+                    ServingUnit.G -> 1.0
+                    else -> gramsPerServingUnit
+                }
+
+
             val inferredBasisType: BasisType? =
                 current.basisType
                     ?: when {
@@ -160,7 +170,7 @@ class FoodEditorViewModel @Inject constructor(
                                     storedAmount = r.amount,
                                     storedBasis = r.basisType,
                                     servingSize = servingSize,
-                                    gramsPerServingUnit = gramsPerServingUnit
+                                    gramsPerServingUnit = gramsPerServingUnitEffectiveForDisplay
                                 ).amount
 
                             BasisType.PER_100ML -> NutrientBasisScaler
@@ -303,15 +313,14 @@ class FoodEditorViewModel @Inject constructor(
             update { it.copy(errorMessage = "Food name is required.") }
             return
         }
+
         val unit = s.servingUnit
         val needsBasis =
             (isAmbiguousForGrounding(unit)) &&
                     s.basisType == null
 
         if (needsBasis) {
-            update {
-                it.copy(isGroundingDialogOpen = true)
-            }
+            update { it.copy(isGroundingDialogOpen = true) }
             return
         }
 
@@ -333,8 +342,6 @@ class FoodEditorViewModel @Inject constructor(
         val mlPerServingUnitFinal: Double? =
             when {
                 mlPerServingUnitInput != null && mlPerServingUnitInput > 0.0 -> mlPerServingUnitInput
-                // Safe volume conversion (no density): ml per 1 unit when the unit has a defined volume.
-                // NOTE: this will be used only when the user chose LIQUID (see finalMlBridge below).
                 else -> s.servingUnit.toMilliliters(1.0)
             }?.takeIf { it > 0.0 }
 
@@ -348,37 +355,17 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
-        val finalGramsBridge: Double? =
-            when {
-                s.groundingMode == GroundingMode.LIQUID -> null
-                else -> gramsPerServingUnitFinal
-            }
+        val finalGramsBridge =
+            if (s.groundingMode == GroundingMode.LIQUID) null else gramsPerServingUnitFinal
 
-        val finalMlBridge: Double? =
-            when {
-                s.groundingMode == GroundingMode.SOLID -> null
-                else -> mlPerServingUnitFinal
-            }
+        val finalMlBridge =
+            if (s.groundingMode == GroundingMode.SOLID) null else mlPerServingUnitFinal
 
         val id = s.foodId ?: 0L
         val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
-        val food = Food(
-            id = id,
-            name = name,
-            brand = s.brand.trim().ifEmpty { null },
-            servingSize = servingSize,
-            servingUnit = s.servingUnit,
-            gramsPerServingUnit = finalGramsBridge,
-            servingsPerPackage = servingsPerPackage,
-            isRecipe = false,
-            stableId = stableId,
-            mlPerServingUnit = finalMlBridge,
-            isLowSodium = null,
-        )
-
-        val defaultBasisType: BasisType =
-            if (isVolumeGrounded(servingUnit = s.servingUnit, mlPerServingUnit = finalMlBridge)) {
+        val defaultBasisType =
+            if (isVolumeGrounded(s.servingUnit, finalMlBridge)) {
                 BasisType.PER_100ML
             } else if (s.servingUnit == ServingUnit.G || finalGramsBridge != null) {
                 BasisType.PER_100G
@@ -386,36 +373,37 @@ class FoodEditorViewModel @Inject constructor(
                 BasisType.USDA_REPORTED_SERVING
             }
 
-        val gramsPerServingUnitEffective: Double? =
+        val gramsPerServingUnitEffective =
             when (s.servingUnit) {
                 ServingUnit.G -> 1.0
                 else -> finalGramsBridge
             }?.takeIf { it > 0.0 }
 
-        val mlPerServingUnitEffective: Double? =
+        val mlPerServingUnitEffective =
             mlPerServingUnitEffective(
                 servingUnit = s.servingUnit,
                 mlPerServingUnit = finalMlBridge
             )
 
-        val rows: List<FoodNutrientRow> = s.nutrientRows.mapNotNull { ui ->
+        val rows = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
-            val uiPerServingAmount = if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
+            val uiPerServingAmount =
+                if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
 
             val amountToStore =
                 when (defaultBasisType) {
                     BasisType.PER_100G -> NutrientBasisScaler.displayPerServingToCanonical(
-                        uiPerServingAmount = uiPerServingAmount,
-                        canonicalBasis = BasisType.PER_100G,
-                        servingSize = servingSize,
-                        gramsPerServingUnit = gramsPerServingUnitEffective
+                        uiPerServingAmount,
+                        BasisType.PER_100G,
+                        servingSize,
+                        gramsPerServingUnitEffective
                     ).amount
 
                     BasisType.PER_100ML -> NutrientBasisScaler.displayPerServingToCanonicalVolume(
-                        uiPerServingAmount = uiPerServingAmount,
-                        canonicalBasis = BasisType.PER_100ML,
-                        servingSize = servingSize,
-                        mlPerServingUnit = mlPerServingUnitEffective
+                        uiPerServingAmount,
+                        BasisType.PER_100ML,
+                        servingSize,
+                        mlPerServingUnitEffective
                     ).amount
 
                     else -> uiPerServingAmount
@@ -442,15 +430,48 @@ class FoodEditorViewModel @Inject constructor(
         viewModelScope.launch {
             update { it.copy(isSaving = true, errorMessage = null, stableId = stableId) }
             try {
+                val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
+
+                val food =
+                    if (existing != null) {
+                        existing.copy(
+                            name = name,
+                            brand = s.brand.trim().ifEmpty { null },
+                            servingSize = servingSize,
+                            servingUnit = s.servingUnit,
+                            gramsPerServingUnit = finalGramsBridge,
+                            servingsPerPackage = servingsPerPackage,
+                            mlPerServingUnit = finalMlBridge,
+                            isRecipe = false
+                        )
+                    } else {
+                        Food(
+                            id = 0L,
+                            name = name,
+                            brand = s.brand.trim().ifEmpty { null },
+                            servingSize = servingSize,
+                            servingUnit = s.servingUnit,
+                            gramsPerServingUnit = finalGramsBridge,
+                            servingsPerPackage = servingsPerPackage,
+                            isRecipe = false,
+                            stableId = stableId,
+                            mlPerServingUnit = finalMlBridge,
+                            isLowSodium = null
+                        )
+                    }
+
                 val savedId = saveFoodWithNutrients(food, rows)
+
                 flagsRepo.setFlags(
                     foodId = savedId,
                     favorite = s.favorite,
                     eatMore = s.eatMore,
                     limit = s.limit
                 )
+
                 update { it.copy(hasUnsavedChanges = false) }
                 onDone(savedId)
+
             } catch (t: Throwable) {
                 update { it.copy(errorMessage = t.message ?: "Failed to save food.") }
             } finally {
@@ -458,26 +479,6 @@ class FoodEditorViewModel @Inject constructor(
             }
         }
     }
-
-//    fun deleteFood() {
-//        val foodId = _state.value.foodId ?: return
-//
-//        viewModelScope.launch {
-//            update { it.copy(isSaving = true, errorMessage = null) }
-//            try {
-//                val deleted = foodRepo.deleteFood(foodId)
-//                if (deleted) {
-//                    didDeleteFlow.value = true
-//                } else {
-//                    update { it.copy(errorMessage = "Cannot delete: this food is used in one or more recipes.") }
-//                }
-//            } catch (t: Throwable) {
-//                update { it.copy(errorMessage = t.message ?: "Failed to delete food.") }
-//            } finally {
-//                update { it.copy(isSaving = false) }
-//            }
-//        }
-//    }
 
     fun openAliasSheet(nutrientId: Long, nutrientName: String) {
         aliasSheetNutrientIdFlow.value = nutrientId

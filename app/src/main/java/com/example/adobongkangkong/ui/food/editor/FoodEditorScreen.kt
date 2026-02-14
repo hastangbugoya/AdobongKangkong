@@ -867,13 +867,43 @@ private fun ServingSection(
         val useMlBridge = basisType == BasisType.PER_100ML || mlPerServingUnit.isNotBlank()
 
         if (useMlBridge) {
+            val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
+            val bridgeD = mlPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
+
+            val mlPerServingComputed: Double? =
+                if (servingSizeD != null && bridgeD != null) servingSizeD * bridgeD else null
+
+            // Editable TOTAL mL per serving
             OutlinedTextField(
-                value = mlPerServingUnit,
-                onValueChange = onMlPerServingChange,
+                value = mlPerServingComputed?.toString().orEmpty(),
+                onValueChange = { newTotalText ->
+                    val newTotal = newTotalText.toDoubleOrNull()?.takeIf { it > 0.0 }
+                    val s = servingSizeD
+
+                    if (newTotal != null && s != null) {
+                        val newBridge = newTotal / s
+                        onMlPerServingChange(newBridge.toString())
+                    } else {
+                        // allow clearing / partial typing without forcing updates
+                        // (do nothing, or optionally set bridge blank)
+                    }
+                },
                 label = { Text("mL per serving") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // Derived BRIDGE (read-only)
+            if (servingSizeD != null && mlPerServingComputed != null) {
+                OutlinedTextField(
+                    value = (mlPerServingComputed / servingSizeD).toString(),
+                    onValueChange = {},
+                    enabled = false,
+                    label = { Text("mL per 1 ${servingUnit.display}") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         } else {
             OutlinedTextField(
                 value = gramsPerServingUnit,
@@ -884,7 +914,6 @@ private fun ServingSection(
             )
         }
 
-
         OutlinedTextField(
             value = servingsPerPackage,
             onValueChange = onServingsPerPackageChange,
@@ -894,6 +923,115 @@ private fun ServingSection(
         )
     }
 }
+
+
+
+//@Composable
+//private fun ServingSection(
+//    servingSize: String,
+//    servingUnit: ServingUnit,
+//    gramsPerServingUnit: String,
+//    mlPerServingUnit: String,
+//    servingsPerPackage: String,
+//    onServingSizeChange: (String) -> Unit,
+//    onServingUnitChange: (ServingUnit) -> Unit,
+//    onGramsPerServingChange: (String) -> Unit,
+//    onMlPerServingChange: (String) -> Unit,
+//    onServingsPerPackageChange: (String) -> Unit,
+//    basisType: BasisType?,
+//    isTablet: Boolean
+//) {
+//    val servingSizeD = servingSize.toDoubleOrNull()
+//    val mlPerUnitD = mlPerServingUnit.toDoubleOrNull()
+//
+//    val computedMlPerServing: Double? =
+//        if (servingSizeD != null && servingSizeD > 0 &&
+//            mlPerUnitD != null && mlPerUnitD > 0
+//        ) servingSizeD * mlPerUnitD else null
+//
+//    OutlinedTextField(
+//        value = mlPerServingUnit,
+//        onValueChange = onMlPerServingChange,
+//        label = { Text("mL per 1 ${servingUnit.display}") }, // see helper below
+//        singleLine = true,
+//        modifier = Modifier.fillMaxWidth()
+//    )
+//
+//    if (computedMlPerServing != null) {
+//        OutlinedTextField(
+//            value = computedMlPerServing.toString(),
+//            onValueChange = {},
+//            enabled = false,
+//            label = { Text("mL per serving (${servingSize} ${servingUnit.display})") },
+//            singleLine = true,
+//            modifier = Modifier.fillMaxWidth()
+//        )
+//    }
+//    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+//        Text(text = "Serving", style = MaterialTheme.typography.titleMedium)
+//
+//        if (isTablet) {
+//            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+//                OutlinedTextField(
+//                    value = servingSize,
+//                    onValueChange = onServingSizeChange,
+//                    label = { Text("Serving size") },
+//                    singleLine = true,
+//                    modifier = Modifier.weight(1f)
+//                )
+//                ServingUnitDropdown(
+//                    value = servingUnit,
+//                    onValueChange = onServingUnitChange,
+//                    modifier = Modifier.weight(1f),
+//                    options = ServingUnit.values().toList()
+//                )
+//            }
+//        } else {
+//            OutlinedTextField(
+//                value = servingSize,
+//                onValueChange = onServingSizeChange,
+//                label = { Text("Serving size") },
+//                singleLine = true,
+//                modifier = Modifier.fillMaxWidth()
+//            )
+//            ServingUnitDropdown(
+//                value = servingUnit,
+//                onValueChange = onServingUnitChange,
+//                modifier = Modifier.fillMaxWidth(),
+//                options = ServingUnit.values().toList()
+//            )
+//        }
+//
+//        val useMlBridge = basisType == BasisType.PER_100ML || mlPerServingUnit.isNotBlank()
+//
+//        if (useMlBridge) {
+//            OutlinedTextField(
+//                value = mlPerServingUnit,
+//                onValueChange = onMlPerServingChange,
+//                label = { Text("mL per serving") },
+//                singleLine = true,
+//                modifier = Modifier.fillMaxWidth()
+//            )
+//        } else {
+//            OutlinedTextField(
+//                value = gramsPerServingUnit,
+//                onValueChange = onGramsPerServingChange,
+//                label = { Text("Grams per serving") },
+//                singleLine = true,
+//                modifier = Modifier.fillMaxWidth()
+//            )
+//        }
+//
+//
+//        OutlinedTextField(
+//            value = servingsPerPackage,
+//            onValueChange = onServingsPerPackageChange,
+//            label = { Text("Servings per package") },
+//            singleLine = true,
+//            modifier = Modifier.fillMaxWidth()
+//        )
+//    }
+//}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

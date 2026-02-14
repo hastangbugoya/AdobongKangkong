@@ -29,7 +29,8 @@ interface FoodDao {
     @Query("SELECT * FROM foods WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<FoodEntity>
 
-    @Query("""
+    @Query(
+        """
                 SELECT * FROM foods
                 WHERE
                   isDeleted = 0
@@ -39,7 +40,8 @@ interface FoodDao {
                   )
                 ORDER BY isRecipe DESC, name ASC
                 LIMIT :limit
-            """)
+            """
+    )
     fun search(query: String, limit: Int = 50): Flow<List<FoodEntity>>
 
     @Query("SELECT COUNT(*) FROM foods")
@@ -52,7 +54,12 @@ interface FoodDao {
     @Query("SELECT id FROM foods WHERE stableId = :stableId LIMIT 1")
     suspend fun getIdByStableId(stableId: String): Long?
 
-    @Query("""
+    // ✅ Used for USDA FDC-id uniqueness + revive-on-import
+    @Query("SELECT * FROM foods WHERE usdaFdcId = :fdcId LIMIT 1")
+    suspend fun getByUsdaFdcId(fdcId: Long): FoodEntity?
+
+    @Query(
+        """
         UPDATE foods SET
           name = :name,
           brand = :brand,
@@ -61,7 +68,8 @@ interface FoodDao {
           gramsPerServingUnit = :gramsPerServingUnit,
           isRecipe = :isRecipe
         WHERE id = :id
-        """)
+        """
+    )
     suspend fun updateCore(
         id: Long,
         name: String,
@@ -72,11 +80,13 @@ interface FoodDao {
         isRecipe: Boolean
     )
 
-    @Query("""
+    @Query(
+        """
     UPDATE foods SET
       gramsPerServingUnit = :gramsPerServingUnit
     WHERE id = :id
-    """)
+    """
+    )
     suspend fun updateGramsPerServingUnit(
         id: Long,
         gramsPerServingUnit: Double?
@@ -86,12 +96,14 @@ interface FoodDao {
     // Soft delete helpers
     // -------------------------
 
-    @Query("""
+    @Query(
+        """
         UPDATE foods
         SET isDeleted = 1,
             deletedAtEpochMs = :deletedAtEpochMs
         WHERE id = :id
-    """)
+    """
+    )
     suspend fun softDeleteById(
         id: Long,
         deletedAtEpochMs: Long
@@ -99,4 +111,7 @@ interface FoodDao {
 
     @Query("SELECT stableId FROM foods WHERE id = :id LIMIT 1")
     suspend fun getStableIdById(id: Long): String?
+
+    @Query("SELECT id FROM foods WHERE id IN (:ids)")
+    suspend fun getExistingFoodIds(ids: List<Long>): List<Long>
 }

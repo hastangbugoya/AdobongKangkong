@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.data.repository
 
+import android.util.Log
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
@@ -11,8 +12,8 @@ import com.example.adobongkangkong.data.local.db.mapper.toDomain
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.data.local.db.mapper.toEntity
 import com.example.adobongkangkong.domain.logging.model.FoodRef
+import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
-import com.example.adobongkangkong.domain.repository.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import kotlinx.coroutines.flow.Flow
@@ -39,6 +40,8 @@ class FoodRepositoryImpl @Inject constructor(
 
     override suspend fun upsert(food: Food): Long {
         val entity = food.toEntity()
+        Log.d("Meow","UPSERT > Food: ${food.name} >stableId=${entity.stableId} gtin=${entity.usdaGtinUpc} fdc=${entity.usdaFdcId} pub=${entity.usdaPublishedDate} mod=${entity.usdaModifiedDate}")
+
         foodDao.upsert(entity)
 
         return foodDao.getIdByStableId(entity.stableId)
@@ -123,5 +126,26 @@ class FoodRepositoryImpl @Inject constructor(
 
     override suspend fun isFoodsEmpty(): Boolean =
         foodDao.countFoods() == 0
+
+    override suspend fun cleanupOrphanFoodMedia(): Int {
+        var deletedCount = 0
+
+        // 1) Clean cache blur derivatives (safe to wipe)
+        deletedCount += foodImageStorage.deleteAllBlurCache()
+
+        // 2) Clean orphan banners in filesDir (only if food id no longer exists)
+        val orphanIds = foodImageStorage.findFoodIdsWithBannerInFilesDir()
+        if (orphanIds.isEmpty()) return deletedCount
+
+        val existing = foodDao.getExistingFoodIds(orphanIds).toSet()
+        val trulyOrphan = orphanIds.filter { it !in existing }
+
+        trulyOrphan.forEach { id ->
+            deletedCount += foodImageStorage.deleteAllFoodMediaDirs(id)
+        }
+
+        return deletedCount
+    }
+
 }
 

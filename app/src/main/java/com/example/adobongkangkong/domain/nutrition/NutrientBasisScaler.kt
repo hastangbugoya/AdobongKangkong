@@ -84,9 +84,9 @@ object NutrientBasisScaler {
         return servingSize * g
     }
 
-// DO NOT TOUCH THIS (future-you note):
-// Volume scaling is independent from mass scaling.
-// PER_100ML assumes pure volume math (ml only).
+    // DO NOT TOUCH THIS (future-you note):
+    // Volume scaling is independent from mass scaling.
+    // PER_100ML assumes pure volume math (ml only).
     fun canonicalToDisplayPerServingVolume(
         storedAmount: Double,
         storedBasis: BasisType,
@@ -97,12 +97,22 @@ object NutrientBasisScaler {
             BasisType.PER_100ML -> {
                 val ml = mlPerServing(servingSize, mlPerServingUnit)
                     ?: return Result(storedAmount, false)
+
+//                // ----------------------------------------------------------------
+//                // Safety: some legacy/USDA-reported rows may be tagged PER_100ML but
+//                // actually already represent "per USDA serving" (e.g., 240 mL).
+//                // If the UI serving is "1 unit" and that unit maps to a large mL,
+//                // treat storedAmount as already-per-serving and do not rescale.
+//                // ----------------------------------------------------------------
+//                if (servingSize == 1.0 && ml >= 100.0) {
+//                    return Result(storedAmount, false)
+//                }
+
                 Result(storedAmount * ml / 100.0, true)
             }
             else -> Result(storedAmount, false)
         }
     }
-
     fun displayPerServingToCanonicalVolume(
         uiPerServingAmount: Double,
         canonicalBasis: BasisType,

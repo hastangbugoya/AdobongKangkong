@@ -15,7 +15,7 @@ import java.util.UUID
 
         // USDA traceability lookups (safe even if null)
         Index(value = ["usdaGtinUpc"]),
-        Index(value = ["usdaFdcId"]),
+        Index(value = ["usdaFdcId"], unique = true),
     ]
 )
 data class FoodEntity(

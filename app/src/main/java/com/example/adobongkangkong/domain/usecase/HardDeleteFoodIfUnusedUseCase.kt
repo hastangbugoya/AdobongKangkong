@@ -1,6 +1,6 @@
 package com.example.adobongkangkong.domain.usecase
 
-import com.example.adobongkangkong.domain.repository.FoodHardDeleteBlockers
+import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import javax.inject.Inject
 
