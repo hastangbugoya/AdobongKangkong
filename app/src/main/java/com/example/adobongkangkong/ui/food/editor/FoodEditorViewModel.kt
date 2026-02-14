@@ -239,6 +239,25 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
+    fun onMlPerServingTotalChange(totalMlText: String) = update { s ->
+        val totalMl = totalMlText.toDoubleOrNull()
+        val servingSize = s.servingSize.toDoubleOrNull()
+
+        // Always mark unsaved if user typed something
+        val base = s.copy(hasUnsavedChanges = true)
+
+        // If we cannot compute yet (partial input, blank, etc.), just keep state
+        if (totalMl == null || totalMl <= 0.0 || servingSize == null || servingSize <= 0.0) {
+            return@update base
+        }
+
+        val perUnit = totalMl / servingSize
+
+        base.copy(
+            mlPerServingUnit = perUnit.roundForUi() // use your existing rounding helper
+        )
+    }
+
     fun dismissGroundingDialog() = update { it.copy(isGroundingDialogOpen = false) }
 
     fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v, hasUnsavedChanges = true) }

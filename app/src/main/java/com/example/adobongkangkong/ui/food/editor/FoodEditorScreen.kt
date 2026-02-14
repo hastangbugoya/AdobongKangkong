@@ -51,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -505,7 +506,7 @@ fun FoodEditorScreen(
                         onMlPerServingChange = onMlPerServingChange,
                         basisType = state.basisType,
 
-                    )
+                        )
                 }
 
                 item {
@@ -873,10 +874,22 @@ private fun ServingSection(
             val mlPerServingComputed: Double? =
                 if (servingSizeD != null && bridgeD != null) servingSizeD * bridgeD else null
 
+            // Keep a local editable text so the field doesn't "snap" while the user types.
+            var mlPerServingText by rememberSaveable { mutableStateOf("") }
+            var mlPerServingFocused by rememberSaveable { mutableStateOf(false) }
+
+            // When not actively editing, reflect the computed value.
+            // (This keeps the field accurate after servingSize/unit edits or imports.)
+            if (!mlPerServingFocused) {
+                val next = mlPerServingComputed?.toString().orEmpty()
+                if (mlPerServingText != next) mlPerServingText = next
+            }
+
             // Editable TOTAL mL per serving
             OutlinedTextField(
-                value = mlPerServingComputed?.toString().orEmpty(),
+                value = mlPerServingText,
                 onValueChange = { newTotalText ->
+                    mlPerServingText = newTotalText
                     val newTotal = newTotalText.toDoubleOrNull()?.takeIf { it > 0.0 }
                     val s = servingSizeD
 
@@ -890,13 +903,21 @@ private fun ServingSection(
                 },
                 label = { Text("mL per serving") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focus ->
+                        mlPerServingFocused = focus.isFocused
+                        if (!focus.isFocused) {
+                            // Snap back to computed value on blur (canonical display).
+                            mlPerServingText = mlPerServingComputed?.toString().orEmpty()
+                        }
+                    }
             )
 
             // Derived BRIDGE (read-only)
             if (servingSizeD != null && mlPerServingComputed != null) {
                 OutlinedTextField(
-                    value = (mlPerServingComputed / servingSizeD).toString(),
+                    value = mlPerServingUnit,
                     onValueChange = {},
                     enabled = false,
                     label = { Text("mL per 1 ${servingUnit.display}") },
