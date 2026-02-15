@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.food.editor
 
 import android.net.Uri
+import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
@@ -61,6 +62,19 @@ data class FoodEditorState(
     val groundingMode: GroundingMode = GroundingMode.SOLID,
     val originalServingUnit: ServingUnit? = null,
     val basisType: BasisType? = null,
+
+    // Barcode fallback (USDA lookup failed)
+    val isBarcodeFallbackOpen: Boolean = false,
+    val barcodeFallbackMessage: String? = null,
+    val barcodeFallbackCreateName: String = "",
+    val barcodeAlreadyAssignedFoodId: Long? = null,
+    // Barcode remap confirm (when barcode already mapped to another food)
+    val barcodeRemapDialog: BarcodeRemapDialogState? = null,
+
+
+    // Barcode mappings for this food (persisted)
+    val assignedBarcodes: List<String> = emptyList(),
+    val barcodeActionMessage: String? = null,
 ) {
     /**
      * Convenience flags/fields used by FoodEditorScreen.
@@ -118,3 +132,11 @@ data class NutrientSearchResultUi(
     val category: NutrientCategory,
     val aliases: List<String> = emptyList()
 )
+
+
+data class BarcodeRemapDialogState(
+    val barcode: String,
+    val fromFoodId: Long,
+    val toFoodId: Long,
+    val fromSource: BarcodeMappingSource
+    )

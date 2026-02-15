@@ -37,4 +37,7 @@ interface FoodBarcodeDao {
 
     @Query("SELECT * FROM food_barcodes WHERE source = :source")
     suspend fun getAllBySource(source: BarcodeMappingSource): List<FoodBarcodeEntity>
+
+    @Query("SELECT * FROM food_barcodes WHERE foodId = :foodId")
+    suspend fun getAllForFood(foodId: Long): List<FoodBarcodeEntity>
 }

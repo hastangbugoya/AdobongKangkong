@@ -1,14 +1,16 @@
 package com.example.adobongkangkong.domain.model
 
+import java.util.UUID
+
 data class Food(
     val id: Long,
-    val stableId: String,
+    val stableId: String = UUID.randomUUID().toString(),
 
     val name: String,
     val brand: String?,
 
-    val servingSize: Double,
-    val servingUnit: ServingUnit,
+    val servingSize: Double = 1.0,
+    val servingUnit: ServingUnit = ServingUnit.SERVING,
 
     val gramsPerServingUnit: Double?,
     val mlPerServingUnit: Double?,

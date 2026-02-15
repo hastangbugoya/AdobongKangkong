@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -60,6 +61,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
@@ -71,12 +73,33 @@ import com.example.adobongkangkong.ui.common.sectionedByCategory
 /**
  * FoodEditorScreen (stateless)
  *
- * @since 2026-02-05
+ * UI-only form for creating/editing a Food.
  *
- * Notes for future-you:
- * - Keep this composable stateless (no ViewModel calls).
- * - Delete MUST be triggered only via `onDeleteFood?.invoke()`.
- * - Modal UI blocks (barcode picker, exit dialog, alias sheet) must live inside this function body.
+ * Design rules:
+ * - **No ViewModel access**: all state is provided via [state] and all actions are delegated via callbacks.
+ * - **All modal UI lives here** (dialogs / sheets) so it remains driven by [state] and local UI flags:
+ *   - barcode candidate picker (only when multiple matches exist)
+ *   - delete confirmation (soft delete + optional permanent delete)
+ *   - grounding dialog (PER_100G vs PER_100ML choice)
+ *   - barcode fallback dialog (USDA lookup failed → assign to existing or create minimal)
+ *   - barcode remap confirmation (replace an existing barcode mapping)
+ *   - exit dialog (unsaved changes)
+ *   - alias-management bottom sheet
+ *
+ * Layout notes:
+ * - Uses a [Scaffold] with a sticky bottom bar ([FoodEditorBottomBar]) so Save/Delete stay reachable.
+ * - Long-form content is a single [LazyColumn] to avoid nested scrolling.
+ *
+ * Callback expectations:
+ * - [onSave] should trigger persistence and eventually clear `state.hasUnsavedChanges`.
+ * - [onDeleteFood] performs a soft delete; [onHardDeleteFood] performs a permanent delete (only when allowed).
+ * - Barcode flow callbacks:
+ *   - [onOpenBarcodeScanner]/[onCloseBarcodeScanner] toggle the scanner UI
+ *   - [onBarcodeScanned] forwards the scanned string to the state owner
+ *   - [onPickBarcodeCandidate] selects a USDA candidate when multiple results are present
+ *   - [onBarcodeFallbackAssignExisting] routes to a picker to map barcode → existing food
+ *   - [onBarcodeFallbackCreateMinimal] creates a minimal food entry then maps barcode → new food (may require remap confirm)
+ *   - [onConfirmBarcodeRemap] confirms or cancels replacing an existing mapping
  */
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -139,7 +162,19 @@ fun FoodEditorScreen(
     mlPerServingUnit: String,
     onMlPerServingChange: (String) -> Unit,
     basisType: BasisType?,
-) {
+
+    // Barcode fallback UI + remap confirm
+    onDismissBarcodeFallback: () -> Unit,
+    onBarcodeFallbackAssignExisting: () -> Unit,
+    onBarcodeFallbackCreateNameChange: (String) -> Unit,
+    onBarcodeFallbackCreateMinimal: () -> Unit,
+    onConfirmBarcodeRemap: (Boolean) -> Unit,
+    onBarcodeFallbackOpenAssignedFood: (Long) -> Unit,
+    onOpenFoodEditor: (Long) -> Unit,
+
+    onUnassignBarcode: (String) -> Unit,
+
+    ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
             .map { it.nutrientId }
@@ -237,38 +272,6 @@ fun FoodEditorScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-        if (!state.errorMessage.isNullOrBlank()) {
-            Text(
-                text = state.errorMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (showDeleteDialog) {
-                OutlinedButton(
-                    onClick = { showDeleteDialog = true },
-                    enabled = !state.isSaving,
-                    modifier = Modifier.weight(1f)
-                ) { Text("Delete") }
-            }
-
-            Button(
-                onClick = onSave,
-                enabled = !state.isSaving,
-                modifier = Modifier.weight(1f)
-            ) { Text(if (state.isSaving) "Saving…" else "Save") }
-        }
-    }
-
     if (state.isGroundingDialogOpen) {
         AlertDialog(
             onDismissRequest = onDismissGroundingDialog,
@@ -286,6 +289,99 @@ fun FoodEditorScreen(
             }
         )
     }
+
+    // ---------------- Barcode fallback: USDA failed ----------------
+// ---------------- Barcode fallback: USDA failed ----------------
+    if (state.isBarcodeFallbackOpen) {
+        val alreadyAssignedFoodId = state.barcodeAlreadyAssignedFoodId
+        val conflict = alreadyAssignedFoodId != null
+
+        AlertDialog(
+            onDismissRequest = onDismissBarcodeFallback,
+            title = { Text(if (conflict) "Barcode already in use" else "Barcode not found") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val msg = state.barcodeFallbackMessage
+                        ?: if (conflict) "This barcode is already assigned in your database."
+                        else "This barcode could not be resolved from USDA."
+                    Text(msg)
+
+                    if (state.scannedBarcode.isNotBlank()) {
+                        Text(
+                            text = "Scanned: ${state.scannedBarcode}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    Text(
+                        "Create minimal food (name required):",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = state.barcodeFallbackCreateName,
+                        onValueChange = onBarcodeFallbackCreateNameChange,
+                        label = { Text("Food name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !conflict
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                    // ✅ New: Open the food that already owns the barcode
+                    TextButton(
+                        onClick = { alreadyAssignedFoodId?.let(onOpenFoodEditor) },
+                        enabled = conflict
+                    ) { Text("Open food") }
+
+                    // ❌ Disabled when conflict (no reassignment here)
+                    TextButton(
+                        onClick = onBarcodeFallbackAssignExisting,
+                        enabled = !conflict
+                    ) { Text("Assign to existing") }
+
+                    // ❌ Disabled when conflict
+                    Button(
+                        onClick = onBarcodeFallbackCreateMinimal,
+                        enabled = !conflict && state.barcodeFallbackCreateName.trim().isNotBlank()
+                    ) { Text("Create") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissBarcodeFallback) { Text("Cancel") }
+            }
+        )
+    }
+
+    // ---------------- Barcode remap confirm ----------------
+    val remap = state.barcodeRemapDialog
+    if (remap != null) {
+        val replaceLabel =
+            if (remap.fromSource == BarcodeMappingSource.USDA) "Replace USDA mapping"
+            else "Replace mapping"
+        AlertDialog(
+            onDismissRequest = { onConfirmBarcodeRemap(false) },
+            title = { Text("Replace existing barcode mapping?") },
+            text = {
+                Text(
+                    "Barcode ${remap.barcode} is already mapped to foodId=${remap.fromFoodId} " +
+                            "(${remap.fromSource}). Replace with foodId=${remap.toFoodId}?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onConfirmBarcodeRemap(true) }) { Text(replaceLabel) }
+            },
+            dismissButton = {
+                TextButton(onClick = { onConfirmBarcodeRemap(false) }) { Text("Cancel") }
+            }
+        )
+    }
+
     // ----------------------------------------------------------------------
 
     Scaffold(
@@ -490,7 +586,61 @@ fun FoodEditorScreen(
                         }
                     }
                 }
+                item {
+                    if (state.foodId != null) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
+                            Text("Assigned barcodes", style = MaterialTheme.typography.titleMedium)
+
+                            if (state.assignedBarcodes.isEmpty()) {
+                                Text(
+                                    "None",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                state.assignedBarcodes.forEach { code ->
+
+                                    var confirmOpen by remember(code) { mutableStateOf(false) }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = code,
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        TextButton(onClick = { confirmOpen = true }) {
+                                            Text("Unassign")
+                                        }
+                                    }
+
+                                    if (confirmOpen) {
+                                        AlertDialog(
+                                            onDismissRequest = { confirmOpen = false },
+                                            title = { Text("Unassign barcode?") },
+                                            text = { Text("Remove barcode $code from this food?") },
+                                            confirmButton = {
+                                                TextButton(
+                                                    onClick = {
+                                                        confirmOpen = false
+                                                        onUnassignBarcode(code)
+                                                    }
+                                                ) { Text("Unassign") }
+                                            },
+                                            dismissButton = {
+                                                TextButton(
+                                                    onClick = { confirmOpen = false }
+                                                ) { Text("Cancel") }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 item {
                     ServingSection(
                         servingSize = state.servingSize,
@@ -682,6 +832,12 @@ fun FoodEditorScreen(
     // ----------------------------------------------------------------------
 }
 
+/**
+ * Simple section header used in the editor form.
+ *
+ * @param title Primary label for the section.
+ * @param subtitle Optional supporting text shown below [title].
+ */
 @Composable
 private fun SectionHeader(
     title: String,
@@ -699,6 +855,16 @@ private fun SectionHeader(
     }
 }
 
+/**
+ * Editable nutrient row.
+ *
+ * Shows the nutrient name/unit and a single editable amount field, plus a remove action.
+ *
+ * Notes:
+ * - [isChanged] is purely a visual hint and does not mutate state.
+ * - [onAmountChange] should update the backing row value in the state owner.
+ * - [onRemove] should remove the nutrient row from the state owner.
+ */
 @Composable
 private fun NutrientRowEditor(
     row: NutrientRowUi,
@@ -757,6 +923,13 @@ private fun NutrientRowEditor(
     }
 }
 
+/**
+ * One row in the “Add nutrient” search results list.
+ *
+ * Supports:
+ * - Adding the nutrient to the food (disabled when already added)
+ * - Opening alias management via an overflow menu
+ */
 @Composable
 private fun NutrientSearchResultRow(
     item: NutrientSearchResultUi,
@@ -815,6 +988,22 @@ private fun NutrientSearchResultRow(
     }
 }
 
+/**
+ * Serving / measurement section.
+ *
+ * Shows serving size + unit, then either:
+ * - mass bridge (grams per serving-unit) for PER_100G style foods, or
+ * - volume bridge (mL per serving) for PER_100ML style foods.
+ *
+ * Volume bridge behavior:
+ * - `mlPerServingUnit` is the canonical “mL per 1 serving-unit”.
+ * - The UI exposes an editable “mL per serving” total, computed as:
+ *   `servingSize × mlPerServingUnit`.
+ * - When the user edits the total mL, this section converts it back into the canonical bridge:
+ *   `mlPerServingUnit = (totalMl / servingSize)`.
+ *
+ * @param basisType Determines whether the UI should prefer the volume bridge (PER_100ML) vs mass.
+ */
 @Composable
 private fun ServingSection(
     servingSize: String,
@@ -1055,6 +1244,11 @@ private fun ServingSection(
 //}
 
 @OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Dropdown for selecting the serving unit (e.g., serving, cup, tbsp).
+ *
+ * Uses the Material3 exposed dropdown pattern.
+ */
 @Composable
 private fun ServingUnitDropdown(
     value: ServingUnit,
@@ -1148,11 +1342,13 @@ private fun FoodEditorBottomBar(
     }
 }
 
-// --- UI labels (keep these local; change later if you want nicer names) ---
+/** UI-only label helpers (intentionally local to this file). */
 
 private fun NutrientCategory.labelForUi(): String = name.replace('_', ' ').lowercase()
     .replaceFirstChar { it.uppercase() }
 
+/** Formats a [NutrientUnit] enum name into a compact lowercase label for UI. */
 private fun NutrientUnit.labelForUi(): String = name.lowercase()
 
+/** Convenience label for a nutrient row's category in UI text. */
 private fun NutrientRowUi.categoryLabelForUi(): String = category.labelForUi()

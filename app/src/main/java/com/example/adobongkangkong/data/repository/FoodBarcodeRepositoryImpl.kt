@@ -43,4 +43,8 @@ class FoodBarcodeRepositoryImpl @Inject constructor(
     override suspend fun upsertAndTouch(entity: FoodBarcodeEntity, nowEpochMs: Long) {
         dao.upsertAndTouch(entity, nowEpochMs)
     }
+
+    override suspend fun getAllBarcodesForFood(foodId: Long): List<FoodBarcodeEntity> {
+        return dao.getAllForFood(foodId)
+    }
 }

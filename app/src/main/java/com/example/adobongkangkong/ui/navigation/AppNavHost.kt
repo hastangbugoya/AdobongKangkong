@@ -3,7 +3,6 @@ package com.example.adobongkangkong.ui.navigation
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -19,7 +18,6 @@ import com.example.adobongkangkong.ui.heatmap.HeatmapScreen
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
-import com.example.adobongkangkong.ui.startup.StartupViewModel
 import java.time.LocalDate
 
 @Composable
@@ -35,6 +33,18 @@ fun AppNavHost(
         startDestination = startDestination,
         modifier = modifier
     ) {
+
+        fun closeFoodEditor() {
+            // If Foods.list exists in back stack, go there
+            val popped = navController.popBackStack(NavRoutes.Foods.list, inclusive = false)
+
+            // If not (e.g. opened editor from Dashboard), navigate to list as the landing page
+            if (!popped) {
+                navController.navigate(NavRoutes.Foods.list) {
+                    launchSingleTop = true
+                }
+            }
+        }
 
         composable("startup") {
             StartupScreen(
@@ -170,43 +180,50 @@ fun AppNavHost(
             val barcode = entry.arguments?.getString("barcode").orEmpty()
 
             FoodsListScreen(
-                onBack = {
-                    navController.popBackStack()
-                },
-
-                // User picks an existing food → assign barcode
+                onBack = { navController.popBackStack() },
                 onEditFood = { pickedFoodId ->
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("barcode_assign_foodId", pickedFoodId)
-
-                    navController.popBackStack()
+                    // Go straight to the editor for that food and carry the barcode as a query param.
+                    navController.navigate(NavRoutes.Foods.edit(pickedFoodId, barcode)) {
+                        // Remove the picker from back stack so back goes where it used to.
+                        popUpTo(NavRoutes.Foods.pickBarcode) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 },
-
-                // Disabled in picker mode
                 onEditRecipe = { /* no-op */ },
                 onCreateFood = { /* no-op */ },
                 onCreateRecipe = { /* no-op */ }
             )
         }
-
-
         composable(
             route = NavRoutes.Foods.edit,
-            arguments = listOf(navArgument("foodId") { type = NavType.LongType })
+            arguments = listOf(
+                navArgument("foodId") { type = NavType.LongType },
+                navArgument("barcode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
         ) { entry ->
             val foodId = entry.arguments!!.getLong("foodId")
+            val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
+            // In Foods.edit composable (right before FoodEditorRoute call)
+            Log.d("Meow", "NAV -> Foods.edit destination. foodId=$foodId initialBarcode=$initialBarcode route=${entry.destination.route}")
 
             FoodEditorRoute(
                 foodId = foodId,
                 initialName = null,
+                initialBarcode = initialBarcode,
                 onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack() },
+                onDone = { closeFoodEditor() },
                 onAssignBarcodeToExisting = { barcode ->
                     navController.navigate(NavRoutes.Foods.pickBarcode(barcode))
                 },
                 bannerCaptureController = bannerCaptureController,
                 bannerRefreshTick = bannerRefreshTick,
+                onOpenFoodEditor = { targetFoodId ->
+                    navController.navigate(NavRoutes.Foods.edit(targetFoodId))
+                }
             )
         }
 
@@ -227,18 +244,23 @@ fun AppNavHost(
         ) { entry ->
             val initialName = entry.arguments?.getString("name").orEmpty().ifBlank { null }
             val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
-
+            // In Foods.new composable (right before FoodEditorRoute call)
+            Log.d("Meow", "NAV -> Foods.new destination. initialName=$initialName initialBarcode=$initialBarcode route=${entry.destination.route}")
             FoodEditorRoute(
                 foodId = null,
                 initialName = initialName,
                 initialBarcode = initialBarcode,
                 onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack() },
+                onDone = { closeFoodEditor() },
                 onAssignBarcodeToExisting = { barcode ->
                     navController.navigate(NavRoutes.Foods.pickBarcode(barcode))
                 },
                 bannerCaptureController = bannerCaptureController,
                 bannerRefreshTick = bannerRefreshTick,
+                // ✅ add this
+                onOpenFoodEditor = { targetFoodId ->
+                    navController.navigate(NavRoutes.Foods.edit(targetFoodId))
+                },
             )
         }
 

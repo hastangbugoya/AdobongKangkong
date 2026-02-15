@@ -4,7 +4,6 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
@@ -28,7 +27,6 @@ import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SoftDeleteFoodUseCase
-import com.example.adobongkangkong.ui.common.banner.BannerSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -85,6 +83,10 @@ class FoodEditorViewModel @Inject constructor(
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
     val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
 
+    // Pending remap when we require user confirmation
+    private var pendingRemapBarcode: String? = null
+    private var pendingRemapTargetFoodId: Long? = null
+
     @OptIn(FlowPreview::class)
     private val nutrientResultsFlow =
         nutrientQueryFlow
@@ -104,9 +106,18 @@ class FoodEditorViewModel @Inject constructor(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun load(foodId: Long?, initialName: String?) {
+    fun load(foodId: Long?, initialName: String?, force: Boolean = false) {
+        Log.d("Meow","foodId: $foodId initialName: $initialName force: $force")
         val current = _state.value
-        if (current.foodId == foodId && (foodId != null)) return
+
+        // ✅ honor force
+        if (!force) {
+            // Don't allow "new food" route to overwrite an editor already showing an existing food.
+            if (foodId == null && current.foodId != null) return
+
+            // If we’re already showing this same existing food, no-op.
+            if (current.foodId == foodId && (foodId != null)) return
+        }
 
         viewModelScope.launch {
             val flags = if (foodId != null) flagsRepo.get(foodId) else null
@@ -147,6 +158,11 @@ class FoodEditorViewModel @Inject constructor(
                             }
                         }
                     }
+
+            val assignedBarcodes = if (foodId != null) {
+                    // You may need to rename this depending on your repo API.
+                    foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
+                } else emptyList()
 
             _state.value = current.copy(
                 foodId = foodId,
@@ -198,7 +214,12 @@ class FoodEditorViewModel @Inject constructor(
                 favorite = flags?.favorite ?: false,
                 eatMore = flags?.eatMore ?: false,
                 limit = flags?.limit ?: false,
+                isSaving = false,
+                errorMessage = null,
                 hasUnsavedChanges = false,
+                assignedBarcodes = assignedBarcodes,
+                barcodeActionMessage = null,
+                scannedBarcode = if (foodId == null) current.scannedBarcode else ""
             )
         }
     }
@@ -212,6 +233,182 @@ class FoodEditorViewModel @Inject constructor(
             mlPerServingUnit = if (type == BasisType.PER_100G) "" else it.mlPerServingUnit,
         )
     } }
+
+    fun dismissBarcodeFallback() {
+        update {
+            it.copy(
+                isBarcodeFallbackOpen = false,
+                barcodeFallbackMessage = null,
+                barcodeFallbackCreateName = "",
+                barcodeAlreadyAssignedFoodId = null
+            )
+        }
+    }
+
+    fun onBarcodeFallbackCreateNameChange(v: String) {
+        update { it.copy(barcodeFallbackCreateName = v) }
+    }
+
+    fun barcodeFallbackAssignExisting() {
+        val code = _state.value.scannedBarcode.trim()
+        if (code.isBlank()) return
+
+        // Close the fallback dialog and route to picker
+        update { it.copy(isBarcodeFallbackOpen = false) }
+        assignBarcodeToExistingFlow.value = code
+    }
+
+    fun barcodeFallbackCreateMinimalFood() {
+        val barcode = _state.value.scannedBarcode.trim()
+        val name = _state.value.barcodeFallbackCreateName.trim()
+        if (barcode.isBlank() || name.isBlank()) return
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            try {
+                update { it.copy(isSaving = true, errorMessage = null) }
+
+                // Minimal food: neutral serving, no nutrients
+                val stableId = UUID.randomUUID().toString()
+                val food = Food(
+                    id = 0L,
+                    name = name,
+                    brand = null,
+                    servingSize = 1.0,
+                    servingUnit = ServingUnit.SERVING,
+                    gramsPerServingUnit = null,
+                    mlPerServingUnit = null,
+                    servingsPerPackage = null,
+                    isRecipe = false,
+                    stableId = stableId,
+                    isLowSodium = null
+                )
+
+                val newFoodId = saveFoodWithNutrients(food, emptyList())
+
+                // Upsert mapping (may conflict → confirm first)
+                val existing = foodBarcodeRepo.getByBarcode(barcode)
+                if (existing != null && existing.foodId != newFoodId) {
+                    update {
+                        it.copy(
+                            isBarcodeFallbackOpen = false,
+                            barcodeRemapDialog = BarcodeRemapDialogState(
+                                barcode = barcode,
+                                fromFoodId = existing.foodId,
+                                toFoodId = newFoodId,
+                                fromSource = existing.source
+                            )
+                        )
+                    }
+                    pendingRemapTargetFoodId = newFoodId
+                    pendingRemapBarcode = barcode
+                    return@launch
+                }
+
+                // No conflict: write mapping immediately
+                foodBarcodeRepo.upsertAndTouch(
+                    entity = FoodBarcodeEntity(
+                        barcode = barcode,
+                        foodId = newFoodId,
+                        source = BarcodeMappingSource.USER_ASSIGNED,
+                        usdaFdcId = null,
+                        usdaPublishedDateIso = null,
+                        assignedAtEpochMs = now,
+                        lastSeenAtEpochMs = now
+                    ),
+                    nowEpochMs = now
+                )
+
+                // Clean UI + open editor for new food
+                update {
+                    it.copy(
+                        isBarcodeFallbackOpen = false,
+                        barcodeFallbackMessage = null,
+                        barcodeFallbackCreateName = "",
+                        pendingUsdaSearchJson = null,
+                        barcodePickItems = emptyList(),
+                        errorMessage = null,
+                        isBarcodeScannerOpen = false
+                    )
+                }
+
+                load(foodId = newFoodId, initialName = null)
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to create food.") }
+            } finally {
+                update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    fun unassignBarcode(barcode: String) {
+        val foodId = _state.value.foodId ?: return
+        val code = barcode.trim()
+        if (code.isBlank()) return
+
+        viewModelScope.launch {
+            try {
+                foodBarcodeRepo.deleteByBarcode(code)
+
+                // Refresh assigned barcodes for this food
+                val refreshed = foodBarcodeRepo
+                    .getAllBarcodesForFood(foodId)
+                    .map { it.barcode }
+
+                update {
+                    it.copy(
+                        assignedBarcodes = refreshed,
+                        scannedBarcode = if (it.scannedBarcode == code) "" else it.scannedBarcode
+                    )
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = "Failed to unassign barcode.") }
+            }
+        }
+    }
+
+    fun onConfirmBarcodeRemap(confirm: Boolean) {
+        val barcode = pendingRemapBarcode
+        val toFoodId = pendingRemapTargetFoodId
+
+        // Clear dialog state regardless
+        update { it.copy(barcodeRemapDialog = null) }
+        pendingRemapBarcode = null
+        pendingRemapTargetFoodId = null
+
+        if (!confirm || barcode.isNullOrBlank() || toFoodId == null) return
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+
+            foodBarcodeRepo.upsertAndTouch(
+                entity = FoodBarcodeEntity(
+                    barcode = barcode,
+                    foodId = toFoodId,
+                    source = BarcodeMappingSource.USER_ASSIGNED,
+                    usdaFdcId = null,
+                    usdaPublishedDateIso = null,
+                    assignedAtEpochMs = now,
+                    lastSeenAtEpochMs = now
+                ),
+                nowEpochMs = now
+            )
+
+            update {
+                it.copy(
+                    pendingUsdaSearchJson = null,
+                    barcodePickItems = emptyList(),
+                    errorMessage = null,
+                    isBarcodeScannerOpen = false,
+                    isBarcodeFallbackOpen = false,
+                    barcodeFallbackMessage = null,
+                    barcodeFallbackCreateName = ""
+                )
+            }
+
+            load(foodId = toFoodId, initialName = null)
+        }
+    }
 
     fun closeGroundingDialog() { update { it.copy(isGroundingDialogOpen = false) }}
 
@@ -628,9 +825,42 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     fun onBarcodeScanned(barcode: String) {
+        val cleaned = barcode.trim()
+        if (cleaned.isBlank()) return
+
         update { it.copy(isBarcodeScannerOpen = false) }
+
         viewModelScope.launch {
-            when (val r = searchUsdaByBarcode(barcode)) {
+            // ✅ NEW: local DB pre-check first
+            val existing = foodBarcodeRepo.getByBarcode(cleaned)
+            if (existing != null) {
+                update {
+                    it.copy(
+                        scannedBarcode = cleaned,
+                        isBarcodeScannerOpen = false,
+
+                        // Show the same fallback dialog, but in "conflict" mode
+                        isBarcodeFallbackOpen = true,
+                        barcodeAlreadyAssignedFoodId = existing.foodId,
+                        barcodeFallbackMessage =
+                            "Barcode already assigned to foodId=${existing.foodId}. " +
+                                    "Open that food to manage/unassign the barcode.",
+
+                        // lock down create flow when conflict exists
+                        barcodeFallbackCreateName = "",
+
+                        // cleanup
+                        pendingUsdaSearchJson = null,
+                        barcodePickItems = emptyList(),
+                        barcodeRemapDialog = null,
+                        errorMessage = null
+                    )
+                }
+                return@launch
+            }
+
+            // existing USDA behavior
+            when (val r = searchUsdaByBarcode(cleaned)) {
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {
                     update {
                         it.copy(
@@ -644,16 +874,34 @@ class FoodEditorViewModel @Inject constructor(
                         onPickBarcodeCandidate(r.candidates.first().fdcId)
                     }
                 }
-                is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked ->
-                    update { it.copy(errorMessage = r.reason) }
-                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed ->{
+
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked -> {
+                    // ✅ Better UX: "no results" should open fallback dialog (not just errorMessage)
+                    if (r.reason.contains("No results", ignoreCase = true)) {
+                        update {
+                            it.copy(
+                                scannedBarcode = cleaned,
+                                isBarcodeFallbackOpen = true,
+                                barcodeFallbackMessage = r.reason,
+                                barcodeFallbackCreateName = "",
+                                barcodeAlreadyAssignedFoodId = null
+                            )
+                        }
+                    } else {
+                        update { it.copy(errorMessage = r.reason) }
+                    }
+                }
+
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed -> {
                     update {
                         it.copy(
-                            scannedBarcode = barcode,
-                            errorMessage = r.message
+                            scannedBarcode = cleaned,
+                            isBarcodeFallbackOpen = true,
+                            barcodeFallbackMessage = r.message,
+                            barcodeFallbackCreateName = "",
+                            barcodeAlreadyAssignedFoodId = null
                         )
                     }
-                    assignBarcodeToExistingFlow.value = barcode
                 }
             }
         }
@@ -684,6 +932,52 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
+    fun assignBarcodeToCurrentFood(barcode: String) {
+        val foodId = _state.value.foodId ?: return
+        val code = barcode.trim()
+        if (code.isBlank()) return
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+
+            val existing = foodBarcodeRepo.getByBarcode(code)
+            if (existing != null && existing.foodId != foodId) {
+                // Conflict → use your existing remap confirmation flow
+                pendingRemapBarcode = code
+                pendingRemapTargetFoodId = foodId
+                update {
+                    it.copy(
+                        barcodeRemapDialog = BarcodeRemapDialogState(
+                            barcode = code,
+                            fromFoodId = existing.foodId,
+                            toFoodId = foodId,
+                            fromSource = existing.source
+                        )
+                    )
+                }
+                return@launch
+            }
+
+            // No conflict → write mapping
+            foodBarcodeRepo.upsertAndTouch(
+                entity = FoodBarcodeEntity(
+                    barcode = code,
+                    foodId = foodId,
+                    source = BarcodeMappingSource.USER_ASSIGNED,
+                    usdaFdcId = null,
+                    usdaPublishedDateIso = null,
+                    assignedAtEpochMs = now,
+                    lastSeenAtEpochMs = now
+                ),
+                nowEpochMs = now
+            )
+
+            // Refresh list shown in UI
+            val refreshed = foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
+            update { it.copy(assignedBarcodes = refreshed, scannedBarcode = code) }
+        }
+    }
+
     init {
         viewModelScope.launch {
             nutrientResultsFlow.collect { results ->
@@ -704,48 +998,63 @@ class FoodEditorViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            savedState.getStateFlow<Long?>("barcode_assign_foodId", savedState.get<Long>("barcode_assign_foodId")).collect { pickedFoodId ->
-                Log.d("Meow", "BarcodeAssign> pickedFoodId=$pickedFoodId")
-                if (pickedFoodId == null) return@collect
+            savedState.getStateFlow<Any?>("barcode_assign_foodId", null)
+                .collect { raw ->
+                    val pickedFoodId: Long = when (raw) {
+                        is Long -> raw
+                        is Int -> raw.toLong()
+                        is String -> raw.toLongOrNull() ?: return@collect
+                        else -> return@collect
+                    }
 
-                val barcode = state.value.scannedBarcode?.trim().orEmpty()
-                if (barcode.isBlank()) {
-                    // Clear the one-shot result so we don't loop.
+                    Log.d("Meow", "BarcodeAssign> pickedFoodId=$pickedFoodId (raw=$raw)")
+
+                    val barcodeFromSaved = savedState.get<String>("barcode_assign_barcode")
+                        ?.trim()
+                        .orEmpty()
+
+                    val barcode = barcodeFromSaved.ifBlank { state.value.scannedBarcode.trim() }
+
+                    // Always clear one-shot values
                     savedState["barcode_assign_foodId"] = null
-                    return@collect
-                }
+                    savedState["barcode_assign_barcode"] = null
 
-                val now = System.currentTimeMillis()
+                    if (barcode.isBlank()) {
+                        update { it.copy(errorMessage = "Missing barcode to assign.") }
+                        return@collect
+                    }
 
-                foodBarcodeRepo.upsertAndTouch(
-                    entity = FoodBarcodeEntity(
-                        barcode = barcode,
-                        foodId = pickedFoodId,
-                        source = BarcodeMappingSource.USER_ASSIGNED,
-                        usdaFdcId = null,
-                        usdaPublishedDateIso = null,
-                        assignedAtEpochMs = now,
-                        lastSeenAtEpochMs = now
-                    ),
-                    nowEpochMs = now
-                )
+                    val now = System.currentTimeMillis()
 
-                // Clear the one-shot result so we don't re-handle it.
-                savedState["barcode_assign_foodId"] = null
-
-                // Clean up any pending USDA UI state (keep minimal).
-                update {
-                    it.copy(
-                        pendingUsdaSearchJson = null,
-                        barcodePickItems = emptyList(),
-                        errorMessage = null,
-                        isBarcodeScannerOpen = false
+                    foodBarcodeRepo.upsertAndTouch(
+                        entity = FoodBarcodeEntity(
+                            barcode = barcode,
+                            foodId = pickedFoodId,
+                            source = BarcodeMappingSource.USER_ASSIGNED,
+                            usdaFdcId = null,
+                            usdaPublishedDateIso = null,
+                            assignedAtEpochMs = now,
+                            lastSeenAtEpochMs = now
+                        ),
+                        nowEpochMs = now
                     )
-                }
 
-                // Open the picked food in the editor.
-                load(foodId = pickedFoodId, initialName = null)
-            }
+                    val refreshed = foodBarcodeRepo.getAllBarcodesForFood(pickedFoodId).map { it.barcode }
+
+                    update {
+                        it.copy(
+                            scannedBarcode = barcode,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null,
+                            isBarcodeScannerOpen = false,
+                            isBarcodeFallbackOpen = false,
+                            assignedBarcodes = refreshed   // ← THIS IS MISSING
+                        )
+                    }
+
+                    load(foodId = pickedFoodId, initialName = null, true)
+                }
         }
     }
 }

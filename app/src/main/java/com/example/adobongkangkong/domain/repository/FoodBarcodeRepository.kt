@@ -37,4 +37,6 @@ interface FoodBarcodeRepository {
      * Matches DAO convenience method.
      */
     suspend fun upsertAndTouch(entity: FoodBarcodeEntity, nowEpochMs: Long)
+
+    suspend fun getAllBarcodesForFood(foodId: Long): List<FoodBarcodeEntity>
 }
