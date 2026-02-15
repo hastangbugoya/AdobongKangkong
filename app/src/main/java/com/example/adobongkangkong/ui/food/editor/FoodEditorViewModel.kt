@@ -21,7 +21,10 @@ import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
+import com.example.adobongkangkong.domain.usda.ResolveBarcodeWithUsdaUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
+import com.example.adobongkangkong.domain.usda.model.BarcodeRemapDialogState
+import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
@@ -55,6 +58,7 @@ class FoodEditorViewModel @Inject constructor(
     private val foodBarcodeRepo: FoodBarcodeRepository,
     private val softDeleteFood: SoftDeleteFoodUseCase,
     private val hardDeleteFoodIfUnused: HardDeleteFoodIfUnusedUseCase,
+    private val resolveBarcodeWithUsda: ResolveBarcodeWithUsdaUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -223,6 +227,143 @@ class FoodEditorViewModel @Inject constructor(
             )
         }
     }
+
+    fun dismissBarcodeCollision() {
+        update { it.copy(barcodeCollisionDialog = null) }
+    }
+
+    fun openExistingFromCollision() {
+        val dialog = state.value.barcodeCollisionDialog ?: return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            foodBarcodeRepo.touchLastSeen(dialog.barcode, now)
+
+            update {
+                it.copy(
+                    barcodeCollisionDialog = null,
+                    pendingUsdaSearchJson = null,
+                    barcodePickItems = emptyList(),
+                    errorMessage = null
+                )
+            }
+
+            load(foodId = dialog.existingFoodId, initialName = null, force = true)
+        }
+    }
+
+    fun remapFromCollisionProceedImport() {
+        val dialog = state.value.barcodeCollisionDialog ?: return
+        val json = state.value.pendingUsdaSearchJson ?: run {
+            update { it.copy(errorMessage = "Missing pending USDA JSON.") }
+            return
+        }
+        val fdcId = dialog.incomingFdcId ?: run {
+            update { it.copy(errorMessage = "Missing incoming fdcId.") }
+            return
+        }
+
+        viewModelScope.launch {
+            when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+                    val now = System.currentTimeMillis()
+
+                    foodBarcodeRepo.upsertAndTouch(
+                        entity = FoodBarcodeEntity(
+                            barcode = dialog.barcode,
+                            foodId = r.foodId,
+                            source = BarcodeMappingSource.USDA,
+                            usdaFdcId = r.fdcId,
+                            usdaPublishedDateIso = r.publishedDateIso ?: dialog.incomingPublishedDateIso,
+                            assignedAtEpochMs = now,
+                            lastSeenAtEpochMs = now
+                        ),
+                        nowEpochMs = now
+                    )
+
+                    update {
+                        it.copy(
+                            barcodeCollisionDialog = null,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null
+                        )
+                    }
+
+                    load(foodId = r.foodId, initialName = null, force = true)
+                }
+
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
+                    update { it.copy(errorMessage = r.reason) }
+                }
+            }
+        }
+    }
+
+    fun onResolveBarcodeCollision(action: BarcodeCollisionAction) {
+        when (action) {
+            BarcodeCollisionAction.Cancel -> dismissBarcodeCollision()
+            BarcodeCollisionAction.OpenExisting -> openExistingFromCollision()
+            BarcodeCollisionAction.Replace -> remapFromCollisionProceedImport()
+        }
+    }
+
+//    fun onResolveBarcodeCollision(action: BarcodeCollisionAction) {
+//        val dialog = _state.value.barcodeCollisionDialog ?: return
+//
+//        update { it.copy(barcodeCollisionDialog = null) }
+//
+//        when (action) {
+//            BarcodeCollisionAction.Cancel -> return
+//
+//            BarcodeCollisionAction.OpenExisting -> {
+//                viewModelScope.launch {
+//                    load(
+//                        foodId = dialog.existingFoodId,
+//                        initialName = null,
+//                        force = true
+//                    )
+//                }
+//            }
+//
+//            BarcodeCollisionAction.Replace -> {
+//                viewModelScope.launch {
+//
+//                    val json = _state.value.pendingUsdaSearchJson ?: return@launch
+//
+//                    when (
+//                        val r = importUsdaFromSearchJson(
+//                            json,
+//                            selectedFdcId = dialog.incomingFdcId
+//                        )
+//                    ) {
+//                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+//
+//                            val now = System.currentTimeMillis()
+//
+//                            foodBarcodeRepo.upsertAndTouch(
+//                                entity = FoodBarcodeEntity(
+//                                    barcode = dialog.barcode,
+//                                    foodId = r.foodId,
+//                                    source = BarcodeMappingSource.USDA,
+//                                    usdaFdcId = r.fdcId,
+//                                    usdaPublishedDateIso = r.publishedDateIso,
+//                                    assignedAtEpochMs = now,
+//                                    lastSeenAtEpochMs = now
+//                                ),
+//                                nowEpochMs = now
+//                            )
+//
+//                            load(r.foodId, null, force = true)
+//                        }
+//
+//                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
+//                            update { it.copy(errorMessage = r.reason) }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
 
     fun onPickBasisType(type: BasisType) { update {
         it.copy(
@@ -831,35 +972,33 @@ class FoodEditorViewModel @Inject constructor(
         update { it.copy(isBarcodeScannerOpen = false) }
 
         viewModelScope.launch {
-            // ✅ NEW: local DB pre-check first
+            val now = System.currentTimeMillis()
             val existing = foodBarcodeRepo.getByBarcode(cleaned)
-            if (existing != null) {
+
+            // ✅ Fast-path: existing USDA mapping → open immediately, skip USDA search/network
+            if (existing != null && existing.source == BarcodeMappingSource.USDA) {
+                foodBarcodeRepo.touchLastSeen(cleaned, now)
+
                 update {
                     it.copy(
                         scannedBarcode = cleaned,
-                        isBarcodeScannerOpen = false,
-
-                        // Show the same fallback dialog, but in "conflict" mode
-                        isBarcodeFallbackOpen = true,
-                        barcodeAlreadyAssignedFoodId = existing.foodId,
-                        barcodeFallbackMessage =
-                            "Barcode already assigned to foodId=${existing.foodId}. " +
-                                    "Open that food to manage/unassign the barcode.",
-
-                        // lock down create flow when conflict exists
-                        barcodeFallbackCreateName = "",
-
-                        // cleanup
                         pendingUsdaSearchJson = null,
                         barcodePickItems = emptyList(),
-                        barcodeRemapDialog = null,
-                        errorMessage = null
+                        isBarcodeFallbackOpen = false,
+                        barcodeFallbackMessage = null,
+                        barcodeCollisionDialog = null,
+                        errorMessage = null,
+                        isBarcodeScannerOpen = false
                     )
                 }
+
+                load(foodId = existing.foodId, initialName = null, force = true)
                 return@launch
             }
 
-            // existing USDA behavior
+            // For USER_ASSIGNED mappings, we still perform USDA search so we can present
+            // a meaningful collision prompt (with incoming candidate context) when picked.
+
             when (val r = searchUsdaByBarcode(cleaned)) {
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {
                     update {
@@ -867,7 +1006,9 @@ class FoodEditorViewModel @Inject constructor(
                             scannedBarcode = r.scannedBarcode,
                             pendingUsdaSearchJson = r.searchJson,
                             barcodePickItems = r.candidates,
-                            isBarcodeScannerOpen = false
+                            isBarcodeScannerOpen = false,
+                            errorMessage = null,
+                            barcodeCollisionDialog = null
                         )
                     }
                     if (r.candidates.size == 1) {
@@ -876,30 +1017,42 @@ class FoodEditorViewModel @Inject constructor(
                 }
 
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked -> {
-                    // ✅ Better UX: "no results" should open fallback dialog (not just errorMessage)
-                    if (r.reason.contains("No results", ignoreCase = true)) {
-                        update {
-                            it.copy(
-                                scannedBarcode = cleaned,
-                                isBarcodeFallbackOpen = true,
-                                barcodeFallbackMessage = r.reason,
-                                barcodeFallbackCreateName = "",
-                                barcodeAlreadyAssignedFoodId = null
-                            )
-                        }
-                    } else {
-                        update { it.copy(errorMessage = r.reason) }
-                    }
-                }
+                    // No results: open fallback. If user-assigned mapping exists, tell them it's mapped.
+                    val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
+                        "Barcode already assigned to a manual food (foodId=${existing.foodId}). " +
+                                "You can open it to manage/unassign, or assign this barcode elsewhere."
+                    } else r.reason
 
-                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed -> {
                     update {
                         it.copy(
                             scannedBarcode = cleaned,
                             isBarcodeFallbackOpen = true,
-                            barcodeFallbackMessage = r.message,
+                            barcodeFallbackMessage = msg,
                             barcodeFallbackCreateName = "",
-                            barcodeAlreadyAssignedFoodId = null
+                            barcodeAlreadyAssignedFoodId = existing?.foodId,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null
+                        )
+                    }
+                }
+
+                is SearchUsdaFoodsByBarcodeUseCase.Result.Failed -> {
+                    val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
+                        "Barcode already assigned to a manual food (foodId=${existing.foodId}). " +
+                                "USDA lookup failed: ${r.message}"
+                    } else r.message
+
+                    update {
+                        it.copy(
+                            scannedBarcode = cleaned,
+                            isBarcodeFallbackOpen = true,
+                            barcodeFallbackMessage = msg,
+                            barcodeFallbackCreateName = "",
+                            barcodeAlreadyAssignedFoodId = existing?.foodId,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null
                         )
                     }
                 }
@@ -913,21 +1066,128 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
+        val barcode = state.value.scannedBarcode.trim()
+        if (barcode.isBlank()) {
+            update { it.copy(errorMessage = "Missing scanned barcode.") }
+            return
+        }
+
+        // ✅ Build incoming meta from the candidate list (Option A)
+        val picked = state.value.barcodePickItems.firstOrNull { it.fdcId == fdcId }
+        if (picked == null) {
+            update { it.copy(errorMessage = "Selected candidate not found.") }
+            return
+        }
+
+        val incoming = ResolveBarcodeWithUsdaUseCase.UsdaBarcodeCandidateMeta(
+            fdcId = picked.fdcId,
+            gtinUpc = picked.gtinUpc.ifBlank { null },
+            publishedDateIso = picked.publishedDateIso,
+            modifiedDateIso = picked.modifiedDateIso,
+            description = picked.description.ifBlank { null },
+            brand = picked.brand.ifBlank { null }
+        )
+
+        fun candidateLabel(p: SearchUsdaFoodsByBarcodeUseCase.PickItem): String {
+            val name = p.description.trim()
+            val brand = p.brand.trim()
+            return when {
+                name.isBlank() && brand.isBlank() -> "USDA item (fdcId=${p.fdcId})"
+                brand.isBlank() -> name
+                name.isBlank() -> brand
+                else -> "$name ($brand)"
+            }
+        }
+
         viewModelScope.launch {
-            when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
-                is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+            when (val decision = resolveBarcodeWithUsda.resolveCandidateChosen(barcode, incoming)) {
+                is ResolveBarcodeWithUsdaUseCase.Result.ProceedToImport -> {
+                    when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
+                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+                            val now = System.currentTimeMillis()
+
+                            // ✅ Write mapping as USDA (single source of truth)
+                            foodBarcodeRepo.upsertAndTouch(
+                                entity = FoodBarcodeEntity(
+                                    barcode = barcode,
+                                    foodId = r.foodId,
+                                    source = BarcodeMappingSource.USDA,
+                                    usdaFdcId = r.fdcId,
+                                    usdaPublishedDateIso = r.publishedDateIso ?: picked.publishedDateIso,
+                                    assignedAtEpochMs = now,
+                                    lastSeenAtEpochMs = now
+                                ),
+                                nowEpochMs = now
+                            )
+
+                            update {
+                                it.copy(
+                                    isBarcodeScannerOpen = false,
+                                    pendingUsdaSearchJson = null,
+                                    barcodePickItems = emptyList(),
+                                    barcodeCollisionDialog = null,
+                                    errorMessage = null
+                                )
+                            }
+
+                            load(foodId = r.foodId, initialName = null, force = true)
+                        }
+
+                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
+                            update { it.copy(errorMessage = r.reason) }
+                        }
+                    }
+                }
+
+                is ResolveBarcodeWithUsdaUseCase.Result.OpenExisting -> {
+                    val now = System.currentTimeMillis()
+                    foodBarcodeRepo.touchLastSeen(decision.barcode, now)
+
                     update {
                         it.copy(
-                            isBarcodeScannerOpen = false,
                             pendingUsdaSearchJson = null,
                             barcodePickItems = emptyList(),
-                            errorMessage = null,
+                            barcodeCollisionDialog = null,
+                            errorMessage = null
                         )
                     }
-                    load(foodId = r.foodId, initialName = null)
+
+                    load(foodId = decision.foodId, initialName = null, force = true)
                 }
-                is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked ->
-                    update { it.copy(errorMessage = r.reason) }
+
+                is ResolveBarcodeWithUsdaUseCase.Result.NeedsCollisionPrompt -> {
+                    update {
+                        it.copy(
+                            // Keep JSON so Remap can proceed without re-search later
+                            pendingUsdaSearchJson = it.pendingUsdaSearchJson,
+
+                            // Optional: clear picker under dialog to reduce clutter
+                            barcodePickItems = emptyList(),
+
+                            barcodeCollisionDialog = BarcodeCollisionDialogState(
+                                barcode = decision.barcode,
+                                existingFoodId = decision.existingFoodId,
+                                existingSource = decision.existingSource,
+                                incomingFdcId = decision.incoming.fdcId,
+                                incomingPublishedDateIso = decision.incoming.publishedDateIso,
+                                incomingLabel = candidateLabel(picked),
+                                reason = decision.reason,
+                            ),
+                            errorMessage = null
+                        )
+                    }
+                }
+
+                is ResolveBarcodeWithUsdaUseCase.Result.Blocked -> {
+                    update {
+                        it.copy(
+                            isBarcodeFallbackOpen = true,
+                            barcodeFallbackMessage = decision.reason,
+                            barcodeFallbackCreateName = "",
+                            barcodeAlreadyAssignedFoodId = null
+                        )
+                    }
+                }
             }
         }
     }

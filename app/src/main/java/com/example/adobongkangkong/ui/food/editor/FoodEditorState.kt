@@ -1,12 +1,10 @@
 package com.example.adobongkangkong.ui.food.editor
 
-import android.net.Uri
-import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.model.requiresGramsPerServing
+import com.example.adobongkangkong.domain.usda.model.BarcodeRemapDialogState
 
 enum class GroundingMode {
     SOLID,
@@ -21,6 +19,9 @@ data class NutrientRowUi(
     val category: NutrientCategory,
     val amount: String // keep as String for text field editing
 )
+
+
+
 
 data class FoodEditorState(
     val foodId: Long? = null,
@@ -71,6 +72,8 @@ data class FoodEditorState(
     // Barcode remap confirm (when barcode already mapped to another food)
     val barcodeRemapDialog: BarcodeRemapDialogState? = null,
 
+    // ✅ NEW: barcode collision prompt (Remap / Open Existing / Cancel)
+    val barcodeCollisionDialog: BarcodeCollisionDialogState? = null,
 
     // Barcode mappings for this food (persisted)
     val assignedBarcodes: List<String> = emptyList(),
@@ -132,11 +135,3 @@ data class NutrientSearchResultUi(
     val category: NutrientCategory,
     val aliases: List<String> = emptyList()
 )
-
-
-data class BarcodeRemapDialogState(
-    val barcode: String,
-    val fromFoodId: Long,
-    val toFoodId: Long,
-    val fromSource: BarcodeMappingSource
-    )

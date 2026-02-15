@@ -9,14 +9,15 @@ class SearchUsdaFoodsByBarcodeUseCase @Inject constructor(
     private val usdaSearch: UsdaFoodsSearchService
 ) {
     suspend operator fun invoke(barcode: String): Result {
-        Log.d("Meow","SearchUsdaFoodsByBarcodeUseCase > Invoke $barcode")
+        Log.d("Meow", "SearchUsdaFoodsByBarcodeUseCase > Invoke $barcode")
         val cleaned = barcode.trim()
-        Log.d("Meow","SearchUsdaFoodsByBarcodeUseCase > barcode cleaned: $cleaned")
+        Log.d("Meow", "SearchUsdaFoodsByBarcodeUseCase > barcode cleaned: $cleaned")
         if (cleaned.isBlank()) return Result.Blocked("Blank barcode")
 
         val json = usdaSearch.searchByBarcode(cleaned)
             ?: return Result.Failed("USDA search returned null response")
-        Log.d("Meow","SearchUsdaFoodsByBarcodeUseCase> json from searchByBarcode> ${json.length}")
+        Log.d("Meow", "SearchUsdaFoodsByBarcodeUseCase> json from searchByBarcode> ${json.length}")
+
         val parsed = UsdaFoodsSearchParser.parse(json)
         val all = parsed.foods
 
@@ -37,10 +38,18 @@ class SearchUsdaFoodsByBarcodeUseCase @Inject constructor(
                         val u = it.servingSizeUnit
                         if (ss != null && !u.isNullOrBlank()) "$ss $u" else ""
                     },
-                gtinUpc = it.gtinUpc?.trim().orEmpty()
+                gtinUpc = it.gtinUpc?.trim().orEmpty(),
+
+                // ✅ NEW: required for resolver freshness rules
+                publishedDateIso = it.publishedDate?.trim().takeIf { s -> !s.isNullOrBlank() },
+                modifiedDateIso = it.modifiedDate?.trim().takeIf { s -> !s.isNullOrBlank() },
             )
         }
-        Log.d("Meow","SearchUsdaFoodsByBarcodeUseCase> Result(barcode:$cleaned jason length: ${json.length} candidate.size:${candidates.size})")
+
+        Log.d(
+            "Meow",
+            "SearchUsdaFoodsByBarcodeUseCase> Result(barcode:$cleaned jason length: ${json.length} candidate.size:${candidates.size})"
+        )
         return Result.Success(
             scannedBarcode = cleaned,
             searchJson = json,
@@ -54,6 +63,10 @@ class SearchUsdaFoodsByBarcodeUseCase @Inject constructor(
         val brand: String,
         val servingText: String,
         val gtinUpc: String,
+
+        // ✅ NEW
+        val publishedDateIso: String?,
+        val modifiedDateIso: String?,
     )
 
     sealed class Result {

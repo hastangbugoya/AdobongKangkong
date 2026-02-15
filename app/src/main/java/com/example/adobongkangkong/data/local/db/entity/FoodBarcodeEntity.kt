@@ -46,6 +46,9 @@ data class FoodBarcodeEntity(
     /** USDA publishedDate (yyyy-MM-dd) associated with this barcode (when known). */
     val usdaPublishedDateIso: String? = null,
 
+    /** USDA modifiedDate (yyyy-MM-dd) associated with this barcode (when known). */
+    val usdaModifiedDateIso: String? = null,
+
     /** When this mapping was created (USDA first seen OR user assigned). */
     val assignedAtEpochMs: Long,
 

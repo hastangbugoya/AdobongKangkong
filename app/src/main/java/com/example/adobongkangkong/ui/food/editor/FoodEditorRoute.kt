@@ -146,6 +146,16 @@ fun FoodEditorRoute(
         onOpenFoodEditor = { foodId ->
             viewModel.dismissBarcodeFallback()
             onOpenFoodEditor(foodId)
+        },
+        onDismissBarcodeCollision = viewModel::dismissBarcodeCollision,
+        onOpenExistingFromCollision = viewModel::openExistingFromCollision,
+        onRemapFromCollisionProceedImport = viewModel::remapFromCollisionProceedImport,
+        onResolveBarcodeCollision = { action ->
+            when (action) {
+                BarcodeCollisionAction.Cancel -> viewModel.dismissBarcodeCollision()
+                BarcodeCollisionAction.OpenExisting -> viewModel.openExistingFromCollision()
+                BarcodeCollisionAction.Replace -> viewModel.remapFromCollisionProceedImport()
+            }
         }
     )
 

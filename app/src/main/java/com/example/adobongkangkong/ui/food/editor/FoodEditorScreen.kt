@@ -66,6 +66,7 @@ import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.common.sectionedByCategory
@@ -173,7 +174,11 @@ fun FoodEditorScreen(
     onOpenFoodEditor: (Long) -> Unit,
 
     onUnassignBarcode: (String) -> Unit,
+    onDismissBarcodeCollision: () -> Unit,
+    onOpenExistingFromCollision: () -> Unit,
+    onRemapFromCollisionProceedImport: () -> Unit,
 
+    onResolveBarcodeCollision: (BarcodeCollisionAction) -> Unit,
     ) {
     val attachedNutrientIds = remember(state.nutrientRows) {
         state.nutrientRows
@@ -195,7 +200,6 @@ fun FoodEditorScreen(
     }
 
     BackHandler { requestExit() }
-    // ----------------------------------------------------------------------
 
     // ---------------- Barcode picker overlay (must be inside composable) ---
     if (state.isBarcodeScannerOpen) {
@@ -291,7 +295,6 @@ fun FoodEditorScreen(
     }
 
     // ---------------- Barcode fallback: USDA failed ----------------
-// ---------------- Barcode fallback: USDA failed ----------------
     if (state.isBarcodeFallbackOpen) {
         val alreadyAssignedFoodId = state.barcodeAlreadyAssignedFoodId
         val conflict = alreadyAssignedFoodId != null
@@ -378,6 +381,51 @@ fun FoodEditorScreen(
             },
             dismissButton = {
                 TextButton(onClick = { onConfirmBarcodeRemap(false) }) { Text("Cancel") }
+            }
+        )
+    }
+
+// ---------------- Barcode collision resolution ----------------
+    val collision = state.barcodeCollisionDialog
+    if (collision != null) {
+        AlertDialog(
+            onDismissRequest = onDismissBarcodeCollision,
+            title = { Text("Barcode conflict") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Barcode: ${collision.barcode}")
+
+                    when (collision.reason) {
+                        CollisionReason.ExistingUserAssignedMapping -> {
+                            Text("This barcode is already assigned to a manually created food.")
+                        }
+
+                        CollisionReason.ExistingUsdaFdcIdMismatch -> {
+                            Text(
+                                "This barcode is mapped to a different USDA item.\n\n" +
+                                        "Incoming:\n${collision.incomingLabel}\n\n" +
+                                        "Existing foodId: ${collision.existingFoodId}"
+                            )
+                        }
+
+                        CollisionReason.ExistingMappingCorruptMissingFood -> {
+                            Text("Existing barcode mapping is invalid.")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onOpenExistingFromCollision) {
+                        Text("Open existing")
+                    }
+                    TextButton(onClick = onRemapFromCollisionProceedImport) {
+                        Text("Replace")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissBarcodeCollision) { Text("Cancel") }
             }
         )
     }

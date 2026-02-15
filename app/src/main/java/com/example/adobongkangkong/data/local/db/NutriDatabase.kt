@@ -31,7 +31,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         MealTemplatePrefsEntity::class,
         FoodBarcodeEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -151,6 +151,16 @@ abstract class NutriDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS index_foods_usdaFdcId_unique ON foods(usdaFdcId)"
                 )
+            }
+        }
+        /**
+         * v8
+         * - Add food_barcodes.usdaModifiedDateIso for USDA revision tracking on barcode mappings
+         */
+        val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add food_barcodes.usdaModifiedDateIso (nullable)
+                db.execSQL("ALTER TABLE food_barcodes ADD COLUMN usdaModifiedDateIso TEXT")
             }
         }
     }

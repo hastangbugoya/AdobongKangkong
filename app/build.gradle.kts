@@ -59,6 +59,7 @@ ksp {
 
 dependencies {
     implementation(libs.androidx.material3)
+    testImplementation(libs.junit.jupiter)
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
