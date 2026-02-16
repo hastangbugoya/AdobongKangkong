@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.ui.heatmap.model
+package com.example.adobongkangkong.ui.calendar.model
 
 data class TargetRange(
     val min: Double?,

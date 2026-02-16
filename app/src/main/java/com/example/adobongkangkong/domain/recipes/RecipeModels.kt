@@ -12,7 +12,8 @@ data class Recipe(
 
 data class RecipeIngredient(
     val foodId: Long,
-    val servings: Double
+    val servings: Double? = null,
+    val grams: Double? = null
 )
 
 fun RecipeEntity.toDomainRecipe(

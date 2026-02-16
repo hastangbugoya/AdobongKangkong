@@ -109,7 +109,12 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
         // totals for entire recipe batch
         val totals = lines.fold(NutrientMap.EMPTY) { acc, line ->
             val foodId = line.ingredientFoodId
-            val servings = line.ingredientServings
+            // ⚠️ Default null servings to 1.0.
+            // UI layer allows nullable servings during editing, but the domain draft
+            // requires a non-null Double for nutrition scaling and planner expansion.
+            // We intentionally default to 1.0 (NOT 0.0) to preserve recipe math integrity
+            // and make unexpected null states visible in the UI.
+            val servings = line.ingredientServings ?: 1.0
 
             if (servings <= 0.0) {
                 warnings += RecipeNutritionWarning.IngredientServingsNonPositive(foodId, servings)

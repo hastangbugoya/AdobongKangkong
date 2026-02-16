@@ -7,7 +7,7 @@ import com.example.adobongkangkong.domain.model.DailyNutritionTotals
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
-import com.example.adobongkangkong.ui.heatmap.model.TargetRange
+import com.example.adobongkangkong.ui.calendar.model.TargetRange
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate

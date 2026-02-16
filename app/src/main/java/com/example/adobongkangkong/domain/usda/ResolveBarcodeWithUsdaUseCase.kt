@@ -61,28 +61,45 @@ class ResolveBarcodeWithUsdaUseCase @Inject constructor(
                         reason = CollisionReason.ExistingUsdaFdcIdMismatch
                     )
                 } else {
-                    // Freshness compare (publishedDate)
+                    // Freshness compare
                     val existingPub = parseIsoDate(existing.usdaPublishedDateIso)
                     val incomingPub = parseIsoDate(incoming.publishedDateIso)
 
-                    // Conservative policy: missing/unparseable dates => do NOT overwrite
+                    // Conservative policy: missing/unparseable published dates => do NOT overwrite
                     if (existingPub == null || incomingPub == null) {
                         Result.OpenExisting(
                             barcode = code,
                             foodId = existing.foodId,
                             reason = OpenReason.ExistingUsdaNoDateConservative
                         )
-                    } else if (!incomingPub.isAfter(existingPub)) {
+                    } else if (incomingPub.isAfter(existingPub)) {
+                        Result.ProceedToImport(
+                            barcode = code,
+                            chosen = incoming
+                        )
+                    } else if (incomingPub.isBefore(existingPub)) {
                         Result.OpenExisting(
                             barcode = code,
                             foodId = existing.foodId,
                             reason = OpenReason.ExistingUsdaUpToDate
                         )
                     } else {
-                        Result.ProceedToImport(
-                            barcode = code,
-                            chosen = incoming
-                        )
+                        // published equal -> Rule C: compare modifiedDateIso (only as tie-breaker)
+                        val existingMod = parseIsoDate(existing.usdaModifiedDateIso)
+                        val incomingMod = parseIsoDate(incoming.modifiedDateIso)
+
+                        if (existingMod != null && incomingMod != null && incomingMod.isAfter(existingMod)) {
+                            Result.ProceedToImport(
+                                barcode = code,
+                                chosen = incoming
+                            )
+                        } else {
+                            Result.OpenExisting(
+                                barcode = code,
+                                foodId = existing.foodId,
+                                reason = OpenReason.ExistingUsdaUpToDate
+                            )
+                        }
                     }
                 }
             }

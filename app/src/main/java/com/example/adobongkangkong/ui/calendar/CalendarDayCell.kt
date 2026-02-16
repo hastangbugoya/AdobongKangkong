@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.ui.heatmap
+package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -12,16 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.example.adobongkangkong.ui.heatmap.model.HeatmapDay
+import com.example.adobongkangkong.ui.calendar.model.CalendarDay
 
 @Composable
-fun HeatmapDayCell(
-    day: HeatmapDay,
+fun CalendarDayCell(
+    day: CalendarDay,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
 
-    val bg = heatmapCellColor(
+    val bg = calendarCellColor(
         status = day.status,
         baseOk = colors.primary,
         baseLow = colors.error,

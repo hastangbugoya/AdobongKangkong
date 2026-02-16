@@ -25,4 +25,5 @@ abstract class MealPrepPlannerRepositoryModule {
     abstract fun bindPlannedItemRepository(
         impl: PlannedItemRepositoryImpl
     ): PlannedItemRepository
+
 }

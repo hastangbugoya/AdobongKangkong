@@ -69,7 +69,7 @@ fun DashboardScreen(
     onCreateRecipe: () -> Unit,
     onCreateFood: (String) -> Unit,
     onOpenFoods: () -> Unit,
-    onOpenHeatmap: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onOpenDayLog: (LocalDate) -> Unit = {},
     onOpenMeowLogs: () -> Unit,
     onOpenPlanner: () -> Unit,
@@ -257,7 +257,7 @@ fun DashboardScreen(
                     TextButton(onClick = onCreateRecipe) { Text("Recipes") }
                     TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
                     TextButton(onClick = onOpenFoods) { Text("Foods") }
-                    TextButton(onClick = onOpenHeatmap) { Text("Heatmap") }
+                    TextButton(onClick = onOpenCalendar) { Text("Calendar") }
                 }
             }
 

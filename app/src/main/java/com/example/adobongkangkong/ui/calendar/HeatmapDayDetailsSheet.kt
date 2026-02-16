@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.ui.heatmap
+package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,13 +15,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.adobongkangkong.ui.heatmap.model.HeatmapDay
+import com.example.adobongkangkong.ui.calendar.model.CalendarDay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @Composable
 fun HeatmapDayDetailsSheet(
-    day: HeatmapDay,
+    day: CalendarDay,
     nutrientDisplayName: String?,
     nutrientUnit: String?,
     onViewLogs: (LocalDate) -> Unit,

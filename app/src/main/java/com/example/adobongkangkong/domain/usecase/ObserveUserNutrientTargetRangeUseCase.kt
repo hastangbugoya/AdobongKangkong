@@ -2,7 +2,7 @@ package com.example.adobongkangkong.domain.usecase
 
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
-import com.example.adobongkangkong.ui.heatmap.model.TargetRange
+import com.example.adobongkangkong.ui.calendar.model.TargetRange
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map

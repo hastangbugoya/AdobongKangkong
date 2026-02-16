@@ -85,7 +85,6 @@ abstract class RepositoryModule {
         impl: FoodNutritionSnapshotRepositoryImpl
     ): FoodNutritionSnapshotRepository
 
-
     @Binds
     @Singleton
     abstract fun bindRecipeBatchLookupRepository (
@@ -118,4 +117,19 @@ abstract class RepositoryModule {
     abstract fun bindFoodBarcodeRepository(
         impl: FoodBarcodeRepositoryImpl
     ): FoodBarcodeRepository
+
+    @Binds
+    abstract fun bindPlannedItemsRangeRepository(
+        impl: com.example.adobongkangkong.data.repository.PlannedItemsRangeRepositoryImpl
+    ): com.example.adobongkangkong.domain.repository.PlannedItemsRangeRepository
+
+    @Binds
+    abstract fun bindFoodLookupRepository(
+        impl: com.example.adobongkangkong.data.repository.FoodLookupRepositoryImpl
+    ): com.example.adobongkangkong.domain.repository.FoodLookupRepository
+
+    @Binds
+    abstract fun bindRecipeHeaderLookup(
+        impl: com.example.adobongkangkong.data.repository.RecipeHeaderLookupImpl
+    ): com.example.adobongkangkong.domain.repository.RecipeHeaderLookup
 }

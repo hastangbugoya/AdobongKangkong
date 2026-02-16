@@ -34,7 +34,7 @@ class AddPlannedRecipeBatchItemUseCase @Inject constructor(
 
         val entity = PlannedItemEntity(
             mealId = mealId,
-            type = PlannedItemSource.RECIPE,
+            type = PlannedItemSource.RECIPE_BATCH,
             refId = recipeBatchId,
             grams = grams,
             servings = servings,

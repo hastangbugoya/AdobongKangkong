@@ -1,0 +1,189 @@
+package com.example.adobongkangkong.ui.calendar
+
+import android.annotation.SuppressLint
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.adobongkangkong.R
+import java.time.LocalDate
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CalendarScreen(
+    onNavigateToDayLog: (LocalDate) -> Unit,
+    onNavigateToPlannerDay: (LocalDate) -> Unit = {},
+    onBack: () -> Unit,
+    vm: CalendarViewModel = hiltViewModel()
+) {
+    val month by vm.month.collectAsState()
+    val plannedDates by vm.plannedDates.collectAsState()
+    val selectedDate by vm.selectedDate.collectAsState()
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    LaunchedEffect(selectedDate) {
+        if (selectedDate != null) sheetState.show()
+    }
+
+    Column(Modifier.fillMaxWidth()) {
+        Spacer(Modifier.size(32.dp))
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .padding(start = 8.dp, top = 8.dp)
+                .size(40.dp)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.angle_circle_left),
+                contentDescription = "Back"
+            )
+        }
+
+        Spacer(Modifier.size(8.dp))
+        MonthHeader(
+            month = month,
+            onPrevMonth = vm::goPrevMonth,
+            onNextMonth = vm::goNextMonth
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .monthSwipe(
+                    onPrev = vm::goPrevMonth,
+                    onNext = vm::goNextMonth
+                )
+        ) {
+            MonthlyCalendar(
+                month = month,
+                plannedDates = plannedDates,
+                selectedDate = selectedDate,
+                onDateClick = vm::onDateClicked,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+            Spacer(Modifier.size(12.dp))
+        }
+        val debugNeeds by vm.debugNeeds.collectAsState()
+        val debugTotals by vm.debugTotals.collectAsState()
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+        ) {
+            item {
+                TextButton(
+                    onClick = { vm.debugFetchNextNDays(7) },
+                    modifier = Modifier.padding(start = 12.dp)
+                ) {
+                    Text("Get")
+                }
+            }
+            item{
+                Text("Raw food items needs list")
+            }
+            items (items = debugNeeds) { item ->
+                Text(
+                    text = "${item.date} • ${item.foodName} • g=${item.grams ?: "-"} • s=${item.servings ?: "-"}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            item{
+                Text("Totalled food items needs list")
+            }
+            items (items = debugTotals) { item ->
+                Text(
+                    text = "${item.earliestNextPlannedDate} • ${item.foodName} • g=${item.gramsTotal ?: "-"} • ml=${item.mlTotal ?: "-"} • s=${item.unconvertedServingsTotal ?: "-"}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+
+    val date = selectedDate
+    if (date != null) {
+        ModalBottomSheet(
+            sheetState = sheetState,
+            onDismissRequest = vm::dismissDayDetails
+        ) {
+            val hasPlanner = plannedDates.contains(date)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 18.dp)
+            ) {
+                Text(date.toString())
+                Spacer(Modifier.size(12.dp))
+
+                Button(
+                    onClick = {
+                        vm.dismissDayDetails()
+                        onNavigateToPlannerDay(date)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open planner")
+                }
+
+                Spacer(Modifier.size(8.dp))
+
+                Button(
+                    onClick = {
+                        vm.dismissDayDetails()
+                        onNavigateToDayLog(date)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open day log")
+                }
+
+                if (!hasPlanner) {
+                    Spacer(Modifier.size(12.dp))
+                    Text("No planned meals for this day.")
+                }
+            }
+        }
+    }
+}
+
+@SuppressLint("ModifierFactoryUnreferencedReceiver")
+private fun Modifier.monthSwipe(
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    thresholdPx: Float = 120f
+): Modifier = pointerInput(Unit) {
+    var totalDx = 0f
+
+    detectHorizontalDragGestures(
+        onDragEnd = {
+            when {
+                totalDx > thresholdPx -> onPrev()
+                totalDx < -thresholdPx -> onNext()
+            }
+            totalDx = 0f
+        },
+        onHorizontalDrag = { _, dx ->
+            totalDx += dx
+        }
+    )
+}

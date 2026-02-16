@@ -8,9 +8,8 @@ object NavRoutes {
         // Dashboard -> DayLog uses DayLog.dayLog(date)
     }
 
-    object Heatmap {
-        const val route: String = "heatmap"
-        // Heatmap tap shows bottom sheet (UI state), but button navigates to DayLog.
+    object Calendar {
+        const val route: String = "calendar"
     }
 
     object DayLog {

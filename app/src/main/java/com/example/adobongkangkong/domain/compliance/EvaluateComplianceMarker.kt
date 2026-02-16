@@ -1,7 +1,7 @@
 package com.example.adobongkangkong.domain.compliance
 
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
-import com.example.adobongkangkong.ui.heatmap.model.TargetRange
+import com.example.adobongkangkong.ui.calendar.model.TargetRange
 
 /**
  * Generic mapping:

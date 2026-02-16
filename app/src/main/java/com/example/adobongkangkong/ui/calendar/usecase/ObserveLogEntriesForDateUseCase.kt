@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.ui.heatmap.usecase
+package com.example.adobongkangkong.ui.calendar.usecase
 
 import com.example.adobongkangkong.domain.model.LogEntry
 import com.example.adobongkangkong.domain.repository.LogRepository

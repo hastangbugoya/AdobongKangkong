@@ -8,13 +8,13 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.example.adobongkangkong.ui.calendar.CalendarScreen
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.daylog.DayLogScreen
 import com.example.adobongkangkong.ui.debug.MeowLogScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
-import com.example.adobongkangkong.ui.heatmap.HeatmapScreen
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
@@ -76,8 +76,8 @@ fun AppNavHost(
                 onOpenFoods = {
                     navController.navigate(NavRoutes.Foods.list)
                 },
-                onOpenHeatmap = {
-                    navController.navigate(NavRoutes.Heatmap.route)
+                onOpenCalendar = {
+                    navController.navigate(NavRoutes.Calendar.route)
                 },
                 onOpenDayLog = { date: LocalDate ->
                     navController.navigate(NavRoutes.DayLog.dayLog(date))
@@ -95,8 +95,8 @@ fun AppNavHost(
         // Heatmap
         // ------------------------------------------------------------
 
-        composable(NavRoutes.Heatmap.route) {
-            HeatmapScreen(
+        composable(NavRoutes.Calendar.route) {
+            CalendarScreen(
                 onNavigateToPlannerDay = { date ->
                     navController.navigate(NavRoutes.Planner.plannerDay(date.toString()))
                 },

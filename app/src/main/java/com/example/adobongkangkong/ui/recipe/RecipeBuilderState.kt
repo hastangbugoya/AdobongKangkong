@@ -9,7 +9,7 @@ data class RecipeIngredientUi(
     val foodId: Long,
     val foodName: String,
     /** Quantity expressed in the food's serving unit (e.g., 1.5 "can", 0.5 "cup"). */
-    val servings: Double,
+    val servings: Double?,
     /** Human-readable serving unit label (e.g., "can", "cup"). Optional for legacy rows. */
     val servingUnitLabel: String? = null,
     /** Convenience display: servings converted to grams using grams-per-serving, if available. */

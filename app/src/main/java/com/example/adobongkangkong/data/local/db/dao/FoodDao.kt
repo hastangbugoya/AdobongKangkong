@@ -114,4 +114,9 @@ interface FoodDao {
 
     @Query("SELECT id FROM foods WHERE id IN (:ids)")
     suspend fun getExistingFoodIds(ids: List<Long>): List<Long>
+
+    @Query("SELECT id, name FROM foods WHERE id IN (:ids)")
+    suspend fun getNamesByIds(ids: List<Long>): List<FoodIdNameRow>
 }
+
+data class FoodIdNameRow(val id: Long, val name: String)

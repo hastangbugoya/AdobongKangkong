@@ -12,7 +12,8 @@ data class RecipeHeader(
 
 data class RecipeIngredientLine(
     val ingredientFoodId: Long,
-    val ingredientServings: Double
+    val ingredientServings: Double? = null,
+    val ingredientGrams: Double? = null
 )
 interface RecipeRepository {
     suspend fun createRecipe(draft: RecipeDraft): Long // returns recipeId

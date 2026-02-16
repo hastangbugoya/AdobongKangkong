@@ -1,5 +1,9 @@
 package com.example.adobongkangkong.ui.recipe
-
+// ⚠️ Default null servings to 1.0.
+// UI layer allows nullable servings during editing, but the domain draft
+// requires a non-null Double for nutrition scaling and planner expansion.
+// We intentionally default to 1.0 (NOT 0.0) to preserve recipe math integrity
+// and make unexpected null states visible in the UI.
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -851,7 +855,9 @@ class RecipeBuilderViewModel @Inject constructor(
                             ingredients = ingredients.map {
                                 RecipeIngredientDraft(
                                     foodId = it.foodId,
-                                    ingredientServings = it.servings
+                                    // UI servings may be null; domain requires non-null.
+                                    // Default to 1.0 (never 0.0) to preserve recipe math.
+                                    ingredientServings = it.servings ?: 1.0
                                 )
                             }
                         )
@@ -950,9 +956,12 @@ class RecipeBuilderViewModel @Inject constructor(
 
             ingredientsFlow.value = ingredients.map { line ->
                 val ingFood = foodById[line.ingredientFoodId]
-                val gramsForLine = ingFood?.gramsPerServingUnitResolved()?.let { gPerServing ->
-                    (line.ingredientServings * gPerServing).coerceAtLeast(0.0)
-                }
+                val gramsForLine =
+                    line.ingredientServings?.let { servings ->
+                        ingFood?.gramsPerServingUnitResolved()?.let { gPerServing ->
+                            (servings * gPerServing).coerceAtLeast(0.0)
+                        }
+                    }
 
                 RecipeIngredientUi(
                     foodId = line.ingredientFoodId,

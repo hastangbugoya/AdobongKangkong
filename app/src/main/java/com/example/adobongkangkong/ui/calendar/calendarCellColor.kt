@@ -1,9 +1,9 @@
-package com.example.adobongkangkong.ui.heatmap
+package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.ui.graphics.Color
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 
-fun heatmapCellColor(
+fun calendarCellColor(
     status: TargetStatus,
     baseOk: Color,
     baseLow: Color,

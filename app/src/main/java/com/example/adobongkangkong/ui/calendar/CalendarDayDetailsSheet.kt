@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.ui.heatmap
+package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,13 +16,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.planner.model.PlannedDay
-import com.example.adobongkangkong.domain.planner.model.PlannedMeal
-import com.example.adobongkangkong.ui.heatmap.model.HeatmapDay
+import com.example.adobongkangkong.ui.calendar.model.CalendarDay
 import java.time.LocalDate
 
 @Composable
 fun CalendarDayDetailsSheet(
-    heatmapDay: HeatmapDay,
+    calendarDay: CalendarDay,
     nutrientDisplayName: String?,
     nutrientUnit: String?,
     plannedDay: PlannedDay?, // null => show heatmap-only behavior
@@ -35,7 +34,7 @@ fun CalendarDayDetailsSheet(
     Column(modifier = Modifier.fillMaxWidth()) {
         // Existing content (unchanged)
         HeatmapDayDetailsSheet(
-            day = heatmapDay,
+            day = calendarDay,
             nutrientDisplayName = nutrientDisplayName,
             nutrientUnit = nutrientUnit,
             onViewLogs = onViewLogs,

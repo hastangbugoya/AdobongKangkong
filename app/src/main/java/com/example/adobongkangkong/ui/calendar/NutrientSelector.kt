@@ -1,4 +1,4 @@
-package com.example.adobongkangkong.ui.heatmap
+package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth

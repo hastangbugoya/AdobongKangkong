@@ -219,4 +219,91 @@ class ResolveBarcodeWithUsdaUseCaseTest {
         r as Result.ProceedToImport
         assertEquals(111L, r.chosen.fdcId)
     }
+
+    @Test
+    fun `existing USDA same published but incoming modified newer - ProceedToImport`() = runBlocking {
+        val barcode = "0123"
+        val repo = FakeFoodBarcodeRepository(
+            mappingByBarcode = mapOf(
+                barcode to existing(
+                    barcode = barcode,
+                    foodId = 20,
+                    source = BarcodeMappingSource.USDA,
+                    usdaFdcId = 111,
+                    published = "2024-02-01"
+                ).copy(usdaModifiedDateIso = "2024-02-05")
+            )
+        )
+        val useCase = ResolveBarcodeWithUsdaUseCase(repo)
+
+        val incoming = UsdaBarcodeCandidateMeta(
+            fdcId = 111,
+            gtinUpc = barcode,
+            publishedDateIso = "2024-02-01",
+            modifiedDateIso = "2024-02-10",
+            description = "Incoming",
+            brand = "Brand"
+        )
+
+        val r = useCase.resolveCandidateChosen(barcode, incoming)
+        assertTrue(r is Result.ProceedToImport)
+    }
+
+    @Test
+    fun `existing USDA same published but incoming modified older - OpenExisting`() = runBlocking {
+        val barcode = "0123"
+        val repo = FakeFoodBarcodeRepository(
+            mappingByBarcode = mapOf(
+                barcode to existing(
+                    barcode = barcode,
+                    foodId = 21,
+                    source = BarcodeMappingSource.USDA,
+                    usdaFdcId = 111,
+                    published = "2024-02-01"
+                ).copy(usdaModifiedDateIso = "2024-02-10")
+            )
+        )
+        val useCase = ResolveBarcodeWithUsdaUseCase(repo)
+
+        val incoming = UsdaBarcodeCandidateMeta(
+            fdcId = 111,
+            gtinUpc = barcode,
+            publishedDateIso = "2024-02-01",
+            modifiedDateIso = "2024-02-05",
+            description = "Incoming",
+            brand = "Brand"
+        )
+
+        val r = useCase.resolveCandidateChosen(barcode, incoming)
+        assertTrue(r is Result.OpenExisting)
+    }
+
+    @Test
+    fun `existing USDA same published and no modified dates - OpenExisting`() = runBlocking {
+        val barcode = "0123"
+        val repo = FakeFoodBarcodeRepository(
+            mappingByBarcode = mapOf(
+                barcode to existing(
+                    barcode = barcode,
+                    foodId = 22,
+                    source = BarcodeMappingSource.USDA,
+                    usdaFdcId = 111,
+                    published = "2024-02-01"
+                )
+            )
+        )
+        val useCase = ResolveBarcodeWithUsdaUseCase(repo)
+
+        val incoming = UsdaBarcodeCandidateMeta(
+            fdcId = 111,
+            gtinUpc = barcode,
+            publishedDateIso = "2024-02-01",
+            modifiedDateIso = null,
+            description = "Incoming",
+            brand = "Brand"
+        )
+
+        val r = useCase.resolveCandidateChosen(barcode, incoming)
+        assertTrue(r is Result.OpenExisting)
+    }
 }

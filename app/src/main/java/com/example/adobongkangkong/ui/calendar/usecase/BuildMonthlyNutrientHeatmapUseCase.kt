@@ -1,12 +1,12 @@
-package com.example.adobongkangkong.ui.heatmap.usecase
+package com.example.adobongkangkong.ui.calendar.usecase
 
 import android.util.Log
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
+import com.example.adobongkangkong.ui.calendar.model.CalendarDay
+import com.example.adobongkangkong.ui.calendar.model.TargetRange
 import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObservePinnedNutrientsUseCase
-import com.example.adobongkangkong.ui.heatmap.model.HeatmapDay
-import com.example.adobongkangkong.ui.heatmap.model.TargetRange
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.YearMonth
@@ -29,7 +29,7 @@ class BuildMonthlyNutrientHeatmapUseCase @Inject constructor(
         zoneId: ZoneId,
         targetRange: TargetRange,
         nutrientKey: NutrientKey? = null
-    ): List<HeatmapDay> {
+    ): List<CalendarDay> {
 
         val resolvedKey = nutrientKey ?: observePinnedNutrients().first().firstOrNull()
         ?: return emptyList()
@@ -60,7 +60,7 @@ class BuildMonthlyNutrientHeatmapUseCase @Inject constructor(
                 println("Resolved key   = $resolvedKey")
                 println("Value          = ${totals.totalsByCode[resolvedKey]}")
             }
-            HeatmapDay(
+            CalendarDay(
                 date = date,
                 nutrientKey = resolvedKey,
                 value = value,

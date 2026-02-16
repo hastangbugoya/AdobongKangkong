@@ -1,10 +1,10 @@
-package com.example.adobongkangkong.ui.heatmap.model
+package com.example.adobongkangkong.ui.calendar.model
 
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import java.time.LocalDate
 
-data class HeatmapDay(
+data class CalendarDay(
     val date: LocalDate,
     val nutrientKey: NutrientKey,
     val value: Double?,
