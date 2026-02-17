@@ -62,7 +62,6 @@ fun AppNavHost(
             }.getOrElse { LocalDate.now() }
             ShoppingScreen(
                 startDate = startDate,
-                days = days,
                 onBack = { navController.popBackStack() }
             )
         }
