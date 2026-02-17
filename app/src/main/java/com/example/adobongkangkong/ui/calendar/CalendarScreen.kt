@@ -31,6 +31,7 @@ import java.time.LocalDate
 fun CalendarScreen(
     onNavigateToDayLog: (LocalDate) -> Unit,
     onNavigateToPlannerDay: (LocalDate) -> Unit = {},
+    onNavigateToShopping: (LocalDate) -> Unit = {},
     onBack: () -> Unit,
     vm: CalendarViewModel = hiltViewModel()
 ) {
@@ -134,6 +135,18 @@ fun CalendarScreen(
             ) {
                 Text(date.toString())
                 Spacer(Modifier.size(12.dp))
+
+                Button(
+                    onClick = {
+                        vm.dismissDayDetails()
+                        onNavigateToShopping(date) // start from selected date
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open shopping list")
+                }
+
+                Spacer(Modifier.size(8.dp))
 
                 Button(
                     onClick = {

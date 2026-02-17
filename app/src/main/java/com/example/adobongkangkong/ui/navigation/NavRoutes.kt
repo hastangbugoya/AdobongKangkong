@@ -95,6 +95,20 @@ object NavRoutes {
         const val plannerDay = "planner/{dateIso}"
         fun plannerDay(dateIso: String): String = "planner/$dateIso"
     }
+
+    object Shopping {
+        private const val BASE = "shopping"
+        private const val ARG_START = "start" // yyyy-MM-dd
+        private const val ARG_DAYS = "days"   // Int
+
+        // Pattern
+        const val route: String = "$BASE?$ARG_START={$ARG_START}&$ARG_DAYS={$ARG_DAYS}"
+
+        // Builder
+        fun shopping(startDate: LocalDate, days: Int = 7): String {
+            return "$BASE?$ARG_START=${startDate}&$ARG_DAYS=$days"
+        }
+    }
 }
 
 

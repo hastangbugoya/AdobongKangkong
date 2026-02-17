@@ -17,6 +17,7 @@ import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
+import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import java.time.LocalDate
 
@@ -44,6 +45,26 @@ fun AppNavHost(
                     launchSingleTop = true
                 }
             }
+        }
+
+        composable(
+            route = NavRoutes.Shopping.route,
+            arguments = listOf(
+                navArgument("start") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("days") { type = NavType.IntType; defaultValue = 7 }
+            )
+        ) { entry ->
+            val startIso = entry.arguments?.getString("start").orEmpty()
+            val days = entry.arguments?.getInt("days") ?: 7
+
+            val startDate = runCatching {
+                startIso.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it) } ?: LocalDate.now()
+            }.getOrElse { LocalDate.now() }
+            ShoppingScreen(
+                startDate = startDate,
+                days = days,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable("startup") {
@@ -102,6 +123,9 @@ fun AppNavHost(
                 },
                 onNavigateToDayLog = { date ->
                     navController.navigate(NavRoutes.DayLog.dayLog(date))
+                },
+                onNavigateToShopping = { startDate ->
+                    navController.navigate(NavRoutes.Shopping.shopping(startDate = startDate, days = 7))
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -309,7 +333,9 @@ fun AppNavHost(
         composable(
             route = NavRoutes.Planner.plannerDay,
             arguments = listOf(navArgument("dateIso") { type = NavType.StringType })
-        ) { backStackEntry ->
+        ) {
+
+            backStackEntry ->
             val dateIso = backStackEntry.arguments?.getString("dateIso")
                 ?.takeIf { it.isNotBlank() }
                 ?: LocalDate.now().toString()

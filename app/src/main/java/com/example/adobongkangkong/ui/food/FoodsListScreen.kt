@@ -340,7 +340,7 @@ private fun FoodRow(
 }
 
 @Composable
-internal fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
+fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
     if (flags == null) return
 
     val showFavorite = flags.favorite
