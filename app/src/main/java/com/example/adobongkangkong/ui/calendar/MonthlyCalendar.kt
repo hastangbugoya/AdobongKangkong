@@ -133,6 +133,12 @@ private fun CalendarDayCell(
         else -> MaterialTheme.colorScheme.onSurface
     }
 
+    val dotColor = when {
+        isToday -> MaterialTheme.colorScheme.onSurfaceVariant
+        isDark -> MaterialTheme.colorScheme.inverseOnSurface // because bg == inverseSurface
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Surface(
         color = backgroundColor,
         shape = shape,
@@ -163,7 +169,7 @@ private fun CalendarDayCell(
                         .size(6.dp)
                 ) {
                     Surface(
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = dotColor, // MaterialTheme.colorScheme.onSurface,
                         shape = RoundedCornerShape(50),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,
