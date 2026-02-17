@@ -11,6 +11,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -45,44 +46,49 @@ fun CalendarScreen(
         if (selectedDate != null) sheetState.show()
     }
 
-    Column(Modifier.fillMaxWidth()) {
-        Spacer(Modifier.size(32.dp))
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .padding(start = 8.dp, top = 8.dp)
-                .size(40.dp)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.angle_circle_left),
-                contentDescription = "Back"
-            )
-        }
-
-        Spacer(Modifier.size(8.dp))
-        MonthHeader(
-            month = month,
-            onPrevMonth = vm::goPrevMonth,
-            onNextMonth = vm::goNextMonth
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .monthSwipe(
-                    onPrev = vm::goPrevMonth,
-                    onNext = vm::goNextMonth
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    )
+    {
+        Column(Modifier.fillMaxWidth()) {
+            Spacer(Modifier.size(32.dp))
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .padding(start = 8.dp, top = 8.dp)
+                    .size(40.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.angle_circle_left),
+                    contentDescription = "Back"
                 )
-        ) {
-            MonthlyCalendar(
+            }
+
+            Spacer(Modifier.size(8.dp))
+            MonthHeader(
                 month = month,
-                plannedDates = plannedDates,
-                selectedDate = selectedDate,
-                onDateClick = vm::onDateClicked,
-                modifier = Modifier.padding(horizontal = 12.dp)
+                onPrevMonth = vm::goPrevMonth,
+                onNextMonth = vm::goNextMonth
             )
-            Spacer(Modifier.size(12.dp))
-        }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .monthSwipe(
+                        onPrev = vm::goPrevMonth,
+                        onNext = vm::goNextMonth
+                    )
+            ) {
+                MonthlyCalendar(
+                    month = month,
+                    plannedDates = plannedDates,
+                    selectedDate = selectedDate,
+                    onDateClick = vm::onDateClicked,
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                Spacer(Modifier.size(12.dp))
+            }
 //        val debugNeeds by vm.debugNeeds.collectAsState()
 //        val debugTotals by vm.debugTotals.collectAsState()
 //        LazyColumn(
@@ -117,6 +123,7 @@ fun CalendarScreen(
 //                )
 //            }
 //        }
+        }
     }
 
     val date = selectedDate

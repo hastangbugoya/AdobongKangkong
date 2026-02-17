@@ -28,6 +28,7 @@ import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
+import java.time.LocalDate
 
 /**
  * Quick-add logging sheet.
@@ -44,6 +45,7 @@ fun QuickAddBottomSheet(
     onDismiss: () -> Unit,
     onCreateFood: (String) -> Unit,
     onOpenFoodEditor: (foodId: Long) -> Unit = {},
+    logDate: LocalDate,
     vm: QuickAddViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
@@ -173,7 +175,7 @@ fun QuickAddBottomSheet(
                         onEditFoodInEditor = { onOpenFoodEditor(selected.id) },
                         primaryButtonLabel = "Log",
                         isPrimaryEnabled = isLogEnabled,
-                        onPrimaryAction = { vm.save(onDone = onDismiss) },
+                        onPrimaryAction = { vm.save(onDone = onDismiss, logDate = logDate) },
                         extraContent = {
                             if (selected.isRecipe) {
                                 Spacer(Modifier.height(16.dp))

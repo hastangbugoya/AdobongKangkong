@@ -89,6 +89,10 @@ fun DashboardScreen(
     val targetDraft by vm.targetDraft.collectAsState()
     val pinOptions by vm.pinOptions.collectAsState()
 
+    val selectedDate = state.date
+    val today = remember { LocalDate.now() } // or compute inline
+    val isToday = selectedDate == today
+
     val exportLauncher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.CreateDocument("application/zip")
@@ -166,7 +170,7 @@ fun DashboardScreen(
                     }
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(2.dp))
             }
         }
     }
@@ -206,7 +210,8 @@ fun DashboardScreen(
             onCreateFood = onCreateFood,
             onOpenFoodEditor = { foodId ->
                 onEditFood(foodId) // DashboardScreen callback
-            }
+            },
+            logDate = state.date
         )
     }
 
@@ -260,16 +265,39 @@ fun DashboardScreen(
                     TextButton(onClick = onOpenCalendar) { Text("Calendar") }
                 }
             }
-
             item {
-                Text(
-                    text = "Today",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.combinedClickable(
-                        onClick = {},
-                        onLongClick = { vm.devSyncNutrients() }
+                val dateLabel = state.date.toString() // or format it
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(onClick = vm::showPreviousDay) {
+                        Icon(
+                            painter = painterResource(R.drawable.angle_small_left),
+                            contentDescription = "Previous day",
+                            tint = MaterialTheme.colorScheme.onSurface // <- force visibility
+                        )
+                    }
+
+                    Text(
+                        text = if (isToday) "Today" else dateLabel,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                )
+
+                    IconButton(
+                        onClick = vm::showNextDay,
+                        enabled = state.date < LocalDate.now()
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.angle_small_right),
+                            contentDescription = "Next day",
+                            tint = MaterialTheme.colorScheme.onSurface // <- force visibility
+                        )
+                    }
+                }
             }
 
             items(
@@ -303,7 +331,7 @@ fun DashboardScreen(
                         )
 
                         TextButton(
-                            onClick = { onOpenDayLog(LocalDate.now()) }
+                            onClick = { onOpenDayLog(state.date) }
                         ) {
                             Text("View (${state.todayItems.size})")
                         }

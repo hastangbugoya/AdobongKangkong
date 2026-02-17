@@ -30,6 +30,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import javax.inject.Inject
 
 @HiltViewModel
@@ -707,7 +710,7 @@ class QuickAddViewModel @Inject constructor(
     // Save (log entry)
     // -----------------------------
 
-    fun save(onDone: () -> Unit) {
+    fun save(onDone: () -> Unit, logDate: LocalDate) {
         val food = selectedFoodFlow.value ?: return
         val servings = servingsFlow.value
 
@@ -733,14 +736,15 @@ class QuickAddViewModel @Inject constructor(
 
             try {
                 val now = Instant.now()
-
+                val timestamp = ZonedDateTime.of(logDate, java.time.LocalTime.now(), ZoneId.systemDefault()).toInstant()
+                // ✅ logs to the viewed date, at current clock time
                 val result = if (!food.isRecipe) {
                     // Regular food
                     createLogEntry.execute(
                         ref = FoodRef.Food(
                             foodId = food.id,
                         ),
-                        timestamp = now,
+                        timestamp = timestamp,
                         amountInput = amountInput,
                         recipeBatchId = null
                     )

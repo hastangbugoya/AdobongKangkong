@@ -27,6 +27,7 @@ import com.example.adobongkangkong.domain.usecase.UpsertUserNutrientTargetUseCas
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 import com.example.adobongkangkong.ui.dashboard.pinned.model.NutrientOption
+import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObserveDashboardPinOptionsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,8 @@ import java.io.OutputStream
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
+import com.example.adobongkangkong.domain.model.MacroTotals
+import com.example.adobongkangkong.domain.model.TodayLogItem
 
 /**
  * Dashboard screen state holder.
@@ -103,6 +106,20 @@ class DashboardViewModel @Inject constructor(
     private val selectedDateFlow = MutableStateFlow(LocalDate.now())
     private val rollingDaysFlow = MutableStateFlow(7)
 
+    val selectedDate: StateFlow<LocalDate> =
+        selectedDateFlow.asStateFlow()
+
+    private val zoneId = ZoneId.systemDefault()
+
+    private val macrosFlow =
+        selectedDateFlow.flatMapLatest { date ->
+            observeTodayMacrosUseCase(date = date, zoneId = zoneId)
+        }
+
+    private val logItemsFlow =
+        selectedDateFlow.flatMapLatest { date ->
+            observeTodayLogItemsUseCase(date = date, zoneId = zoneId)
+        }
 
     private val cardsFlow =
         combine(selectedDateFlow, rollingDaysFlow) { date, days -> date to days }
@@ -168,29 +185,50 @@ class DashboardViewModel @Inject constructor(
             .map { it.targetDraft }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val state: StateFlow<DashboardState> =
+    // 1) First combine 5 flows (typed overload exists)
+    private val coreStateFlow =
         combine(
-            observeTodayMacrosUseCase(),
-            observeTodayLogItemsUseCase(),
+            selectedDateFlow,
+            macrosFlow,
+            logItemsFlow,
             cardsFlow,
-            pinnedKeysFlow,
-            _overlay
-        ) { totals, items, cards, pinnedKeys, overlay ->
-            DashboardState(
+            pinnedKeysFlow
+        ) { date, totals, items, cards, pinnedKeys ->
+            CoreDash(
+                date = date,
                 totals = totals,
-                todayItems = items,
-                nutrientCards = cards,
-                pinnedKeys = pinnedKeys,
+                items = items,
+                cards = cards,
+                pinnedKeys = pinnedKeys
+            )
+        }
+
+    // 2) Then combine with overlay (typed overload for 2 flows exists)
+    val state: StateFlow<DashboardState> =
+        combine(coreStateFlow, _overlay) { core, overlay ->
+            DashboardState(
+                date = core.date,
+                totals = core.totals,
+                todayItems = core.items,
+                nutrientCards = core.cards,
+                pinnedKeys = core.pinnedKeys,
                 blockingSheet = overlay.blockingSheet,
                 blockedFoodId = overlay.blockedFoodId,
                 navigateToEditFoodId = overlay.navigateToEditFoodId,
-                settingsSheetOpen = overlay.settingsSheetOpen
+                settingsSheetOpen = overlay.settingsSheetOpen,
+                restoreConfirmOpen = overlay.restoreConfirmOpen,
+                pendingRestoreUri = overlay.pendingRestoreUri
             )
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
             DashboardState()
         )
+
+    fun setDate(date: LocalDate) {
+        if (selectedDateFlow.value == date) return
+        selectedDateFlow.value = date
+    }
 
     // region UI toggles
 
@@ -594,3 +632,11 @@ private data class DashboardOverlay(
     val pendingRestoreUri: Uri? = null
 )
 
+// Local helper (private) to avoid introducing “new public identifiers”
+private data class CoreDash(
+    val date: LocalDate,
+    val totals: MacroTotals,
+    val items: List<TodayLogItem>,
+    val cards: List<DashboardNutrientCard>,
+    val pinnedKeys: List<NutrientKey>
+)

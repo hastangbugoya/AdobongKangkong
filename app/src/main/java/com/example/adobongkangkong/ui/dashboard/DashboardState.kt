@@ -7,8 +7,10 @@ import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
+import java.time.LocalDate
 
 data class DashboardState(
+    val date: LocalDate = LocalDate.now(),
     val totals: MacroTotals = MacroTotals(),
     val todayItems: List<TodayLogItem> = emptyList(),
 

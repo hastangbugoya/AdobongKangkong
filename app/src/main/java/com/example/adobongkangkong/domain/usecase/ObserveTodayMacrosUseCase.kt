@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.usecase
 
+import com.example.adobongkangkong.core.time.dayRange
 import com.example.adobongkangkong.core.time.todayRange
 import com.example.adobongkangkong.domain.model.LogEntry
 import com.example.adobongkangkong.domain.model.MacroTotals
@@ -10,6 +11,7 @@ import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.repository.LogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 
@@ -24,9 +26,10 @@ class ObserveTodayMacrosUseCase @Inject constructor(
 ) {
 
     operator fun invoke(
+        date: LocalDate,
         zoneId: ZoneId = ZoneId.systemDefault()
     ): Flow<MacroTotals> {
-        val range = todayRange(zoneId)
+        val range = dayRange(date, zoneId)
 
         return logRepository.observeRange(range.startInclusive, range.endExclusive)
             .map { logs ->
@@ -43,4 +46,8 @@ class ObserveTodayMacrosUseCase @Inject constructor(
                 )
             }
     }
+
+    operator fun invoke(
+        zoneId: ZoneId = ZoneId.systemDefault()
+    ): Flow<MacroTotals> = invoke(LocalDate.now(zoneId), zoneId)
 }
