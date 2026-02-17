@@ -1,7 +1,9 @@
 package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -105,12 +107,38 @@ private fun CalendarDayCell(
     val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     val bg = MaterialTheme.colorScheme.surfaceVariant
 
+    val today = LocalDate.now()
+    val isToday = cell.date != null && cell.date == today
+
+    val isDark = isSystemInDarkTheme()
+
+    // Regular days: light (even in dark theme)
+    val normalBg = if (isDark) MaterialTheme.colorScheme.inverseSurface
+    else MaterialTheme.colorScheme.surface
+
+    // Today: darker than regular days (but still readable)
+    val todayBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant
+    else MaterialTheme.colorScheme.surfaceVariant
+
+    val backgroundColor = if (isToday) todayBg else normalBg
+
+    val borderStroke =
+        if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+        else null
+
+    // Make text readable on the chosen bg
+    val dayTextColor = when {
+        isToday -> MaterialTheme.colorScheme.onSurfaceVariant
+        isDark -> MaterialTheme.colorScheme.inverseOnSurface // because bg == inverseSurface
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Surface(
-        color = bg,
+        color = backgroundColor,
         shape = shape,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = border,
+        border = borderStroke,
         modifier = Modifier
             .aspectRatio(1f)
             .sizeIn(minWidth = 36.dp, minHeight = 36.dp)
@@ -123,7 +151,8 @@ private fun CalendarDayCell(
             Text(
                 text = cell.date?.dayOfMonth?.toString() ?: "",
                 style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                color = dayTextColor
             )
 
             if (cell.date != null && cell.hasPlannedMeals) {

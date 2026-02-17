@@ -22,7 +22,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -44,6 +49,7 @@ class PlannerDayViewModel @Inject constructor(
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
     val state: StateFlow<PlannerDayUiState> = _state.asStateFlow()
 
+    private val dateFlow = MutableStateFlow(_state.value.date)
     private var observeJob: Job? = null
     private var searchJob: Job? = null
 
@@ -52,20 +58,13 @@ class PlannerDayViewModel @Inject constructor(
     private var lastRemovedSnapshot: PlannedItemEntity? = null
 
     fun setDate(date: LocalDate) {
-        if (_state.value.date == date && observeJob != null) return
+        if (_state.value.date == date) return
 
+        // Update UI immediately (date strip changes instantly)
         _state.update { it.copy(date = date, isLoading = true, errorMessage = null) }
 
-        observeJob?.cancel()
-        observeJob = viewModelScope.launch {
-            try {
-                observePlannedDay(date.toString()).collect { plannedDay ->
-                    _state.update { it.copy(isLoading = false, day = plannedDay, errorMessage = null) }
-                }
-            } catch (t: Throwable) {
-                _state.update { it.copy(isLoading = false, errorMessage = t.message ?: "Failed to load plan") }
-            }
-        }
+        // Trigger the observer to switch flows (no cancel/relaunch)
+        dateFlow.value = date
     }
 
     fun onEvent(event: PlannerDayEvent) {
@@ -623,6 +622,36 @@ class PlannerDayViewModel @Inject constructor(
         // The parent meal is about to be deleted; any pending undo would fail FK restore.
         lastRemovedSnapshot = null
         _state.update { s -> if (s.undo != null) s.copy(undo = null) else s }
+    }
+
+    init {
+        observeJob = viewModelScope.launch {
+            dateFlow
+//                .distinctUntilChanged()
+                .flatMapLatest { d ->
+                    observePlannedDay(d.toString())
+                    // Optional: if anything upstream is heavy and not already on IO:
+                    // .flowOn(Dispatchers.IO)
+                }
+                .distinctUntilChanged()
+                .catch { t ->
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = t.message ?: "Failed to load plan"
+                        )
+                    }
+                }
+                .collectLatest { plannedDay ->
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            day = plannedDay,
+                            errorMessage = null
+                        )
+                    }
+                }
+        }
     }
 
 }

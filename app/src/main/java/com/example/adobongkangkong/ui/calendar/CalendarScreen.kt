@@ -83,40 +83,40 @@ fun CalendarScreen(
             )
             Spacer(Modifier.size(12.dp))
         }
-        val debugNeeds by vm.debugNeeds.collectAsState()
-        val debugTotals by vm.debugTotals.collectAsState()
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-        ) {
-            item {
-                TextButton(
-                    onClick = { vm.debugFetchNextNDays(7) },
-                    modifier = Modifier.padding(start = 12.dp)
-                ) {
-                    Text("Get")
-                }
-            }
-            item{
-                Text("Raw food items needs list")
-            }
-            items (items = debugNeeds) { item ->
-                Text(
-                    text = "${item.date} • ${item.foodName} • g=${item.grams ?: "-"} • s=${item.servings ?: "-"}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            item{
-                Text("Totalled food items needs list")
-            }
-            items (items = debugTotals) { item ->
-                Text(
-                    text = "${item.earliestNextPlannedDate} • ${item.foodName} • g=${item.gramsTotal ?: "-"} • ml=${item.mlTotal ?: "-"} • s=${item.unconvertedServingsTotal ?: "-"}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
+//        val debugNeeds by vm.debugNeeds.collectAsState()
+//        val debugTotals by vm.debugTotals.collectAsState()
+//        LazyColumn(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(horizontal = 12.dp)
+//        ) {
+//            item {
+//                TextButton(
+//                    onClick = { vm.debugFetchNextNDays(7) },
+//                    modifier = Modifier.padding(start = 12.dp)
+//                ) {
+//                    Text("Get")
+//                }
+//            }
+//            item{
+//                Text("Raw food items needs list")
+//            }
+//            items (items = debugNeeds) { item ->
+//                Text(
+//                    text = "${item.date} • ${item.foodName} • g=${item.grams ?: "-"} • s=${item.servings ?: "-"}",
+//                    style = MaterialTheme.typography.bodySmall
+//                )
+//            }
+//            item{
+//                Text("Totalled food items needs list")
+//            }
+//            items (items = debugTotals) { item ->
+//                Text(
+//                    text = "${item.earliestNextPlannedDate} • ${item.foodName} • g=${item.gramsTotal ?: "-"} • ml=${item.mlTotal ?: "-"} • s=${item.unconvertedServingsTotal ?: "-"}",
+//                    style = MaterialTheme.typography.bodySmall
+//                )
+//            }
+//        }
     }
 
     val date = selectedDate

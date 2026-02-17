@@ -21,9 +21,9 @@ data class PlannerDayUiState(
 ) {
     val mealsBySlot: Map<MealSlot, List<PlannedMeal>>
         get() {
-            val base = MealSlot.entries.associateWith { emptyList<PlannedMeal>() }
-            val actual = day?.mealsBySlot ?: emptyMap()
-            return base.toMutableMap().apply { putAll(actual) }
+            val actual = day?.mealsBySlot.orEmpty()
+            if (actual.size == MealSlot.entries.size) return actual
+            return MealSlot.entries.associateWith { slot -> actual[slot].orEmpty() }
         }
 }
 

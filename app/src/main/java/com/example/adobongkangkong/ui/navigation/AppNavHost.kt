@@ -345,12 +345,7 @@ fun AppNavHost(
             PlannerDayRoute(
                 date = date,
                 onBack = { navController.popBackStack() },
-                onPickDate = { /* TODO: date picker later */ },
-                onNavigateToDate = { newDate ->
-                    navController.navigate(NavRoutes.Planner.plannerDay(newDate.toString())) {
-                        launchSingleTop = true
-                    }
-                }
+                onPickDate = { /* TODO */ }
             )
         }
 

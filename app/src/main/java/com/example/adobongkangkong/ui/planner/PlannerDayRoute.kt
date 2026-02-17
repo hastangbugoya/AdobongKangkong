@@ -10,7 +10,6 @@ fun PlannerDayRoute(
     date: LocalDate,
     onBack: () -> Unit,
     onPickDate: (LocalDate) -> Unit,
-    onNavigateToDate: (LocalDate) -> Unit,
     viewModel: PlannerDayViewModel = hiltViewModel()
 ) {
     LaunchedEffect(date) {
@@ -27,11 +26,12 @@ fun PlannerDayRoute(
                 PlannerDayEvent.PickDate ->
                     onPickDate(viewModel.state.value.date)
 
+                // ✅ Option 1: do NOT navigate; just update VM date
                 PlannerDayEvent.PrevDay ->
-                    onNavigateToDate(viewModel.state.value.date.minusDays(1))
+                    viewModel.setDate(viewModel.state.value.date.minusDays(1))
 
                 PlannerDayEvent.NextDay ->
-                    onNavigateToDate(viewModel.state.value.date.plusDays(1))
+                    viewModel.setDate(viewModel.state.value.date.plusDays(1))
 
                 // Not navigating yet
                 is PlannerDayEvent.OpenMeal -> {
