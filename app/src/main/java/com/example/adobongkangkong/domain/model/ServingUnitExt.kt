@@ -194,7 +194,7 @@ fun gramsToVolume(grams: Double, unit: ServingUnit, densityGPerMl: Double): Doub
 // Canonical constants
 // --------------------
 
-private fun ServingUnit.mlPerUnit(): Double = when (this) {
+fun ServingUnit.mlPerUnit(): Double = when (this) {
     // Metric
     ServingUnit.ML -> 1.0
     ServingUnit.L -> 1000.0
@@ -231,7 +231,7 @@ private fun ServingUnit.mlPerUnit(): Double = when (this) {
     )
 }
 
-private fun ServingUnit.gPerUnit(): Double = when (this) {
+fun ServingUnit.gPerUnit(): Double = when (this) {
     ServingUnit.MG -> 0.001
     ServingUnit.G -> 1.0
     ServingUnit.KG -> 1000.0

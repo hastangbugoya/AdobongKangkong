@@ -4,7 +4,28 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import com.example.adobongkangkong.domain.model.NutrientUnit
-
+/**
+ * Resolves the "grams per serving" bridge value without modifying the canonical nutrient basis.
+ *
+ * Canonical nutrients are controlled strictly by BasisType:
+ *
+ * - USDA_REPORTED_SERVING → nutrients stored per 1 reported serving
+ * - PER_100G               → nutrients stored per 100 g
+ * - PER_100ML              → nutrients stored per 100 mL
+ *
+ * This use case does NOT change BasisType.
+ * It only ensures a usable gramsPerServing exists when possible.
+ *
+ * Resolution rules:
+ *
+ * 1) If gramsPerServing already exists → return as-is.
+ * 2) If gramsPerServing is null but mlPerServing exists →
+ *      derive grams using water density (1 mL = 1 g).
+ *      Mark as ESTIMATED_WATER_DENSITY.
+ * 3) If neither exists → return null.
+ *
+ * The derived value is a conversion bridge, not canonical nutrient data.
+ */
 @Entity(
     tableName = "food_nutrients",
     primaryKeys = ["foodId", "nutrientId", "basisType"],

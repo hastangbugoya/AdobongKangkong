@@ -3,6 +3,7 @@ package com.example.adobongkangkong.domain.logging
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.LogEntry
+import com.example.adobongkangkong.domain.model.gPerUnit
 import com.example.adobongkangkong.domain.nutrition.ComputeRecipeBatchNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.toRecipe
@@ -69,10 +70,20 @@ class CreateLogEntryUseCase @Inject constructor(
         val food = foodRepository.getById(foodId)
             ?: return Result.Error("Food not found")
 
+        // ✅ Resolve grams-per-serving if possible:
+        // - If user already set gramsPerServingUnit, use it.
+        // - Else if the serving unit itself is a mass unit (g/mg/kg/oz/lb), derive it from servingSize.
+        val resolvedGramsPerServingUnit: Double? =
+            food.gramsPerServingUnit
+                ?: food.servingUnit.gPerUnit()?.let { gPerUnit ->
+                    val size = food.servingSize
+                    if (size > 0.0) size * gPerUnit else null
+                }
+
         // Enforce logging rules (volume → grams-per-serving)
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
-            gramsPerServingUnit = food.gramsPerServingUnit,
+            gramsPerServingUnit = resolvedGramsPerServingUnit, // ✅ use resolved
             amountInput = amountInput,
             context = UsageContext.LOGGING
         )) {
@@ -82,8 +93,9 @@ class CreateLogEntryUseCase @Inject constructor(
 
         val grams = when (amountInput) {
             is AmountInput.ByGrams -> amountInput.grams
+
             is AmountInput.ByServings -> {
-                val gpsu = food.gramsPerServingUnit
+                val gpsu = resolvedGramsPerServingUnit
                     ?: return Result.Blocked("Set grams-per-serving before logging by servings.")
                 amountInput.servings * gpsu
             }
@@ -103,7 +115,6 @@ class CreateLogEntryUseCase @Inject constructor(
             nutrients = nutrients
         )
 
-        // IMPORTANT: return the inserted id (fixes the current "0L" success id issue)
         val id = logRepository.insert(entry)
         return Result.Success(id = id)
     }
