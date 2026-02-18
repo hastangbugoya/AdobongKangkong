@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.dashboard
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
@@ -290,6 +291,7 @@ class DashboardViewModel @Inject constructor(
         foodId: Long,
         result: CreateLogEntryUseCase.Result
     ) {
+        Log.d("Meow","DashboardViewModel> handleLogResult foodId:${foodId} result:${result.toString()}")
         when (result) {
             is CreateLogEntryUseCase.Result.Success -> Unit
 

@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.logging
 
+import android.util.Log
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.LogEntry
@@ -79,10 +80,14 @@ class CreateLogEntryUseCase @Inject constructor(
         val resolvedGramsPerServingUnit: Double? =
             overrideGramsPerServingUnit
                 ?: food.gramsPerServingUnit
-                ?: food.servingUnit.gPerUnit()?.let { gPerUnit ->
-                    val size = food.servingSize
-                    if (size > 0.0) size * gPerUnit else null
+                ?: run {
+                    val gPerUnit = runCatching { food.servingUnit.gPerUnit() }.getOrNull()
+                    gPerUnit?.let { perUnit ->
+                        val size = food.servingSize
+                        if (size > 0.0) size * perUnit else null
+                    }
                 }
+
         // Enforce logging rules (volume → grams-per-serving)
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
@@ -110,7 +115,9 @@ class CreateLogEntryUseCase @Inject constructor(
         val nutrients = snapshot.nutrientsPerGram
             ?.scaledBy(grams)
             ?: return Result.Error("Food nutrition incomplete")
-
+        Log.d("Meow", "CreateLogEntryUseCase> Snapshot for foodId=${food.id}: " +
+                "hasSnapshot=${snapshot != null}, " +
+                "hasNutrientsPerGram=${snapshot?.nutrientsPerGram != null}")
         val entry = LogEntry(
             timestamp = timestamp,
             foodStableId = food.stableId,

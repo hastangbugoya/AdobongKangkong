@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.log
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
@@ -14,6 +15,7 @@ import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.gPerUnit
+import com.example.adobongkangkong.domain.model.gPerUnitOrNull
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -316,7 +318,9 @@ class QuickAddViewModel @Inject constructor(
 
                 isCreateBatchDialogOpen = flags.isDialogOpen,
                 isSaving = flags.isSaving,
-                errorMessage = flags.error
+                errorMessage = flags.error,
+                isResolveMassDialogOpen = flags.isResolveMassDialogOpen,   // ✅ ADD
+                gramsPerServingText = flags.gramsPerServingText            // ✅ ADD
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
     }
@@ -669,7 +673,7 @@ class QuickAddViewModel @Inject constructor(
                     amountInput = pending.amountInput,
                     overrideGramsPerServingUnit = overrideGpsu
                 )
-
+                Log.d("Meow", "QuickAddViewModel > createLogEntry result = $result")
                 when (result) {
                     is CreateLogEntryUseCase.Result.Success -> {
                         closeResolveMassDialog()
@@ -756,15 +760,6 @@ class QuickAddViewModel @Inject constructor(
         return ml * densityGPerMl
     }
 
-    private fun ServingUnit.gPerUnitOrNull(): Double? = when (this) {
-        ServingUnit.MG -> 0.001
-        ServingUnit.G -> 1.0
-        ServingUnit.KG -> 1000.0
-        ServingUnit.OZ -> 28.349523125
-        ServingUnit.LB -> 453.59237
-        else -> null
-    }
-
     private fun ServingUnit.mlPerUnitOrNull(): Double? = when (this) {
         // Metric
         ServingUnit.ML -> 1.0
@@ -807,7 +802,6 @@ class QuickAddViewModel @Inject constructor(
     fun save(onDone: () -> Unit, logDate: LocalDate) {
         val food = selectedFoodFlow.value ?: return
         val servings = servingsFlow.value
-
         val gramsForSave = computeGramsAmount(
             food = food,
             servings = servings,
@@ -815,7 +809,6 @@ class QuickAddViewModel @Inject constructor(
             inputUnit = inputUnitFlow.value,
             inputAmount = inputAmountFlow.value
         )
-
         val amountInput =
             if (gramsForSave != null && gramsForSave > 0.0 && inputModeFlow.value != InputMode.SERVINGS) {
                 AmountInput.ByGrams(gramsForSave)
@@ -823,7 +816,7 @@ class QuickAddViewModel @Inject constructor(
                 if (servings <= 0.0) return
                 AmountInput.ByServings(servings)
             }
-
+        Log.d("Meow","QuickAddViewModel > save START amountInput=$amountInput selected=${selectedFoodFlow.value?.name}")
         viewModelScope.launch {
             isSavingFlow.value = true
             errorFlow.value = null
@@ -888,17 +881,21 @@ class QuickAddViewModel @Inject constructor(
                         queryFlow.value = ""
                         onDone()
                     }
-                    is CreateLogEntryUseCase.Result.Blocked -> {
+                    is CreateLogEntryUseCase.Result.Blocked ->{
                         val selected = selectedFoodFlow.value
-                        val needsMassPrompt =
-                            selected != null &&
-                                    !selected.isRecipe &&
+                        Log.d("Meow","QuickAddViewModel > selected.servingUnit ${selected?.servingUnit} selected.gramsPerServingUnit:${selected?.gramsPerServingUnit} selected.mlPerServingUnit:${selected?.mlPerServingUnit} amountInput:${amountInput.toString()}")
+                        val isMissingGpsuBlock =
+                            result.message.contains("grams-per-serving", ignoreCase = true)
+
+                        val shouldOfferMlEstimate =
+                            isMissingGpsuBlock &&
+                                    selected != null &&
                                     amountInput is AmountInput.ByServings &&
                                     selected.gramsPerServingUnit == null &&
-                                    selected.servingUnit.gPerUnit() == null &&
                                     selected.mlPerServingUnit != null
 
-                        if (needsMassPrompt) {
+                        if (shouldOfferMlEstimate) {
+                            Log.d("Meow", "QuickAddViewModel > opening resolve-mass dialog ml=${selected.mlPerServingUnit}")
                             pendingResolveMass = PendingResolveMass(
                                 food = selected,
                                 timestamp = timestamp,
@@ -907,17 +904,21 @@ class QuickAddViewModel @Inject constructor(
                             gramsPerServingTextFlow.value = ""
                             isResolveMassDialogOpenFlow.value = true
                             errorFlow.value = null
-                        } else {
-                            errorFlow.value = result.message
+                            return@launch
                         }
+                        errorFlow.value = result.message
                     }
                     is CreateLogEntryUseCase.Result.Error -> {
                         errorFlow.value = result.message
                     }
                 }
             } finally {
+                Log.d("Meow","QuickAddViewModel > save FINALLY (clearing?)")
                 isSavingFlow.value = false
             }
         }
     }
 }
+
+
+

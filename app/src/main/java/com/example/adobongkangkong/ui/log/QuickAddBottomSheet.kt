@@ -63,7 +63,7 @@ fun QuickAddBottomSheet(
     )
 
     rememberScrollState()
-
+    Log.d("Meow", "QuickAddBottomSheet> resolveMassOpen=${state.isResolveMassDialogOpen}")
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
@@ -89,6 +89,56 @@ fun QuickAddBottomSheet(
                 )
 
                 Spacer(Modifier.height(12.dp))
+            }
+
+            if (state.isResolveMassDialogOpen) {
+                val food = state.selectedFood
+                val ml = food?.mlPerServingUnit
+
+                AlertDialog(
+                    onDismissRequest = vm::closeResolveMassDialog,
+                    title = { Text("Mass needed for servings") },
+                    text = {
+                        Column {
+                            Text("To log by servings, we need grams per serving.")
+                            Spacer(Modifier.height(12.dp))
+
+                            OutlinedTextField(
+                                value = state.gramsPerServingText,
+                                onValueChange = vm::onGramsPerServingTextChange,
+                                label = { Text("Grams per serving") },
+                                singleLine = true
+                            )
+
+                            if (ml != null) {
+                                Spacer(Modifier.height(12.dp))
+                                Text("Or use an estimate: 1 mL = 1 g → ${ml} g per serving.")
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Column {
+                            Button(
+                                onClick = vm::confirmEnteredGramsPerServing,
+                                enabled = state.gramsPerServingText.toDoubleOrNull()?.let { it > 0.0 } == true
+                            ) { Text("Save grams & log") }
+
+                            if (ml != null) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(onClick = vm::useEstimateJustOnce) {
+                                    Text("Use estimate just once")
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(onClick = vm::useEstimateAlways) {
+                                    Text("Use estimate always for this food")
+                                }
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = vm::closeResolveMassDialog) { Text("Cancel") }
+                    }
+                )
             }
 
             if (state.selectedFood == null) {
@@ -224,55 +274,7 @@ fun QuickAddBottomSheet(
         }
     }
 
-    if (state.isResolveMassDialogOpen) {
-        val food = state.selectedFood
-        val ml = food?.mlPerServingUnit
 
-        AlertDialog(
-            onDismissRequest = vm::closeResolveMassDialog,
-            title = { Text("Mass needed for servings") },
-            text = {
-                Column {
-                    Text("To log by servings, we need grams per serving.")
-                    Spacer(Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = state.gramsPerServingText,
-                        onValueChange = vm::onGramsPerServingTextChange,
-                        label = { Text("Grams per serving") },
-                        singleLine = true
-                    )
-
-                    if (ml != null) {
-                        Spacer(Modifier.height(12.dp))
-                        Text("Or use an estimate: 1 mL = 1 g → ${ml} g per serving.")
-                    }
-                }
-            },
-            confirmButton = {
-                Column {
-                    Button(
-                        onClick = vm::confirmEnteredGramsPerServing,
-                        enabled = state.gramsPerServingText.toDoubleOrNull()?.let { it > 0.0 } == true
-                    ) { Text("Save grams & log") }
-
-                    if (ml != null) {
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = vm::useEstimateJustOnce) {
-                            Text("Use estimate just once")
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = vm::useEstimateAlways) {
-                            Text("Use estimate always for this food")
-                        }
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = vm::closeResolveMassDialog) { Text("Cancel") }
-            }
-        )
-    }
 
 }
 
@@ -295,7 +297,7 @@ private fun FoodSearchResults(
     ) {
         items(results, key = { it.food.id }) { item ->
             val food = item.food
-            Log.d("Meow", "QuickAdd search > ${item.food.name} flages:${item.goalFlags.toString()}")
+            Log.d("Meow", "QuickAdd search > ${item.food.name} flags:${item.goalFlags.toString()}")
             ListItem(
                 headlineContent = { Text(food.name) },
                 supportingContent = {
