@@ -1,15 +1,14 @@
 package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,11 +18,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
+import com.example.adobongkangkong.R
+import com.example.adobongkangkong.ui.theme.EatMoreGreen
+import com.example.adobongkangkong.ui.theme.FavoriteYellow
+import com.example.adobongkangkong.ui.theme.LimitRed
 
 @Immutable
 data class CalendarCell(
@@ -35,6 +39,7 @@ data class CalendarCell(
 fun MonthlyCalendar(
     month: YearMonth,
     plannedDates: Set<LocalDate> = emptySet(),
+    dayIconStatusByDate: Map<LocalDate, DayIconStatus> = emptyMap(),
     modifier: Modifier = Modifier,
     selectedDate: LocalDate? = null,
     onDateClick: (LocalDate) -> Unit
@@ -60,6 +65,7 @@ fun MonthlyCalendar(
                 CalendarDayCell(
                     cell = cell,
                     isSelected = (cell.date != null && cell.date == selectedDate),
+                    iconStatus = cell.date?.let { dayIconStatusByDate[it] },
                     onClick = {
                         val date = cell.date ?: return@CalendarDayCell
                         onDateClick(date)
@@ -100,6 +106,7 @@ private fun WeekdayHeader(modifier: Modifier = Modifier) {
 private fun CalendarDayCell(
     cell: CalendarCell,
     isSelected: Boolean,
+    iconStatus: DayIconStatus?,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
@@ -107,59 +114,56 @@ private fun CalendarDayCell(
     val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     val bg = MaterialTheme.colorScheme.surfaceVariant
 
-    val today = LocalDate.now()
-    val isToday = cell.date != null && cell.date == today
-
-    val isDark = isSystemInDarkTheme()
-
-    // Regular days: light (even in dark theme)
-    val normalBg = if (isDark) MaterialTheme.colorScheme.inverseSurface
-    else MaterialTheme.colorScheme.surface
-
-    // Today: darker than regular days (but still readable)
-    val todayBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant
-    else MaterialTheme.colorScheme.surfaceVariant
-
-    val backgroundColor = if (isToday) todayBg else normalBg
-
-    val borderStroke =
-        if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
-        else null
-
-    // Make text readable on the chosen bg
-    val dayTextColor = when {
-        isToday -> MaterialTheme.colorScheme.onSurfaceVariant
-        isDark -> MaterialTheme.colorScheme.inverseOnSurface // because bg == inverseSurface
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    val dotColor = when {
-        isToday -> MaterialTheme.colorScheme.onSurfaceVariant
-        isDark -> MaterialTheme.colorScheme.inverseOnSurface // because bg == inverseSurface
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
     Surface(
-        color = backgroundColor,
+        color = bg,
         shape = shape,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = borderStroke,
+        border = border,
         modifier = Modifier
             .aspectRatio(1f)
             .sizeIn(minWidth = 36.dp, minHeight = 36.dp)
             .clickable(enabled = cell.date != null) { onClick() }
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = cell.date?.dayOfMonth?.toString() ?: "",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = dayTextColor
-            )
+            Column(
+                modifier = Modifier.align(Alignment.Center).padding(bottom = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = cell.date?.dayOfMonth?.toString() ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                val dayIcon = when (iconStatus) {
+                    DayIconStatus.OK -> painterResource(R.drawable.check_circle__1_)
+                    DayIconStatus.MISSED -> painterResource(R.drawable.exclamation)
+                    DayIconStatus.NO_DATA -> painterResource(R.drawable.interrogation)
+                    DayIconStatus.NO_TARGETS, null -> null
+                }
+
+                val tint = when (iconStatus) {
+                    DayIconStatus.OK -> EatMoreGreen
+                    DayIconStatus.MISSED -> LimitRed
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+
+                if (dayIcon != null) {
+                    Icon(
+                        painter = dayIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = tint
+                    )
+                } else {
+                    Spacer(Modifier.size(18.dp))
+                }
+            }
 
             if (cell.date != null && cell.hasPlannedMeals) {
                 Box(
@@ -169,7 +173,7 @@ private fun CalendarDayCell(
                         .size(6.dp)
                 ) {
                     Surface(
-                        color = dotColor, // MaterialTheme.colorScheme.onSurface,
+                        color = MaterialTheme.colorScheme.onSurface,
                         shape = RoundedCornerShape(50),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,

@@ -29,6 +29,8 @@ import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Quick-add logging sheet.
@@ -55,6 +57,11 @@ fun QuickAddBottomSheet(
         skipPartiallyExpanded = true
     )
 
+    val formatter = DateTimeFormatter.ofPattern(
+        "EEEE MMMM d, yyyy",
+        Locale.getDefault()
+    )
+
     rememberScrollState()
 
     ModalBottomSheet(
@@ -68,7 +75,8 @@ fun QuickAddBottomSheet(
                 .navigationBarsPadding()
         ) {
             Text("Quick Add", style = MaterialTheme.typography.titleLarge)
-
+            Spacer(Modifier.height(8.dp))
+            Text("${logDate.format(formatter)}", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(12.dp))
 
             if (state.selectedFood == null) {

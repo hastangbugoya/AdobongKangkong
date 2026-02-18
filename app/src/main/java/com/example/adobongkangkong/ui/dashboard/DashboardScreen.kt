@@ -73,6 +73,7 @@ fun DashboardScreen(
     onOpenDayLog: (LocalDate) -> Unit = {},
     onOpenMeowLogs: () -> Unit,
     onOpenPlanner: () -> Unit,
+    initialDate: LocalDate? = null,
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -112,6 +113,9 @@ fun DashboardScreen(
             }
         }
 
+    LaunchedEffect(initialDate) {
+        initialDate?.let { vm.setDate(it) }
+    }
 
     // One-shot navigation request (e.g., "needs grams-per-serving" -> edit food)
     LaunchedEffect(state.navigateToEditFoodId) {

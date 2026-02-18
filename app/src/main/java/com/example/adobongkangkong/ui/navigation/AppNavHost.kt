@@ -69,7 +69,7 @@ fun AppNavHost(
         composable("startup") {
             StartupScreen(
                 onDone = {
-                    navController.navigate("dashboard") {
+                    navController.navigate(NavRoutes.Dashboard.dashboard()) {
                         popUpTo("startup") { inclusive = true }
                         launchSingleTop = true
                     }
@@ -81,33 +81,29 @@ fun AppNavHost(
         // Dashboard (always today)
         // ------------------------------------------------------------
 
-        composable(route = NavRoutes.Dashboard.route) {
+        composable(
+            route = NavRoutes.Dashboard.route,
+            arguments = listOf(
+                navArgument("date") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { entry ->
+            val dateIso = entry.arguments?.getString("date").orEmpty()
+            val initialDate = dateIso.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it) }
+
             DashboardScreen(
-                onEditFood = { foodId ->
-                    navController.navigate(NavRoutes.Foods.edit(foodId))
-                },
-                onCreateRecipe = {
-                    // For now your recipes entry is the builder/list route.
-                    navController.navigate(NavRoutes.Recipes.route)
-                },
-                onCreateFood = { prefillName ->
-                    navController.navigate(NavRoutes.Foods.new(prefillName))
-                },
-                onOpenFoods = {
-                    navController.navigate(NavRoutes.Foods.list)
-                },
-                onOpenCalendar = {
-                    navController.navigate(NavRoutes.Calendar.route)
-                },
-                onOpenDayLog = { date: LocalDate ->
-                    navController.navigate(NavRoutes.DayLog.dayLog(date))
-                },
-                onOpenMeowLogs = {
-                    navController.navigate(NavRoutes.Debug.meowLogs)
-                },
-                onOpenPlanner = {
-                    navController.navigate(NavRoutes.Planner.plannerDay(LocalDate.now().toString()))
-                },
+                initialDate = initialDate,
+                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
+                onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
+                onCreateFood = { prefillName -> navController.navigate(NavRoutes.Foods.new(prefillName)) },
+                onOpenFoods = { navController.navigate(NavRoutes.Foods.list) },
+                onOpenCalendar = { navController.navigate(NavRoutes.Calendar.route) },
+                onOpenDayLog = { date -> navController.navigate(NavRoutes.DayLog.dayLog(date)) },
+                onOpenMeowLogs = { navController.navigate(NavRoutes.Debug.meowLogs) },
+                onOpenPlanner = { navController.navigate(NavRoutes.Planner.plannerDay(LocalDate.now().toString())) },
             )
         }
 
@@ -117,6 +113,11 @@ fun AppNavHost(
 
         composable(NavRoutes.Calendar.route) {
             CalendarScreen(
+                onNavigateToDashboard = { date ->
+                    navController.navigate(NavRoutes.Dashboard.dashboard(date)) {
+                        launchSingleTop = true
+                    }
+                },
                 onNavigateToPlannerDay = { date ->
                     navController.navigate(NavRoutes.Planner.plannerDay(date.toString()))
                 },

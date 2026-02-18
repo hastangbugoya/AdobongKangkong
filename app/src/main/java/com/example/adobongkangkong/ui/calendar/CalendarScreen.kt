@@ -33,12 +33,14 @@ fun CalendarScreen(
     onNavigateToDayLog: (LocalDate) -> Unit,
     onNavigateToPlannerDay: (LocalDate) -> Unit = {},
     onNavigateToShopping: (LocalDate) -> Unit = {},
+    onNavigateToDashboard: (LocalDate) -> Unit = {},
     onBack: () -> Unit,
     vm: CalendarViewModel = hiltViewModel()
 ) {
     val month by vm.month.collectAsState()
     val plannedDates by vm.plannedDates.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
+    val dayIconStatusByDate by vm.dayIconStatusByDate.collectAsState()
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -46,12 +48,8 @@ fun CalendarScreen(
         if (selectedDate != null) sheetState.show()
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    )
-    {
-        Column(Modifier.fillMaxWidth()) {
+    Surface(color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.size(32.dp))
             IconButton(
                 onClick = onBack,
@@ -83,6 +81,7 @@ fun CalendarScreen(
                 MonthlyCalendar(
                     month = month,
                     plannedDates = plannedDates,
+                    dayIconStatusByDate = dayIconStatusByDate,
                     selectedDate = selectedDate,
                     onDateClick = vm::onDateClicked,
                     modifier = Modifier.padding(horizontal = 12.dp)
@@ -124,62 +123,74 @@ fun CalendarScreen(
 //            }
 //        }
         }
-    }
 
-    val date = selectedDate
-    if (date != null) {
-        ModalBottomSheet(
-            sheetState = sheetState,
-            onDismissRequest = vm::dismissDayDetails
-        ) {
-            val hasPlanner = plannedDates.contains(date)
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 18.dp)
+        val date = selectedDate
+        if (date != null) {
+            ModalBottomSheet(
+                sheetState = sheetState,
+                onDismissRequest = vm::dismissDayDetails
             ) {
-                Text(date.toString())
-                Spacer(Modifier.size(12.dp))
+                val hasPlanner = plannedDates.contains(date)
 
-                Button(
-                    onClick = {
-                        vm.dismissDayDetails()
-                        onNavigateToShopping(date) // start from selected date
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 18.dp)
                 ) {
-                    Text("Open shopping list")
-                }
-
-                Spacer(Modifier.size(8.dp))
-
-                Button(
-                    onClick = {
-                        vm.dismissDayDetails()
-                        onNavigateToPlannerDay(date)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Open planner")
-                }
-
-                Spacer(Modifier.size(8.dp))
-
-                Button(
-                    onClick = {
-                        vm.dismissDayDetails()
-                        onNavigateToDayLog(date)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Open day log")
-                }
-
-                if (!hasPlanner) {
+                    Text(date.toString())
                     Spacer(Modifier.size(12.dp))
-                    Text("No planned meals for this day.")
+
+                    Button(
+                        onClick = {
+                            vm.dismissDayDetails()
+                            onNavigateToDashboard(date) // start from selected date
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open dashboard")
+                    }
+
+                    Spacer(Modifier.size(8.dp))
+
+                    Button(
+                        onClick = {
+                            vm.dismissDayDetails()
+                            onNavigateToShopping(date) // start from selected date
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open shopping list")
+                    }
+
+                    Spacer(Modifier.size(8.dp))
+
+                    Button(
+                        onClick = {
+                            vm.dismissDayDetails()
+                            onNavigateToPlannerDay(date)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open planner")
+                    }
+
+                    Spacer(Modifier.size(8.dp))
+
+                    Button(
+                        onClick = {
+                            vm.dismissDayDetails()
+                            onNavigateToDayLog(date)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open day log")
+                    }
+
+                    if (!hasPlanner) {
+                        Spacer(Modifier.size(12.dp))
+                        Text("No planned meals for this day.")
+                    }
                 }
             }
         }

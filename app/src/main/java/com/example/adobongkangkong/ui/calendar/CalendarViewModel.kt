@@ -8,30 +8,49 @@ import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.domain.usecase.ObserveDailyNutrientStatusesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import javax.inject.Inject
+
+/**
+ * Status used by the Calendar month grid to render a tiny icon per day.
+ */
+enum class DayIconStatus {
+    NO_TARGETS,
+    NO_DATA,
+    OK,
+    MISSED
+}
 
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
     private val observePlannedDaysInMonth: ObservePlannedDaysInMonthUseCase,
     private val observePlannedFoodNeeds: ObservePlannedFoodNeedsUseCase,
     private val observePlannedFoodTotals: ObservePlannedFoodTotalsUseCase,
+    private val observeDailyNutrientStatuses: ObserveDailyNutrientStatusesUseCase,
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = _month
+
+    private val zoneId = ZoneId.systemDefault()
 
     private val _selectedDate = MutableStateFlow<LocalDate?>(null)
     val selectedDate: StateFlow<LocalDate?> = _selectedDate
@@ -52,6 +71,32 @@ class CalendarViewModel @Inject constructor(
         _month
             .flatMapLatest { m -> observePlannedDaysInMonth(m) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * Month grid icon status map.
+     *
+     * Computed as one flow per day (<=31) and then merged into a map.
+     */
+    val dayIconStatusByDate: StateFlow<Map<LocalDate, DayIconStatus>> =
+        _month
+            .flatMapLatest { ym ->
+                val days = (1..ym.lengthOfMonth()).map { day -> ym.atDay(day) }
+                if (days.isEmpty()) return@flatMapLatest flowOf(emptyMap())
+
+                val perDayFlows = days.map { date ->
+                    observeDailyNutrientStatuses(date = date, zoneId = zoneId)
+                        .map { statuses ->
+                            date to statuses.toDayIconStatus()
+                        }
+                }
+
+                combine(perDayFlows) { pairsAny ->
+                    @Suppress("UNCHECKED_CAST")
+                    val pairs = pairsAny.toList() as List<Pair<LocalDate, DayIconStatus>>
+                    pairs.toMap()
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun goPrevMonth() { _month.update { it.minusMonths(1) } }
     fun goNextMonth() { _month.update { it.plusMonths(1) } }
@@ -115,4 +160,20 @@ class CalendarViewModel @Inject constructor(
                 }
         }
     }
+}
+
+private fun List<com.example.adobongkangkong.domain.model.DailyNutrientStatus>.toDayIconStatus(): DayIconStatus {
+    if (isEmpty()) return DayIconStatus.NO_TARGETS
+
+    // Ignore entries that have no active min/target/max.
+    val targeted = filter { s -> (s.min != null) || (s.target != null) || (s.max != null) }
+    if (targeted.isEmpty()) return DayIconStatus.NO_TARGETS
+
+    // Heuristic: if all consumed == 0, treat as no data.
+    // If later you expose a "hasLogs" / "logCount" signal, switch to that.
+    val hasAnyConsumed = targeted.any { it.consumed != 0.0 }
+    if (!hasAnyConsumed) return DayIconStatus.NO_DATA
+
+    val allOk = targeted.all { it.status == TargetStatus.OK }
+    return if (allOk) DayIconStatus.OK else DayIconStatus.MISSED
 }

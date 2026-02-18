@@ -3,9 +3,18 @@ package com.example.adobongkangkong.ui.navigation
 import java.time.LocalDate
 
 object NavRoutes {
+
+
     object Dashboard {
-        const val route: String = "dashboard"
-        // Dashboard -> DayLog uses DayLog.dayLog(date)
+        private const val BASE = "dashboard"
+        private const val ARG_DATE = "date" // yyyy-MM-dd
+
+        // Route pattern supports optional query
+        const val route: String = "$BASE?$ARG_DATE={$ARG_DATE}"
+
+        fun dashboard(date: LocalDate? = null): String {
+            return if (date == null) BASE else "$BASE?$ARG_DATE=$date"
+        }
     }
 
     object Calendar {
