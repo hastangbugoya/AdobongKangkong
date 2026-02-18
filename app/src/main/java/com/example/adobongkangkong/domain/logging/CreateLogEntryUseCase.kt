@@ -44,13 +44,15 @@ class CreateLogEntryUseCase @Inject constructor(
         ref: FoodRef,
         timestamp: Instant,
         amountInput: AmountInput,
-        recipeBatchId: Long? = null
+        recipeBatchId: Long? = null,
+        overrideGramsPerServingUnit: Double? = null
     ): Result {
         return when (ref) {
             is FoodRef.Food -> logFood(
                 foodId = ref.foodId,
                 timestamp = timestamp,
-                amountInput = amountInput
+                amountInput = amountInput,
+                overrideGramsPerServingUnit = overrideGramsPerServingUnit
             )
 
             is FoodRef.Recipe -> logRecipe(
@@ -65,7 +67,8 @@ class CreateLogEntryUseCase @Inject constructor(
     private suspend fun logFood(
         foodId: Long,
         timestamp: Instant,
-        amountInput: AmountInput
+        amountInput: AmountInput,
+        overrideGramsPerServingUnit: Double? = null
     ): Result {
         val food = foodRepository.getById(foodId)
             ?: return Result.Error("Food not found")
@@ -74,12 +77,12 @@ class CreateLogEntryUseCase @Inject constructor(
         // - If user already set gramsPerServingUnit, use it.
         // - Else if the serving unit itself is a mass unit (g/mg/kg/oz/lb), derive it from servingSize.
         val resolvedGramsPerServingUnit: Double? =
-            food.gramsPerServingUnit
+            overrideGramsPerServingUnit
+                ?: food.gramsPerServingUnit
                 ?: food.servingUnit.gPerUnit()?.let { gPerUnit ->
                     val size = food.servingSize
                     if (size > 0.0) size * gPerUnit else null
                 }
-
         // Enforce logging rules (volume → grams-per-serving)
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,

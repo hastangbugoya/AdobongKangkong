@@ -43,5 +43,9 @@ data class QuickAddState(
     val isCreateBatchDialogOpen: Boolean = false,
 
     val isSaving: Boolean = false,
-    val errorMessage: String? = null
-)
+    val errorMessage: String? = null,
+
+    val isResolveMassDialogOpen: Boolean = false,
+    val gramsPerServingText: String = "",
+
+    )

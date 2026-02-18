@@ -13,8 +13,10 @@ import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.gPerUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
+import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import javax.inject.Inject
@@ -43,7 +46,9 @@ class QuickAddViewModel @Inject constructor(
     private val recipeBatchDao: RecipeBatchDao,
     private val createBatchFoodFromRecipeUseCase: CreateSnapshotFoodFromRecipeUseCase,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
-) : ViewModel() {
+    private val foodRepository: FoodRepository,
+
+    ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
     private val selectedFoodFlow = MutableStateFlow<Food?>(null)
@@ -71,7 +76,16 @@ class QuickAddViewModel @Inject constructor(
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
 
+    private val isResolveMassDialogOpenFlow = MutableStateFlow(false)
+    private val gramsPerServingTextFlow = MutableStateFlow("")
 
+    private data class PendingResolveMass(
+        val food: Food,
+        val timestamp: Instant,
+        val amountInput: AmountInput
+    )
+
+    private var pendingResolveMass: PendingResolveMass? = null
     private val resultsFlow =
         queryFlow
             .debounce(150)
@@ -161,7 +175,9 @@ class QuickAddViewModel @Inject constructor(
     private data class UiFlags(
         val isDialogOpen: Boolean,
         val isSaving: Boolean,
-        val error: String?
+        val error: String?,
+        val isResolveMassDialogOpen: Boolean,
+        val gramsPerServingText: String,
     )
 
     val state: StateFlow<QuickAddState> = run {
@@ -238,12 +254,16 @@ class QuickAddViewModel @Inject constructor(
         val flagsFlow = combine(
             isCreateBatchDialogOpenFlow,
             isSavingFlow,
-            errorFlow
-        ) { isDialogOpen, isSaving, error ->
+            errorFlow,
+            isResolveMassDialogOpenFlow,
+            gramsPerServingTextFlow
+        ) { isDialogOpen, isSaving, error, isResolveMassDialogOpen, gramsPerServingText ->
             UiFlags(
                 isDialogOpen = isDialogOpen,
                 isSaving = isSaving,
-                error = error
+                error = error,
+                isResolveMassDialogOpen = isResolveMassDialogOpen,
+                gramsPerServingText = gramsPerServingText
             )
         }
 
@@ -595,6 +615,80 @@ class QuickAddViewModel @Inject constructor(
         }
     }
 
+    fun closeResolveMassDialog() {
+        isResolveMassDialogOpenFlow.value = false
+        pendingResolveMass = null
+    }
+
+    fun onGramsPerServingTextChange(text: String) {
+        gramsPerServingTextFlow.value = text
+    }
+
+    fun useEstimateJustOnce() {
+        val pending = pendingResolveMass ?: return
+        val ml = pending.food.mlPerServingUnit ?: return
+
+        retryPendingLog(overrideGpsu = ml, persistGpsu = null)
+    }
+
+    fun useEstimateAlways() {
+        val pending = pendingResolveMass ?: return
+        val ml = pending.food.mlPerServingUnit ?: return
+
+        retryPendingLog(overrideGpsu = null, persistGpsu = ml)
+    }
+
+    fun confirmEnteredGramsPerServing() {
+        val pending = pendingResolveMass ?: return
+        val grams = gramsPerServingTextFlow.value.toDoubleOrNull()
+            ?.takeIf { it > 0.0 } ?: return
+
+        retryPendingLog(overrideGpsu = null, persistGpsu = grams)
+    }
+
+    private fun retryPendingLog(
+        overrideGpsu: Double?,
+        persistGpsu: Double?
+    ) {
+        val pending = pendingResolveMass ?: return
+
+        viewModelScope.launch {
+            try {
+                // Persist if requested (Option A)
+                if (persistGpsu != null) {
+                    foodRepository.upsert(
+                        pending.food.copy(gramsPerServingUnit = persistGpsu)
+                    )
+                    // refresh local selected food so UI math updates
+                    selectedFoodFlow.value = pending.food.copy(gramsPerServingUnit = persistGpsu)
+                }
+
+                val result = createLogEntry.execute(
+                    ref = FoodRef.Food(pending.food.id),
+                    timestamp = pending.timestamp,
+                    amountInput = pending.amountInput,
+                    overrideGramsPerServingUnit = overrideGpsu
+                )
+
+                when (result) {
+                    is CreateLogEntryUseCase.Result.Success -> {
+                        closeResolveMassDialog()
+                        clearSelection()
+                        queryFlow.value = ""
+                        // NOTE: call onDone() from original save flow if needed;
+                        // easiest is to store it in pending too, if you want auto-dismiss.
+                    }
+                    is CreateLogEntryUseCase.Result.Blocked -> errorFlow.value = result.message
+                    is CreateLogEntryUseCase.Result.Error -> errorFlow.value = result.message
+                }
+            } finally {
+                isResolveMassDialogOpenFlow.value = false
+                pendingResolveMass = null
+            }
+        }
+    }
+
+
 
     // -----------------------------
     // Unit conversion helpers (QuickAdd)
@@ -736,7 +830,7 @@ class QuickAddViewModel @Inject constructor(
 
             try {
                 val now = Instant.now()
-                val timestamp = ZonedDateTime.of(logDate, java.time.LocalTime.now(), ZoneId.systemDefault()).toInstant()
+                val timestamp = ZonedDateTime.of(logDate, LocalTime.now(), ZoneId.systemDefault()).toInstant()
                 // ✅ logs to the viewed date, at current clock time
                 val result = if (!food.isRecipe) {
                     // Regular food
@@ -795,7 +889,27 @@ class QuickAddViewModel @Inject constructor(
                         onDone()
                     }
                     is CreateLogEntryUseCase.Result.Blocked -> {
-                        errorFlow.value = result.message
+                        val selected = selectedFoodFlow.value
+                        val needsMassPrompt =
+                            selected != null &&
+                                    !selected.isRecipe &&
+                                    amountInput is AmountInput.ByServings &&
+                                    selected.gramsPerServingUnit == null &&
+                                    selected.servingUnit.gPerUnit() == null &&
+                                    selected.mlPerServingUnit != null
+
+                        if (needsMassPrompt) {
+                            pendingResolveMass = PendingResolveMass(
+                                food = selected,
+                                timestamp = timestamp,
+                                amountInput = amountInput
+                            )
+                            gramsPerServingTextFlow.value = ""
+                            isResolveMassDialogOpenFlow.value = true
+                            errorFlow.value = null
+                        } else {
+                            errorFlow.value = result.message
+                        }
                     }
                     is CreateLogEntryUseCase.Result.Error -> {
                         errorFlow.value = result.message
