@@ -27,7 +27,6 @@ import java.time.format.TextStyle
 import java.util.Locale
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
-import com.example.adobongkangkong.ui.theme.FavoriteYellow
 import com.example.adobongkangkong.ui.theme.LimitRed
 
 @Immutable
@@ -103,90 +102,7 @@ private fun WeekdayHeader(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun CalendarDayCell(
-    cell: CalendarCell,
-    isSelected: Boolean,
-    iconStatus: DayIconStatus?,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(10.dp)
 
-    val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-    val bg = MaterialTheme.colorScheme.surfaceVariant
-
-    Surface(
-        color = bg,
-        shape = shape,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = border,
-        modifier = Modifier
-            .aspectRatio(1f)
-            .sizeIn(minWidth = 36.dp, minHeight = 36.dp)
-            .clickable(enabled = cell.date != null) { onClick() }
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.align(Alignment.Center).padding(bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = cell.date?.dayOfMonth?.toString() ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                val dayIcon = when (iconStatus) {
-                    DayIconStatus.OK -> painterResource(R.drawable.check_circle__1_)
-                    DayIconStatus.MISSED -> painterResource(R.drawable.exclamation)
-                    DayIconStatus.NO_DATA -> painterResource(R.drawable.empty_set)
-                    DayIconStatus.NO_TARGETS, null -> painterResource(R.drawable.interrogation)
-                }
-
-                val tint = when (iconStatus) {
-                    DayIconStatus.OK -> EatMoreGreen
-                    DayIconStatus.MISSED -> LimitRed
-                    else -> LocalContentColor.current
-                }
-
-                if (dayIcon != null) {
-                    Icon(
-                        painter = dayIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = tint
-                    )
-                } else {
-                    Spacer(Modifier.size(18.dp))
-                }
-            }
-
-            if (cell.date != null && cell.hasPlannedMeals) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(6.dp)
-                ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        shape = RoundedCornerShape(50),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
-                    ) {}
-                }
-            }
-        }
-    }
-}
 
 private fun buildCalendarCells(
     month: YearMonth,
