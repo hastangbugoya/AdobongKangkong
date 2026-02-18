@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
@@ -26,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -57,9 +60,14 @@ import kotlin.math.max
 import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.ui.calendar.DayIconStatus
 import com.example.adobongkangkong.ui.navigation.NavRoutes
+import com.example.adobongkangkong.ui.theme.EatMoreGreen
+import com.example.adobongkangkong.ui.theme.LimitRed
 import java.time.Instant
 import java.time.LocalDate
+import java.util.Locale
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -270,7 +278,13 @@ fun DashboardScreen(
                 }
             }
             item {
-                val dateLabel = state.date.toString() // or format it
+
+                val formatter = DateTimeFormatter.ofPattern(
+                    "EEE, MMM/d/yyyy",
+                    Locale.getDefault()
+                )
+
+                val dateLabel = state.date.format(formatter) // or format it
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -284,6 +298,7 @@ fun DashboardScreen(
                             tint = MaterialTheme.colorScheme.onSurface // <- force visibility
                         )
                     }
+
 
                     Text(
                         text = if (isToday) "Today" else dateLabel,
@@ -384,12 +399,47 @@ private fun formatTime(instant: Instant): String {
 internal fun Double.round0(): String = "%,.0f".format(this)
 internal fun Double.round2(): String = "%,.2f".format(this).trimEnd('0').trimEnd('.')
 
+//@Composable
+//private fun DashboardNutrientCardRow(
+//    card: DashboardNutrientCard
+//) {
+//    val unit = card.unit.orEmpty()
+//
+//    val display = remember(card) { card.toDisplay(unit) }
+//
+//    Column(
+//        Modifier
+//            .fillMaxWidth()
+//            .padding(vertical = 8.dp)
+//    ) {
+//        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+//            Text(card.displayName, style = MaterialTheme.typography.titleMedium)
+//            Text(display.rightText, style = MaterialTheme.typography.bodyMedium)
+//        }
+//
+//        Spacer(Modifier.height(6.dp))
+//        LinearProgressIndicator(progress = display.progress, modifier = Modifier.fillMaxWidth())
+//
+//        Spacer(Modifier.height(4.dp))
+//        Text(
+//            text = "Status: ${card.status.name}",
+//            style = MaterialTheme.typography.bodySmall
+//        )
+//
+//        card.rollingAverage?.let { avg ->
+//            Text(
+//                text = "Avg: ${avg.round1()} $unit",
+//                style = MaterialTheme.typography.bodySmall
+//            )
+//        }
+//    }
+//}
+
 @Composable
 private fun DashboardNutrientCardRow(
     card: DashboardNutrientCard
 ) {
     val unit = card.unit.orEmpty()
-
     val display = remember(card) { card.toDisplay(unit) }
 
     Column(
@@ -397,15 +447,57 @@ private fun DashboardNutrientCardRow(
             .fillMaxWidth()
             .padding(vertical = 8.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(card.displayName, style = MaterialTheme.typography.titleMedium)
-            Text(display.rightText, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Text(
+                card.displayName,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            // RIGHT TEXT (unchanged)
+            Text(
+                display.rightText,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(Modifier.width(6.dp))
+
+            // --- STATUS ICON (new) ---
+            val icon = when (card.status) {
+                TargetStatus.OK -> R.drawable.check_circle__1_
+                TargetStatus.LOW -> R.drawable.exclamation
+                TargetStatus.HIGH -> R.drawable.exclamation
+                TargetStatus.NO_TARGET -> R.drawable.empty_set
+            }
+
+            val tint = when (card.status) {
+                TargetStatus.OK -> EatMoreGreen
+                TargetStatus.LOW, TargetStatus.HIGH -> LimitRed
+                else -> LocalContentColor.current
+            }
+
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = card.status.name,
+                tint = tint,
+                modifier = Modifier.size(16.dp), // small enough to avoid height growth
+            )
         }
 
         Spacer(Modifier.height(6.dp))
-        LinearProgressIndicator(progress = display.progress, modifier = Modifier.fillMaxWidth())
+
+        LinearProgressIndicator(
+            progress = display.progress,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Spacer(Modifier.height(4.dp))
+
         Text(
             text = "Status: ${card.status.name}",
             style = MaterialTheme.typography.bodySmall
@@ -419,6 +511,7 @@ private fun DashboardNutrientCardRow(
         }
     }
 }
+
 
 private data class NutrientCardDisplay(
     val rightText: String,

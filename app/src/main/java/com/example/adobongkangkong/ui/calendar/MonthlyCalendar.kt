@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -143,14 +144,14 @@ private fun CalendarDayCell(
                 val dayIcon = when (iconStatus) {
                     DayIconStatus.OK -> painterResource(R.drawable.check_circle__1_)
                     DayIconStatus.MISSED -> painterResource(R.drawable.exclamation)
-                    DayIconStatus.NO_DATA -> painterResource(R.drawable.interrogation)
-                    DayIconStatus.NO_TARGETS, null -> null
+                    DayIconStatus.NO_DATA -> painterResource(R.drawable.empty_set)
+                    DayIconStatus.NO_TARGETS, null -> painterResource(R.drawable.interrogation)
                 }
 
                 val tint = when (iconStatus) {
                     DayIconStatus.OK -> EatMoreGreen
                     DayIconStatus.MISSED -> LimitRed
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> LocalContentColor.current
                 }
 
                 if (dayIcon != null) {
