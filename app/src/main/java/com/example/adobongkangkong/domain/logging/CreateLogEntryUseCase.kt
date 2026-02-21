@@ -109,15 +109,32 @@ class CreateLogEntryUseCase @Inject constructor(
             }
         }
 
+        Log.d(
+            "Meow",
+            "CreateLogEntryUseCase> grams=$grams " +
+                    "resolvedGPSU=$resolvedGramsPerServingUnit " +
+                    "servingsInput=$amountInput"
+        )
+
         val snapshot = snapshotRepository.getSnapshot(food.id)
             ?: return Result.Error("Nutrition snapshot unavailable")
 
-        val nutrients = snapshot.nutrientsPerGram
-            ?.scaledBy(grams)
+        Log.d(
+            "Meow",
+            "CreateLogEntryUseCase> Snapshot debug foodId=${food.id} " +
+                    "serving=${food.servingSize} ${food.servingUnit} " +
+                    "gpsu(resolved)=$resolvedGramsPerServingUnit " +
+                    "food.gpsu=${food.gramsPerServingUnit} food.mlpsu=${food.mlPerServingUnit} " +
+                    "snapshot.hasNutrientsPerGram=${snapshot.nutrientsPerGram != null}"
+        )
+
+        val nutrients = snapshot.nutrientsPerGram?.scaledBy(grams)
+            ?: snapshot.nutrientsPerMilliliter?.let { perMl ->
+                // Option A: water-default density assumption (1 mL == 1 g)
+                perMl.scaledBy(grams)
+            }
             ?: return Result.Error("Food nutrition incomplete")
-        Log.d("Meow", "CreateLogEntryUseCase> Snapshot for foodId=${food.id}: " +
-                "hasSnapshot=${snapshot != null}, " +
-                "hasNutrientsPerGram=${snapshot?.nutrientsPerGram != null}")
+
         val entry = LogEntry(
             timestamp = timestamp,
             foodStableId = food.stableId,

@@ -630,16 +630,31 @@ class QuickAddViewModel @Inject constructor(
 
     fun useEstimateJustOnce() {
         val pending = pendingResolveMass ?: return
-        val ml = pending.food.mlPerServingUnit ?: return
+        val food = pending.food
+        val mlPerUnit = food.mlPerServingUnit ?: return
 
-        retryPendingLog(overrideGpsu = ml, persistGpsu = null)
+        // mlPerServingUnit is per 1×servingUnit (e.g., per 1 fl oz), so scale by servingSize.
+        val estimatedGpsu = food.servingSize * mlPerUnit
+        if (estimatedGpsu <= 0.0) return
+
+        retryPendingLog(
+            overrideGpsu = estimatedGpsu,
+            persistGpsu = null
+        )
     }
 
     fun useEstimateAlways() {
         val pending = pendingResolveMass ?: return
-        val ml = pending.food.mlPerServingUnit ?: return
+        val food = pending.food
+        val mlPerUnit = food.mlPerServingUnit ?: return
 
-        retryPendingLog(overrideGpsu = null, persistGpsu = ml)
+        // mlPerServingUnit is per 1×servingUnit (e.g., per 1 fl oz), so scale by servingSize.
+        val estimatedGpsu = food.servingSize * mlPerUnit
+
+        retryPendingLog(
+            overrideGpsu = null,
+            persistGpsu = estimatedGpsu
+        )
     }
 
     fun confirmEnteredGramsPerServing() {
