@@ -177,7 +177,7 @@ fun DashboardSettingsSheet(
                     )
                 },
                 modifier = Modifier.clickable {
-                    Log.d("Meow", "SettingsSheet tap: ${card.code}")
+                    Log.d("Meow", "SettingsSheet tap: ${card.displayName}")
                     onStartTargetEditPrefilled(
                         NutrientKey(card.code),
                         card.minPerDay?.toString() ?: "",
@@ -238,17 +238,17 @@ fun DashboardSettingsSheet(
             Text("Meow Logs")
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                onDismiss()
-                onOpenPlanner()
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Meal Planner")
-        }
+//        Spacer(Modifier.height(16.dp))
+//
+//        Button(
+//            onClick = {
+//                onDismiss()
+//                onOpenPlanner()
+//            },
+//            modifier = Modifier.fillMaxWidth()
+//        ) {
+//            Text("Meal Planner")
+//        }
     }
 }
 

@@ -284,7 +284,7 @@ fun RecipeBuilderScreen(
                         ) {
                             Icon(
                                 painter = painterResource(android.R.drawable.ic_menu_camera),
-                                contentDescription = "Change banner"
+                                contentDescription = "${editFoodId?.let {"Change"} ?: "Assign" } banner"
                             )
                         }
                     } else {
@@ -314,7 +314,7 @@ fun RecipeBuilderScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "Change banner",
+                                text = "${editFoodId?.let {"Change"} ?: "Assign" } banner",
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
