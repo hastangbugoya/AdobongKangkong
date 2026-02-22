@@ -100,42 +100,40 @@ class CreateSnapshotFoodFromRecipeUseCase @Inject constructor(
         val recipeEntity = recipeDao.getById(recipeId)
             ?: return Result.Blocked(listOf("Recipe not found."))
 
-        // Compute from DOMAIN recipe (persisted)
-        //        val computed = computeRecipeNutritionForSnapshotUseCase.invoke(
-        //            recipeEntity.toDomainRecipe()
-        //        )
+        // IMPORTANT:
+        // RecipeEntity does NOT embed ingredients. If we forget to load them, snapshot compute
+        // will see 0 ingredients and produce 0 totals (misleading "no nutrients" symptoms).
+        val ingredientEntities = recipeIngredientDao.getForRecipe(recipeId)
+        if (ingredientEntities.isEmpty()) {
+            return Result.Blocked(listOf("Recipe has no ingredients."))
+        }
 
-                // IMPORTANT:
-                // RecipeEntity does NOT embed ingredients. If we forget to load them, snapshot compute
-                // will see 0 ingredients and produce 0 totals (misleading "no nutrients" symptoms).
-                val ingredientEntities = recipeIngredientDao.getForRecipe(recipeId)
-                if (ingredientEntities.isEmpty()) {
-                        return Result.Blocked(listOf("Recipe has no ingredients."))
-                    }
+        val domainIngredients: List<RecipeIngredient> =
+            ingredientEntities.map { ie ->
+                RecipeIngredient(
+                    foodId = ie.foodId,
+                    servings = ie.amountServings,
+                    grams = ie.amountGrams
+                )
+            }
 
-                val domainIngredients: List<RecipeIngredient> =
-                        ingredientEntities.map { ie ->
-                                RecipeIngredient(
-                                        foodId = ie.foodId,
-                                        servings = ie.amountServings,
-                                        grams = ie.amountGrams
-                                            )
-                            }
-
-                // Compute from DOMAIN recipe (persisted + ingredients)
-                val computed = computeRecipeNutritionForSnapshotUseCase.invoke(
-                        recipeEntity.toDomainRecipe(ingredients = domainIngredients)
-                            )
+        // Compute from DOMAIN recipe (persisted + ingredients)
+        val computed = computeRecipeNutritionForSnapshotUseCase.invoke(
+            recipeEntity.toDomainRecipe(ingredients = domainIngredients)
+        )
 
         if (computed.warnings.isNotEmpty()) {
             return Result.Blocked(computed.warnings.map { it.toString() })
         }
 
-        // Convert totals -> PER_100G using cookedYieldGrams
-        val per100gSnapshot: Map<String, Double> =
-            computed.totals.entries().associate { (nutrientKey, totalAmt) ->
-                nutrientKey.value to (totalAmt / cookedYieldGrams) * 100.0
-            }
+        val snapshot = RecipeBatchSnapshotMath.compute(
+            totals = computed.totals,
+            cookedYieldGrams = cookedYieldGrams,
+            servingsYieldUsed = servingsYieldUsed
+        )
+
+        val per100gSnapshot = snapshot.per100g
+        val gramsPerServingCooked = snapshot.gramsPerServingCooked
 
         if (per100gSnapshot.isEmpty()) {
             return Result.Blocked(listOf("Recipe has no nutrients to snapshot."))
@@ -147,145 +145,135 @@ class CreateSnapshotFoodFromRecipeUseCase @Inject constructor(
                     .format(DateTimeFormatter.ofPattern("MM/dd/yyyy h:mm a"))
 
                 // 1) Create the loggable batch food snapshot
-                val batchFood = FoodEntity(
-                    name = "${recipeEntity.name} ($ts)",
-                    brand = "From recipe",
-                    servingSize = 1.0,
-                    servingUnit = ServingUnit.G,
-                    gramsPerServingUnit = null,
-                    servingsPerPackage = null,
-                    isRecipe = false,
-                    isLowSodium = null
-                )
+                val hasServings = gramsPerServingCooked != null && gramsPerServingCooked > 0.0
+
+                val batchFood = if (hasServings) {
+                    FoodEntity(
+                        name = "${recipeEntity.name} ($ts)",
+                        brand = "From recipe",
+                        servingSize = 1.0,
+                        servingUnit = ServingUnit.SERVING,
+                        gramsPerServingUnit = gramsPerServingCooked,
+                        servingsPerPackage = servingsYieldUsed,
+                        isRecipe = false,
+                        isLowSodium = null
+                    )
+                } else {
+                    // Fallback:
+                    // Store as a 100g base so the food editor + any UI that assumes "servingSize + unit"
+                    // aligns with the PER_100G nutrient basis we persist below.
+                    FoodEntity(
+                        name = "${recipeEntity.name} ($ts)",
+                        brand = "From recipe",
+                        servingSize = 100.0,
+                        servingUnit = ServingUnit.G,
+                        gramsPerServingUnit = null,
+                        servingsPerPackage = null,
+                        isRecipe = false,
+                        isLowSodium = null
+                    )
+                }
 
                 val batchFoodId = foodDao.insert(batchFood)
                 require(batchFoodId > 0L) { "Failed to insert batch food." }
 
                 // Debug proof: each batch must reference a fresh snapshot food id.
-                // If existingRefs > 0, some path is reusing a previous batchFoodId,
-                // or a duplicate insert is being attempted with the same id.
                 val existingRefs = recipeBatchDao.countByBatchFoodId(batchFoodId)
                 Log.d(
-                        "Meow",
-                        "CreateSnapshotFoodFromRecipeUseCase> inserted batch food batchFoodId=$batchFoodId existingBatchRefs=$existingRefs"
-                            )
+                    "Meow",
+                    "CreateSnapshotFoodFromRecipeUseCase> inserted batch food batchFoodId=$batchFoodId existingBatchRefs=$existingRefs"
+                )
                 if (existingRefs > 0) {
-                        error("Invariant violated: batchFoodId=$batchFoodId is already referenced by recipe_batches ($existingRefs rows).")
-                    }
-
+                    error("Invariant violated: batchFoodId=$batchFoodId is already referenced by recipe_batches ($existingRefs rows).")
+                }
 
                 // 2) Build nutrient rows AFTER we have batchFoodId
                 var droppedMissingId = 0
-                var droppedMissingUnit = 0
-
                 val missingIdKeys = mutableListOf<String>()
-                val missingUnitIds = mutableListOf<Long>()
+
+                // Track which codes we successfully persisted (for macro seatbelt without extra DAO calls).
+                val persistedCodes = LinkedHashSet<String>()
 
                 val nutrientRows: List<FoodNutrientEntity> =
-                    per100gSnapshot.mapNotNull { (nutrientKeyValue, amtPer100g) ->
+                    per100gSnapshot.entries().mapNotNull { (nutrientKey, amtPer100g) ->
+                        val nutrientCode = nutrientKey.value
 
-                        val nutrient = nutrientDao.getByCode(nutrientKeyValue)
+                        val nutrient = nutrientDao.getByCode(nutrientCode)
                             ?: run {
                                 droppedMissingId++
-                                if (missingIdKeys.size < 25) missingIdKeys += nutrientKeyValue
+                                if (missingIdKeys.size < 25) missingIdKeys += nutrientCode
                                 return@mapNotNull null
                             }
 
-                        // Unit comes from the entity (no single-column enum projection).
-                        val unit = nutrient.unit
+                        persistedCodes += nutrient.code
 
                         FoodNutrientEntity(
                             foodId = batchFoodId,
                             nutrientId = nutrient.id,
                             nutrientAmountPerBasis = amtPer100g,
-                            unit = unit,
+                            unit = nutrient.unit,
                             basisType = BasisType.PER_100G
                         )
                     }
 
-//                if (nutrientRows.isEmpty()) {
-//                    // Avoid creating a batch food that can't be logged due to missing nutrients.
-//                    // Because we're in a transaction, we can safely abort and nothing will persist.
-////                    error("Unable to snapshot nutrients (all rows dropped: missingId=$droppedMissingId missingUnit=$droppedMissingUnit).")
-//                    error(
-//                        "Unable to snapshot nutrients (all rows dropped: " +
-//                                "missingId=$droppedMissingId keys=$missingIdKeys " +
-//                                "missingUnit=$droppedMissingUnit ids=$missingUnitIds)."
-//                    )
-//                }
+                /**
+                 * Seatbelt: allow batch creation as long as we have *minimum viable macros*.
+                 *
+                 * Why:
+                 * - Ingredients may contain micronutrient keys that are not currently present in the
+                 *   `nutrients` master table (catalog drift / partial seeding).
+                 * - Dropping *all* rows would produce an un-loggable snapshot; we must block that.
+                 * - Dropping *some* rows is acceptable if the snapshot still contains the core macros
+                 *   used throughout the app (Calories/Protein/Carbs/Fat).
+                 *
+                 * Corner case:
+                 * - If even macros cannot be written (e.g., missing CALORIES_KCAL in nutrients table),
+                 *   we block to avoid creating a batch food that appears "empty".
+                 */
+                if (nutrientRows.isEmpty()) {
+                    error(
+                        "Unable to snapshot nutrients (all rows dropped: " +
+                                "missingId=$droppedMissingId keys=$missingIdKeys)."
+                    )
+                }
 
-                                /**
-                                 * Seatbelt: allow batch creation as long as we have *minimum viable macros*.
-                                 *
-                                 * Why:
-                                 * - Ingredients may contain micronutrient keys that are not currently present in the
-                                 *   `nutrients` master table (catalog drift / partial seeding).
-                                 * - Dropping *all* rows would produce an un-loggable snapshot; we must block that.
-                                 * - Dropping *some* rows is acceptable if the snapshot still contains the core macros
-                                 *   used throughout the app (Calories/Protein/Carbs/Fat).
-                                 *
-                                 * Corner case:
-                                 * - If even macros cannot be written (e.g., missing CALORIES_KCAL in nutrients table),
-                                 *   we block to avoid creating a batch food that appears "empty".
-                                 */
-                                if (nutrientRows.isEmpty()) {
-                                        error(
-                                                "Unable to snapshot nutrients (all rows dropped: " +
-                                                                "missingId=$droppedMissingId keys=$missingIdKeys " +
-                                                                "missingUnit=$droppedMissingUnit ids=$missingUnitIds)."
-                                                    )
-                                    }
+                val macroCodesRequired = setOf(
+                    "CALORIES_KCAL",
+                    "PROTEIN_G",
+                    "CARBS_G",
+                    "FAT_G"
+                )
 
-                                val macroCodesRequired = setOf(
-                                        "CALORIES_KCAL",
-                                        "PROTEIN_G",
-                                        "CARBS_G",
-                                        "FAT_G"
-                                            )
+                val presentMacroCodes = persistedCodes.intersect(macroCodesRequired)
+                if (presentMacroCodes.size < macroCodesRequired.size) {
+                    error(
+                        "Unable to snapshot nutrients (macros incomplete: present=$presentMacroCodes required=$macroCodesRequired). " +
+                                "missingId=$droppedMissingId keys=$missingIdKeys"
+                    )
+                }
 
-                                // We have nutrient ids in rows; to verify macro presence, map ids -> codes once.
-                                // Minimal IO: only do it when we dropped something (i.e., catalog drift suspected).
-                                if (droppedMissingId > 0 || droppedMissingUnit > 0) {
-                                        val idsInSnapshot = nutrientRows.map { it.nutrientId }.distinct()
-                                        val codesById = nutrientDao.getCodesByIds(idsInSnapshot).associate { it.id to it.code }
+                if (droppedMissingId > 0) {
+                    Log.w(
+                        "Meow",
+                        "Snapshot nutrient drops: missingId=$droppedMissingId keys=${missingIdKeys.distinct()}"
+                    )
+                }
 
-                                        val presentMacroCodes = nutrientRows
-                                            .mapNotNull { row -> codesById[row.nutrientId] }
-                                            .toSet()
-                                            .intersect(macroCodesRequired)
-
-                                        if (presentMacroCodes.size < macroCodesRequired.size) {
-                                                error(
-                                                        "Unable to snapshot nutrients (macros incomplete: present=$presentMacroCodes required=$macroCodesRequired). " +
-                                                                        "missingId=$droppedMissingId keys=$missingIdKeys " +
-                                                                        "missingUnit=$droppedMissingUnit ids=$missingUnitIds"
-                                                            )
-                                            }
-                                    }
-
-
-                if (droppedMissingId > 0 || droppedMissingUnit > 0) {
-                        Log.w(
-                                "Meow",
-                                "Snapshot nutrient drops: missingId=$droppedMissingId keys=${missingIdKeys.distinct()} " +
-                                            "missingUnit=$droppedMissingUnit ids=${missingUnitIds.distinct()}"
-                                    )
-                    }
                 // 3) Write nutrient rows for the batch food snapshot
                 foodNutrientDao.deleteForFood(batchFoodId)
                 foodNutrientDao.upsertAll(nutrientRows)
 
                 Log.d(
                     "Meow",
-                    "CreateSnapshotFoodFromRecipeUseCase> batchFoodId=$batchFoodId rows=${nutrientRows.size} " +
-                            "droppedMissingId=$droppedMissingId droppedMissingUnit=$droppedMissingUnit"
+                    "CreateSnapshotFoodFromRecipeUseCase> batchFoodId=$batchFoodId rows=${nutrientRows.size} droppedMissingId=$droppedMissingId"
                 )
 
                 // 4) Persist the batch link (recipe -> batchFoodId)
                 Log.d(
-                        "Meow",
-                        "CreateSnapshotFoodFromRecipeUseCase> inserting recipe_batch recipeId=$recipeId batchFoodId=$batchFoodId"
-                            )
+                    "Meow",
+                    "CreateSnapshotFoodFromRecipeUseCase> inserting recipe_batch recipeId=$recipeId batchFoodId=$batchFoodId"
+                )
+
                 val batchId = recipeBatchDao.insert(
                     RecipeBatchEntity(
                         id = 0L,
@@ -298,10 +286,12 @@ class CreateSnapshotFoodFromRecipeUseCase @Inject constructor(
                 )
 
                 require(batchId > 0L) { "Failed to insert recipe batch." }
+
                 Log.d(
-                        "Meow",
-                        "CreateSnapshotFoodFromRecipeUseCase> inserted recipe_batch batchId=$batchId recipeId=$recipeId batchFoodId=$batchFoodId"
-                            )
+                    "Meow",
+                    "CreateSnapshotFoodFromRecipeUseCase> inserted recipe_batch batchId=$batchId recipeId=$recipeId batchFoodId=$batchFoodId"
+                )
+
                 Result.Success(
                     batchId = batchId,
                     batchFoodId = batchFoodId

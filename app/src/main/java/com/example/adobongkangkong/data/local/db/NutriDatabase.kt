@@ -57,6 +57,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun mealTemplateItemDao(): MealTemplateItemDao
     abstract fun mealTemplatePrefsDao(): MealTemplatePrefsDao
     abstract fun foodBarcodeEntityDao(): FoodBarcodeDao
+    abstract fun debugResetDao(): DebugResetDao
 
     companion object {
         /**
