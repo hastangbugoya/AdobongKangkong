@@ -31,7 +31,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         MealTemplatePrefsEntity::class,
         FoodBarcodeEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -162,6 +162,17 @@ abstract class NutriDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Add food_barcodes.usdaModifiedDateIso (nullable)
                 db.execSQL("ALTER TABLE food_barcodes ADD COLUMN usdaModifiedDateIso TEXT")
+            }
+        }
+
+        /**
+         * v9
+         * - planned_meals: add seriesId (nullable) + status (TEXT NOT NULL DEFAULT 'ACTIVE')
+         */
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE planned_meals ADD COLUMN seriesId INTEGER")
+                db.execSQL("ALTER TABLE planned_meals ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE'")
             }
         }
     }

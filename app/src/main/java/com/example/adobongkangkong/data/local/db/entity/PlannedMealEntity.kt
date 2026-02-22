@@ -28,8 +28,26 @@ data class PlannedMealEntity(
     val nameOverride: String? = null,
 
     /** Order within the day */
-    val sortOrder: Int
+    val sortOrder: Int,
+
+    /**
+     * Recurrence series linkage (nullable means one-off planned meal).
+     * This is the “occurrence layer” field for Option 1.
+     */
+    val seriesId: Long? = null,
+
+    /**
+     * Occurrence lifecycle status.
+     * Stored as TEXT using enum.name (no type converter required).
+     */
+    val status: String = PlannedOccurrenceStatus.ACTIVE.name
 )
+
+enum class PlannedOccurrenceStatus {
+    ACTIVE,
+    CANCELLED,
+    OVERRIDDEN
+}
 
 enum class MealSlot(
     val display: String
