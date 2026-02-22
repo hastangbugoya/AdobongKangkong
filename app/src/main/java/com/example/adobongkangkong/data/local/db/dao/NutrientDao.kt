@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NutrientDao {
+
+    @Query("SELECT * FROM nutrients WHERE id = :nutrientId LIMIT 1")
+    suspend fun getById(nutrientId: Long): NutrientEntity?
+
     @Query("SELECT * FROM nutrients ORDER BY category ASC, displayName ASC")
     suspend fun getAll(): List<NutrientEntity>
 
@@ -106,4 +110,9 @@ interface NutrientDao {
 
     @Query("SELECT * FROM nutrients WHERE code = :code LIMIT 1")
     suspend fun getByCode(code: String): NutrientEntity?
+
+    @Query("SELECT id, code FROM nutrients WHERE id IN (:ids)")
+    suspend fun getCodesByIds(ids: List<Long>): List<NutrientIdCodeRow>
 }
+
+data class NutrientIdCodeRow(val id: Long, val code: String)

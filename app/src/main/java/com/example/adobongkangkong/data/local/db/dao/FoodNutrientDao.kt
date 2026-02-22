@@ -47,7 +47,7 @@ interface FoodNutrientDao {
     FROM food_nutrients fn
     JOIN nutrients n ON n.id = fn.nutrientId
     WHERE fn.foodId = :foodId
-      AND n.code IN ('CALORIES', 'PROTEIN_G', 'CARBS_G', 'FAT_G')
+      AND n.code IN ('CALORIES_KCAL', 'PROTEIN_G', 'CARBS_G', 'FAT_G')
       AND fn.basisType = (
         SELECT f2.basisType
         FROM food_nutrients f2

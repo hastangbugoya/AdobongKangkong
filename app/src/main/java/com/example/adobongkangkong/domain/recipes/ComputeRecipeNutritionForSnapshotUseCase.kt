@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.recipes
 
+import android.util.Log
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.nutrition.dividedBy
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
@@ -114,7 +115,11 @@ class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
                 totalYieldGrams.toDouble() / servingsYield.toDouble()
             else -> null
         }
-
+        Log.d(
+            "Meow",
+            "Snapshot> recipeId=${recipe.id} ingredients=${recipe.ingredients.size} " +
+                    "snapshotsLoaded=${foodsById.size} totalsSize=${totals.entries().size} warnings=${warnings.size}"
+        )
         return RecipeNutritionResult(
             totals = totals,
             perServing = perServing,

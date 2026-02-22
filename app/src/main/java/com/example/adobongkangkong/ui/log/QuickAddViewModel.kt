@@ -3,18 +3,15 @@ package com.example.adobongkangkong.ui.log
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
-import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.model.gPerUnit
 import com.example.adobongkangkong.domain.model.gPerUnitOrNull
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
@@ -562,6 +559,14 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun createBatchForSelectedRecipe() {
+        // Seatbelt: creating a cooked batch must be single-shot. This prevents
+        // double-taps or double-triggered UI callbacks from firing two inserts.
+        if (isSavingFlow.value) {
+                Log.w("Meow", "QuickAddViewModel > createBatch ignored (already saving)")
+                return
+            }
+
+
         val recipeId = selectedRecipeIdFlow.value
         if (recipeId == null) {
             errorFlow.value = "Select a recipe first."
@@ -587,32 +592,41 @@ class QuickAddViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            isSavingFlow.value = true
             try {
-
-
-                val result = createBatchFoodFromRecipeUseCase.execute(
+                errorFlow.value = null
+                Log.w("Meow", "CreateSnapshotFoodFromRecipeUseCase.execute() VERSION=2026-02-21A (byCode lookup)")
+                Log.d(
+                        "Meow",
+                        "QuickAddViewModel > createBatch START recipeId=$recipeId cookedYieldGrams=$cookedYieldGrams servingsYieldUsed=$servingsYieldUsed"
+                            )
+                when (val r = createBatchFoodFromRecipeUseCase.execute(
                     recipeId = recipeId,
                     cookedYieldGrams = cookedYieldGrams,
                     servingsYieldUsed = servingsYieldUsed
-                )
+                )) {
+                    is CreateSnapshotFoodFromRecipeUseCase.Result.Success -> {
+                        Log.d(
+                            "Meow",
+                            "QuickAddViewModel > createBatch SUCCESS batchId=${r.batchId} batchFoodId=${r.batchFoodId}"
+                                )
+                        selectedBatchIdFlow.value = r.batchId
+                        isCreateBatchDialogOpenFlow.value = false
+                        yieldGramsTextFlow.value = ""
+                        servingsYieldTextFlow.value = ""
+                        errorFlow.value = null
+                    }
 
-                val batchFoodId = result.batchFoodId
+                    is CreateSnapshotFoodFromRecipeUseCase.Result.Blocked -> {
+                        Log.w("Meow", "QuickAddViewModel > createBatch BLOCKED messages=${r.messages}")
+                        errorFlow.value = r.messages.joinToString("\n")
+                    }
 
-                // 2️⃣ Create batch referencing snapshot food
-                val batchId = recipeBatchDao.insert(
-                    RecipeBatchEntity(
-                        recipeId = recipeId,
-                        batchFoodId = batchFoodId,
-                        cookedYieldGrams = cookedYieldGrams,
-                        servingsYieldUsed = servingsYieldUsed
-                    )
-                )
-
-                selectedBatchIdFlow.value = batchId
-                isCreateBatchDialogOpenFlow.value = false
-                yieldGramsTextFlow.value = ""
-                servingsYieldTextFlow.value = ""
-                errorFlow.value = null
+                    is CreateSnapshotFoodFromRecipeUseCase.Result.Error -> {
+                        Log.e("Meow", "QuickAddViewModel > createBatch ERROR message=${r.message}")
+                        errorFlow.value = r.message
+                    }
+                }
             } catch (t: Throwable) {
                 errorFlow.value = t.message ?: "Failed to create batch."
             }
