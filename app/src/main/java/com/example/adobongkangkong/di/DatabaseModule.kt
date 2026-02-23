@@ -27,7 +27,8 @@ object DatabaseModule {
                 NutriDatabase.MIGRATION_5_6,
                 NutriDatabase.MIGRATION_6_7,
                 NutriDatabase.MIGRATION_7_8,
-                NutriDatabase.MIGRATION_8_9
+                NutriDatabase.MIGRATION_8_9,
+                NutriDatabase.MIGRATION_9_10,
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -64,4 +65,8 @@ object DatabaseModule {
 
     @Provides fun providesFoodBarcodeDao(db: NutriDatabase): FoodBarcodeDao = db.foodBarcodeEntityDao()
 
+    @Provides fun providePlannedSeriesDao(db: NutriDatabase): PlannedSeriesDao = db.plannedSeriesDao()
+    @Provides
+    fun providePlannedSeriesItemDao(db: NutriDatabase): PlannedSeriesItemDao =
+        db.plannedSeriesItemDao()
 }

@@ -52,4 +52,10 @@ sealed interface PlannerDayEvent {
     data class DuplicateAddDate(val dateIso: String) : PlannerDayEvent
     data class DuplicateRemoveDate(val dateIso: String) : PlannerDayEvent
     data object ConfirmDuplicateDates : PlannerDayEvent
+
+    // Debug: create a sample recurring series
+    data object DebugCreateSampleSeries : PlannerDayEvent
+
+    // Promote an existing meal into a recurring series
+    data class MakeMealRecurring(val mealId: Long) : PlannerDayEvent
 }

@@ -150,10 +150,24 @@ fun PlannerDayScreen(
                     items(items = meals, key = { it.id }) { meal ->
                         PlannedMealCard(
                             meal = meal,
+                            isRecurring = meal.seriesId != null,
+                            onMakeRecurring = { mealId -> onEvent(PlannerDayEvent.MakeMealRecurring(mealId)) },
                             onRemoveItem = { itemId -> onEvent(PlannerDayEvent.RemovePlannedItem(itemId)) },
                             onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) },
                             onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) }
                         )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+            // TEMP DEBUG: create a sample recurring series (remove later)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { onEvent(PlannerDayEvent.DebugCreateSampleSeries) }) {
+                        Text("Debug: Sample Series")
                     }
                 }
             }
@@ -238,6 +252,8 @@ private fun EmptySlotCard(
 @Composable
 private fun PlannedMealCard(
     meal: PlannedMeal,
+    isRecurring: Boolean,
+    onMakeRecurring: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
     onRemoveEmptyMeal: (Long) -> Unit,
     onDuplicateMeal: (Long) -> Unit
@@ -246,7 +262,35 @@ private fun PlannedMealCard(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+
+            // Header row: title + recurring badge + actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (isRecurring) {
+                    // Option 1 (no new drawable): use Material icon if available
+                    // You may need: implementation("androidx.compose.material:material-icons-extended")
+                    Icon(
+                        painter = painterResource(R.drawable.rotate_reverse),
+                        contentDescription = "Recurring",
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+
+                // Keep functionality minimal: only show "Make recurring" if NOT already recurring
+                if (!isRecurring) {
+                    TextButton(onClick = { onMakeRecurring(meal.id) }) {
+                        Text("Make recurring")
+                    }
+                }
+            }
 
             val items = meal.items
             val visible = items.take(3)
@@ -255,7 +299,6 @@ private fun PlannedMealCard(
             Spacer(Modifier.height(6.dp))
 
             if (items.isEmpty()) {
-                // ✅ Restore: "Remove meal" button for empty meal containers
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -265,10 +308,10 @@ private fun PlannedMealCard(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f)
                     )
+
                     TextButton(onClick = { onRemoveEmptyMeal(meal.id) }) {
                         Text("Remove meal")
                     }
-
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -282,9 +325,10 @@ private fun PlannedMealCard(
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
                     }
+
                     TextButton(
                         modifier = Modifier.fillMaxWidth().align(Alignment.End),
-                        onClick = { onDuplicateMeal(meal.id)}
+                        onClick = { onDuplicateMeal(meal.id) }
                     ) {
                         Text("Duplicate")
                     }

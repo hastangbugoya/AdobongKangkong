@@ -5,19 +5,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
+import com.example.adobongkangkong.data.local.db.entity.PlannedSeriesEndConditionType
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedFoodItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedRecipeBatchItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedSeriesUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreateSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
+import com.example.adobongkangkong.domain.planner.usecase.EnsurePlannerHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDayUseCase
+import com.example.adobongkangkong.domain.planner.usecase.PromoteMealToSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.time.LocalDate
-import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,8 +30,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import javax.inject.Inject
 
 @HiltViewModel
 class PlannerDayViewModel @Inject constructor(
@@ -44,6 +48,11 @@ class PlannerDayViewModel @Inject constructor(
     private val restorePlannedItem: RestorePlannedItemUseCase,
 
     private val duplicateMeal: DuplicatePlannedMealUseCase,
+
+    private val ensurePlannerHorizon: EnsurePlannerHorizonUseCase,
+    private val createSeriesAndEnsureHorizon: CreateSeriesAndEnsureHorizonUseCase,
+
+    private val promoteMealToSeriesAndEnsureHorizon: PromoteMealToSeriesAndEnsureHorizonUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
@@ -57,6 +66,11 @@ class PlannerDayViewModel @Inject constructor(
     private var lastUndoId: Long = 0L
     private var lastRemovedSnapshot: PlannedItemEntity? = null
 
+    private var lastEnsuredEnd: LocalDate? = null
+    private var ensureJob: Job? = null
+
+    private var debugCreateSeriesJob: Job? = null
+
     fun setDate(date: LocalDate) {
         if (_state.value.date == date) return
 
@@ -65,6 +79,23 @@ class PlannerDayViewModel @Inject constructor(
 
         // Trigger the observer to switch flows (no cancel/relaunch)
         dateFlow.value = date
+        ensureHorizonFor(date)
+    }
+
+    private fun ensureHorizonFor(date: LocalDate) {
+        // Cancel previous horizon ensure if user is rapidly flipping dates.
+        ensureJob?.cancel()
+        ensureJob = viewModelScope.launch {
+            try {
+                lastEnsuredEnd = ensurePlannerHorizon.execute(
+                    anchorDate = date,
+                    lastEnsuredEnd = lastEnsuredEnd
+                )
+            } catch (t: Throwable) {
+                // Non-fatal: planner still works with existing occurrences.
+                Log.w("PlannerHorizon", "Failed ensuring planner horizon: ${t.message}", t)
+            }
+        }
     }
 
     fun onEvent(event: PlannerDayEvent) {
@@ -235,8 +266,8 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             PlannerDayEvent.DuplicateAddToday -> {
-//                addDuplicateDate(_state.value.date)
-                // One-tap shortcut: replace selection with ONLY today, then duplicate once.
+            // addDuplicateDate(_state.value.date)
+            // One-tap shortcut: replace selection with ONLY today, then duplicate once.
                 val date = _state.value.date
                 _state.update { s ->
                     val sheet = s.duplicateSheet ?: return@update s
@@ -246,8 +277,8 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             PlannerDayEvent.DuplicateAddTomorrow -> {
-//                addDuplicateDate(_state.value.date.plusDays(1))
-                // One-tap shortcut: replace selection with ONLY tomorrow, then duplicate once.
+            // addDuplicateDate(_state.value.date.plusDays(1))
+            // One-tap shortcut: replace selection with ONLY tomorrow, then duplicate once.
                 val date = _state.value.date.plusDays(1)
                 _state.update { s ->
                     val sheet = s.duplicateSheet ?: return@update s
@@ -257,7 +288,7 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             is PlannerDayEvent.DuplicateAddDate -> {
-//                addDuplicateDate(LocalDate.parse(event.dateIso))
+            // addDuplicateDate(LocalDate.parse(event.dateIso))
                 val date = LocalDate.parse(event.dateIso)
 
                 _state.update { s ->
@@ -280,9 +311,30 @@ class PlannerDayViewModel @Inject constructor(
             PlannerDayEvent.ConfirmDuplicateDates -> {
                 confirmDuplicateDates()
             }
+
+            PlannerDayEvent.DebugCreateSampleSeries -> {
+                debugCreateSampleSeries()
+            }
+
+            is PlannerDayEvent.MakeMealRecurring -> {
+                makeMealRecurring(event.mealId)
+            }
         }
     }
 
+    private fun makeMealRecurring(mealId: Long) {
+        if (mealId <= 0L) return
+
+        viewModelScope.launch {
+            try {
+                // You can pick 180 like your other horizon helpers
+                promoteMealToSeriesAndEnsureHorizon.execute(mealId = mealId, horizonDays = 180)
+                // No UI plumbing yet (snackbar), keep behavior consistent: just let observe refresh.
+            } catch (t: Throwable) {
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to make meal recurring") }
+            }
+        }
+    }
 
 
     /**
@@ -651,6 +703,40 @@ class PlannerDayViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+        ensureHorizonFor(_state.value.date)
+    }
+
+    private fun debugCreateSampleSeries() {
+        if (debugCreateSeriesJob?.isActive == true) return
+
+        val anchor = _state.value.date
+
+        debugCreateSeriesJob = viewModelScope.launch {
+            try {
+                val input = CreatePlannedSeriesUseCase.Input(
+                    effectiveStartDateIso = anchor.toString(),
+                    effectiveEndDateIso = null,
+                    endConditionType = PlannedSeriesEndConditionType.INDEFINITE,
+                    endConditionValue = null,
+                    slotRules = listOf(
+                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 1, slot = MealSlot.LUNCH),      // Mon
+                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 2, slot = MealSlot.DINNER),     // Tue
+                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 5, slot = MealSlot.BREAKFAST),  // Fri
+                    )
+                )
+
+                val seriesId = createSeriesAndEnsureHorizon.execute(
+                    input = input,
+                    anchorDate = anchor,
+                    horizonDays = 180
+                )
+
+                Log.d("PlannerDebug", "Created sample seriesId=$seriesId and expanded occurrences.")
+                // No snackbar plumbing yet; keep UI unchanged.
+            } catch (t: Throwable) {
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to create sample series") }
+            }
         }
     }
 

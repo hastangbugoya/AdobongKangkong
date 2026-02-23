@@ -88,13 +88,12 @@ fun CalendarDayCell(
                     DayIconStatus.NO_TARGETS, null -> painterResource(R.drawable.interrogation)
                 }
 
-                val tint = when (iconStatus) {
-                    DayIconStatus.OK -> EatMoreGreen
-                    DayIconStatus.MISSED -> LimitRed
-                    else -> LocalContentColor.current
-                }
-
-                if (dailyGoalIcon != null) {
+                if (dailyGoalIcon != null && cell?.date != null ) {
+                    val tint = when (iconStatus) {
+                        DayIconStatus.OK -> EatMoreGreen
+                        DayIconStatus.MISSED -> LimitRed
+                        else -> LocalContentColor.current
+                    }
                     Icon(
                         painter = dailyGoalIcon,
                         contentDescription = null,

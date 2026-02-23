@@ -4,6 +4,7 @@ import android.view.Display
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
 @Entity(
     tableName = "planned_meals",
@@ -40,7 +41,14 @@ data class PlannedMealEntity(
      * Occurrence lifecycle status.
      * Stored as TEXT using enum.name (no type converter required).
      */
-    val status: String = PlannedOccurrenceStatus.ACTIVE.name
+    val status: String = PlannedOccurrenceStatus.ACTIVE.name,
+//    /**
+//     * NEW: Non-null key used for series uniqueness.
+//     * - For non-CUSTOM slots: ""
+//     * - For CUSTOM slot: normalized customLabel (trim)
+//     */
+//    @ColumnInfo(defaultValue = "")
+//    val seriesKey: String = ""
 )
 
 enum class PlannedOccurrenceStatus {

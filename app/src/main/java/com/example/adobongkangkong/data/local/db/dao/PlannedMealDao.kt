@@ -49,4 +49,16 @@ interface PlannedMealDao {
     @Query("SELECT COALESCE(MAX(sortOrder), -1) FROM planned_meals WHERE date = :date")
     suspend fun getMaxSortOrderForDate(date: String): Int
 
+    @Query("""
+        SELECT *
+        FROM planned_meals
+        WHERE seriesId = :seriesId
+          AND date BETWEEN :startDate AND :endDate
+        ORDER BY date ASC, sortOrder ASC, id ASC
+    """)
+    suspend fun getMealsForSeriesInRange(
+        seriesId: Long,
+        startDate: String,
+        endDate: String
+    ): List<PlannedMealEntity>
 }

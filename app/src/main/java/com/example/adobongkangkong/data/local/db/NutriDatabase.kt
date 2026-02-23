@@ -29,9 +29,12 @@ import com.example.adobongkangkong.data.local.db.dao.*
         MealTemplateEntity::class,
         MealTemplateItemEntity::class,
         MealTemplatePrefsEntity::class,
-        FoodBarcodeEntity::class
+        FoodBarcodeEntity::class,
+        PlannedSeriesEntity::class,
+        PlannedSeriesSlotRuleEntity::class,
+        PlannedSeriesItemEntity::class
     ],
-    version = 9,
+    version = 11,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -58,6 +61,8 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun mealTemplatePrefsDao(): MealTemplatePrefsDao
     abstract fun foodBarcodeEntityDao(): FoodBarcodeDao
     abstract fun debugResetDao(): DebugResetDao
+    abstract fun plannedSeriesDao(): PlannedSeriesDao
+    abstract fun plannedSeriesItemDao(): PlannedSeriesItemDao
 
     companion object {
         /**
@@ -173,6 +178,48 @@ abstract class NutriDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE planned_meals ADD COLUMN seriesId INTEGER")
                 db.execSQL("ALTER TABLE planned_meals ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE'")
+            }
+        }
+        /**
+         * v10
+         * - Add planned_series + planned_series_slot_rules for recurrence rule layer
+         */
+        val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS planned_series (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                effectiveStartDate TEXT NOT NULL,
+                effectiveEndDate TEXT,
+                endConditionType TEXT NOT NULL,
+                endConditionValue TEXT,
+                createdAtEpochMs INTEGER NOT NULL,
+                updatedAtEpochMs INTEGER NOT NULL
+            )
+            """.trimIndent()
+                )
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_effectiveStartDate ON planned_series(effectiveStartDate)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_effectiveEndDate ON planned_series(effectiveEndDate)")
+
+                db.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS planned_series_slot_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                seriesId INTEGER NOT NULL,
+                weekday INTEGER NOT NULL,
+                slot TEXT NOT NULL,
+                customLabel TEXT,
+                createdAtEpochMs INTEGER NOT NULL,
+                FOREIGN KEY(seriesId) REFERENCES planned_series(id) ON DELETE CASCADE
+            )
+            """.trimIndent()
+                )
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_slot_rules_seriesId ON planned_series_slot_rules(seriesId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_slot_rules_seriesId_weekday ON planned_series_slot_rules(seriesId, weekday)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_slot_rules_seriesId_weekday_slot ON planned_series_slot_rules(seriesId, weekday, slot)")
             }
         }
     }

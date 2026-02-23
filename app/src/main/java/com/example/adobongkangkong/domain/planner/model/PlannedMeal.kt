@@ -8,5 +8,7 @@ data class PlannedMeal(
     val date: LocalDate,
     val slot: MealSlot,
     val title: String?,
-    val items: List<PlannedItem>
+    val items: List<PlannedItem>,
+    // NEW (nullable): occurrence belongs to a series
+    val seriesId: Long? = null
 )

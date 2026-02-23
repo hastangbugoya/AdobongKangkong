@@ -9,7 +9,7 @@ import com.example.adobongkangkong.data.repository.FoodRepositoryImpl
 import com.example.adobongkangkong.data.repository.LogRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientAliasRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientRepositoryImpl
-import com.example.adobongkangkong.data.repository.PlannedMealRepositoryImpl
+import com.example.adobongkangkong.data.repository.PlannedSeriesItemRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
@@ -23,7 +23,7 @@ import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
-import com.example.adobongkangkong.domain.repository.PlannedMealRepository
+import com.example.adobongkangkong.domain.repository.PlannedSeriesRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -132,4 +132,14 @@ abstract class RepositoryModule {
     abstract fun bindRecipeHeaderLookup(
         impl: com.example.adobongkangkong.data.repository.RecipeHeaderLookupImpl
     ): com.example.adobongkangkong.domain.repository.RecipeHeaderLookup
+
+    @Binds
+    abstract fun bindPlannedSeriesRepository(
+        impl: com.example.adobongkangkong.data.repository.PlannedSeriesRepositoryImpl
+    ): PlannedSeriesRepository
+
+    @Binds
+    abstract fun bindPlannedSeriesItemRepository(
+        impl: PlannedSeriesItemRepositoryImpl
+    ): com.example.adobongkangkong.domain.repository.PlannedSeriesItemRepository
 }

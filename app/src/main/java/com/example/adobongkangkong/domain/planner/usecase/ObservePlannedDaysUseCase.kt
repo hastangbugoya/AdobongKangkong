@@ -143,7 +143,8 @@ class ObservePlannedDaysUseCase @Inject constructor(
             date = parsedDate,
             slot = slot,
             title = title,
-            items = plannedItems
+            items = plannedItems,
+            seriesId = meal.seriesId
         )
     }
 

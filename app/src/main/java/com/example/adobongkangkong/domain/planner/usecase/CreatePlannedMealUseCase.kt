@@ -2,6 +2,7 @@ package com.example.adobongkangkong.domain.planner.usecase
 
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
+import com.example.adobongkangkong.data.local.db.entity.PlannedOccurrenceStatus
 import com.example.adobongkangkong.domain.repository.PlannedMealRepository
 import javax.inject.Inject
 
@@ -21,7 +22,9 @@ class CreatePlannedMealUseCase @Inject constructor(
         slot: MealSlot,
         customLabel: String? = null,
         nameOverride: String? = null,
-        sortOrder: Int? = null
+        sortOrder: Int? = null,
+        seriesId: Long? = null,
+        status: String = PlannedOccurrenceStatus.ACTIVE.name
     ): Long {
         require(dateIso.isNotBlank()) { "dateIso must not be blank" }
 
@@ -33,7 +36,6 @@ class CreatePlannedMealUseCase @Inject constructor(
             }
             else -> null
         }
-
         val finalSortOrder = sortOrder ?: Int.MAX_VALUE
 
         val entity = PlannedMealEntity(
@@ -41,7 +43,9 @@ class CreatePlannedMealUseCase @Inject constructor(
             slot = slot,
             customLabel = normalizedCustomLabel,
             nameOverride = nameOverride?.trim()?.takeIf { it.isNotBlank() },
-            sortOrder = finalSortOrder
+            sortOrder = finalSortOrder,
+            seriesId = seriesId,
+            status = status,
         )
 
         return meals.insert(entity)

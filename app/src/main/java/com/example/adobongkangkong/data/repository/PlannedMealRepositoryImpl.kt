@@ -36,4 +36,7 @@ class PlannedMealRepositoryImpl @Inject constructor(
 
     override suspend fun getMaxSortOrderForDate(dateIso: String): Int =
         dao.getMaxSortOrderForDate(dateIso)
+
+    override suspend fun getMealsForSeriesInRange(seriesId: Long, startDateIso: String, endDateIso: String): List<PlannedMealEntity> =
+        dao.getMealsForSeriesInRange(seriesId, startDateIso, endDateIso)
 }
