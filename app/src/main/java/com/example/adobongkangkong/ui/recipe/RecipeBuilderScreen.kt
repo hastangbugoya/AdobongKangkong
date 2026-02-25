@@ -378,8 +378,8 @@ fun RecipeBuilderScreen(
             }
 
             item { Spacer(Modifier.height(4.dp)) }
+            // Query
             item { Text("Add ingredient", style = MaterialTheme.typography.titleMedium) }
-
             item {
                 OutlinedTextField(
                     value = state.query,
@@ -389,7 +389,6 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
-
             if (state.results.isNotEmpty()) {
                 item {
                     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -485,9 +484,9 @@ fun RecipeBuilderScreen(
                 }
             }
 
+            // Ingredients list
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Ingredients", style = MaterialTheme.typography.titleMedium) }
-
             item {
                 if (state.ingredients.isEmpty()) {
                     Text("No ingredients yet.")
