@@ -12,6 +12,66 @@ import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import javax.inject.Inject
 
+/**
+ * Saves a [Food] and its nutrient rows, enforcing canonical single-basis nutrient persistence rules.
+ *
+ * ## Purpose
+ * Persist a food record and replace its nutrient rows in one operation while ensuring nutrient data
+ * is stored in a deterministic, scalable form (single basis per nutrient per food).
+ *
+ * ## Rationale (why this use case exists)
+ * Foods may arrive from multiple sources (manual entry, USDA import, edits). Nutrient rows can be a
+ * mix of:
+ * - PER_100G / PER_100ML (scalable, canonical), and/or
+ * - USDA_REPORTED_SERVING (a snapshot of a reported serving that may not be safely scalable).
+ *
+ * Without a centralized save step that canonicalizes rows, the app can end up with:
+ * - multiple rows for the same nutrient in different bases,
+ * - ambiguous scaling behavior,
+ * - accidental grams↔mL conversions without density,
+ * - unstable day-to-day results when different call sites choose different “preferred” bases.
+ *
+ * This use case exists to keep persistence deterministic and to enforce locked invariants that
+ * protect nutrition correctness across the app.
+ *
+ * ## Behavior
+ * - Applies “safe grounding lock-in” to the incoming [Food] when its conversion bridge fields are blank:
+ *   - Locks in `gramsPerServingUnit` for deterministic mass units (except grams itself).
+ *   - Locks in `mlPerServingUnit` for deterministic volume units (except milliliters itself),
+ *     **but only if the food is not already mass-grounded** (single-grounding rule).
+ * - Upserts the grounded food via [FoodRepository].
+ * - Canonicalizes incoming nutrient [rows] into exactly one basis (PER_100G, PER_100ML, or USDA_REPORTED_SERVING)
+ *   and ensures exactly one row per nutrient id.
+ * - Replaces all persisted nutrient rows for the saved food via [FoodNutrientRepository].
+ *
+ * ## Parameters
+ * - `food`: The food to upsert. May be modified only by deterministic grounding lock-in rules.
+ * - `rows`: Nutrient rows for the food. May include mixed bases; will be canonicalized.
+ *
+ * ## Return
+ * The persisted `foodId` returned from [FoodRepository.upsert].
+ *
+ * ## Edge cases
+ * - Empty [rows] is allowed; nutrients are replaced with an empty set.
+ * - If the food cannot be safely grounded in grams or mL, nutrients are persisted as USDA_REPORTED_SERVING
+ *   (raw basis, not safely scalable).
+ * - If mixed bases are provided and cannot be converted safely to the target basis, rows that require
+ *   unsafe conversion are dropped (e.g., grams↔mL without density).
+ *
+ * ## Pitfalls / gotchas
+ * - **Single grounding per food:** Do not auto-lock both mass and volume bridges. If mass grounding exists,
+ *   volume grounding must not be inferred (and vice versa) to avoid ambiguity.
+ * - **No density guessing:** Never convert between grams and mL without an explicit density field.
+ * - **Truth-first bridges:** If a bridge field exists (gramsPerServingUnit / mlPerServingUnit), it is
+ *   authoritative for “per serving” computations even if the unit is convertible.
+ * - **Single-basis persistence:** Downstream logic assumes exactly one persisted row per nutrient id
+ *   (within one basis). Do not allow multi-basis duplicates to slip into storage.
+ *
+ * ## Architectural rules
+ * - Domain-layer correctness gate for persistence: grounding + canonicalization happens here.
+ * - No UI state, no navigation, no side effects beyond repository writes.
+ * - Repository contracts are the only persistence boundary (no direct DB/Room usage here).
+ */
 class SaveFoodWithNutrientsUseCase @Inject constructor(
     private val foods: FoodRepository,
     private val foodNutrients: FoodNutrientRepository
@@ -183,48 +243,39 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
 }
 
 /**
- * FUTURE-YOU NOTE (2026-02-06) 3:33pm:
+ * FUTURE-AI / MAINTENANCE KDoc (Do not remove)
  *
- * Canonical nutrients MUST be single-basis per nutrientId per food.
+ * ## Invariants (must not change)
+ * - Single-basis persistence:
+ *   - Persist exactly ONE row per nutrient id per food.
+ *   - The persisted rows must all share the same target basis chosen for that food.
+ * - Target basis selection must remain:
+ *   - If grams-per-serving can be computed -> PER_100G
+ *   - Else if mL-per-serving can be computed -> PER_100ML
+ *   - Else -> USDA_REPORTED_SERVING
+ * - Truth-first bridges:
+ *   - If `gramsPerServingUnit` is present (> 0), it is authoritative for gram grounding computations.
+ *   - If `mlPerServingUnit` is present (> 0), it is authoritative for volume grounding computations.
+ * - No grams↔mL conversion without explicit density (never guess density).
+ * - “Single grounding per food” invariant:
+ *   - If mass grounding is present (mass unit OR gramsPerServingUnit != null), do NOT auto-lock volume grounding.
+ *   - If volume grounding is present (volume unit OR mlPerServingUnit != null), do NOT infer grams.
  *
- * - Target basis selection:
- *     - If grounded in grams -> PER_100G
- *     - Else if grounded in mL -> PER_100ML
- *     - Else -> USDA_REPORTED_SERVING
+ * ## Do not refactor notes
+ * - Do not rework canonicalization to store multiple bases “for convenience”; downstream assumes one basis.
+ * - Do not change the drop behavior in `mapNotNull` that rejects unsafe conversions between mass and volume.
+ * - Keep the deterministic dedupe rule (prefer already-target-basis row, else first converted row).
+ * - Keep “lock-in” behavior limited to deterministic unit conversions only; do not add heuristics.
  *
- * - "Single grounding per food" invariant:
- *     - If mass grounding is present (mass unit OR gramsPerServingUnit != null), do NOT auto-lock volume grounding.
- *     - If volume grounding is present (volume unit OR mlPerServingUnit != null), do NOT infer grams (no density).
+ * ## Architectural boundaries
+ * - This use case owns persistence correctness rules for saving foods + nutrient rows.
+ * - Repositories are the only persistence boundary; no direct DB/Room code may be added here.
+ * - This use case must not join nutrients back to foods/recipes or query other tables during save.
  *
- * - Density is NOT guessed. Never convert between grams and mL without a future explicit density field.
- */
-
-
-/**
- * FUTURE-YOU NOTE (2026-02-06) 1:00pm:
+ * ## Migration notes (KMP / time APIs)
+ * - No time APIs involved.
  *
- * Canonical nutrients MUST be single-basis per nutrientId per food.
- *
- * - We persist exactly one basis row per nutrient (enforced here before replaceForFood()).
- * - Target basis selection:
- *     - If grounded in grams -> PER_100G
- *     - Else if grounded in mL -> PER_100ML
- *     - Else -> USDA_REPORTED_SERVING
- *
- * - IMPORTANT GRAMMING RULE:
- *     - If servingUnit is mass: gramsPerServing = toGrams(servingSize)
- *     - Else if gramsPerServingUnit exists: gramsPerServing = servingSize * gramsPerServingUnit
- *       (gramsPerServingUnit means grams per 1 unit of servingUnit)
- *
- * - We may lock in gramsPerServingUnit for mass unit
- * ============================================================================
- */
-
-/**
- * AI NOTE (2026-02-06):
- *
- * TRUTH-FIRST VOLUME GROUNDING:
- * - If mlPerServingUnit is present, it is authoritative and must be used for ml-per-serving computations
- *   even when servingUnit is a volume unit (CUP/FLOZ/etc). This is required for USDA branded liquids where
- *   USDA's servingSize in mL is the truth and household text is display-only.
+ * ## Performance considerations
+ * - Canonicalization is O(N) over nutrient rows and performed on each save. This is acceptable for the
+ *   typical number of nutrients per food. Avoid adding additional passes unless required.
  */
