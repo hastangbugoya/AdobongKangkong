@@ -330,14 +330,23 @@ private fun PlannedMealCard(
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(onClick = { onLogMeal(meal.id) }) { Text("Log") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth().align(Alignment.End),
-                        onClick = { onDuplicateMeal(meal.id) }
-                    ) {
-                        Text("Duplicate")
+                    Row{
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { onLogMeal(meal.id) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.log_file),
+                                contentDescription = "Back"
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(onClick = { onDuplicateMeal(meal.id) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.duplicate),
+                                contentDescription = "Back"
+                            )
+                        }
                     }
+
                 }
             }
         }
@@ -359,7 +368,12 @@ private fun PlannedItemRow(
             Text(qtySummary, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onRemove) { Text("Remove") }
+        IconButton(onClick = { onRemove }) {
+            Icon(
+                painter = painterResource(R.drawable.trash),
+                contentDescription = "Remove"
+            )
+        }
     }
 }
 
@@ -403,7 +417,6 @@ private fun AddToPlanBottomSheet(
             Text("Add to plan", style = MaterialTheme.typography.titleLarge)
             Text("${sheet.slot.display} • $dateText", style = MaterialTheme.typography.bodySmall)
 
-//            if (sheet.slot == MealSlot.CUSTOM) {
             if (sheet.customLabel != null && sheet.customLabel.isNotEmpty()) {
                 TextField(
                     value = sheet.customLabel.orEmpty(),
@@ -414,7 +427,6 @@ private fun AddToPlanBottomSheet(
                     textStyle = MaterialTheme.typography.labelMedium
                 )
             }
-//            }
 
             TextField(
                 value = sheet.nameOverride.orEmpty(),
