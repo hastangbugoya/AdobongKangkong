@@ -376,7 +376,89 @@ fun RecipeBuilderScreen(
                     TextButton(onClick = vm::clearError) { Text("Dismiss") }
                 }
             }
+            item { Spacer(Modifier.height(4.dp)) }
+            // Ingredients list
+            item { Spacer(Modifier.height(8.dp)) }
+            item { Text("Ingredients", style = MaterialTheme.typography.titleMedium) }
+            item {
+                if (state.ingredients.isEmpty()) {
+                    Text("No ingredients yet.")
+                } else {
+                    androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.ingredients.forEachIndexed { index, ing ->
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
 
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        // Primary: food name
+                                        Text(
+                                            text = ing.foodName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        // Secondary: amount + grams
+                                        val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
+                                        val amountText = if (unitLabel.isNotBlank()) {
+                                            "${"%,.2f".format(ing.servings)} $unitLabel"
+                                        } else {
+                                            "${"%,.2f".format(ing.servings)} servings"
+                                        }
+                                        val gramsText = ing.grams?.let { g ->
+                                            " • ≈ ${"%,.0f".format(g)} g"
+                                        }.orEmpty()
+
+                                        Text(
+                                            text = amountText + gramsText,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+
+                                        // Tertiary: entered-as hint
+                                        val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
+                                        if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
+                                            Text(
+                                                text = "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    IconButton(
+                                        onClick = { vm.removeIngredientAt(index) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.trash),
+                                            contentDescription = "Remove ingredient",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Divider(
+                                    modifier = Modifier.padding(start = 0.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+                        }
+
+
+                    }
+                }
+            }
             item { Spacer(Modifier.height(4.dp)) }
             // Query
             item { Text("Add ingredient", style = MaterialTheme.typography.titleMedium) }
@@ -483,90 +565,7 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
-
-            // Ingredients list
-            item { Spacer(Modifier.height(8.dp)) }
-            item { Text("Ingredients", style = MaterialTheme.typography.titleMedium) }
-            item {
-                if (state.ingredients.isEmpty()) {
-                    Text("No ingredients yet.")
-                } else {
-                    androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        state.ingredients.forEachIndexed { index, ing ->
-                            Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                    ) {
-                                        // Primary: food name
-                                        Text(
-                                            text = ing.foodName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-
-                                        // Secondary: amount + grams
-                                        val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
-                                        val amountText = if (unitLabel.isNotBlank()) {
-                                            "${"%,.2f".format(ing.servings)} $unitLabel"
-                                        } else {
-                                            "${"%,.2f".format(ing.servings)} servings"
-                                        }
-                                        val gramsText = ing.grams?.let { g ->
-                                            " • ≈ ${"%,.0f".format(g)} g"
-                                        }.orEmpty()
-
-                                        Text(
-                                            text = amountText + gramsText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-
-                                        // Tertiary: entered-as hint
-                                        val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
-                                        if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
-                                            Text(
-                                                text = "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-
-                                    IconButton(
-                                        onClick = { vm.removeIngredientAt(index) },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.trash),
-                                            contentDescription = "Remove ingredient",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                Divider(
-                                    modifier = Modifier.padding(start = 0.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            }
-                        }
-
-
-                    }
-                }
-            }
-
+            // Nutrients Preview
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Preview", style = MaterialTheme.typography.titleMedium) }
             item {
