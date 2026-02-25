@@ -32,7 +32,7 @@ class DayLogViewModel @Inject constructor(
     val entries: StateFlow<List<DayLogRow>> =
         selectedDate
             .filterNotNull()
-            .flatMapLatest { date -> observeDayLogRows(date) }
+            .flatMapLatest { date -> observeDayLogRows(date.toString()) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val totals: StateFlow<DailyNutritionTotals?> =

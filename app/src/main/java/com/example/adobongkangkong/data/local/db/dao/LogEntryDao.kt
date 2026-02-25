@@ -26,12 +26,19 @@ interface LogEntryDao {
 
     @Query("""
         SELECT * FROM log_entries
-        WHERE timestamp >= :startInclusive AND timestamp < :endExclusive
+        WHERE logDateIso = :logDateIso
         ORDER BY timestamp DESC
     """)
-    fun observeRange(
-        startInclusive: Instant,
-        endExclusive: Instant
+    fun observeDayByLogDateIso(logDateIso: String): Flow<List<LogEntryEntity>>
+
+    @Query("""
+        SELECT * FROM log_entries
+        WHERE logDateIso >= :startDateIsoInclusive AND logDateIso <= :endDateIsoInclusive
+        ORDER BY logDateIso DESC, timestamp DESC
+    """)
+    fun observeRangeByLogDateIso(
+        startDateIsoInclusive: String,
+        endDateIsoInclusive: String
     ): Flow<List<LogEntryEntity>>
 
     /**
@@ -40,20 +47,16 @@ interface LogEntryDao {
      * NOTE: no joins. This stays valid even if foods/food_nutrients change or are deleted.
      */
     @Query("""
-    SELECT
-        le.id AS logId,
-        le.timestamp AS timestamp,
-        le.itemName AS itemName,
-        le.nutrientsJson AS nutrientsJson
-    FROM log_entries le
-    WHERE le.timestamp >= :startInclusive
-      AND le.timestamp < :endExclusive
-    ORDER BY le.timestamp DESC
-""")
-    fun observeTodayLogRows(
-        startInclusive: Instant,
-        endExclusive: Instant
-    ): Flow<List<TodayLogRow>>
+        SELECT
+            le.id AS logId,
+            le.timestamp AS timestamp,
+            le.itemName AS itemName,
+            le.nutrientsJson AS nutrientsJson
+        FROM log_entries le
+        WHERE le.logDateIso = :dateIso
+        ORDER BY le.timestamp DESC
+    """)
+    fun observeTodayLogRows(dateIso: String): Flow<List<TodayLogRow>>
 
     @Query("DELETE FROM log_entries WHERE id = :id")
     suspend fun deleteById(id: Long)

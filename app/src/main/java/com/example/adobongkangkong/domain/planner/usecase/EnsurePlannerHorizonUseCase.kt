@@ -1,5 +1,66 @@
 package com.example.adobongkangkong.domain.planner.usecase
-
+/**
+ * FUTURE-YOU NOTE — Planner Horizon Strategy (Rolling Forward Window)
+ *
+ * Current behavior (Phase 1):
+ * --------------------------------
+ * The planner ensures recurrence-generated occurrences only within:
+ *
+ *     anchorDate + DEFAULT_HORIZON_DAYS
+ *
+ * Where `anchorDate` is the date currently being viewed.
+ *
+ * This means:
+ * - If anchorDate = Feb 24 and DEFAULT_HORIZON_DAYS = 180,
+ *   occurrences are created through ~late August.
+ * - When user navigates into September, horizon extends again.
+ *
+ * This can appear as:
+ *   "Recurring meals stop in August, then resume in September."
+ *
+ * This behavior is technically correct but may feel confusing.
+ *
+ *
+ * Planned Improvement (Option 2 — Recommended):
+ * ----------------------------------------------
+ * Switch to a rolling forward horizon based on:
+ *
+ *     base = max(anchorDate, LocalDate.now())
+ *     targetEnd = base + horizonDays
+ *
+ * Rationale:
+ * - Always ensure at least N days ahead of *today*.
+ * - Avoid perceived gaps when user browses older dates.
+ * - Keep bounded expansion (no infinite generation).
+ *
+ *
+ * Why NOT implemented yet:
+ * -------------------------
+ * - Phase 1 goal is functional correctness.
+ * - Current behavior is deterministic and safe.
+ * - Avoid expanding logic surface area during active feature development.
+ *
+ *
+ * When implementing:
+ * -------------------
+ * Replace:
+ *     val targetEnd = anchorDate.plusDays(horizonDays)
+ *
+ * With:
+ *     val base = maxOf(anchorDate, LocalDate.now())
+ *     val targetEnd = base.plusDays(horizonDays)
+ *
+ * Ensure no regression in:
+ * - lastEnsuredEnd delta logic
+ * - series overlapping range query
+ * - idempotent behavior of EnsureSeriesOccurrencesWithinHorizonUseCase
+ *
+ * Performance considerations:
+ * - DEFAULT_HORIZON_DAYS can remain 180.
+ * - Occurrences remain bounded and lazily expanded.
+ *
+ * DO NOT remove this note until rolling horizon strategy is implemented.
+ */
 import com.example.adobongkangkong.domain.repository.PlannedSeriesRepository
 import java.time.LocalDate
 import javax.inject.Inject

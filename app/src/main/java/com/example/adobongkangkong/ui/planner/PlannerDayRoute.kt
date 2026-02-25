@@ -1,7 +1,9 @@
 package com.example.adobongkangkong.ui.planner
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.time.LocalDate
 
@@ -14,6 +16,16 @@ fun PlannerDayRoute(
 ) {
     LaunchedEffect(date) {
         viewModel.setDate(date)
+    }
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { e ->
+            when (e) {
+                is PlannerDayViewModel.PlannerDayUiEvent.ShowToast ->
+                    Toast.makeText(context, e.message, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     PlannerDayScreen(

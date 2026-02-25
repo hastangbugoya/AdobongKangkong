@@ -222,6 +222,16 @@ class RecipeRepositoryImpl @Inject constructor(
             }
         }
     }}
+
+    override suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader? {
+        val r = recipeDao.getById(recipeId) ?: return null
+        return RecipeHeader(
+            recipeId = r.id,
+            foodId = r.foodId,
+            servingsYield = r.servingsYield,
+            totalYieldGrams = r.totalYieldGrams
+        )
+    }
 }
 
 /**

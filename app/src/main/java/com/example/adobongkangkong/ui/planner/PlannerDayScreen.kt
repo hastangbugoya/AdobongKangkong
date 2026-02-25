@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.planner
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -82,6 +84,7 @@ fun PlannerDayScreen(
         }
         onEvent(PlannerDayEvent.UndoSnackbarConsumed(u.id))
     }
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -154,7 +157,8 @@ fun PlannerDayScreen(
                             onMakeRecurring = { mealId -> onEvent(PlannerDayEvent.MakeMealRecurring(mealId)) },
                             onRemoveItem = { itemId -> onEvent(PlannerDayEvent.RemovePlannedItem(itemId)) },
                             onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) },
-                            onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) }
+                            onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) },
+                            onLogMeal = { mealId -> onEvent(PlannerDayEvent.LogMeal(mealId)) }
                         )
                     }
                 }
@@ -256,7 +260,8 @@ private fun PlannedMealCard(
     onMakeRecurring: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
     onRemoveEmptyMeal: (Long) -> Unit,
-    onDuplicateMeal: (Long) -> Unit
+    onDuplicateMeal: (Long) -> Unit,
+    onLogMeal: (Long) -> Unit
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
 
@@ -325,7 +330,8 @@ private fun PlannedMealCard(
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
                     }
-
+                    TextButton(onClick = { onLogMeal(meal.id) }) { Text("Log") }
+                    Spacer(Modifier.width(8.dp))
                     TextButton(
                         modifier = Modifier.fillMaxWidth().align(Alignment.End),
                         onClick = { onDuplicateMeal(meal.id) }

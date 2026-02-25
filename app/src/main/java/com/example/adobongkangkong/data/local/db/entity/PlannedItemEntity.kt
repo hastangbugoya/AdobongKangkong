@@ -31,7 +31,18 @@ data class PlannedItemEntity(
     val type: PlannedItemSource,
 
 
-    /** foodId (FOOD), recipeFoodId/recipeId (RECIPE), or recipeBatchId (RECIPE_BATCH) */
+    /**
+     * Planned item identity rules (Phase 1):
+     * - type=FOOD        => refId = foods.id
+     * - type=RECIPE      => refId = recipes.id
+     * - type=RECIPE_BATCH=> refId = recipe_batches.id
+     *
+     * NOTE:
+     * - Recipes have a Food row (RecipeEntity.foodId). For logging/export reconciliation,
+     *   logs should use the recipe's Food.stableId (not recipeId).
+     * - Batch logs should also reconcile to the recipe Food.stableId, while storing recipeBatchId
+     *   for cooked-yield context.
+     */
     val refId: Long,
 
     val grams: Double? = null,

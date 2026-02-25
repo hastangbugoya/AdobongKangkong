@@ -25,24 +25,28 @@ class LogFoodUseCase @Inject constructor(
     suspend fun logFoodByServings(
         foodId: Long,
         servings: Double,
-        timestamp: Instant = Instant.now()
+        timestamp: Instant = Instant.now(),
+        logDateIso: String,
     ): CreateLogEntryUseCase.Result {
         return createLogEntry.execute(
             ref = FoodRef.Food(foodId),
             timestamp = timestamp,
-            amountInput = AmountInput.ByServings(servings)
+            amountInput = AmountInput.ByServings(servings),
+            logDateIso = logDateIso
         )
     }
 
     suspend fun logFoodByGrams(
         foodId: Long,
         grams: Double,
-        timestamp: Instant = Instant.now()
+        timestamp: Instant = Instant.now(),
+        logDateIso: String
     ): CreateLogEntryUseCase.Result {
         return createLogEntry.execute(
             ref = FoodRef.Food(foodId),
             timestamp = timestamp,
-            amountInput = AmountInput.ByGrams(grams)
+            amountInput = AmountInput.ByGrams(grams),
+            logDateIso = logDateIso
         )
     }
 
@@ -50,13 +54,15 @@ class LogFoodUseCase @Inject constructor(
         recipeRef: FoodRef.Recipe,
         servings: Double,
         recipeBatchId: Long,
-        timestamp: Instant = Instant.now()
+        timestamp: Instant = Instant.now(),
+        logDateIso: String
     ): CreateLogEntryUseCase.Result {
         return createLogEntry.execute(
             ref = recipeRef,
             timestamp = timestamp,
             amountInput = AmountInput.ByServings(servings),
-            recipeBatchId = recipeBatchId
+            recipeBatchId = recipeBatchId,
+            logDateIso = logDateIso
         )
     }
 
@@ -64,13 +70,15 @@ class LogFoodUseCase @Inject constructor(
         recipeRef: FoodRef.Recipe,
         grams: Double,
         recipeBatchId: Long,
-        timestamp: Instant = Instant.now()
+        timestamp: Instant = Instant.now(),
+        logDateIso: String
     ): CreateLogEntryUseCase.Result {
         return createLogEntry.execute(
             ref = recipeRef,
             timestamp = timestamp,
             amountInput = AmountInput.ByGrams(grams),
-            recipeBatchId = recipeBatchId
+            recipeBatchId = recipeBatchId,
+            logDateIso = logDateIso
         )
     }
 }

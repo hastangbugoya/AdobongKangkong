@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.logging
 
 import android.util.Log
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.LogEntry
@@ -46,21 +47,27 @@ class CreateLogEntryUseCase @Inject constructor(
         timestamp: Instant,
         amountInput: AmountInput,
         recipeBatchId: Long? = null,
-        overrideGramsPerServingUnit: Double? = null
+        overrideGramsPerServingUnit: Double? = null,
+        mealSlot: MealSlot? = null,
+        logDateIso: String,
     ): Result {
         return when (ref) {
             is FoodRef.Food -> logFood(
                 foodId = ref.foodId,
                 timestamp = timestamp,
                 amountInput = amountInput,
-                overrideGramsPerServingUnit = overrideGramsPerServingUnit
+                overrideGramsPerServingUnit = overrideGramsPerServingUnit,
+                mealSlot = mealSlot,
+                logDateIso = logDateIso
             )
 
             is FoodRef.Recipe -> logRecipe(
                 recipeRef = ref,
                 recipeBatchId = recipeBatchId,
                 timestamp = timestamp,
-                amountInput = amountInput
+                amountInput = amountInput,
+                mealSlot = mealSlot,
+                logDateIso = logDateIso
             )
         }
     }
@@ -69,7 +76,9 @@ class CreateLogEntryUseCase @Inject constructor(
         foodId: Long,
         timestamp: Instant,
         amountInput: AmountInput,
-        overrideGramsPerServingUnit: Double? = null
+        overrideGramsPerServingUnit: Double? = null,
+        mealSlot: MealSlot?,
+        logDateIso: String
     ): Result {
         val food = foodRepository.getById(foodId)
             ?: return Result.Error("Food not found")
@@ -139,7 +148,9 @@ class CreateLogEntryUseCase @Inject constructor(
             timestamp = timestamp,
             foodStableId = food.stableId,
             itemName = food.name,
-            nutrients = nutrients
+            nutrients = nutrients,
+            mealSlot = mealSlot,
+            logDateIso = logDateIso
         )
 
         val id = logRepository.insert(entry)
@@ -150,7 +161,9 @@ class CreateLogEntryUseCase @Inject constructor(
         recipeRef: FoodRef.Recipe,
         timestamp: Instant,
         amountInput: AmountInput,
-        recipeBatchId: Long?
+        recipeBatchId: Long?,
+        mealSlot: MealSlot?,
+        logDateIso: String
     ): Result {
         val batchId = recipeBatchId
             ?: return Result.Blocked("Select or create a cooked batch first.")
@@ -179,6 +192,10 @@ class CreateLogEntryUseCase @Inject constructor(
             input = amountInput.toRecipeLogInput()
         )
 
+        val gramsPerServingCooked = batch.gramsPerServingCooked(
+            fallbackServings = effectiveDraft.servingsYield
+        )
+
         if (!logged.isAllowed) {
             // Prefer your existing warning/message string if present
             val reason = logged.warnings.firstOrNull()?.toString()
@@ -190,7 +207,12 @@ class CreateLogEntryUseCase @Inject constructor(
             timestamp = timestamp,
             foodStableId = recipeRef.stableId,
             itemName = recipeRef.displayName,
-            nutrients = logged.totals
+            nutrients = logged.totals,
+            // ✅ provenance
+            recipeBatchId = batchId,
+            gramsPerServingCooked = gramsPerServingCooked,
+            mealSlot = mealSlot,
+            logDateIso = logDateIso
         )
 
         val id = logRepository.insert(entry)

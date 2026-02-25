@@ -10,7 +10,7 @@ class PromoteMealToSeriesAndEnsureHorizonUseCase @Inject constructor(
         val result = promote.execute(mealId)
         val startIso = result.anchorDate.toString()
         val endIso = result.anchorDate.plusDays(horizonDays).toString()
-        ensure.execute(seriesId = result.seriesId, startDateIso = startIso, endDateIso = endIso)
+        ensure.execute(seriesId = result.seriesId, startDateIso = startIso, endDateIso = endIso,)
         return result.seriesId
     }
 }

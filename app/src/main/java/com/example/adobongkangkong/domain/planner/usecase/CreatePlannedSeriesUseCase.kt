@@ -22,7 +22,9 @@ class CreatePlannedSeriesUseCase @Inject constructor(
         val effectiveEndDateIso: String? = null,
         val endConditionType: String,        // PlannedSeriesEndConditionType.*
         val endConditionValue: String? = null,
-        val slotRules: List<SlotRuleInput>
+        val slotRules: List<SlotRuleInput>,
+        val sourceMealId: Long,
+        val nameOverride: String
     )
 
     suspend fun execute(input: Input): Long {
@@ -36,6 +38,7 @@ class CreatePlannedSeriesUseCase @Inject constructor(
                 effectiveEndDate = input.effectiveEndDateIso,
                 endConditionType = input.endConditionType,
                 endConditionValue = input.endConditionValue,
+                sourceMealId = input.sourceMealId,
                 createdAtEpochMs = now,
                 updatedAtEpochMs = now
             )

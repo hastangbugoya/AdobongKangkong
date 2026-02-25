@@ -13,6 +13,7 @@ import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedSeriesUse
 import com.example.adobongkangkong.domain.planner.usecase.CreateSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.EnsurePlannerHorizonUseCase
+import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDayUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PromoteMealToSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMealUseCase
@@ -22,8 +23,11 @@ import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
@@ -31,6 +35,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -53,10 +58,18 @@ class PlannerDayViewModel @Inject constructor(
     private val createSeriesAndEnsureHorizon: CreateSeriesAndEnsureHorizonUseCase,
 
     private val promoteMealToSeriesAndEnsureHorizon: PromoteMealToSeriesAndEnsureHorizonUseCase,
+    private val logPlannedMeal: LogPlannedMealUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
     val state: StateFlow<PlannerDayUiState> = _state.asStateFlow()
+
+
+    sealed interface PlannerDayUiEvent {
+        data class ShowToast(val message: String) : PlannerDayUiEvent
+    }
+    private val _events = MutableSharedFlow<PlannerDayUiEvent>(extraBufferCapacity = 1)
+    val events: SharedFlow<PlannerDayUiEvent> = _events.asSharedFlow()
 
     private val dateFlow = MutableStateFlow(_state.value.date)
     private var observeJob: Job? = null
@@ -319,9 +332,59 @@ class PlannerDayViewModel @Inject constructor(
             is PlannerDayEvent.MakeMealRecurring -> {
                 makeMealRecurring(event.mealId)
             }
+
+            is PlannerDayEvent.LogMeal -> {
+                logMeal(event.mealId)
+            }
         }
     }
 
+    private fun logMeal(mealId: Long) {
+        if (mealId <= 0L) return
+
+        // Resolve slot from current state (no extra DB call)
+        val day = _state.value.day
+        val slot: MealSlot? = day?.mealsBySlot
+            ?.values
+            ?.asSequence()
+            ?.flatten()
+            ?.firstOrNull { it.id == mealId }
+            ?.slot
+
+        viewModelScope.launch {
+            val logDateIso = _state.value.date.toString()
+            try {
+                val result = logPlannedMeal.execute(
+                    mealId = mealId,
+                    timestamp = Instant.now(),
+                    mealSlot = slot,
+                    logDateIso = logDateIso
+                )
+
+                val alreadyLogged = result.loggedCount == 0 &&
+                        result.blockedCount == 0 &&
+                        result.errorCount == 1 &&
+                        result.outcomes.size == 1 &&
+                        (result.outcomes.firstOrNull()?.message?.contains("already been logged", ignoreCase = true) == true)
+
+                if (alreadyLogged) {
+                    _events.tryEmit(PlannerDayUiEvent.ShowToast("Already logged."))
+                    return@launch
+                }
+
+                // Minimal UX: surface summary in errorMessage for now (or add snackbar later)
+                val msg = buildString {
+                    append("Logged ${result.loggedCount}")
+                    if (result.blockedCount > 0) append(" • Blocked ${result.blockedCount}")
+                    if (result.errorCount > 0) append(" • Errors ${result.errorCount}")
+                }
+
+                _state.update { it.copy(errorMessage = msg) }
+            } catch (t: Throwable) {
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to log meal") }
+            }
+        }
+    }
     private fun makeMealRecurring(mealId: Long) {
         if (mealId <= 0L) return
 
@@ -687,10 +750,13 @@ class PlannerDayViewModel @Inject constructor(
                 }
                 .distinctUntilChanged()
                 .catch { t ->
+                    t.printStackTrace()  // ✅ always shows full stack in Logcat
+                    android.util.Log.e("Meow", "PlannerDay> observePlannedDay failed", t)
+
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = t.message ?: "Failed to load plan"
+                            errorMessage = (t.message ?: t::class.simpleName ?: "Failed to load plan")
                         )
                     }
                 }
@@ -723,7 +789,9 @@ class PlannerDayViewModel @Inject constructor(
                         CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 1, slot = MealSlot.LUNCH),      // Mon
                         CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 2, slot = MealSlot.DINNER),     // Tue
                         CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 5, slot = MealSlot.BREAKFAST),  // Fri
-                    )
+                    ),
+                    sourceMealId = 0L,
+                    nameOverride = "test"
                 )
 
                 val seriesId = createSeriesAndEnsureHorizon.execute(

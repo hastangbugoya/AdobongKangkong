@@ -39,6 +39,9 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
         val slotRules = seriesRepo.getSlotRulesForSeries(seriesId)
         if (slotRules.isEmpty()) return 0
 
+        val templateNameOverride = series.sourceMealId
+            ?.let { mealsRepo.getById(it)?.nameOverride }
+
         // Clamp requested window to series effective dates
         val requestedStart = LocalDate.parse(startDateIso)
         val requestedEnd = LocalDate.parse(endDateIso)
@@ -87,7 +90,7 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
                             dateIso = dateIso,
                             slot = r.slot,
                             customLabel = r.customLabel,
-                            nameOverride = null,
+                            nameOverride = templateNameOverride,
                             sortOrder = null,
                             seriesId = seriesId,
                             status = PlannedOccurrenceStatus.ACTIVE.name

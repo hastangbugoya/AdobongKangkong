@@ -38,14 +38,14 @@ class UserNutrientTargetRepositoryImpl @Inject constructor(
 
 
 
-private fun UserNutrientTargetEntity.toDomain() = UserNutrientTarget(
+internal fun UserNutrientTargetEntity.toDomain() = UserNutrientTarget(
     nutrientCode = nutrientCode,
     minPerDay = minPerDay,
     targetPerDay = targetPerDay,
     maxPerDay = maxPerDay
 )
 
-private fun UserNutrientTarget.toEntity() = UserNutrientTargetEntity(
+internal fun UserNutrientTarget.toEntity() = UserNutrientTargetEntity(
     nutrientCode = nutrientCode,
     minPerDay = minPerDay,
     targetPerDay = targetPerDay,

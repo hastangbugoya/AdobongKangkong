@@ -275,14 +275,24 @@ class DashboardViewModel @Inject constructor(
 
     fun logFoodByServings(foodId: Long, servings: Double = 1.0) {
         viewModelScope.launch {
-            val result = logFood.logFoodByServings(foodId, servings)
+            val dateIso = selectedDateFlow.value.toString()
+            val result = logFood.logFoodByServings(
+                foodId = foodId,
+                servings = servings,
+                logDateIso = dateIso
+            )
             handleLogResult(foodId, result)
         }
     }
 
     fun logFoodByGrams(foodId: Long, grams: Double) {
         viewModelScope.launch {
-            val result = logFood.logFoodByGrams(foodId, grams)
+            val dateIso = selectedDateFlow.value.toString()
+            val result = logFood.logFoodByGrams(
+                foodId = foodId,
+                grams = grams,
+                logDateIso = dateIso
+            )
             handleLogResult(foodId, result)
         }
     }

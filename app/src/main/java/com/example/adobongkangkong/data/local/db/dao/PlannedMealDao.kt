@@ -15,6 +15,17 @@ interface PlannedMealDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: PlannedMealEntity): Long
 
+    @Query("""
+        UPDATE planned_meals
+        SET loggedAtEpochMs = :loggedAtEpochMs
+        WHERE id = :plannedMealId
+          AND loggedAtEpochMs IS NULL
+    """)
+    suspend fun markLoggedIfNotYet(plannedMealId: Long, loggedAtEpochMs: Long): Int
+
+    @Query("SELECT loggedAtEpochMs FROM planned_meals WHERE id = :plannedMealId")
+    suspend fun getLoggedAtEpochMs(plannedMealId: Long): Long?
+
     @Update
     suspend fun update(entity: PlannedMealEntity)
 

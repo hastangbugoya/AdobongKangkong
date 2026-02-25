@@ -81,7 +81,8 @@ class QuickAddViewModel @Inject constructor(
     private data class PendingResolveMass(
         val food: Food,
         val timestamp: Instant,
-        val amountInput: AmountInput
+        val amountInput: AmountInput,
+        val logDateIso: String
     )
 
     private var pendingResolveMass: PendingResolveMass? = null
@@ -698,9 +699,10 @@ class QuickAddViewModel @Inject constructor(
 
                 val result = createLogEntry.execute(
                     ref = FoodRef.Food(pending.food.id),
-                    timestamp = pending.timestamp,
+                    timestamp = Instant.now(),
                     amountInput = pending.amountInput,
-                    overrideGramsPerServingUnit = overrideGpsu
+                    overrideGramsPerServingUnit = overrideGpsu,
+                    logDateIso = pending.logDateIso
                 )
                 Log.d("Meow", "QuickAddViewModel > createLogEntry result = $result")
                 when (result) {
@@ -862,7 +864,8 @@ class QuickAddViewModel @Inject constructor(
                         ),
                         timestamp = timestamp,
                         amountInput = amountInput,
-                        recipeBatchId = null
+                        recipeBatchId = null,
+                        logDateIso = logDate.toString()
                     )
                 } else {
                     // Recipe (Food is a proxy row; resolve recipeId)
@@ -899,7 +902,8 @@ class QuickAddViewModel @Inject constructor(
                         ),
                         timestamp = now,
                         amountInput = amountInput,
-                        recipeBatchId = batchId
+                        recipeBatchId = batchId,
+                        logDateIso = logDate.toString()
                     )
                 }
 
@@ -928,7 +932,8 @@ class QuickAddViewModel @Inject constructor(
                             pendingResolveMass = PendingResolveMass(
                                 food = selected,
                                 timestamp = timestamp,
-                                amountInput = amountInput
+                                amountInput = amountInput,
+                                logDate.toString()
                             )
                             gramsPerServingTextFlow.value = ""
                             isResolveMassDialogOpenFlow.value = true

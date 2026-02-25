@@ -39,6 +39,9 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         ) {
             throw UnsupportedOperationException("Not needed for these tests")
         }
+
+        override suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader? =
+            headerByFoodId.values.firstOrNull { it.recipeId == recipeId }
     }
 
     private class FakeSnapshotRepo(

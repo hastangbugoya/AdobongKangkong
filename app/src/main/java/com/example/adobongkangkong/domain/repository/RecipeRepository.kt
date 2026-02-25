@@ -28,4 +28,7 @@ interface RecipeRepository {
         totalYieldGrams: Double?,
         ingredients: List<RecipeIngredientLine>
     )
+
+    suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader?
+
 }

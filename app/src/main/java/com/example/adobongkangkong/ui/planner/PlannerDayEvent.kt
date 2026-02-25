@@ -58,4 +58,6 @@ sealed interface PlannerDayEvent {
 
     // Promote an existing meal into a recurring series
     data class MakeMealRecurring(val mealId: Long) : PlannerDayEvent
+
+    data class LogMeal(val mealId: Long) : PlannerDayEvent
 }

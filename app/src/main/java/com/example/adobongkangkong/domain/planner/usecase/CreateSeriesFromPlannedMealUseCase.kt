@@ -56,7 +56,7 @@ class CreateSeriesFromPlannedMealUseCase @Inject constructor(
                 effectiveEndDate = null,
                 endConditionType = PlannedSeriesEndConditionType.INDEFINITE,
                 endConditionValue = null,
-                sourceMealId = null, // you said "not yet"
+                sourceMealId = meal.id,
                 createdAtEpochMs = now,
                 updatedAtEpochMs = now
             )
@@ -93,7 +93,7 @@ class CreateSeriesFromPlannedMealUseCase @Inject constructor(
                 grams = mi.grams,
                 servings = mi.servings,
                 note = null, // planned_items doesn't have note
-                sortOrder = mi.sortOrder
+                sortOrder = mi.sortOrder,
             )
 
             seriesItems.insert(template)

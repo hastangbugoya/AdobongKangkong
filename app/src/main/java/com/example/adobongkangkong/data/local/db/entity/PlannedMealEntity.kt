@@ -42,13 +42,9 @@ data class PlannedMealEntity(
      * Stored as TEXT using enum.name (no type converter required).
      */
     val status: String = PlannedOccurrenceStatus.ACTIVE.name,
-//    /**
-//     * NEW: Non-null key used for series uniqueness.
-//     * - For non-CUSTOM slots: ""
-//     * - For CUSTOM slot: normalized customLabel (trim)
-//     */
-//    @ColumnInfo(defaultValue = "")
-//    val seriesKey: String = ""
+
+    /** When non-null, this planned meal occurrence has already been logged. */
+    val loggedAtEpochMs: Long? = null
 )
 
 enum class PlannedOccurrenceStatus {

@@ -27,4 +27,6 @@ interface PlannedMealRepository {
     suspend fun getMaxSortOrderForDate(dateIso: String): Int
 
     suspend fun getMealsForSeriesInRange(seriesId: Long, startDateIso: String, endDateIso: String): List<PlannedMealEntity>
+
+    suspend fun markLoggedIfNotYet(plannedMealId: Long, loggedAtEpochMs: Long): Boolean
 }

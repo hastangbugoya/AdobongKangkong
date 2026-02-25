@@ -19,35 +19,50 @@ import javax.inject.Inject
  * Benefits:
  * - Deleting/editing foods does not affect historical logs or summaries.
  * - No joins, no recomputation from food tables.
+ *
+ * Implementation of [SummaryRepository] backed by [LogRepository].
+ *
+ * ## Behavior
+ * - Reads log entries via date-based range queries.
+ * - Sums immutable nutrient snapshots stored on each log entry.
+ * - Avoids joins so historical totals remain stable if foods/recipes change later.
  */
 class SummaryRepositoryImpl @Inject constructor(
     private val logRepository: LogRepository
 ) : SummaryRepository {
 
     /**
-     * Observes macro totals within the given time range [startInclusive, endExclusive).
+     * Observes total nutrients across the inclusive ISO date range.
+     *
+     * Delegates to [LogRepository.observeRangeByDateIso] and folds each entry's snapshot nutrients
+     * into a single [NutrientMap].
      */
-    override fun observeNutrientTotals(
-        startInclusive: Instant,
-        endExclusive: Instant
+    override fun observeNutrientTotalsByDateIso(
+        startDateIsoInclusive: String,
+        endDateIsoInclusive: String
     ): Flow<NutrientMap> {
-        return logRepository.observeRange(startInclusive, endExclusive)
+        return logRepository.observeRangeByDateIso(startDateIsoInclusive, endDateIsoInclusive)
             .map { logs ->
                 logs.fold(NutrientMap.EMPTY) { acc, log -> acc + log.nutrients }
             }
     }
 
-    override fun observeMacroTotals(
-        startInclusive: Instant,
-        endExclusive: Instant
+    /**
+     * Observes macro totals across the inclusive ISO date range.
+     *
+     * This maps the full [NutrientMap] totals into [MacroTotals] using [MacroKeys].
+     */
+    override fun observeMacroTotalsByDateIso(
+        startDateIsoInclusive: String,
+        endDateIsoInclusive: String
     ): Flow<MacroTotals> {
-        return observeNutrientTotals(startInclusive, endExclusive)
+        return observeNutrientTotalsByDateIso(startDateIsoInclusive, endDateIsoInclusive)
             .map { totals ->
                 MacroTotals(
                     caloriesKcal = totals[MacroKeys.CALORIES],
-                    proteinG     = totals[MacroKeys.PROTEIN],
-                    carbsG       = totals[MacroKeys.CARBS],
-                    fatG         = totals[MacroKeys.FAT]
+                    proteinG = totals[MacroKeys.PROTEIN],
+                    carbsG = totals[MacroKeys.CARBS],
+                    fatG = totals[MacroKeys.FAT]
                 )
             }
     }

@@ -39,4 +39,11 @@ class PlannedMealRepositoryImpl @Inject constructor(
 
     override suspend fun getMealsForSeriesInRange(seriesId: Long, startDateIso: String, endDateIso: String): List<PlannedMealEntity> =
         dao.getMealsForSeriesInRange(seriesId, startDateIso, endDateIso)
+
+    override suspend fun markLoggedIfNotYet(
+        plannedMealId: Long,
+        loggedAtEpochMs: Long
+    ): Boolean = dao.markLoggedIfNotYet(plannedMealId, loggedAtEpochMs) == 1
+
+
 }

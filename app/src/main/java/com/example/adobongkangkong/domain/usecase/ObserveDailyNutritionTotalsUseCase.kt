@@ -25,16 +25,16 @@ class ObserveDailyNutritionTotalsUseCase @Inject constructor(
 ) {
     operator fun invoke(
         date: LocalDate,
-        zoneId: ZoneId
+        zoneId: ZoneId // keep parameter if callers already have it; unused for now
     ): Flow<DailyNutritionTotals> {
-        val (startInclusive, endExclusive) = dayBounds(date, zoneId)
-        return logRepository.observeRange(startInclusive, endExclusive)
+        val dateIso = date.toString() // yyyy-MM-dd
+        return logRepository.observeDay(dateIso)
             .map { entries ->
                 val totals = mutableMapOf<NutrientKey, Double>()
 
                 for (entry in entries) {
                     entry.nutrients.asMap().forEach { (code, amount) ->
-                        val key = NutrientKey(code) // matches your usage NutrientKey(card.code)
+                        val key = NutrientKey(code)
                         totals[key] = (totals[key] ?: 0.0) + amount
                     }
                 }

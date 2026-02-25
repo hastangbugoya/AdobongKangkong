@@ -17,6 +17,7 @@ import java.time.Instant
     tableName = "log_entries",
     indices = [
         Index(value = ["timestamp"]),
+        Index(value = ["logDateIso"]),          // ✅ NEW
         Index(value = ["foodStableId"]),
         Index(value = ["recipeBatchId"])
     ]
@@ -26,37 +27,19 @@ data class LogEntryEntity(
 
     val timestamp: Instant,
 
-    /** Display name captured at log time (resilient to rename/deletion). */
-    val itemName: String,
+    // ✅ NEW: “counts for” day bucket (yyyy-MM-dd)
+    val logDateIso: String,
 
-    /** Stable ID for export/import reconciliation, nullable for ad-hoc entries. */
+    val itemName: String,
     val foodStableId: String?,
 
-    /** User input */
     val amount: Double = 1.0,
-
-    /**
-     * Stored as TEXT via TypeConverter.
-     * Default ITEM is used for legacy rows.
-     */
     val unit: com.example.adobongkangkong.domain.model.LogUnit =
         com.example.adobongkangkong.domain.model.LogUnit.ITEM,
 
-    /**
-     * Optional link to a cooked batch (only meaningful for recipe-based logs).
-     * If present, this tells you WHICH cooked yield context was used.
-     */
     val recipeBatchId: Long? = null,
-
-    /**
-     * Optional explanatory field:
-     * gramsPerServingCooked = batch.cookedYieldGrams / servingsYieldUsed
-     * Useful when unit=SERVING (or for UI transparency).
-     */
     val gramsPerServingCooked: Double? = null,
 
-    /** Final totals for this log event as JSON (your NutrientMap totals). */
     val nutrientsJson: String,
-
     val mealSlot: MealSlot? = null
 )
