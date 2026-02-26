@@ -1,11 +1,6 @@
 package com.example.adobongkangkong.ui.shopping
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -35,26 +30,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
-import com.example.adobongkangkong.feature.camera.FoodImageStorage
-import com.example.adobongkangkong.ui.camera.generateBlurDerivative
+import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 private enum class ShoppingTab { TOTALLED, NOT_TOTALLED }
@@ -71,7 +59,6 @@ fun ShoppingScreen(
     }
 
     val state by vm.state.collectAsState()
-
     var tab by remember { mutableStateOf(ShoppingTab.TOTALLED) }
 
     Scaffold(
@@ -148,7 +135,7 @@ private fun TotalledTab(
     ) {
         items(rows, key = { it.foodId }) { row ->
             FoodBannerCardBackground(foodId = row.foodId) {
-                // IMPORTANT: Card must be transparent or it will paint over the blur background.
+                // CRITICAL: Card must be transparent or it will paint over the blur background.
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -163,11 +150,8 @@ private fun TotalledTab(
                                 row.unconvertedServingsText?.let { Text(it) }
                             }
                         },
-                        trailingContent = {
-                            FoodGoalFlagsStrip(flagsByFoodId[row.foodId])
-                        },
+                        trailingContent = { FoodGoalFlagsStrip(flagsByFoodId[row.foodId]) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                        // IMPORTANT: no clickable modifier here (no row tap behavior)
                     )
                 }
             }
@@ -187,7 +171,7 @@ private fun NotTotalledTab(
     ) {
         items(groups, key = { it.foodId }) { g ->
             FoodBannerCardBackground(foodId = g.foodId) {
-                // IMPORTANT: Card must be transparent or it will paint over the blur background.
+                // CRITICAL: Card must be transparent or it will paint over the blur background.
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -222,66 +206,5 @@ private fun NotTotalledTab(
                 }
             }
         }
-    }
-}
-
-/**
- * FoodBannerCardBackground
- *
- * UI-only reusable background wrapper for list rows/cards that should display the banner blur
- * background (if available), matching FoodsListScreen → FoodRow().
- *
- * Notes:
- * - Master banner: filesDir/food_images/{foodId}/banner.jpg
- * - Blur derivative: cacheDir/food_images/{foodId}/banner_blur.webp (safe to regenerate)
- * - This wrapper draws the blur + scrim behind [content].
- *
- * Important:
- * - The child Card/ListItem must use containerColor = Color.Transparent for the blur to be visible.
- */
-@Composable
-fun FoodBannerCardBackground(
-    foodId: Long,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    val context = LocalContext.current
-    val storage = remember(context) { FoodImageStorage(context) }
-
-    val blurBitmapState = produceState<Bitmap?>(initialValue = null, key1 = foodId) {
-        val bannerFile = storage.bannerJpegFile(foodId)
-        val blurFile = storage.bannerBlurWebpFile(foodId)
-
-        value = withContext(Dispatchers.IO) {
-            if (!blurFile.exists() && bannerFile.exists()) {
-                storage.ensureBlurDir(foodId)
-                generateBlurDerivative(
-                    inputJpeg = bannerFile,
-                    outputWebp = blurFile,
-                    webpQuality = 60,
-                    downscaleTargetWidthPx = 96
-                )
-            }
-            if (blurFile.exists()) BitmapFactory.decodeFile(blurFile.absolutePath) else null
-        }
-    }
-
-    Box(modifier = modifier.fillMaxWidth()) {
-        blurBitmapState.value?.let { bmp ->
-            Image(
-                bitmap = bmp.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop,
-                alpha = 0.22f
-            )
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(Color.Black.copy(alpha = 0.06f))
-            )
-        }
-
-        content()
     }
 }
