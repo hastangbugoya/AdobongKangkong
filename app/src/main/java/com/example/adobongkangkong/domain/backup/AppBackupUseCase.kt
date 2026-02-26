@@ -1,0 +1,168 @@
+package com.example.adobongkangkong.domain.backup
+
+import android.content.Context
+import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
+import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+import javax.inject.Inject
+
+/**
+ * AppBackupUseCase
+ *
+ * Exports and restores a complete migration bundle.
+ *
+ * Included:
+ * - Room DB files: nutri.db (+ -wal / -shm if present)
+ * - Banner masters directory: filesDir/food_images (all files inside)
+ *
+ * Excluded (cache / derivable):
+ * - cacheDir (blur images regenerate automatically)
+ *
+ * CRITICAL:
+ * - Restore must be performed when the Room DB is CLOSED.
+ * - After restore, restart the app process so Room reopens the restored DB cleanly.
+ */
+class AppBackupUseCase @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+
+    companion object {
+        private const val DB_NAME = "nutri.db"
+
+        // Zip layout (inside archive)
+        private const val ZIP_DB_DIR = "databases/"
+        private const val ZIP_FILES_DIR = "files/"
+
+        // Authoritative media we include
+        private const val FOOD_IMAGES_DIR = "food_images"
+    }
+
+    /**
+     * Creates a ZIP at [outputUri] containing:
+     * - databases/nutri.db, nutri.db-wal, nutri.db-shm (if present)
+     * - files/food_images (all files inside)
+     *
+     * Optional [beforeCopy] hook lets UI do a WAL checkpoint / pause writers if desired.
+     */
+    suspend fun exportToZip(
+        outputUri: Uri,
+        beforeCopy: (suspend () -> Unit)? = null
+    ) = withContext(Dispatchers.IO) {
+        beforeCopy?.invoke()
+
+        val resolver = context.contentResolver
+        val dbFiles = getDbFiles()
+        val bannerRoot = File(context.filesDir, FOOD_IMAGES_DIR)
+
+        resolver.openOutputStream(outputUri)?.use { os ->
+            ZipOutputStream(os.buffered()).use { zip ->
+
+                fun addFile(file: File, entryName: String) {
+                    if (!file.exists() || !file.isFile) return
+                    zip.putNextEntry(ZipEntry(entryName))
+                    BufferedInputStream(file.inputStream()).use { input ->
+                        input.copyTo(zip)
+                    }
+                    zip.closeEntry()
+                }
+
+                // DB files (WAL mode => include wal/shm if present)
+                addFile(dbFiles.db, ZIP_DB_DIR + DB_NAME)
+                dbFiles.wal?.let { addFile(it, ZIP_DB_DIR + DB_NAME + "-wal") }
+                dbFiles.shm?.let { addFile(it, ZIP_DB_DIR + DB_NAME + "-shm") }
+
+                // Banner masters directory (filesDir/food_images)
+                if (bannerRoot.exists() && bannerRoot.isDirectory) {
+                    bannerRoot
+                        .walkTopDown()
+                        .filter { it.isFile }
+                        .forEach { f ->
+                            val rel = f.absolutePath
+                                .removePrefix(bannerRoot.absolutePath + File.separator)
+                                .replace("\\", "/")
+                            addFile(f, ZIP_FILES_DIR + FOOD_IMAGES_DIR + "/" + rel)
+                        }
+                }
+            }
+        } ?: error("Unable to open output stream for export Uri.")
+    }
+
+    /**
+     * Restores a ZIP previously created by [exportToZip].
+     *
+     * Overwrites:
+     * - databases/nutri.db (+ -wal / -shm if present in zip)
+     * - filesDir/food_images (all files inside)
+     *
+     * Optional [beforeRestore] should close Room / stop writers.
+     * Optional [afterRestore] is a good place to restart process.
+     */
+    suspend fun restoreFromZip(
+        inputUri: Uri,
+        beforeRestore: (suspend () -> Unit)? = null,
+        afterRestore: (suspend () -> Unit)? = null
+    ) = withContext(Dispatchers.IO) {
+        beforeRestore?.invoke()
+
+        val resolver = context.contentResolver
+
+        val db = context.getDatabasePath(DB_NAME)
+        val dbDir = db.parentFile ?: error("Database parent directory missing for $DB_NAME")
+        val filesDir = context.filesDir
+
+        resolver.openInputStream(inputUri)?.use { ins ->
+            ZipInputStream(ins.buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val name = entry.name
+
+                    when {
+                        name.startsWith(ZIP_DB_DIR) -> {
+                            val outFile = File(dbDir, name.removePrefix(ZIP_DB_DIR))
+                            outFile.parentFile?.mkdirs()
+                            outFile.outputStream().use { out ->
+                                zip.copyTo(out)
+                            }
+                        }
+
+                        name.startsWith(ZIP_FILES_DIR) -> {
+                            val outFile = File(filesDir, name.removePrefix(ZIP_FILES_DIR))
+                            outFile.parentFile?.mkdirs()
+                            outFile.outputStream().use { out ->
+                                zip.copyTo(out)
+                            }
+                        }
+
+                        else -> {
+                            // ignore unknown entries
+                        }
+                    }
+
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        } ?: error("Unable to open input stream for restore Uri.")
+
+        afterRestore?.invoke()
+    }
+
+    private data class DbFiles(
+        val db: File,
+        val wal: File?,
+        val shm: File?
+    )
+
+    private fun getDbFiles(): DbFiles {
+        val db = context.getDatabasePath(DB_NAME)
+        val wal = File(db.parentFile, DB_NAME + "-wal").takeIf { it.exists() && it.isFile }
+        val shm = File(db.parentFile, DB_NAME + "-shm").takeIf { it.exists() && it.isFile }
+        return DbFiles(db = db, wal = wal, shm = shm)
+    }
+}
