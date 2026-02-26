@@ -11,21 +11,78 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 /**
- * Observe all FOOD needs for planned items in the next N days.
+ * Observes “shopping needs” (food quantities) derived from planned meals/items over a forward-looking window.
  *
- * Rules (locked in):
- * - FOOD planned items: include as-is (grams/servings).
- * - RECIPE planned items: expand to ingredient foods, scaled by plannedServings / recipe.servingsYield.
- *   - Uses RecipeRepository.getRecipeByFoodId(...) or header lookup (see [RecipeHeaderLookup]).
- *   - Uses RecipeRepository.getIngredients(recipeId) which provides ingredient servings.
- *   - Output for expanded recipe ingredients is in "servings" (grams = null) because your
- *     RecipeIngredientLine is servings-based in the domain.
- * - Ordering: planned date ASC, then food name ASC (case-insensitive).
- * - Aggregation: per (date, foodId), sum grams and sum servings independently.
+ * ## Purpose
+ * Provide a single domain entry point for the Shopping List feature to answer:
+ * “What foods do I need on each date in the next N days, and how much?”
  *
- * NOTE:
- * - RECIPE_BATCH is intentionally ignored in this version per your request (“recipe is the source”).
- *   You can add it later using the same expansion strategy as recipe batches already do.
+ * The output is designed for UI rendering and grouping, not for persistence.
+ *
+ * ## Rationale (why this use case exists)
+ * Planned meals store *intent* (items scheduled on dates), but shopping needs require **expansion**
+ * and **normalization**:
+ *
+ * - FOOD planned items can be read directly.
+ * - RECIPE planned items must be expanded into ingredient foods, scaled to the planned servings.
+ * - Names must be resolved for display.
+ *
+ * Keeping this in the domain layer:
+ * - centralizes expansion rules (so planner/logging/shopping don’t diverge),
+ * - prevents UI from duplicating recipe math logic,
+ * - maintains a stable contract even if data layer joins or schema evolve.
+ *
+ * ## Behavior
+ * For an inclusive ISO window `[startDate, startDate + days - 1]`:
+ *
+ * 1) Observe planned items joined to their planned dates via [PlannedItemsRangeRepository].
+ * 2) For each planned row:
+ *    - If `type == FOOD`:
+ *        emit one “atom” as-is (foodId + grams/servings).
+ *    - If `type == RECIPE`:
+ *        expand to ingredient atoms using [RecipeRepository]:
+ *        - Load recipe header by recipeFoodId (edit-mode key).
+ *        - Compute `scale = plannedServings / servingsYield`.
+ *        - For each ingredient line, scale ingredient servings/grams by `scale`.
+ *    - If `type == RECIPE_BATCH`:
+ *        intentionally ignored in this version (see “Limitations”).
+ * 3) Aggregate atoms by `(date, foodId)`:
+ *    - Sum grams independently (null treated as 0.0, output null if total == 0.0).
+ *    - Sum servings independently (same rule).
+ * 4) Resolve food names in bulk via [FoodLookupRepository].
+ * 5) Emit a sorted list:
+ *    - date ASC
+ *    - foodName ASC (case-insensitive)
+ *
+ * ## Parameters
+ * @param startDate First day (inclusive) of the window.
+ * @param days Number of days to include (must be > 0). Window is inclusive.
+ *
+ * ## Return
+ * @return A stream of [PlannedFoodNeed] rows suitable for UI grouping and display.
+ * Emits whenever the underlying planned items/meals in the range change.
+ *
+ * ## Edge cases handled
+ * - `days <= 0` → throws (caller bug).
+ * - No planned items in range → emits empty list.
+ * - RECIPE row missing planned servings / servingsYield / header / ingredients → contributes nothing (silent skip).
+ * - Ingredient line with neither grams nor servings → skipped.
+ * - Food name missing in lookup → uses `"Food #<id>"` fallback.
+ *
+ * ## Pitfalls / gotchas
+ * - **Recipe expansion requires planned servings.** If a planned recipe item is stored without servings,
+ *   it will not contribute to needs (by design: scaling would be undefined).
+ * - **Ingredient quantities are dual-path (grams vs servings).** This use case sums grams and servings
+ *   independently; it does not convert between them (no density guessing).
+ * - **Sorting is UI-facing.** If the UI later needs “group by food then earliest date”, do that at the UI/VM
+ *   layer or introduce a second domain projection—do not change ordering silently here.
+ * - **Date membership is ISO-string based upstream.** This use case trusts `dateIso` from the join
+ *   as the authoritative planned day.
+ *
+ * ## Architectural rules
+ * - Do not join to Foods/Recipes tables directly here except via the injected lookup repositories/DAOs.
+ * - Do not guess density or convert ml ↔ grams; keep grams and servings as separate quantities.
+ * - Output is derived only; this use case must not write to the database.
  */
 class ObservePlannedFoodNeedsUseCase @Inject constructor(
     private val plannedItemsRangeRepository: PlannedItemsRangeRepository,
@@ -111,6 +168,7 @@ class ObservePlannedFoodNeedsUseCase @Inject constructor(
                     )
             }
     }
+
     private suspend fun expandRecipe(
         date: LocalDate,
         recipeFoodId: Long,
@@ -156,8 +214,11 @@ class ObservePlannedFoodNeedsUseCase @Inject constructor(
 
 /**
  * Output row: “food needed on date”.
- * If the need comes from a recipe expansion, grams will typically be null and servings non-null
- * (because your RecipeIngredientLine is servings-based).
+ *
+ * Semantics:
+ * - [grams] and [servings] are independent quantities and may both be present.
+ * - Recipe expansions typically produce servings-based ingredient needs (grams often null),
+ *   because your recipe ingredient contract is primarily servings-based.
  */
 data class PlannedFoodNeed(
     val date: LocalDate,
@@ -178,3 +239,43 @@ data class PlannedItemWithDateRow(
     val grams: Double?,
     val servings: Double?
 )
+
+/**
+ * =============================================================================
+ * FOR FUTURE AI ASSISTANT — invariants, boundaries, and “do not refactor” notes
+ * =============================================================================
+ *
+ * Invariants (must not change)
+ * - Window is inclusive: endIso = startDate + (days - 1).
+ * - RECIPE expansion scale is: plannedServings / recipe.servingsYield.
+ * - Aggregate key is exactly (date, foodId).
+ * - Grams and servings are summed independently; never auto-convert between them.
+ * - No density guessing, no ml↔g conversion, no “helpful” unit inference.
+ * - Ordering is date ASC then foodName ASC (case-insensitive).
+ *
+ * Do not refactor notes
+ * - Do not move recipe expansion into UI. Keep this logic centralized so shopping/planner stay consistent.
+ * - Do not change skip-vs-error behavior casually:
+ *   - Missing recipe/header/yield/ingredients currently results in “no contribution” (silent skip).
+ *   - If you introduce diagnostics, do it as an *additional* debug surface, not by changing output semantics.
+ *
+ * Architectural boundaries
+ * - This use case is read-only. It must not write planned meals/items or mutate recipes.
+ * - It relies on repositories as boundaries. Avoid direct DB/DAO access here.
+ *
+ * Known limitations (intentional)
+ * - PlannedItemSource.RECIPE_BATCH is ignored per original direction (“recipe is the source”).
+ *   If adding:
+ *   - Decide whether to treat batch as recipe reference or as cooked-grams-based needs.
+ *   - Keep the “no density guessing” rule.
+ *
+ * Performance considerations
+ * - Name resolution is intentionally batched via getFoodNamesByIds(ids).
+ * - Recipe expansion does per-recipe reads (header + ingredients). If this becomes hot:
+ *   - consider caching recipe header/ingredients within a single mapLatest emission,
+ *   - but do not introduce global caches that can go stale across DB updates without invalidation.
+ *
+ * Migration notes
+ * - Date strings are ISO yyyy-MM-dd. If migrating to KMP time, keep the ISO-string boundary
+ *   between data storage and domain logic stable.
+ */

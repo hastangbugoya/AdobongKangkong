@@ -20,6 +20,125 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
+/**
+ * Observes a derived planner model ([PlannedDay] → [PlannedMeal] → [PlannedItem]) for an ISO date range.
+ *
+ * =============================================================================
+ * PURPOSE
+ * =============================================================================
+ *
+ * This use case produces the **full planner-day domain model** used by PlannerDay-style screens:
+ *
+ * - Groups planned meals by calendar date and meal slot
+ * - Hydrates each planned meal with its planned items
+ * - Resolves item titles (food / recipe / recipe batch) as a derived UI-friendly field
+ *
+ * Output is a list of [PlannedDay] objects ordered by date, each containing meals grouped by [MealSlot]
+ * (including empty slot buckets so UI rendering can be stable/predictable).
+ *
+ *
+ * =============================================================================
+ * RATIONALE (WHY THIS EXISTS)
+ * =============================================================================
+ *
+ * The database stores planner data as normalized tables:
+ *
+ * - planned_meals (occurrences)
+ * - planned_items (items per meal)
+ *
+ * The UI needs a denormalized, structured model that is easy to render and reason about:
+ *
+ * - “Give me the day model for this date”
+ * - “Give me all planned days in a range”
+ *
+ * This use case centralizes that derivation so:
+ *
+ * - UI is not forced to coordinate multiple repositories/DAOs
+ * - ordering rules are consistent everywhere
+ * - title resolution logic stays centralized and does not leak to the UI layer
+ *
+ *
+ * =============================================================================
+ * BEHAVIOR
+ * =============================================================================
+ *
+ * - Observes planned meals in the requested inclusive ISO range.
+ * - For each meal, observes planned items (reactive per-meal).
+ * - Combines all per-meal streams into one emission.
+ * - Sorts meals deterministically by:
+ *     1) date
+ *     2) sortOrder
+ *     3) id
+ * - Groups meals by day, then by slot.
+ * - Ensures each day contains entries for every [MealSlot] (empty lists where missing).
+ * - Resolves item titles using DAO lookups:
+ *     - FOOD → FoodDao.getByIds(...)
+ *     - RECIPE → RecipeDao.getById(...)
+ *     - RECIPE_BATCH → RecipeBatchDao.getById(...) then RecipeDao.getById(batch.recipeId)
+ *
+ *
+ * =============================================================================
+ * PARAMETERS
+ * =============================================================================
+ *
+ * invoke(startDateIso, endDateIso)
+ * - [startDateIso] inclusive range start, ISO yyyy-MM-dd
+ * - [endDateIso] inclusive range end, ISO yyyy-MM-dd
+ *
+ * observeDay(dateIso)
+ * - [dateIso] ISO yyyy-MM-dd
+ * - Always emits a [PlannedDay] for that date (even if empty)
+ *
+ *
+ * =============================================================================
+ * RETURN
+ * =============================================================================
+ *
+ * - Range API returns:
+ *     Flow<List<PlannedDay>>
+ *   where the list contains only days that have at least one meal.
+ *
+ * - Single-day API returns:
+ *     Flow<PlannedDay>
+ *   and guarantees a day emission even when empty.
+ *
+ *
+ * =============================================================================
+ * EDGE CASES HANDLED
+ * =============================================================================
+ *
+ * - Empty range (no meals) → emits emptyList() (range) or an empty PlannedDay (single-day)
+ * - Invalid range (end < start) → throws (require)
+ * - CUSTOM meals with missing customLabel → throws (IllegalStateException)
+ * - Missing title lookups (deleted foods/recipes/batches) → title omitted for that item
+ *
+ *
+ * =============================================================================
+ * PITFALLS / GOTCHAS
+ * =============================================================================
+ *
+ * - combine(perMealFlows) scales with number of meals in range.
+ *   Large ranges with many meals can increase overhead and subscription count.
+ *
+ * - Title resolution performs DB reads on each emission of the combined model.
+ *   If meals/items update frequently, this can become a hotspot.
+ *
+ * - This use case uses DAOs directly for derived “display fields”.
+ *   This is intentional for now, but it means this is not a pure domain-only use case.
+ *
+ * - This model is “planner schedule”, not “consumption”.
+ *   Do not mix with log/heatmap totals in this use case.
+ *
+ *
+ * =============================================================================
+ * ARCHITECTURAL RULES
+ * =============================================================================
+ *
+ * - PlannedDay is derived; we persist planned meals and items only.
+ * - Day membership is derived from PlannedMealEntity.date (ISO yyyy-MM-dd).
+ * - Title resolution is derived only; no schema changes are required for titles.
+ * - Do not join planner rows to foods/recipes for nutrition here; this is a schedule model.
+ */
 class ObservePlannedDaysUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
     private val items: PlannedItemRepository,
@@ -30,10 +149,11 @@ class ObservePlannedDaysUseCase @Inject constructor(
     private val recipeDao: RecipeDao
 ) {
     /**
-     * Observe a derived list of PlannedDay for an inclusive ISO date range (yyyy-MM-dd).
+     * Observe a derived list of [PlannedDay] for an inclusive ISO date range (yyyy-MM-dd).
      *
-     * Note: This emits only dates that have at least one meal.
-     * (observeDay() below guarantees a day emission even if empty.)
+     * Semantics:
+     * - Emits only dates that have at least one planned meal.
+     * - Ordering is deterministic and stable across emissions.
      */
     operator fun invoke(
         startDateIso: String,
@@ -41,15 +161,16 @@ class ObservePlannedDaysUseCase @Inject constructor(
     ): Flow<List<PlannedDay>> = observeInternal(startDateIso, endDateIso)
 
     /**
-     * Convenience overload: observe a single derived PlannedDay.
+     * Convenience overload: observe a single derived [PlannedDay].
      *
-     * Semantics: always emit a PlannedDay for the requested date, even if empty.
+     * Semantics:
+     * - Always emits a [PlannedDay] for the requested date, even if empty.
+     * - If upstream ever emits multiple days (range logic), we pick the requested date robustly.
      */
     fun observeDay(dateIso: String): Flow<PlannedDay> {
         val date = LocalDate.parse(dateIso)
 
         return observeInternal(dateIso, dateIso).map { days ->
-            // ✅ Robust: even if upstream ever emits multiple days, pick the requested date.
             days.firstOrNull { it.date == date } ?: PlannedDay(
                 date = date,
                 mealsBySlot = emptyMealsBySlot()
@@ -176,7 +297,6 @@ class ObservePlannedDaysUseCase @Inject constructor(
             .distinct()
             .toList()
 
-
         val recipeIds: List<Long> = allItems
             .asSequence()
             .filter { it.type == PlannedItemSource.RECIPE }
@@ -230,3 +350,62 @@ private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair
     }
     return result
 }
+
+/**
+ * =============================================================================
+ * FOR FUTURE AI / FUTURE DEVELOPER — invariants, consolidation notes, and perf warnings
+ * =============================================================================
+ *
+ * IMPORTANT: This is NOT the same as ObservePlannedDaysInMonthUseCase
+ *
+ * ObservePlannedDaysInMonthUseCase:
+ * - returns only markers: Set<LocalDate>
+ * - intentionally lightweight for month calendar indicators
+ * - should remain cheap to observe frequently
+ *
+ * ObservePlannedDaysUseCase (this file):
+ * - returns full derived models: PlannedDay → PlannedMeal → PlannedItem
+ * - performs per-meal reactive subscriptions (combine of many flows)
+ * - resolves titles via DAO reads (derived display fields)
+ *
+ * They serve different UI needs and should generally NOT be consolidated.
+ *
+ *
+ * If you still want a “thin wrapper” for reuse
+ *
+ * A safe consolidation is:
+ * - Keep ObservePlannedDaysInMonthUseCase as-is (marker-only).
+ * - Add a new thin use case for:
+ *     ObservePlannedDaysInRangeMarkersUseCase
+ *   that delegates to ObservePlannedDaysInMonthUseCase.observePlannedDatesInRange(...)
+ *
+ * But do NOT make ObservePlannedDaysUseCase depend on marker-only use case:
+ * it needs full meal/item hydration and title resolution.
+ *
+ *
+ * INVARIANTS (MUST NOT CHANGE)
+ *
+ * - Date identity uses PlannedMealEntity.date ISO yyyy-MM-dd.
+ * - CUSTOM slot must have non-blank customLabel (else error).
+ * - Do not mutate DB state here; this is an observer/derivation only.
+ * - Do not join nutrition/logging here; this is scheduling only.
+ *
+ *
+ * PERFORMANCE CONSIDERATIONS
+ *
+ * - combine(perMealFlows) creates one Flow subscription per meal in range.
+ *   This is fine for PlannerDay (small range) but risky for large horizons.
+ *
+ * If performance becomes a problem:
+ * - Replace per-meal observation with a single query that returns items for all meals in range,
+ *   then group in memory (one Flow instead of N flows).
+ * - Cache title resolution for stable IDs (food/recipe/batch) to avoid repeated DAO hits.
+ *
+ *
+ * MIGRATION / BOUNDARIES
+ *
+ * - This use case currently depends on Room DAOs (FoodDao/RecipeDao/RecipeBatchDao).
+ *   If moving toward strict Clean Architecture or KMP:
+ *   - introduce repository interfaces for title resolution,
+ *   - move DB-specific code behind data layer implementations.
+ */
