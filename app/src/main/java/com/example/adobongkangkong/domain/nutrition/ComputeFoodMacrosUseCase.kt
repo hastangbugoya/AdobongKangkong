@@ -22,7 +22,6 @@ data class FoodMacros(
 class ComputeFoodMacrosUseCase @Inject constructor(
     private val snapshotRepo: FoodNutritionSnapshotRepository
 ) {
-
     suspend operator fun invoke(
         foodId: Long,
         grams: Double

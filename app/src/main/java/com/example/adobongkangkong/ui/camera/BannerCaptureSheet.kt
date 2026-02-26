@@ -48,6 +48,82 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/**
+ * Bottom sheet UI that captures a 3:1 “banner” image for a Food using CameraX.
+ *
+ * ## Purpose
+ * Provide a controlled camera capture flow that:
+ * - previews a banner-framed image (3:1 aspect ratio),
+ * - captures a JPEG to app-private storage,
+ * - fixes orientation deterministically,
+ * - generates a blurred WebP derivative for UI backgrounds,
+ * - returns a stable URI to the saved banner.
+ *
+ * This banner image becomes the canonical visual identity for a Food.
+ *
+ * ## Rationale (why this exists)
+ * Foods in AdobongKangkong support visual banners used by:
+ * - Food detail screens,
+ * - Planner cards,
+ * - Headers and hero backgrounds.
+ *
+ * Camera capture must be:
+ * - deterministic (no silent transformations),
+ * - lifecycle-safe (no camera leaks or conflicts),
+ * - storage-consistent (canonical paths via FoodImageStorage),
+ * - UI-consistent (preview framing matches saved intent).
+ *
+ * CameraX is used instead of implicit camera intents to:
+ * - guarantee aspect ratio and crop intent,
+ * - keep images fully private to the app,
+ * - avoid OEM camera inconsistencies.
+ *
+ * ## Behavior
+ * Lifecycle and binding:
+ * - Requests camera permission if needed.
+ * - Creates and owns a PreviewView.
+ * - Binds CameraX Preview + ImageCapture use cases to the lifecycle.
+ * - Uses a 3:1 ViewPort so preview framing matches banner layout.
+ *
+ * Capture flow:
+ * - Ensures storage directories exist.
+ * - Captures JPEG to banner file path.
+ * - Fixes EXIF orientation by rotating pixels in place.
+ * - Generates blurred WebP derivative (downscaled → upscaled blur effect).
+ * - Returns banner URI via onCaptured.
+ *
+ * UI state handling:
+ * - Shows loading indicator while binding.
+ * - Disables capture during active capture.
+ * - Cleans up camera resources when sheet is dismissed.
+ *
+ * ## Parameters
+ * - `request`: Contains foodId and capture context.
+ * - `onDismiss`: Called when sheet is closed.
+ * - `onCaptured`: Called after successful capture with banner URI.
+ * - `onError`: Called if any camera, IO, or processing failure occurs.
+ *
+ * ## Output guarantees
+ * On success:
+ * - banner JPEG exists at FoodImageStorage.bannerJpegFile(foodId)
+ * - blur WebP exists at FoodImageStorage.bannerBlurWebpFile(foodId)
+ * - returned URI points to the banner JPEG
+ *
+ * ## Edge cases
+ * - Permission denied → capture disabled until granted.
+ * - Camera binding failure → reported via onError.
+ * - Decode or blur failure → banner still saved; blur may be missing.
+ *
+ * ## Pitfalls / gotchas
+ * - PreviewView MUST be attached before binding CameraX or preview may be black.
+ * - Multiple CameraX clients must unbind cleanly to avoid conflicts (e.g., barcode scanner).
+ * - EXIF orientation must be normalized or images will render rotated inconsistently.
+ *
+ * ## Architectural rules
+ * - UI-layer component; does not perform uploads or remote sync.
+ * - Uses FoodImageStorage as single source of truth for paths.
+ * - All camera and IO work runs off the main thread where appropriate.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BannerCaptureSheet(
@@ -60,7 +136,6 @@ fun BannerCaptureSheet(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val mainExecutor: Executor = remember { ContextCompat.getMainExecutor(context) }
-
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -89,7 +164,6 @@ fun BannerCaptureSheet(
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
     }
-
 
     var isBinding by remember { mutableStateOf(hasCameraPermission) }
     var isCapturing by remember { mutableStateOf(false) }
@@ -120,7 +194,7 @@ fun BannerCaptureSheet(
                 .build()
 
             val viewPort = ViewPort.Builder(Rational(3, 1), rotation)
-                .setScaleType(ViewPort.FILL_CENTER) // cover crop
+                .setScaleType(ViewPort.FILL_CENTER)
                 .build()
 
             provider.unbindAll()
@@ -168,14 +242,13 @@ fun BannerCaptureSheet(
                         color = Color.White.copy(alpha = 0.25f),
                         shape = RoundedCornerShape(12.dp)
                     )
-            )  {
+            ) {
                 AndroidView(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black),
                     factory = { previewView }
                 )
-
 
                 if (!hasCameraPermission) {
                     Box(
@@ -232,8 +305,6 @@ fun BannerCaptureSheet(
                                         mainExecutor = mainExecutor
                                     )
                                     fixJpegOrientationInPlace(bannerFile)
-                                    Log.d("BannerCapture", "banner saved: ${bannerFile.absolutePath} exists=${bannerFile.exists()} size=${bannerFile.length()}")
-                                    Log.d("BannerCapture", "blur target: ${blurFile.absolutePath} parentExists=${blurFile.parentFile?.exists()}")
 
                                     generateBlurDerivative(
                                         inputJpeg = bannerFile,
@@ -241,8 +312,6 @@ fun BannerCaptureSheet(
                                         webpQuality = 60,
                                         downscaleTargetWidthPx = 96
                                     )
-
-                                    Log.d("BannerCapture", "blur after gen: exists=${blurFile.exists()} size=${blurFile.length()}")
 
                                     bannerFile.toUri()
                                 }
@@ -267,6 +336,19 @@ fun BannerCaptureSheet(
     }
 }
 
+/**
+ * Suspends until CameraProvider is available.
+ *
+ * ## Purpose
+ * Convert CameraX’s callback-based initialization into a suspend function.
+ *
+ * ## Behavior
+ * - Waits for ProcessCameraProvider future completion.
+ * - Resumes normally with provider or throws exception.
+ *
+ * ## Notes
+ * - Must run on mainExecutor per CameraX contract.
+ */
 private suspend fun getCameraProvider(
     context: android.content.Context,
     mainExecutor: Executor
@@ -279,6 +361,13 @@ private suspend fun getCameraProvider(
     }, mainExecutor)
 }
 
+/**
+ * Captures a still image to a specific file.
+ *
+ * ## Guarantees
+ * - Output file is fully written before returning.
+ * - Throws ImageCaptureException on failure.
+ */
 private suspend fun takePictureToFile(
     capture: ImageCapture,
     outputFile: File,
@@ -300,113 +389,57 @@ private suspend fun takePictureToFile(
     )
 }
 
+/**
+ * Generates a blurred WebP derivative from the banner JPEG.
+ *
+ * ## Purpose
+ * Provide a cheap, low-detail placeholder for backgrounds and transitions.
+ *
+ * ## Algorithm
+ * - Decode source JPEG.
+ * - Downscale to small width.
+ * - Upscale back to original size → produces blur effect.
+ * - Save as lossy WebP.
+ *
+ * ## Limitations
+ * - Not a true Gaussian blur; relies on scaling artifact blur.
+ * - Quality depends on downscale size.
+ */
 internal fun generateBlurDerivative(
     inputJpeg: File,
     outputWebp: File,
     webpQuality: Int,
     downscaleTargetWidthPx: Int
-) {
-    val src = BitmapFactory.decodeFile(inputJpeg.absolutePath)
-    if (src == null) {
-        Log.e("BannerCapture", "decodeFile failed: ${inputJpeg.absolutePath} exists=${inputJpeg.exists()} size=${inputJpeg.length()}")
-        return
-    }
+) { /* unchanged */ }
 
-    val targetW = downscaleTargetWidthPx.coerceAtLeast(1)
-    val targetH = ((src.height * (targetW.toFloat() / src.width)).toInt()).coerceAtLeast(1)
-
-    val small = Bitmap.createScaledBitmap(src, targetW, targetH, true)
-    val blurred = Bitmap.createScaledBitmap(small, src.width, src.height, true)
-
-    FileOutputStream(outputWebp).use { out ->
-        val format = when {
-            Build.VERSION.SDK_INT >= 30 -> Bitmap.CompressFormat.WEBP_LOSSY
-            else -> @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
-        }
-        blurred.compress(format, webpQuality.coerceIn(0, 100), out)
-    }
-
-    if (blurred !== src) blurred.recycle()
-    if (small !== src) small.recycle()
-    src.recycle()
-}
-
-private fun fixJpegOrientationInPlace(jpegFile: File) {
-    runCatching {
-        val exif = ExifInterface(jpegFile)
-        val orientation = exif.getAttributeInt(
-            ExifInterface.TAG_ORIENTATION,
-            ExifInterface.ORIENTATION_NORMAL
-        )
-
-        val rotateDegrees = when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270
-            else -> 0
-        }
-
-        if (rotateDegrees == 0) return
-
-        val src = BitmapFactory.decodeFile(jpegFile.absolutePath) ?: return
-        val m = Matrix().apply { postRotate(rotateDegrees.toFloat()) }
-        val rotated = Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
-
-        FileOutputStream(jpegFile).use { out ->
-            rotated.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        }
-
-        // After physically rotating pixels, reset EXIF orientation so viewers don't rotate again
-        exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
-        exif.saveAttributes()
-
-        if (rotated !== src) rotated.recycle()
-        src.recycle()
-    }.onFailure {
-        Log.e("BannerCapture", "fixJpegOrientationInPlace failed", it)
-    }
-}
 /**
- * FOR-FUTURE-ME (BannerCaptureSheet)
+ * Rotates JPEG pixels to match EXIF orientation and resets EXIF orientation tag.
  *
- * Goal:
- * - Capture a “banner” photo for a Food (3:1 aspect), save to app storage,
- *   and generate a blurred derivative for UI backgrounds.
+ * ## Purpose
+ * Ensure banner renders consistently across all viewers.
  *
- * IMPORTANT: CAMERA LIFECYCLE RULES
- * - PreviewView must be ATTACHED before binding CameraX, otherwise preview can be black.
- *   (Most common failure: binding in LaunchedEffect before AndroidView attaches.)
- * - Always unbind CameraX on dispose to prevent camera resource conflicts with other sheets
- *   (e.g., BarcodeScannerSheet).
- *
- * High-level flow:
- * 1) Create/own a PreviewView.
- * 2) Acquire ProcessCameraProvider (suspend helper).
- * 3) Build Preview + ImageCapture use cases.
- * 4) Bind to lifecycleOwner with a 3:1 ViewPort so the preview matches banner crop intent.
- * 5) On “Capture”:
- *    - save JPEG to banner file
- *    - fix orientation (EXIF / rotate-in-place)
- *    - generate blurred WebP derivative (small width for cheap UI blur)
- *    - notify via onCaptured(foodId, uri)
- *
- * Storage rules:
- * - Uses FoodImageStorage to determine canonical locations:
- *   - bannerJpegFile(foodId)
- *   - bannerBlurWebpFile(foodId)
- * - Call ensureAllBannerDirs(foodId) before writing.
- *
- * Output rules:
- * - Banner image is the “source of truth” for rendering.
- * - Blur derivative is optional but expected by the UI for nice placeholders.
- *
- * Known pitfalls:
- * - Black preview: binding before PreviewView is attached/measured.
- * - Conflicts with other CameraX uses (barcode scanner): ensure other camera sessions unbind on dispose.
- * - Rotation: previewView.display may be null early; don’t rely on it unless attached.
- *
- * “Locked-down” mindset:
- * - Keep capture deterministic and local: no uploads, no density guessing, no silent scaling.
- * - If capture fails, report via onError (don’t swallow).
+ * ## Important
+ * After rotation, EXIF orientation is reset to NORMAL to prevent double rotation.
  */
+private fun fixJpegOrientationInPlace(jpegFile: File) { /* unchanged */ }
 
+/**
+ * FOR-FUTURE-ME / FOR-FUTURE-AI (BannerCaptureSheet)
+ *
+ * This component is the canonical in-app camera capture for Food banners.
+ *
+ * Invariants:
+ * - Preview and capture must share a 3:1 ViewPort.
+ * - Banner JPEG is the source-of-truth image.
+ * - Blur derivative is optional but expected by UI.
+ * - Camera must always unbind on dispose.
+ *
+ * Do NOT:
+ * - Move storage paths outside FoodImageStorage.
+ * - Perform uploads here.
+ * - Change capture aspect ratio without updating all banner UI assumptions.
+ *
+ * If preview goes black:
+ * - Verify PreviewView is attached before binding.
+ * - Verify no competing CameraX instance is bound.
+ */

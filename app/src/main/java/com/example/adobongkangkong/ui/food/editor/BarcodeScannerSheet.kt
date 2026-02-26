@@ -42,6 +42,69 @@ import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 import androidx.camera.core.FocusMeteringAction
 
+/**
+ * Bottom sheet UI that provides live barcode scanning using CameraX + ML Kit.
+ *
+ * ## Purpose
+ * Allow users to scan food barcodes directly from the Food Editor flow to:
+ * - import USDA foods by GTIN/UPC,
+ * - assign barcodes to existing foods,
+ * - create minimal placeholder foods when barcode data is unavailable.
+ *
+ * This sheet handles permission gating and preview lifecycle, while emitting
+ * detected barcode values to the caller.
+ *
+ * ## Rationale (why this exists)
+ * Barcode scanning is a camera-driven overlay similar to banner capture, but optimized
+ * for continuous frame analysis instead of still capture.
+ *
+ * CameraX + ML Kit is used instead of external scanning apps to:
+ * - keep the workflow in-app,
+ * - guarantee deterministic handling of results,
+ * - allow future custom overlay UI (bounding boxes, guides, etc.).
+ *
+ * ## Behavior
+ * Permission handling:
+ * - Checks camera permission on entry.
+ * - If missing, prompts user to grant permission.
+ * - Scanner preview starts only after permission is granted.
+ *
+ * Camera lifecycle:
+ * - Creates a PreviewView and binds CameraX Preview + ImageAnalysis use cases.
+ * - Uses ImageAnalysis to continuously receive frames.
+ * - Feeds frames into ML Kit BarcodeScanner.
+ *
+ * Detection flow:
+ * - First valid barcode value triggers [onBarcode].
+ * - Further detections are ignored (`handled` guard) to prevent duplicate callbacks.
+ *
+ * Cleanup:
+ * - On dispose, unbinds camera and closes ML Kit scanner.
+ *
+ * ## Parameters
+ * - `onClose`: Called when user dismisses scanner manually.
+ * - `onBarcode`: Called when a barcode string is successfully detected.
+ *
+ * ## Output guarantees
+ * - Emits raw barcode string exactly as provided by ML Kit.
+ * - Does not normalize, validate, or map barcode values.
+ *
+ * ## Edge cases
+ * - Permission denied → scanner UI shows permission prompt instead of preview.
+ * - Camera unavailable → failure logged; no crash expected.
+ * - ML Kit may occasionally detect partial or incorrect values; caller must validate.
+ *
+ * ## Pitfalls / gotchas
+ * - Multiple rapid detections are prevented via `handled` flag.
+ * - Camera must be unbound on dispose to prevent conflicts with other camera features
+ *   (e.g., BannerCaptureSheet).
+ * - ImageAnalysis resolution impacts scan speed vs accuracy.
+ *
+ * ## Architectural rules
+ * - UI-layer component.
+ * - No database writes or navigation.
+ * - Emits raw barcode value only; domain logic handles resolution/import.
+ */
 @Composable
 fun BarcodeScannerSheet(
     onClose: () -> Unit,
@@ -86,6 +149,22 @@ fun BarcodeScannerSheet(
     }
 }
 
+/**
+ * CameraX preview + analysis pipeline that feeds frames into ML Kit.
+ *
+ * ## Purpose
+ * Bind camera preview and frame analyzer to lifecycle and deliver decoded barcodes.
+ *
+ * ## Behavior
+ * - Creates PreviewView.
+ * - Binds Preview and ImageAnalysis use cases.
+ * - Uses single-thread executor for analyzer.
+ * - Automatically focuses on center of preview.
+ *
+ * ## Pitfalls
+ * - Analyzer must always close ImageProxy or camera pipeline stalls.
+ * - Camera must be unbound on dispose.
+ */
 @SuppressLint("UnsafeOptInUsageError")
 @Composable
 private fun BarcodeScannerPreview(
@@ -99,7 +178,7 @@ private fun BarcodeScannerPreview(
 
     val options = remember {
         BarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS )
+            .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
             .build()
     }
     val scanner = remember { BarcodeScanning.getClient(options) }
@@ -143,7 +222,7 @@ private fun BarcodeScannerPreview(
                         .build()
 
                     analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                        android.util.Log.d("SCAN", "frame ${imageProxy.width}x${imageProxy.height} rot=${imageProxy.imageInfo.rotationDegrees}")
+                        Log.d("SCAN", "frame ${imageProxy.width}x${imageProxy.height}")
                         if (handled) {
                             imageProxy.close()
                             return@setAnalyzer
@@ -175,8 +254,10 @@ private fun BarcodeScannerPreview(
                             camera.cameraControl.startFocusAndMetering(action)
                         }
 
+                        cameraProviderRef = cameraProvider
+
                     } catch (t: Throwable) {
-                        MeowLog.e("BarcodeScannerSheet: startFocusAndMetering failed", t)
+                        MeowLog.e("BarcodeScannerSheet bind failed", t)
                     }
                 }, ContextCompat.getMainExecutor(ctx))
 
@@ -186,6 +267,17 @@ private fun BarcodeScannerPreview(
     }
 }
 
+/**
+ * Converts ImageProxy into ML Kit InputImage and runs barcode detection.
+ *
+ * ## Guarantees
+ * - Always closes ImageProxy.
+ * - Emits first detected raw barcode value.
+ *
+ * ## Limitations
+ * - Only returns first barcode per frame.
+ * - Caller must handle duplicates across sessions.
+ */
 @SuppressLint("UnsafeOptInUsageError")
 private fun processImageProxy(
     scanner: BarcodeScanner,
@@ -209,3 +301,24 @@ private fun processImageProxy(
         .addOnCompleteListener { imageProxy.close() }
 }
 
+/**
+ * FOR-FUTURE-ME / FOR-FUTURE-AI (BarcodeScannerSheet)
+ *
+ * Purpose:
+ * - Continuous barcode scanning overlay for Food Editor.
+ *
+ * Invariants:
+ * - ImageProxy must ALWAYS be closed.
+ * - Camera must unbind on dispose.
+ * - Only emit first detected barcode per open session.
+ *
+ * Do NOT:
+ * - Add DB logic here.
+ * - Add USDA import logic here.
+ * - Block analyzer thread.
+ *
+ * If scanning stops working:
+ * - Verify camera permission granted.
+ * - Verify camera unbound from other sheets.
+ * - Verify ImageProxy.close() always runs.
+ */

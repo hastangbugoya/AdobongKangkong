@@ -11,17 +11,81 @@ import com.example.adobongkangkong.domain.repository.RecipeRepository
 import javax.inject.Inject
 
 /**
- * Canonical recipe batch nutrition computation (servings-based ingredients).
+ * Canonical recipe-batch nutrition computation for servings-based ingredients using immutable snapshots.
  *
- * Computes:
- * - totals for the entire recipe batch
- * - perServing (if servingsYield valid)
- * - perCookedGram (if totalYieldGrams valid)
- * - gramsPerServingCooked (if both valid)
+ * ## Purpose
+ * Compute nutrition totals for an entire recipe batch and optionally derive:
+ * - per-serving nutrients,
+ * - per-cooked-gram nutrients,
+ * - cooked grams per serving,
+ * while emitting warnings when recipe metadata or ingredient data is incomplete.
  *
+ * ## Rationale (why this use case exists)
+ * Recipes are editable and ingredient foods can change over time. For correctness and historical
+ * stability, recipe nutrition computation must use *snapshot* nutrition inputs for ingredient foods
+ * (not live joins back to mutable food entities).
+ *
+ * This use case centralizes:
+ * - the canonical math for summing ingredient nutrients,
+ * - the rules for deriving per-serving and per-gram breakdowns,
+ * - the warning policy for missing/invalid fields,
+ * so all call sites (recipe screen, logging, planner) behave consistently.
+ *
+ * ## Behavior
+ * Data inputs:
+ * - Loads recipe header + ingredient lines from [RecipeRepository] when called by recipeFoodId.
+ * - Loads ingredient nutrition snapshots via [FoodNutritionSnapshotRepository] for all ingredient foodIds.
+ *
+ * Batch totals:
+ * - For each ingredient line:
+ *   - Uses `ingredientServings` (nullable) and defaults null to `1.0` (see pitfalls).
+ *   - Requires `gramsPerServingUnit` on snapshot (> 0).
+ *   - Requires `nutrientsPerGram` on snapshot.
+ *   - Computes grams = servings * gramsPerServingUnit.
+ *   - Adds snapshot nutrients for grams.
+ *
+ * Derived outputs:
+ * - perServing:
+ *   - If servingsYield missing/invalid/non-positive → warning + null.
+ *   - Else totals / servingsYield.
+ * - perCookedGram:
+ *   - If totalYieldGrams missing/invalid/non-positive → warning + null.
+ *   - Else totals / totalYieldGrams.
+ * - gramsPerServingCooked:
+ *   - Only when servingsYield valid (>0) and totalYieldGrams valid (>0) and not missing-yield warning.
+ *   - totalYieldGrams / servingsYield.
+ *
+ * ## Parameters
  * Entry points:
- * - execute(recipeFoodId: Long): loads RecipeHeader + RecipeIngredientLine from RecipeRepository
- * - execute(recipe: Recipe): computes from an in-memory Recipe (used by logging after overrides)
+ * - `execute(recipeFoodId: Long)`: Recipe is identified by its recipe “foodId” (editable recipe definition).
+ * - `execute(recipe: Recipe)`: Computes from an in-memory recipe (used after applying overrides).
+ * - `invoke(recipe: Recipe)`: Back-compat operator wrapper around execute(recipe).
+ *
+ * ## Return
+ * A [RecipeNutritionResult] containing:
+ * - `totals`: NutrientMap for entire batch (may be EMPTY if no usable ingredients).
+ * - `perServing`: NutrientMap? (null if servings yield missing/invalid).
+ * - `perCookedGram`: NutrientMap? (null if total yield grams missing/invalid).
+ * - `gramsPerServingCooked`: Double? (null if either prerequisite missing/invalid).
+ * - `warnings`: List of [RecipeNutritionWarning] explaining missing/invalid inputs.
+ *
+ * ## Edge cases
+ * - Missing recipe header (recipeFoodId not found) → returns EMPTY totals + no warnings.
+ * - Missing ingredient snapshot → warning per missing food; ingredient contributes nothing.
+ * - Non-positive servings on a line → warning; ingredient skipped.
+ * - Missing grams-per-serving or nutrients-per-gram → warning; ingredient skipped.
+ *
+ * ## Pitfalls / gotchas
+ * - **Defaulting null ingredient servings to 1.0 is intentional** to preserve “recipe math integrity”
+ *   and keep unexpected nulls visible in UI while still producing a usable estimate.
+ * - This use case currently supports **mass-only scaling** (grams). It must not guess density or
+ *   convert between grams and mL without an explicit volume-capable snapshot model.
+ * - Warnings are part of the contract; do not silently “fix” invalid data without recording warnings.
+ *
+ * ## Architectural rules
+ * - Uses snapshot-based ingredient nutrition via [FoodNutritionSnapshotRepository]; no joins to live foods.
+ * - Does not write to repositories; pure read + compute + warnings.
+ * - No UI state, no navigation, no database APIs.
  */
 class ComputeRecipeBatchNutritionUseCase @Inject constructor(
     private val recipeRepo: RecipeRepository,
@@ -30,6 +94,9 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
 
     /**
      * Computes nutrition for a recipe identified by its recipe "foodId" (editable recipe definition).
+     *
+     * @param recipeFoodId The foodId representing the editable recipe definition.
+     * @return [RecipeNutritionResult] containing totals, optional derived maps, and warnings.
      */
     suspend fun execute(recipeFoodId: Long): RecipeNutritionResult {
         val header = recipeRepo.getRecipeByFoodId(recipeFoodId)
@@ -59,6 +126,9 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
 
     /**
      * Computes nutrition from an in-memory Recipe (used by CreateLogEntryUseCase after applying overrides).
+     *
+     * @param recipe In-memory recipe that may have overrides applied.
+     * @return [RecipeNutritionResult] containing totals, optional derived maps, and warnings.
      */
     suspend fun execute(recipe: Recipe): RecipeNutritionResult {
         val ingredientFoodIds: Set<Long> = recipe.ingredients
@@ -190,15 +260,44 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
 }
 
 /**
- * AI NOTE — READ BEFORE REFACTORING (2026-02-06)
+ * FUTURE-AI / MAINTENANCE KDoc (Do not remove)
  *
- * I previously broke this file by guessing repository APIs and snapshot fields.
- * The real RecipeRepository API here is:
- * - getRecipeByFoodId(recipeFoodId)
- * - getIngredients(recipeId)
+ * ## Invariants (must not change)
+ * - Snapshot-based computation:
+ *   - Ingredient nutrition must come from [FoodNutritionSnapshotRepository] snapshots (immutable inputs).
+ *   - Do not join back to live foods/recipes for nutrient computation.
+ * - Mass-only scaling:
+ *   - Computation currently depends on `gramsPerServingUnit` and `nutrientsPerGram`.
+ *   - Do not add grams↔mL conversion or density guessing here.
+ * - Warning-driven degradation:
+ *   - Missing/invalid ingredient data must add warnings and skip that ingredient.
+ *   - Missing/invalid servingsYield or totalYieldGrams must add warnings and set derived outputs to null.
+ * - Null ingredient servings default remains `1.0` (intentional, do not change without UI+domain audit).
  *
- * Do NOT add volume logic here until the domain.recipes.FoodNutritionSnapshot actually supports it in this codebase.
- * If I want recipe ingredients to support liquids later:
- * - First update FoodNutritionSnapshot + mapper to include mlPerServingUnit + nutrientsPerMilliliter
- * - Then update computeFromServingsLines to branch grams vs mL (still no density guessing).
+ * ## Do not refactor notes
+ * - Do not “simplify” by removing the warnings list; it is part of the contract used by UI.
+ * - Do not change repository API assumptions:
+ *   - RecipeRepository: getRecipeByFoodId(recipeFoodId), getIngredients(recipeId).
+ * - Keep execute(...) overloads:
+ *   - One loads from repository by recipeFoodId.
+ *   - One computes from in-memory Recipe (used after overrides).
+ * - Avoid “optimizing” to parallel snapshot loads without ensuring repository supports it safely.
+ *
+ * ## Architectural boundaries
+ * - Domain-layer compute only: reads recipe + snapshots, returns result + warnings.
+ * - No persistence writes, no navigation, no UI concerns.
+ *
+ * ## Migration notes (KMP / time APIs)
+ * - No time APIs involved.
+ * - KMP-safe as long as snapshot/repository abstractions remain platform-agnostic.
+ *
+ * ## Performance considerations
+ * - Complexity is O(N) over ingredient lines.
+ * - Snapshot loading cost depends on repository implementation; consider batch fetching (already used via getSnapshots(Set<Long>)).
+ *
+ * ## Future extension (volume / liquids)
+ * - Before supporting liquid ingredients:
+ *   1) Extend FoodNutritionSnapshot to include `mlPerServingUnit` and `nutrientsPerMilliliter`.
+ *   2) Extend snapshot mapper to populate those fields for volume-grounded foods.
+ *   3) Update computeFromServingsLines to branch grams vs mL without density guessing.
  */
