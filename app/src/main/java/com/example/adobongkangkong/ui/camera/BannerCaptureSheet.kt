@@ -1,11 +1,10 @@
 package com.example.adobongkangkong.ui.camera
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.Manifest
 import android.graphics.Matrix
-import androidx.exifinterface.media.ExifInterface
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -24,10 +23,32 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -37,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.exifinterface.media.ExifInterface
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -252,7 +274,9 @@ fun BannerCaptureSheet(
 
                 if (!hasCameraPermission) {
                     Box(
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
                         contentAlignment = androidx.compose.ui.Alignment.Center
                     ) {
                         Text(
@@ -304,14 +328,21 @@ fun BannerCaptureSheet(
                                         outputFile = bannerFile,
                                         mainExecutor = mainExecutor
                                     )
+
+                                    // Normalize pixels + EXIF so all decoders render the same (BitmapFactory is NOT EXIF-aware).
                                     fixJpegOrientationInPlace(bannerFile)
 
-                                    generateBlurDerivative(
-                                        inputJpeg = bannerFile,
-                                        outputWebp = blurFile,
-                                        webpQuality = 60,
-                                        downscaleTargetWidthPx = 96
-                                    )
+                                    // Optional derivative used by list backgrounds; safe to regenerate.
+                                    runCatching {
+                                        generateBlurDerivative(
+                                            inputJpeg = bannerFile,
+                                            outputWebp = blurFile,
+                                            webpQuality = 60,
+                                            downscaleTargetWidthPx = 96
+                                        )
+                                    }.onFailure { t ->
+                                        Log.w("Meow", "Banner blur generation failed: ${t.message}")
+                                    }
 
                                     bannerFile.toUri()
                                 }
@@ -396,21 +427,62 @@ private suspend fun takePictureToFile(
  * Provide a cheap, low-detail placeholder for backgrounds and transitions.
  *
  * ## Algorithm
- * - Decode source JPEG.
- * - Downscale to small width.
- * - Upscale back to original size → produces blur effect.
+ * - Decode source JPEG bounds to read original dimensions.
+ * - Decode a downscaled bitmap (target width ~ downscaleTargetWidthPx).
+ * - Upscale the downscaled bitmap to a moderate output size (blur-by-scaling artifact).
  * - Save as lossy WebP.
  *
- * ## Limitations
- * - Not a true Gaussian blur; relies on scaling artifact blur.
- * - Quality depends on downscale size.
+ * ## Notes
+ * - This does not need to match the original banner resolution; UI will scale/crop it.
+ * - Output is stored in cacheDir and is safe to delete/regenerate.
  */
 internal fun generateBlurDerivative(
     inputJpeg: File,
     outputWebp: File,
     webpQuality: Int,
     downscaleTargetWidthPx: Int
-) { /* unchanged */ }
+) {
+    require(webpQuality in 0..100) { "webpQuality must be 0..100" }
+    if (!inputJpeg.exists()) return
+
+    // 1) Read bounds
+    val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(inputJpeg.absolutePath, boundsOpts)
+    val srcW = boundsOpts.outWidth
+    val srcH = boundsOpts.outHeight
+    if (srcW <= 0 || srcH <= 0) return
+
+    // 2) Decode downscaled
+    val sample = computeInSampleSize(srcW, srcH, downscaleTargetWidthPx.coerceAtLeast(16))
+    val decodeOpts = BitmapFactory.Options().apply {
+        inJustDecodeBounds = false
+        inSampleSize = sample
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+
+    val small = BitmapFactory.decodeFile(inputJpeg.absolutePath, decodeOpts) ?: return
+
+    // 3) Upscale to create blur-by-scaling artifact.
+    // Keep output moderate to avoid memory spikes; UI can still stretch/crop.
+    val maxOutW = 768
+    val outW = minOf(srcW, maxOutW)
+    val outH = (outW.toFloat() * (srcH.toFloat() / srcW.toFloat())).toInt().coerceAtLeast(1)
+    val blurred = Bitmap.createScaledBitmap(small, outW, outH, true)
+
+    // 4) Write WebP
+    outputWebp.parentFile?.mkdirs()
+    FileOutputStream(outputWebp).use { out ->
+        val format = when {
+            Build.VERSION.SDK_INT >= 30 -> Bitmap.CompressFormat.WEBP_LOSSY
+            else -> Bitmap.CompressFormat.WEBP
+        }
+        blurred.compress(format, webpQuality, out)
+        out.flush()
+    }
+
+    if (blurred !== small) blurred.recycle()
+    small.recycle()
+}
 
 /**
  * Rotates JPEG pixels to match EXIF orientation and resets EXIF orientation tag.
@@ -420,8 +492,77 @@ internal fun generateBlurDerivative(
  *
  * ## Important
  * After rotation, EXIF orientation is reset to NORMAL to prevent double rotation.
+ *
+ * ## Behavior
+ * - Reads EXIF orientation.
+ * - If rotation is required:
+ *   - decodes bitmap,
+ *   - rotates pixels,
+ *   - overwrites the same file,
+ *   - sets EXIF orientation to NORMAL.
+ *
+ * If EXIF is missing/unknown or decode fails, this is a no-op.
  */
-private fun fixJpegOrientationInPlace(jpegFile: File) { /* unchanged */ }
+private fun fixJpegOrientationInPlace(jpegFile: File) {
+    if (!jpegFile.exists()) return
+
+    val exif = runCatching { ExifInterface(jpegFile) }.getOrNull() ?: return
+    val orientation = exif.getAttributeInt(
+        ExifInterface.TAG_ORIENTATION,
+        ExifInterface.ORIENTATION_NORMAL
+    )
+
+    val degrees = when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+        else -> 0
+    }
+
+    if (degrees == 0) {
+        // Still normalize tag to be safe if something wrote a non-normal value that we don't handle.
+        if (orientation != ExifInterface.ORIENTATION_NORMAL) {
+            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+            runCatching { exif.saveAttributes() }
+        }
+        return
+    }
+
+    val bitmap = BitmapFactory.decodeFile(jpegFile.absolutePath) ?: return
+    val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+
+    FileOutputStream(jpegFile, false).use { out ->
+        rotated.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        out.flush()
+    }
+
+    bitmap.recycle()
+    if (rotated !== bitmap) rotated.recycle()
+
+    // Reset EXIF orientation to normal after pixel rotation.
+    val exifOut = runCatching { ExifInterface(jpegFile) }.getOrNull() ?: return
+    exifOut.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+    runCatching { exifOut.saveAttributes() }
+}
+
+private fun computeInSampleSize(
+    srcW: Int,
+    srcH: Int,
+    targetW: Int
+): Int {
+    if (srcW <= 0 || srcH <= 0) return 1
+    if (targetW <= 0) return 1
+
+    var inSampleSize = 1
+    var halfW = srcW / 2
+    var halfH = srcH / 2
+
+    while (halfW / inSampleSize >= targetW && halfH / inSampleSize >= 1) {
+        inSampleSize *= 2
+    }
+    return inSampleSize.coerceAtLeast(1)
+}
 
 /**
  * FOR-FUTURE-ME / FOR-FUTURE-AI (BannerCaptureSheet)

@@ -37,9 +37,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,9 +55,6 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.generateBlurDerivative
-import com.example.adobongkangkong.ui.theme.EatMoreGreen
-import com.example.adobongkangkong.ui.theme.FavoriteYellow
-import com.example.adobongkangkong.ui.theme.LimitRed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

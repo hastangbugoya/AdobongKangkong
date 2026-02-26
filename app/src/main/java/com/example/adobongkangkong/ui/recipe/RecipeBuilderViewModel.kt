@@ -14,7 +14,6 @@ import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
-import com.example.adobongkangkong.domain.nutrition.ServingPolicy
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
