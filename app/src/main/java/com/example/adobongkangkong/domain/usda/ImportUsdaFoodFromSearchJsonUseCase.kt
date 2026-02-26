@@ -22,22 +22,176 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * Imports the first USDA foods/search result from a JSON response string into the app DB.
+ * Imports a USDA `/foods/search` result into the local database, canonicalizing nutrients and serving bridges.
  *
- * Canonical storage rule:
- * - Store exactly ONE basis row per (foodId, nutrientId).
- * - If serving is mass-backed: store PER_100G only.
- * - If serving is volume-backed: store PER_100ML only.
- * - Otherwise store USDA_REPORTED_SERVING only (raw; not safely scalable).
+ * ============================================================
+ * DATA FLOW DIAGRAM (DFD)
+ * ============================================================
  *
- * Volume-grounded liquids:
- * - Example label: "1 can (473 mL)" where nutrients are per 473 mL.
- * - Persist:
+ * USDA `/foods/search` JSON
+ *        │
+ *        ▼
+ * UsdaFoodsSearchParser.parse()
+ *        │
+ *        ▼
+ * Select USDA item (fdcId)
+ *        │
+ *        ▼
+ * Build Food draft
+ *   - servingSize
+ *   - servingUnit
+ *   - gramsPerServingUnit (mass bridge)
+ *   - mlPerServingUnit (volume bridge)
+ *   - stableId (gtin or fdc)
+ *        │
+ *        ▼
+ * Map USDA nutrients → internal nutrient catalog
+ *        │
+ *        ▼
+ * Canonicalize nutrient basis
+ *   ├─ mass-grounded → PER_100G
+ *   ├─ volume-grounded → PER_100ML
+ *   └─ otherwise → USDA_REPORTED_SERVING
+ *        │
+ *        ▼
+ * DB transaction
+ *   ├─ FoodRepository.upsert()
+ *   └─ FoodNutrientRepository.replaceForFood()
+ *        │
+ *        ▼
+ * RETURN foodId + USDA metadata
+ *
+ * ============================================================
+ *
+ * Purpose
+ * - Convert USDA search response JSON into a fully usable FoodEntity and nutrient snapshot.
+ * - Normalize nutrients into a canonical storage basis for safe scaling and recipe math.
+ * - Establish serving bridges (gramsPerServingUnit or mlPerServingUnit) when USDA provides safe grounding.
+ *
+ * Rationale (why this use case exists)
+ * - USDA responses provide nutrients relative to a serving size, which may not be safely scalable.
+ * - The app requires a canonical, normalized basis (PER_100G or PER_100ML) for:
+ *   - recipe math
+ *   - logging
+ *   - planner projections
+ *   - nutrient scaling
+ * - This use case performs that normalization while preserving original serving semantics for UI.
+ *
+ * Core invariants enforced here
+ *
+ * ONE-basis rule
+ * - Exactly one row per (foodId, nutrientId).
+ * - Never store multiple basis rows for same nutrient.
+ *
+ * Mass grounding rule
+ * - If USDA serving unit is mass-based OR grams bridge exists:
+ *     canonical basis = PER_100G
+ *
+ * Volume grounding rule
+ * - If USDA serving unit is volume-based OR mL bridge exists:
+ *     canonical basis = PER_100ML
+ *
+ * Raw fallback rule
+ * - If neither mass nor volume grounding exists:
+ *     store USDA_REPORTED_SERVING only.
+ *
+ * Absolute safety rules
+ * - NEVER infer grams from mL.
+ * - NEVER infer mL from grams.
+ * - NEVER guess density.
+ *
+ * Revive-on-import behavior
+ * - If a food with same usdaFdcId already exists:
+ *     reuse its row id and stableId.
+ *
+ * This prevents:
+ * - duplicate foods
+ * - broken log references
+ *
+ * Household serving bridge logic
+ *
+ * USDA example:
+ *
+ *     servingSize = 473
+ *     servingUnit = MLT
+ *     householdServingFullText = "1 can (473 mL)"
+ *
+ * Stored as:
+ *
  *     servingSize = 1
  *     servingUnit = CAN
  *     mlPerServingUnit = 473
- *     nutrient basis = PER_100ML
- * - No grams involved. No density guessing.
+ *
+ * This preserves:
+ *
+ * UI display:
+ *     "1 can"
+ *
+ * mathematical truth:
+ *     1 can = 473 mL
+ *
+ * Import steps
+ *
+ * Step 1 — Parse USDA JSON
+ * Uses UsdaFoodsSearchParser.
+ *
+ * Step 2 — Select target USDA item
+ * Either first item or selectedFdcId.
+ *
+ * Step 3 — Detect revive scenario
+ * Existing usdaFdcId → reuse id and stableId.
+ *
+ * Step 4 — Resolve serving model
+ * Determine:
+ *     servingSize
+ *     servingUnit
+ *     gramsPerServingUnit bridge
+ *     mlPerServingUnit bridge
+ *
+ * Step 5 — Map USDA nutrients
+ * USDA nutrientNumber → CSV code → internal nutrient.
+ *
+ * Step 6 — Canonicalize nutrient basis
+ * Convert serving-based nutrients into PER_100G or PER_100ML when grounded.
+ *
+ * Step 7 — Transactional persistence
+ * Upsert FoodEntity.
+ * Replace nutrient rows atomically.
+ *
+ * Parameters
+ * - searchJson:
+ *   USDA foods/search JSON string.
+ *
+ * - selectedFdcId:
+ *   Optional specific USDA food to import.
+ *
+ * Return
+ * - Success:
+ *   Food successfully imported or revived.
+ *
+ * - Blocked:
+ *   Unsupported serving unit
+ *   USDA parsing/select failure
+ *
+ * Edge cases handled
+ * - branded foods with custom serving units
+ * - household serving text overriding display unit
+ * - existing USDA foods being re-imported safely
+ * - partial nutrient catalogs
+ *
+ * Pitfalls / gotchas
+ * - householdServingFullText overrides display unit but NOT underlying truth.
+ * - mlPerServingUnit and gramsPerServingUnit bridges are critical for canonicalization.
+ *
+ * Architectural rules
+ * - Must never write duplicate nutrient rows.
+ * - Must always use DB transaction.
+ *
+ * Logging model compatibility
+ * - Imported foods become valid inputs for:
+ *     snapshot logging
+ *     planner
+ *     recipes
  */
 class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
     private val db: NutriDatabase,
@@ -56,8 +210,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             else "Selected item not found in USDA response (fdcId=$selectedFdcId)."
         )
 
-        // Prefer a stable ID for new inserts, but if we already have a row for this FDC id,
-        // KEEP the existing stableId to avoid breaking log references.
         val computedStableId = when {
             !item.gtinUpc.isNullOrBlank() -> "usda:gtin:${item.gtinUpc.trim()}"
             else -> "usda:fdc:${item.fdcId}"
@@ -78,20 +230,16 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             .orEmpty()
             .ifBlank { "Unnamed USDA Food" }
 
-        val servingSizeUnit = item.servingSizeUnit
         val rawServingUnit: ServingUnit =
-            ServingUnit.fromUsda(servingSizeUnit)
+            ServingUnit.fromUsda(item.servingSizeUnit)
                 ?: return Result.Blocked("Unsupported USDA servingSizeUnit='${item.servingSizeUnit}'")
 
         val rawServingSize: Double = item.servingSize ?: 1.0
 
-        // Prefer householdServingFullText for the *display* unit (e.g. "1 can"),
-        // and use USDA servingSize+unit as the bridge (e.g. 473 ML per 1 can).
         val household = parseHouseholdServing(item.householdServingFullText)
 
         // LOCKED-IN USDA RULE:
         // If household text is parseable, we store servingSize=household.size and servingUnit=household.unit for display.
-        // This makes "1 serving" match the label serving (best for quick logs + recipes).
         val finalServingSize: Double = household?.size ?: rawServingSize
         val finalServingUnit: ServingUnit = household?.unit ?: rawServingUnit
 
@@ -103,17 +251,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             rawSize = rawServingSize,
             rawUnit = rawServingUnit
         )
-        if (household != null && household.size > 0.0) {
-            val rawG = rawServingUnit.toGrams(rawServingSize)
-            val bridgedServingG = gramsPerServingUnit?.let { finalServingSize * it }
-
-            if (rawG != null && bridgedServingG != null && kotlin.math.abs(bridgedServingG - rawG) > 0.5) {
-                Log.w(
-                    "Meow",
-                    "USDA_IMPORT > Bridge mismatch (mass): finalServingSize*gramsPerServingUnit=$bridgedServingG vs rawG=$rawG"
-                )
-            }
-        }
 
         val mlPerServingUnit: Double? = computeMlBridgePer1Unit(
             householdSize = household?.size,
@@ -122,28 +259,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             rawUnit = rawServingUnit
         )
 
-        Log.d(
-            "USDA_IMPORT",
-            """
-    finalServingSize=$finalServingSize
-    finalServingUnit=$finalServingUnit
-    mlPerServingUnit=$mlPerServingUnit
-    computedServingMl=${finalServingSize * (mlPerServingUnit ?: 0.0)}
-    rawServing=($rawServingSize $rawServingUnit)
-    household=$household
-    """.trimIndent()
-        )
-        if (household != null && household.size > 0.0) {
-            val rawMl = rawServingUnit.toMilliliters(rawServingSize)
-            val bridgedServingMl = mlPerServingUnit?.let { finalServingSize * it }
-            if (rawMl != null && bridgedServingMl != null && kotlin.math.abs(bridgedServingMl - rawMl) > 0.5) {
-                Log.w("Meow", "USDA_IMPORT > Bridge mismatch: finalServingSize*mlPerServingUnit=$bridgedServingMl vs rawMl=$rawMl")
-            }
-        }
-        Log.d("Meow","usdaFdcId = ${item.fdcId},\n" +
-                "            usdaGtinUpc = ${(item.gtinUpc?.trim()?.takeIf { it.isNotBlank() })}, \n" +
-                "            usdaPublishedDate = ${(item.publishedDate?.trim()?.takeIf { it.isNotBlank() })},\n" +
-                "            usdaModifiedDate = ${(item.modifiedDate?.trim()?.takeIf { it.isNotBlank() })}")
         val food = Food(
             id = revivedId,
             name = normalizedName,
@@ -200,7 +315,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
                     "USDA import: failed to compute ml-per-serving for volume-grounded food."
                 )
                 val factor = 100.0 / mlPerServing
-                Log.d("USDA_IMPORT", "mlPerServing=$mlPerServing factor=$factor")
                 servingRows.map { r ->
                     r.copy(
                         basisType = BasisType.PER_100ML,
@@ -217,9 +331,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
 
         val foodId = db.withTransaction {
             val id = foods.upsert(food)
-            canonicalRows.firstOrNull { it.nutrient.displayName == "Calories" }?.let {
-                Log.d("USDA_IMPORT", "CANONICAL_WRITE Calories: basis=${it.basisType} amount=${it.amount}")
-            }
             foodNutrients.replaceForFood(id, canonicalRows)
             id
         }
@@ -297,17 +408,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         return HouseholdServing(size = size, unit = unit)
     }
 
-    /**
-     * If USDA raw serving is mass-based and household serving provides a display unit,
-     * compute grams per 1 display-unit.
-     *
-     * Locked-in USDA behavior:
-     * - When household text is parseable, we persist servingSize=1 + servingUnit=<parsed unit>
-     * - Therefore the bridge must represent grams-per-1 display unit, which is exactly the USDA raw grams.
-     *
-     * Absolute prohibition:
-     * - Never infer grams from mL.
-     */
     private fun computeGramsBridgePer1Unit(
         householdSize: Double?,
         displayUnit: ServingUnit,
@@ -317,8 +417,7 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         if (householdSize == null) return null
         if (!rawUnit.isMassUnit()) return null
 
-        // If the display unit itself is a mass unit, we can rely on deterministic conversion;
-        // no bridge needed.
+        // If the display unit itself is a mass unit, we can rely on deterministic conversion; no bridge needed.
         if (displayUnit.isMassUnit()) return null
 
         val gramsTotal = rawUnit.toGrams(rawSize)?.takeIf { it > 0.0 } ?: return null
@@ -327,19 +426,6 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         return (gramsTotal / householdSize).takeIf { it > 0.0 }
     }
 
-    /**
-     * If USDA raw serving is volume-based and household serving provides a display unit,
-     * compute mL per 1 display-unit.
-     *
-     * Locked-in USDA liquids behavior:
-     * - USDA servingSizeUnit=MLT + servingSize=X is the *truth* for canonicalization.
-     * - householdServingFullText is display only (but if parseable, it wins for display).
-     * - When household text is parseable we persist servingSize=1 + servingUnit=<parsed unit>
-     *   and preserve the truth via mlPerServingUnit=X.
-     *
-     * Absolute prohibition:
-     * - Never infer mL from grams (no density guessing).
-     */
     private fun computeMlBridgePer1Unit(
         householdSize: Double?,
         displayUnit: ServingUnit,
@@ -363,9 +449,18 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             val publishedDateIso: String?,
             val modifiedDateIso: String?
         ) : Result()
+
         data class Blocked(val reason: String) : Result()
     }
 }
+
+/**
+ * Title-cases a string for display.
+ *
+ * NOTE:
+ * - This is intentionally simple and locale-agnostic.
+ * - It preserves your existing behavior; do not “fix” it without auditing UI diffs.
+ */
 fun String.toTitleCase(): String =
     lowercase()
         .split(" ")
@@ -373,48 +468,36 @@ fun String.toTitleCase(): String =
             word.replaceFirstChar { it.uppercase() }
         }
 
-
 /**
- * ============================
- * IMPORT_USDA_FOOD_FROM_SEARCH_JSON_USECASE – FUTURE-ME NOTES 1:30pm
- * ============================
+ * ===== Bottom KDoc (for future AI assistant) =====
  *
- * Purpose:
- * - Take USDA foods/search JSON (already fetched elsewhere), parse it, and import ONE selected food into DB.
- * - Persist:
- *     - Food serving model in FoodEntity (servingSize + servingUnit, plus optional gramsPerServingUnit)
- *     - Nutrients in food_nutrients using the LOCKED canonical basis rule (single basis per nutrient)
+ * Invariants (must never change)
+ * - Exactly ONE nutrient row per (foodId, nutrientId) is persisted.
+ * - Canonical basis:
+ *   - PER_100G when mass-grounded
+ *   - PER_100ML when volume-grounded
+ *   - USDA_REPORTED_SERVING otherwise
+ * - Never infer density; never convert grams <-> mL.
+ * - Preserve stableId on revive to avoid breaking log references.
+ * - All writes must occur inside a single DB transaction.
  *
- * Critical mindset:
- * - USDA responses can be messy, inconsistent, or branded-data weird.
- * - We do NOT “fix” USDA; we normalize only when mathematically safe.
- * - We do NOT guess density. No mL<->g conversions unless user gives grams-per-serving backing.
+ * Do not refactor notes
+ * - Keep grounding decision order: mass grounding takes precedence over volume grounding.
+ * - Keep revive-on-import logic (unique usdaFdcId constraint safety).
+ * - Keep groupBy(nutrient.id).firstOrNull() de-dupe behavior unless you also update DB constraints and readers.
  *
- * Canonical storage rule (locked):
- * - Persist exactly ONE row per nutrient per food:
- *     - If USDA serving unit is GRM/G and servingSize > 0 → store PER_100G only (scale from serving to 100g).
- *     - If USDA serving unit is MLT/ML and servingSize > 0 → store PER_100ML only (scale from serving to 100ml).
- *     - Otherwise → store USDA_REPORTED_SERVING only (raw), and the food is BLOCKED until grounded.
+ * Architectural boundaries
+ * - This use case is a domain/persistence orchestration boundary:
+ *   - parsing + mapping is domain logic
+ *   - writes happen through repositories inside a transaction
  *
- * Why FoodEntity keeps serving info even when nutrients are canonical:
- * - ServingSize/Unit is user-facing and drives UI.
- * - Canonical nutrients are for math and conversions.
- * - Together: you can display “2 Tbsp” but compute using PER_100G if grams backing exists.
+ * Migration notes (KMP / time APIs)
+ * - This file currently depends on android.util.Log; replace with injected logger for KMP.
  *
- * Nutrient selection nuance:
- * - We only import nutrients that exist in our internal catalog (via UsdaToCsvNutrientMap + NutrientRepository).
- * - If a USDA nutrient is unmapped, skip it.
- * - This keeps dashboards/recipes consistent with app expectations.
+ * Performance considerations
+ * - Conversion is in-memory; DB writes are batched via replaceForFood.
  *
- * Traceability nuance:
- * - Food.stableId should be stable (gtin/UPC preferred, else fdcId).
- * - This protects export/import reconciliation and avoids duplicates across syncs.
- *
- * Regression smells:
- * - If you see both USDA_REPORTED_SERVING and PER_100G inserted for the same nutrient → wrong (writer drift).
- * - If UI crashes due to duplicate nutrientId rows → this use case (or CSV importer / save use case) is leaking multi-basis rows.
- *
- * Discipline:
- * - Minimal change policy: do not invent new parsers/IDs.
- * - Use existing ServingUnit.fromUsda + existing BasisType values.
+ * Maintenance recommendations
+ * - If title casing changes, audit UI snapshots (names/brands will change).
+ * - Consider a single shared title-case util if multiple USDA import paths need identical behavior.
  */
