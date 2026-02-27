@@ -82,6 +82,7 @@ fun DashboardScreen(
     onOpenMeowLogs: () -> Unit,
     onOpenPlanner: () -> Unit,
     initialDate: LocalDate? = null,
+    onOpenBackup: () -> Unit,
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -209,9 +210,17 @@ fun DashboardScreen(
                 onStartTargetEditPrefilled = vm::startTargetEditPrefilled,
                 onSync = vm::devSyncNutrients,
                 onExport = { exportLauncher.launch("adobongkangkong_export.zip") },
-                onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
+                onImport = {
+                    importLauncher.launch(
+                        arrayOf(
+                            "application/zip",
+                            "application/octet-stream"
+                        )
+                    )
+                },
                 onOpenMeowLogs = onOpenMeowLogs,
-                onOpenPlanner = onOpenPlanner
+                onOpenPlanner = onOpenPlanner,
+                onOpenBackup =  onOpenBackup,
             )
         }
     }

@@ -53,7 +53,10 @@ fun DashboardSettingsSheet(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onOpenMeowLogs: () -> Unit,
-    onOpenPlanner: () -> Unit
+    onOpenPlanner: () -> Unit,
+
+    // NEW: Full backup/restore screen (DB + images)
+    onOpenBackup: () -> Unit
 ) {
     var slot0Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(0)?.value) }
     var slot1Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(1)?.value) }
@@ -107,7 +110,6 @@ fun DashboardSettingsSheet(
 
         // ---------------- Targets ----------------
 
-
         targetDraft?.let { draft ->
             Text("Targets (min / target / max)", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(16.dp))
@@ -156,8 +158,6 @@ fun DashboardSettingsSheet(
                 TextButton(onClick = onCancelTargetEdit) { Text("Cancel") }
             }
         }
-
-
 
         Spacer(Modifier.height(8.dp))
 
@@ -238,6 +238,19 @@ fun DashboardSettingsSheet(
             Text("Meow Logs")
         }
 
+        Spacer(Modifier.height(12.dp))
+
+        // NEW: Full app backup/restore (DB + images)
+        Button(
+            onClick = {
+                onDismiss()
+                onOpenBackup()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Backup & Restore")
+        }
+
 //        Spacer(Modifier.height(16.dp))
 //
 //        Button(
@@ -251,7 +264,6 @@ fun DashboardSettingsSheet(
 //        }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -315,8 +327,6 @@ private fun PinDropdown(
                     }
                 )
             }
-
         }
     }
 }
-

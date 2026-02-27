@@ -8,6 +8,8 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.example.adobongkangkong.core.util.restartApp
+import com.example.adobongkangkong.ui.backup.BackupScreen
 import com.example.adobongkangkong.ui.calendar.CalendarScreen
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
@@ -104,6 +106,7 @@ fun AppNavHost(
                 onOpenDayLog = { date -> navController.navigate(NavRoutes.DayLog.dayLog(date)) },
                 onOpenMeowLogs = { navController.navigate(NavRoutes.Debug.meowLogs) },
                 onOpenPlanner = { navController.navigate(NavRoutes.Planner.plannerDay(LocalDate.now().toString())) },
+                onOpenBackup = { navController.navigate("backup") }
             )
         }
 
@@ -347,6 +350,16 @@ fun AppNavHost(
                 date = date,
                 onBack = { navController.popBackStack() },
                 onPickDate = { /* TODO */ }
+            )
+        }
+
+        composable("backup") {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            BackupScreen(
+                onBack = { navController.popBackStack() },
+                onRequestRestartApp = {
+                    restartApp(context)
+                }
             )
         }
 
