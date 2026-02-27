@@ -78,6 +78,13 @@ data class FoodEditorState(
     // Barcode mappings for this food (persisted)
     val assignedBarcodes: List<String> = emptyList(),
     val barcodeActionMessage: String? = null,
+
+    // ✅ NEW: non-blocking “Needs Fix” banner state (computed by ViewModel)
+    val needsFix: Boolean = false,
+    val fixMessage: String? = null,
+
+    // ✅ Optional dismiss: hides banner until message changes (or becomes null)
+    val fixBannerDismissed: Boolean = false,
 ) {
     /**
      * Convenience flags/fields used by FoodEditorScreen.

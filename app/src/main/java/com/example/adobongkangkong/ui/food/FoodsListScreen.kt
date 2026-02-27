@@ -139,7 +139,6 @@ fun FoodsListScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // Sort menu lives here (after the filter row).
             FoodsSortRow(
                 sort = state.sort,
                 onSortKey = vm::onSortKeyChange,
@@ -149,7 +148,7 @@ fun FoodsListScreen(
             Spacer(Modifier.height(10.dp))
 
             LazyColumn(
-                Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 state = listState
             ) {
                 items(state.rows, key = { it.foodId }) { row ->
@@ -161,12 +160,15 @@ fun FoodsListScreen(
                     )
                     HorizontalDivider()
                 }
+
+                // (You had this debug; keep if you want, otherwise remove)
                 item {
-                    Text(state.toString(), style = MaterialTheme.typography.bodySmall )
+                    Text(state.toString(), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
     }
+
     LaunchedEffect(state.sort.key, state.sort.direction) {
         listState.scrollToItem(0)
     }
@@ -198,7 +200,7 @@ private fun FoodsSortRow(
 
         IconButton(onClick = onToggleDirection) {
             Icon(
-                painter = painterResource(R.drawable.priority_arrows), // replace if needed
+                painter = painterResource(R.drawable.priority_arrows),
                 contentDescription = "Toggle sort direction"
             )
         }
@@ -275,7 +277,16 @@ private fun FoodRow(
             },
             supportingContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Brand must always be visible (search candidate).
+
+                    // ✅ Needs-fix banner (non-blocking, derived from VM)
+                    if (!row.fixMessage.isNullOrBlank()) {
+                        NeedsFixBanner(
+                            message = row.fixMessage,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
                     Text(
                         text = row.brandText,
                         maxLines = 1,
@@ -286,7 +297,6 @@ private fun FoodRow(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // Calories per serving always visible; optional extra metric shown only for macro sort keys.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -315,10 +325,9 @@ private fun FoodRow(
                     modifier = Modifier.padding(top = 2.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    // Optional compact type icon when cramped (recipe vs food)
                     Icon(
                         painter = painterResource(
-                            if (row.isRecipe) R.drawable.recipe else R.drawable.salad // replace with your icons
+                            if (row.isRecipe) R.drawable.recipe else R.drawable.salad
                         ),
                         contentDescription = if (row.isRecipe) "Recipe" else "Food",
                         modifier = Modifier.size(18.dp),
@@ -332,6 +341,34 @@ private fun FoodRow(
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun NeedsFixBanner(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.triangle_warning),
+            contentDescription = "Needs fix",
+            tint = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -355,7 +392,6 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
                 painter = painterResource(R.drawable.star),
                 contentDescription = "Favorite",
                 modifier = Modifier.size(18.dp),
-//                tint = FavoriteYellow
             )
         }
 
@@ -364,7 +400,6 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
                 painter = painterResource(R.drawable.social_network),
                 contentDescription = "Eat more",
                 modifier = Modifier.size(18.dp),
-//                tint = EatMoreGreen,
             )
         }
 
@@ -373,7 +408,6 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
                 painter = painterResource(R.drawable.triangle_warning),
                 contentDescription = "Limit",
                 modifier = Modifier.size(18.dp),
-//                tint = LimitRed
             )
         }
     }

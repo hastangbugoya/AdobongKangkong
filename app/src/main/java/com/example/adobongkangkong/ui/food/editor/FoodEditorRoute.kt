@@ -156,7 +156,8 @@ fun FoodEditorRoute(
                 BarcodeCollisionAction.OpenExisting -> viewModel.openExistingFromCollision()
                 BarcodeCollisionAction.Replace -> viewModel.remapFromCollisionProceedImport()
             }
-        }
+        },
+        onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner
     )
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

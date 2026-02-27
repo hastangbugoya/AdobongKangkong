@@ -5,20 +5,22 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
+import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.recipes.ComputeRecipeKcalForFoodIdUseCase
-import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
+import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 import com.example.adobongkangkong.domain.recipes.nutrientsForGrams
 import com.example.adobongkangkong.domain.recipes.nutrientsForMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
+import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
+import com.example.adobongkangkong.domain.usage.FoodUsageCheck
+import com.example.adobongkangkong.domain.usage.UsageContext
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import javax.inject.Inject
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,13 +33,16 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
+import kotlin.math.roundToInt
 
 @HiltViewModel
 class FoodsListViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
     private val snapshotRepo: FoodNutritionSnapshotRepository,
-    private val computeRecipeKcalForFoodId : ComputeRecipeKcalForFoodIdUseCase
+    private val computeRecipeKcalForFoodId: ComputeRecipeKcalForFoodIdUseCase,
+    private val checkFoodUsable: CheckFoodUsableUseCase,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -70,8 +75,18 @@ class FoodsListViewModel @Inject constructor(
             }
         }
 
-
-
+    /**
+     * Snapshots for the current visible list.
+     *
+     * Used for:
+     * - building per-100 caches
+     * - determining if a food has nutrients (snapshot present)
+     */
+    private val snapshotsByFoodIdFlow: Flow<Map<Long, FoodNutritionSnapshot>> =
+        filteredFoodsFlow.mapLatest { foods ->
+            val ids = foods.map { it.id }.toSet()
+            if (ids.isEmpty()) emptyMap() else snapshotRepo.getSnapshots(ids)
+        }
 
     /**
      * Canonical per-100 macro cache for the current visible list.
@@ -84,23 +99,20 @@ class FoodsListViewModel @Inject constructor(
      * Note: grams and mL are not comparable without density; we never guess density.
      */
     private val per100ByFoodIdFlow: Flow<Map<Long, Per100Macros>> =
-        filteredFoodsFlow.mapLatest { foods ->
-            val ids = foods.map { it.id }.toSet()
+        snapshotsByFoodIdFlow.mapLatest { snapshotsById ->
+            if (snapshotsById.isEmpty()) return@mapLatest emptyMap()
 
-            if (ids.isEmpty()) return@mapLatest emptyMap()
-
-            val snapshotsById = snapshotRepo.getSnapshots(ids)
-
-            val out = HashMap<Long, Per100Macros>(foods.size)
-            for (food in foods) {
-                val snapshot = snapshotsById[food.id] ?: continue
+            val out = HashMap<Long, Per100Macros>(snapshotsById.size)
+            for ((foodId, snapshot) in snapshotsById) {
 
                 val (basis, per100) = when {
                     // Mass-grounded snapshot
-                    snapshot.nutrientsPerGram != null -> BasisType.PER_100G to snapshot.nutrientsForGrams(100.0)
+                    snapshot.nutrientsPerGram != null ->
+                        BasisType.PER_100G to snapshot.nutrientsForGrams(100.0)
 
                     // Volume-grounded snapshot
-                    snapshot.nutrientsPerMilliliter != null -> BasisType.PER_100ML to snapshot.nutrientsForMilliliters(100.0)
+                    snapshot.nutrientsPerMilliliter != null ->
+                        BasisType.PER_100ML to snapshot.nutrientsForMilliliters(100.0)
 
                     else -> null to null
                 }
@@ -111,7 +123,7 @@ class FoodsListViewModel @Inject constructor(
                     return if (per100 != null && present.contains(code)) per100[NutrientKey(code)] else null
                 }
 
-                out[food.id] = Per100Macros(
+                out[foodId] = Per100Macros(
                     basis = basis,
                     kcal = pick(NutrientKey.CALORIES_KCAL.value),
                     protein = pick(NutrientKey.PROTEIN_G.value),
@@ -120,6 +132,7 @@ class FoodsListViewModel @Inject constructor(
                     sugar = pick(NutrientKey.SUGAR_G.value)
                 )
             }
+
             out
         }
 
@@ -148,15 +161,43 @@ class FoodsListViewModel @Inject constructor(
             )
         }
             .combine(per100ByFoodIdFlow) { partial, per100ById ->
+                partial to per100ById
+            }
+            .combine(snapshotsByFoodIdFlow) { (partial, per100ById), snapshotsById ->
+
                 val (q, filter, sort, foods, flagsById) = partial
 
                 val rowsUnsorted = ArrayList<FoodsListRowUiModel>(foods.size)
                 for (food in foods) {
+
+                    val fixMessageForFood: String? =
+                        if (food.isRecipe) {
+                            null
+                        } else {
+                            val snapshot = snapshotsById[food.id]
+                            if (snapshot == null) {
+                                "Food has no nutrients and cannot be logged"
+                            } else {
+                                val r = checkFoodUsable.execute(
+                                    servingUnit = food.servingUnit,
+                                    gramsPerServingUnit = food.gramsPerServingUnit,
+                                    mlPerServingUnit = food.mlPerServingUnit,
+                                    amountInput = AmountInput.ByServings(1.0),
+                                    context = UsageContext.LOGGING
+                                )
+                                when (r) {
+                                    is FoodUsageCheck.Ok -> null
+                                    is FoodUsageCheck.Blocked -> r.message
+                                }
+                            }
+                        }
+
                     if (food.isRecipe) {
                         val kcalText =
                             when (val r = computeRecipeKcalForFoodId(food.id)) {
                                 is ComputeRecipeKcalForFoodIdUseCase.Result.Success ->
                                     "B=${r.totalKcal}/S=${r.perServingKcal} kcal"
+
                                 else -> "B=—/S=— kcal"
                             }
 
@@ -168,7 +209,8 @@ class FoodsListViewModel @Inject constructor(
                                 caloriesPerServingText = kcalText,
                                 extraMetricText = null,
                                 isRecipe = true,
-                                goalFlags = flagsById[food.id]
+                                goalFlags = flagsById[food.id],
+                                fixMessage = null
                             )
                         )
                         continue
@@ -210,11 +252,11 @@ class FoodsListViewModel @Inject constructor(
                             caloriesPerServingText = kcalPerServingText,
                             extraMetricText = extraMetricText,
                             isRecipe = false,
-                            goalFlags = flagsById[food.id]
+                            goalFlags = flagsById[food.id],
+                            fixMessage = fixMessageForFood
                         )
                     )
                 }
-
 
                 val sortedRows = sortRows(
                     rows = rowsUnsorted,
@@ -228,13 +270,17 @@ class FoodsListViewModel @Inject constructor(
                     sort = sort,
                     rows = sortedRows
                 )
-
             }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FoodsListState())
 
-    fun onQueryChange(v: String) { queryFlow.value = v }
-    fun onFilterChange(v: FoodsFilter) { filterFlow.value = v }
+    fun onQueryChange(v: String) {
+        queryFlow.value = v
+    }
+
+    fun onFilterChange(v: FoodsFilter) {
+        filterFlow.value = v
+    }
 
     fun onSortKeyChange(key: FoodSortKey) {
         sortFlow.value = sortFlow.value.copy(key = key)
@@ -295,8 +341,10 @@ class FoodsListViewModel @Inject constructor(
             val sText = s?.toString() ?: "—"
             return "B=$bText/S=$sText kcal"
         }
+
         if (basis == null || kcalPer100 == null) return "— kcal"
         if (food.isRecipe) return "B=—/S=— kcal"
+
         val label = servingLabel(food.servingSize, food.servingUnit)
         return when (basis) {
             BasisType.PER_100G -> {
@@ -425,6 +473,7 @@ class FoodsListViewModel @Inject constructor(
                     val primary = nameCmp(a.name, b.name, sort.direction)
                     if (primary != 0) primary else nameCmp(a.brandText, b.brandText, SortDirection.ASC)
                 }
+
                 else -> {
                     val (ab, av) = metric(a)
                     val (bb, bv) = metric(b)

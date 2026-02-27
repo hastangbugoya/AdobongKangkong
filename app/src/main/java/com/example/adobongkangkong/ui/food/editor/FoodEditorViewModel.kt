@@ -30,6 +30,8 @@ import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SoftDeleteFoodUseCase
+import com.example.adobongkangkong.domain.model.isVolumeUnit
+import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -168,7 +170,7 @@ class FoodEditorViewModel @Inject constructor(
                     foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
                 } else emptyList()
 
-            _state.value = current.copy(
+            val next = current.copy(
                 foodId = foodId,
                 stableId = stableId,
                 name = food?.name ?: (initialName ?: ""),
@@ -225,11 +227,17 @@ class FoodEditorViewModel @Inject constructor(
                 barcodeActionMessage = null,
                 scannedBarcode = if (foodId == null) current.scannedBarcode else ""
             )
+
+            _state.value = applyNeedsFix(next, current)
         }
     }
 
     fun dismissBarcodeCollision() {
         update { it.copy(barcodeCollisionDialog = null) }
+    }
+
+    fun dismissNeedsFixBanner() {
+        update { it.copy(fixBannerDismissed = true) }
     }
 
     fun openExistingFromCollision() {
@@ -249,6 +257,50 @@ class FoodEditorViewModel @Inject constructor(
 
             load(foodId = dialog.existingFoodId, initialName = null, force = true)
         }
+    }
+
+    private fun applyNeedsFix(next: FoodEditorState, prev: FoodEditorState): FoodEditorState {
+        val computedMessage = computeFixMessage(next)
+        val needsFix = !computedMessage.isNullOrBlank()
+
+        val dismissed =
+            if (!needsFix) false
+            else if (computedMessage != prev.fixMessage) false // reset dismiss when message changes
+            else next.fixBannerDismissed
+
+        return next.copy(
+            needsFix = needsFix,
+            fixMessage = computedMessage,
+            fixBannerDismissed = dismissed
+        )
+    }
+
+    private fun computeFixMessage(s: FoodEditorState): String? {
+        // 1) Nutrients missing / empty -> not loggable and not recipe-usable (per your UX examples)
+        if (s.nutrientRows.isEmpty()) {
+            return "Food has no nutrients and cannot be logged or used in recipes."
+        }
+
+        // Treat “all blank / non-numeric” as effectively missing too.
+        val hasAnyNumeric = s.nutrientRows.any { row -> row.amount.trim().toDoubleOrNull() != null }
+        if (!hasAnyNumeric) {
+            return "Food nutrient amounts are blank; enter nutrient amounts to log or use in recipes."
+        }
+
+        // 2) Missing grams-per-serving backing when serving-based and not volume-grounded
+        val grams = s.gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+        val ml = s.mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+
+        val needsBacking = s.servingUnit.requiresGramsPerServing()
+        val isVolumeGrounded = s.servingUnit.isVolumeUnit() || (ml != null)
+
+        // We don’t have an AmountInput here (by design: no extra logging use-case calls).
+        // This banner is a reminder for the *common* case (logging/recipe by servings).
+        if (needsBacking && grams == null && !isVolumeGrounded) {
+            return "Food needs grams per serving unit to be loggable (and recipe-usable) when using servings."
+        }
+
+        return null
     }
 
     fun remapFromCollisionProceedImport() {
@@ -306,64 +358,6 @@ class FoodEditorViewModel @Inject constructor(
             BarcodeCollisionAction.Replace -> remapFromCollisionProceedImport()
         }
     }
-
-//    fun onResolveBarcodeCollision(action: BarcodeCollisionAction) {
-//        val dialog = _state.value.barcodeCollisionDialog ?: return
-//
-//        update { it.copy(barcodeCollisionDialog = null) }
-//
-//        when (action) {
-//            BarcodeCollisionAction.Cancel -> return
-//
-//            BarcodeCollisionAction.OpenExisting -> {
-//                viewModelScope.launch {
-//                    load(
-//                        foodId = dialog.existingFoodId,
-//                        initialName = null,
-//                        force = true
-//                    )
-//                }
-//            }
-//
-//            BarcodeCollisionAction.Replace -> {
-//                viewModelScope.launch {
-//
-//                    val json = _state.value.pendingUsdaSearchJson ?: return@launch
-//
-//                    when (
-//                        val r = importUsdaFromSearchJson(
-//                            json,
-//                            selectedFdcId = dialog.incomingFdcId
-//                        )
-//                    ) {
-//                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
-//
-//                            val now = System.currentTimeMillis()
-//
-//                            foodBarcodeRepo.upsertAndTouch(
-//                                entity = FoodBarcodeEntity(
-//                                    barcode = dialog.barcode,
-//                                    foodId = r.foodId,
-//                                    source = BarcodeMappingSource.USDA,
-//                                    usdaFdcId = r.fdcId,
-//                                    usdaPublishedDateIso = r.publishedDateIso,
-//                                    assignedAtEpochMs = now,
-//                                    lastSeenAtEpochMs = now
-//                                ),
-//                                nowEpochMs = now
-//                            )
-//
-//                            load(r.foodId, null, force = true)
-//                        }
-//
-//                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
-//                            update { it.copy(errorMessage = r.reason) }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
 
     fun onPickBasisType(type: BasisType) { update {
         it.copy(
@@ -914,7 +908,9 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     private fun update(block: (FoodEditorState) -> FoodEditorState) {
-        _state.value = block(_state.value)
+        val prev = _state.value
+        val nextRaw = block(prev)
+        _state.value = applyNeedsFix(nextRaw, prev)
     }
 
     private fun Double.roundForUi(): String {
