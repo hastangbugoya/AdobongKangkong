@@ -1,7 +1,6 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
-import android.R.attr.maxWidth
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
@@ -82,6 +81,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.clip
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import androidx.compose.material3.CircularProgressIndicator
+import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 
 /**
  * Recipe builder / editor screen.
@@ -387,64 +387,68 @@ fun RecipeBuilderScreen(
                     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         state.ingredients.forEachIndexed { index, ing ->
                             Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                FoodBannerCardBackground(
+                                    foodId = ing.foodId, // make sure Ingredient has this; otherwise pass null/0 and it will fallback
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
-
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Primary: food name
-                                        Text(
-                                            text = ing.foodName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-
-                                        // Secondary: amount + grams
-                                        val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
-                                        val amountText = if (unitLabel.isNotBlank()) {
-                                            "${"%,.2f".format(ing.servings)} $unitLabel"
-                                        } else {
-                                            "${"%,.2f".format(ing.servings)} servings"
-                                        }
-                                        val gramsText = ing.grams?.let { g ->
-                                            " • ≈ ${"%,.0f".format(g)} g"
-                                        }.orEmpty()
-
-                                        Text(
-                                            text = amountText + gramsText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-
-                                        // Tertiary: entered-as hint
-                                        val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
-                                        if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            // Primary: food name
                                             Text(
-                                                text = "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit",
-                                                style = MaterialTheme.typography.labelSmall,
+                                                text = ing.foodName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+
+                                            // Secondary: amount + grams
+                                            val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
+                                            val amountText = if (unitLabel.isNotBlank()) {
+                                                "${"%,.2f".format(ing.servings)} $unitLabel"
+                                            } else {
+                                                "${"%,.2f".format(ing.servings)} servings"
+                                            }
+                                            val gramsText = ing.grams?.let { g ->
+                                                " • ≈ ${"%,.0f".format(g)} g"
+                                            }.orEmpty()
+
+                                            Text(
+                                                text = amountText + gramsText,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1
                                             )
-                                        }
-                                    }
 
-                                    IconButton(
-                                        onClick = { vm.removeIngredientAt(index) },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.trash),
-                                            contentDescription = "Remove ingredient",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                            // Tertiary: entered-as hint
+                                            val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
+                                            if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
+                                                Text(
+                                                    text = "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { vm.removeIngredientAt(index) },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(id = R.drawable.trash),
+                                                contentDescription = "Remove ingredient",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
 

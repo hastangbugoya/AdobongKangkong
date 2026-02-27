@@ -20,7 +20,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved

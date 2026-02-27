@@ -2,7 +2,6 @@ package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.NutrientAliasDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
-import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.data.local.db.mapper.toDomain
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.repository.NutrientRepository

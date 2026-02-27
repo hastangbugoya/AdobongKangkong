@@ -41,8 +41,6 @@ import kotlinx.coroutines.flow.flowOf
 import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
 import com.example.adobongkangkong.domain.repository.NutrientRepository
-import com.example.adobongkangkong.domain.nutrition.NutrientKey
-import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import kotlin.math.abs
 

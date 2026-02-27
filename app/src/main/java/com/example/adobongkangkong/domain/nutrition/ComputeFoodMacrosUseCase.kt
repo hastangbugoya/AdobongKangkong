@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.domain.nutrition
 
-import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import javax.inject.Inject
 

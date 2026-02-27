@@ -5,7 +5,6 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
-import com.example.adobongkangkong.domain.model.ServingUnit
 
 @Entity(
     tableName = "nutrients",

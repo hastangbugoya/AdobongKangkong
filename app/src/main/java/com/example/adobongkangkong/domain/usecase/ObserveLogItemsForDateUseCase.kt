@@ -5,7 +5,6 @@ import com.example.adobongkangkong.domain.model.TodayLogItem
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
 import com.example.adobongkangkong.domain.repository.LogRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject

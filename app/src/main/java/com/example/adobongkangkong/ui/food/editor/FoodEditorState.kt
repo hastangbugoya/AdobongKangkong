@@ -79,6 +79,7 @@ data class FoodEditorState(
     val assignedBarcodes: List<String> = emptyList(),
     val barcodeActionMessage: String? = null,
 
+    val hasLoaded: Boolean = false,
     // ✅ NEW: non-blocking “Needs Fix” banner state (computed by ViewModel)
     val needsFix: Boolean = false,
     val fixMessage: String? = null,

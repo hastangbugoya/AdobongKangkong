@@ -1,10 +1,8 @@
 package com.example.adobongkangkong.ui.dashboard
 
 import android.net.Uri
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,8 +57,6 @@ import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
-import com.example.adobongkangkong.ui.calendar.DayIconStatus
-import com.example.adobongkangkong.ui.navigation.NavRoutes
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
 import com.example.adobongkangkong.ui.theme.LimitRed
 import java.time.Instant

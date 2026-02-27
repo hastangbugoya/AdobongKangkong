@@ -9,7 +9,6 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.util.zip.ZipInputStream

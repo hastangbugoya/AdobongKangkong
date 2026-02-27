@@ -4,7 +4,6 @@ import com.example.adobongkangkong.domain.model.UserNutrientTarget
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientSpec
-import com.example.adobongkangkong.domain.trend.model.RollingNutritionStats
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionSummaryUseCase
 import kotlinx.coroutines.flow.Flow

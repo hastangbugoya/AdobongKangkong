@@ -16,8 +16,6 @@ import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
-import com.example.adobongkangkong.domain.usda.model.UsdaFoodSearchItem
-import kotlinx.serialization.Serializable
 import java.util.UUID
 import javax.inject.Inject
 

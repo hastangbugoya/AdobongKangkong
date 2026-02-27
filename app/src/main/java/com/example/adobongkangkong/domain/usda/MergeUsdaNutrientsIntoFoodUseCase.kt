@@ -1,7 +1,6 @@
 package com.example.adobongkangkong.domain.usda
 
 import com.example.adobongkangkong.data.local.db.entity.BasisType
-import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import javax.inject.Inject

@@ -24,7 +24,6 @@ import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCa
 import com.example.adobongkangkong.domain.usda.ResolveBarcodeWithUsdaUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
 import com.example.adobongkangkong.domain.usda.model.BarcodeRemapDialogState
-import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
@@ -171,6 +170,7 @@ class FoodEditorViewModel @Inject constructor(
                 } else emptyList()
 
             val next = current.copy(
+                hasLoaded = true,
                 foodId = foodId,
                 stableId = stableId,
                 name = food?.name ?: (initialName ?: ""),
@@ -276,26 +276,24 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     private fun computeFixMessage(s: FoodEditorState): String? {
-        // 1) Nutrients missing / empty -> not loggable and not recipe-usable (per your UX examples)
+        // Prevent “blip” while initial load is still in-flight
+        if (!s.hasLoaded) return null
+
         if (s.nutrientRows.isEmpty()) {
             return "Food has no nutrients and cannot be logged or used in recipes."
         }
 
-        // Treat “all blank / non-numeric” as effectively missing too.
         val hasAnyNumeric = s.nutrientRows.any { row -> row.amount.trim().toDoubleOrNull() != null }
         if (!hasAnyNumeric) {
             return "Food nutrient amounts are blank; enter nutrient amounts to log or use in recipes."
         }
 
-        // 2) Missing grams-per-serving backing when serving-based and not volume-grounded
         val grams = s.gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
         val ml = s.mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
 
         val needsBacking = s.servingUnit.requiresGramsPerServing()
         val isVolumeGrounded = s.servingUnit.isVolumeUnit() || (ml != null)
 
-        // We don’t have an AmountInput here (by design: no extra logging use-case calls).
-        // This banner is a reminder for the *common* case (logging/recipe by servings).
         if (needsBacking && grams == null && !isVolumeGrounded) {
             return "Food needs grams per serving unit to be loggable (and recipe-usable) when using servings."
         }

@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.ui.format
 
-import org.intellij.lang.annotations.Pattern
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
 import com.example.adobongkangkong.ui.format.toPrettyTime
-import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @Composable

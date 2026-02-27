@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.domain.recipes
 
-import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.nutrition.dividedBy
 

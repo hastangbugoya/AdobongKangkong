@@ -1,10 +1,8 @@
 package com.example.adobongkangkong.data.local.db.entity
 
-import android.view.Display
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.ColumnInfo
 
 @Entity(
     tableName = "planned_meals",

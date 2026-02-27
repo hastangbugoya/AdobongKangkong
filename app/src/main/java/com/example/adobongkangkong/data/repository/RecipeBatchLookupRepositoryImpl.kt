@@ -1,7 +1,6 @@
 package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
-import com.example.adobongkangkong.data.local.db.entity.RecipeBatchEntity
 import com.example.adobongkangkong.data.local.db.mapper.toDomain
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository

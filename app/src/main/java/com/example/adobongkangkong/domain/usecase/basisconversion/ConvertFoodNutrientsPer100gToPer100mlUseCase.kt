@@ -3,7 +3,6 @@ package com.example.adobongkangkong.domain.usecase.basisconversion
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
-import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toGrams

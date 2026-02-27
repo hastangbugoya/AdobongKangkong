@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
-import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao

@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.ui.startup
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.prefs.FirstRunPrefs
@@ -9,7 +8,6 @@ import com.example.adobongkangkong.domain.usecase.ImportFoodsCsvUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
