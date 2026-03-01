@@ -15,6 +15,9 @@ import com.example.adobongkangkong.domain.importing.model.ImportIssueCode
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.usage.FoodValidationResult
+import com.example.adobongkangkong.domain.usage.UsageContext
+import com.example.adobongkangkong.domain.usage.ValidateFoodForUsageUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -114,7 +117,8 @@ import javax.inject.Inject
  */
 class FoodsCsvImporter @Inject constructor(
     private val assets: AssetManager,
-    private val db: NutriDatabase
+    private val db: NutriDatabase,
+    private val validateFoodForUsage: ValidateFoodForUsageUseCase
 ) {
 
     companion object {
@@ -152,13 +156,13 @@ class FoodsCsvImporter @Inject constructor(
      * If serving unit is "cup/tbsp/serving/etc", we need grams-per-serving to convert servings → grams.
      * If serving unit is already grams/oz/lb/mg, we do not need grams-per-serving.
      */
-    private fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
-        ServingUnit.G,
-        ServingUnit.MG,
-        ServingUnit.OZ,
-        ServingUnit.LB -> false
-        else -> true
-    }
+//    private fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
+//        ServingUnit.G,
+//        ServingUnit.MG,
+//        ServingUnit.OZ,
+//        ServingUnit.LB -> false
+//        else -> true
+//    }
 
     /**
      * Adds an import warning keyed by CSV row index.
@@ -484,7 +488,16 @@ class FoodsCsvImporter @Inject constructor(
                 }
 
                 // Warn but import anyway if volume-like serving unit requires grams-per-serving and it is missing.
-                if (servingUnit.requiresGramsPerServing() && parsedWeight.grams == null) {
+
+                val grounding = validateFoodForUsage.validateServingsGroundingOnly(
+                    servingUnit = servingUnit,
+                    gramsPerServingUnit = parsedWeight.grams,
+                    mlPerServingUnit = null, // importer doesn’t parse ml bridge yet
+                    context = UsageContext.LOGGING // or RECIPE; pick one, LOGGING is fine
+                )
+                if (grounding is FoodValidationResult.Blocked &&
+                    grounding.reason == FoodValidationResult.Reason.MissingGramsPerServing
+                )  {
                     issues.warn(i, ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
                     warnMissingGrams++
                 }

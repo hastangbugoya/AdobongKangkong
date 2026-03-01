@@ -15,11 +15,12 @@ import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 import com.example.adobongkangkong.domain.recipes.nutrientsForGrams
 import com.example.adobongkangkong.domain.recipes.nutrientsForMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
-import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
-import com.example.adobongkangkong.domain.usage.FoodUsageCheck
+import com.example.adobongkangkong.domain.usage.FoodValidationResult
 import com.example.adobongkangkong.domain.usage.UsageContext
+import com.example.adobongkangkong.domain.usage.ValidateFoodForUsageUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,16 +34,37 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
-import javax.inject.Inject
 import kotlin.math.roundToInt
 
+/**
+ * ViewModel for the FoodsList screen.
+ *
+ * Responsibilities:
+ * - Query + filter + sort foods/recipes.
+ * - Build lightweight row UI models with:
+ *   - per-serving kcal display
+ *   - optional extra macro metric (per 100g or per 100mL)
+ *   - fix banner message (single-source-of-truth validation)
+ *
+ * Correctness rules:
+ * - Validation uses the domain single source of truth:
+ *   [ValidateFoodForUsageUseCase] returning [FoodValidationResult].
+ * - Sorting uses canonical per-100 values derived from snapshots:
+ *   - Mass foods: PER_100G (snapshot.nutrientsForGrams(100.0))
+ *   - Volume foods: PER_100ML (snapshot.nutrientsForMilliliters(100.0))
+ * - Never compare grams vs mL values directly (no density guessing).
+ *
+ * Performance rules:
+ * - Keep row construction cheap: compute once per list emission, no heavy composables.
+ * - Use snapshot batch fetch to avoid N+1 queries.
+ */
 @HiltViewModel
 class FoodsListViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
     private val snapshotRepo: FoodNutritionSnapshotRepository,
     private val computeRecipeKcalForFoodId: ComputeRecipeKcalForFoodIdUseCase,
-    private val checkFoodUsable: CheckFoodUsableUseCase,
+    private val validateFood: ValidateFoodForUsageUseCase,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -81,6 +103,7 @@ class FoodsListViewModel @Inject constructor(
      * Used for:
      * - building per-100 caches
      * - determining if a food has nutrients (snapshot present)
+     * - driving validation fix messages (single source of truth)
      */
     private val snapshotsByFoodIdFlow: Flow<Map<Long, FoodNutritionSnapshot>> =
         filteredFoodsFlow.mapLatest { foods ->
@@ -91,12 +114,13 @@ class FoodsListViewModel @Inject constructor(
     /**
      * Canonical per-100 macro cache for the current visible list.
      *
-     * Note: snapshotRepo yields normalized maps; calling nutrientsForGrams(100.0) / nutrientsForMilliliters(100.0)
-     * gives us a canonical per-100 basis for sorting.
+     * snapshotRepo yields normalized maps; calling nutrientsForGrams(100.0) / nutrientsForMilliliters(100.0)
+     * gives canonical per-100 basis for sorting.
+     *
      * - Mass foods: per 100g
      * - Volume foods: per 100mL
      *
-     * Note: grams and mL are not comparable without density; we never guess density.
+     * NOTE: grams and mL are not comparable without density; we never guess density.
      */
     private val per100ByFoodIdFlow: Flow<Map<Long, Per100Macros>> =
         snapshotsByFoodIdFlow.mapLatest { snapshotsById ->
@@ -174,30 +198,31 @@ class FoodsListViewModel @Inject constructor(
                         if (food.isRecipe) {
                             null
                         } else {
-                            val snapshot = snapshotsById[food.id]
-                            if (snapshot == null) {
-                                "Food has no nutrients and cannot be logged"
-                            } else {
-                                val r = checkFoodUsable.execute(
+                            val result = validateFood.execute(
+                                ValidateFoodForUsageUseCase.PersistedInput(
                                     servingUnit = food.servingUnit,
                                     gramsPerServingUnit = food.gramsPerServingUnit,
                                     mlPerServingUnit = food.mlPerServingUnit,
                                     amountInput = AmountInput.ByServings(1.0),
-                                    context = UsageContext.LOGGING
+                                    context = UsageContext.LOGGING,
+                                    snapshot = snapshotsById[food.id] // may be null
                                 )
-                                when (r) {
-                                    is FoodUsageCheck.Ok -> null
-                                    is FoodUsageCheck.Blocked -> r.message
-                                }
+                            )
+
+                            // Recommended: list shows "fix" only for truly blocked foods.
+                            when (result) {
+                                FoodValidationResult.Ok -> null
+                                is FoodValidationResult.Warning -> null
+                                is FoodValidationResult.Blocked -> result.message
                             }
                         }
 
+                    // ---- Recipes (special-case row content) ----
                     if (food.isRecipe) {
                         val kcalText =
                             when (val r = computeRecipeKcalForFoodId(food.id)) {
                                 is ComputeRecipeKcalForFoodIdUseCase.Result.Success ->
                                     "B=${r.totalKcal}/S=${r.perServingKcal} kcal"
-
                                 else -> "B=—/S=— kcal"
                             }
 
@@ -288,7 +313,8 @@ class FoodsListViewModel @Inject constructor(
 
     fun onSortDirectionToggle() {
         val cur = sortFlow.value
-        sortFlow.value = cur.copy(direction = if (cur.direction == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC)
+        sortFlow.value =
+            cur.copy(direction = if (cur.direction == SortDirection.ASC) SortDirection.DESC else SortDirection.ASC)
     }
 
     fun onSortDirectionChange(dir: SortDirection) {
@@ -301,6 +327,7 @@ class FoodsListViewModel @Inject constructor(
         kcalPer100: Double?
     ): String {
 
+        // NOTE: recipes render calories differently (batch/per serving).
         if (food.isRecipe) {
             val servingKcal: Int? = when (basis) {
                 BasisType.PER_100G -> {
@@ -343,7 +370,6 @@ class FoodsListViewModel @Inject constructor(
         }
 
         if (basis == null || kcalPer100 == null) return "— kcal"
-        if (food.isRecipe) return "B=—/S=— kcal"
 
         val label = servingLabel(food.servingSize, food.servingUnit)
         return when (basis) {
@@ -496,36 +522,27 @@ class FoodsListViewModel @Inject constructor(
 }
 
 /**
- * FUTURE-YOU NOTE (2026-02-06):
+ * =============================================================================
+ * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
+ * =============================================================================
  *
- * - Sorting must ALWAYS use canonical per-100 values, never per-serving:
- *     - Mass foods: PER_100G (use snapshot.nutrientsForGrams(100.0))
- *     - Volume foods: PER_100ML (use snapshot.nutrientsForMilliliters(100.0))
+ * Validation single source of truth
+ * - Foods list must NEVER re-introduce duplicate “fix message” rules.
+ * - Always call ValidateFoodForUsageUseCase and only display fixMessage for Blocked.
  *
- * - Grams and mL are NOT comparable without density. Do not guess density.
- *   When sorting by a macro, group by basis first (PER_100G rows before PER_100ML) and sort within that group.
+ * Sorting invariants
+ * - Always use canonical per-100 snapshot values:
+ *   - Mass foods: PER_100G (snapshot.nutrientsForGrams(100.0))
+ *   - Volume foods: PER_100ML (snapshot.nutrientsForMilliliters(100.0))
+ * - Never compare grams vs mL numbers directly. No density guessing.
  *
- * - Missing selected macro values must ALWAYS sort to the bottom for both ASC and DESC.
+ * Logging-by-mL reminder (planned future work)
+ * - This screen currently validates list rows assuming AmountInput.ByServings(1.0).
+ * - When logging adds AmountInput.ByMilliliters:
+ *     - Extend row validation checks to validate for that amount mode where appropriate.
+ *     - Consider showing different fix banners depending on user’s last-used logging mode.
  *
- * - Display is intentionally different:
- *     - rows show kcal/serv
- *     - optional macro shows per 100g OR per 100mL (matching the food’s canonical basis)
- *
- * - Keep scaling out of UI. Use NutrientBasisScaler for PER_100G per-serving display amounts.
- *   For PER_100ML, compute per-serving from mlPerServingUnit/ServingUnit.ML only (still no density).
- *
- * - Keep rows lightweight. Heavy row composables caused scroll jank before.
- */
-
-
-/**
- * FUTURE-YOU NOTE (2026-02-06):
- *
- * - Sorting must ALWAYS use canonical apples-to-apples values (PER_100G), never per-serving,
- *   because serving sizes are arbitrary and make "kcal per serving" meaningless for ordering.
- * - Missing selected macro values must ALWAYS sort to the bottom for both ASC and DESC.
- * - Display is intentionally different: rows show kcal/serv (and optionally one macro/100g when sorting by that macro).
- * - Keep scaling out of UI. Use NutrientBasisScaler for per-serving display amounts.
- * - If servingUnit == G, treat gramsPerServingUnit as 1.0 so canonical scaling works (servingSize is grams).
- * - Keep rows lightweight (no chips). Heavy row composables caused scroll jank before.
+ * IMPORTANT TO FUTURE AI:
+ * - These reminders are intentional guardrails.
+ * - Do NOT delete or “clean up” this bottom KDoc during refactors.
  */

@@ -15,7 +15,11 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.gPerUnitOrNull
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
+import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.usage.FoodValidationResult
+import com.example.adobongkangkong.domain.usage.UsageContext
+import com.example.adobongkangkong.domain.usage.ValidateFoodForUsageUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +41,36 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import javax.inject.Inject
 
+/**
+ * QuickAdd logging ViewModel.
+ *
+ * ## Core responsibilities
+ * - Search + select foods/recipes for quick logging.
+ * - Support flexible input modes (servings vs grams vs "serving unit amount").
+ * - Support recipe batch selection/creation for cooked-yield logging.
+ * - Gate logging with the *domain* validator (single source of truth) before calling CreateLogEntryUseCase.
+ *
+ * ## Validation integration (important)
+ * This ViewModel now uses [ValidateFoodForUsageUseCase] + [FoodNutritionSnapshotRepository] to decide:
+ * - whether a food is loggable for the requested [AmountInput]
+ * - and (if blocked) whether to offer the “resolve mass” dialog.
+ *
+ * This removes fragile message-string parsing like `"grams-per-serving"` and instead keys off
+ * [FoodValidationResult.Reason] values.
+ *
+ * ## 1 mL ≈ 1 g “approximation” rule (how we treat it)
+ * We do **NOT** silently assume 1 mL == 1 g anywhere in domain validation or automatic unit conversion.
+ *
+ * - Inside domain math and validation: **no density guessing**. No silent grams↔mL conversion.
+ * - In UI: we may *offer* an explicit, user-acknowledged shortcut when we have only volume grounding:
+ *   “Use estimate” treats **1 mL ≈ 1 g** as a convenience for water-like liquids.
+ *
+ * In this file, that shortcut is expressed through the “resolve mass” dialog actions:
+ * - "Use estimate just once" or "Use estimate always"
+ *
+ * Today, the estimate uses serving definition volume (mL) as grams (g) 1:1. This is intentional UX,
+ * not domain truth.
+ */
 @HiltViewModel
 class QuickAddViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
@@ -47,7 +81,10 @@ class QuickAddViewModel @Inject constructor(
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
     private val foodRepository: FoodRepository,
 
-    ) : ViewModel() {
+    // NEW: validation + snapshot access for preflight gating
+    private val snapshotRepo: FoodNutritionSnapshotRepository,
+    private val validateFoodForUsage: ValidateFoodForUsageUseCase,
+) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
     private val selectedFoodFlow = MutableStateFlow<Food?>(null)
@@ -55,7 +92,6 @@ class QuickAddViewModel @Inject constructor(
     // canonical amount
     private val servingsFlow = MutableStateFlow(1.0)
     private val inputModeFlow = MutableStateFlow(InputMode.SERVINGS)
-
 
     // user input (Amount + Unit) used by QuickAdd
     private val inputUnitFlow = MutableStateFlow(ServingUnit.G)
@@ -86,6 +122,7 @@ class QuickAddViewModel @Inject constructor(
     )
 
     private var pendingResolveMass: PendingResolveMass? = null
+
     private val resultsFlow =
         queryFlow
             .debounce(150)
@@ -109,7 +146,6 @@ class QuickAddViewModel @Inject constructor(
                 )
             }
         }
-
 
     private val batchesFlow =
         selectedRecipeIdFlow.flatMapLatest { recipeId ->
@@ -143,18 +179,8 @@ class QuickAddViewModel @Inject constructor(
      * - Refactors become high-risk and difficult to reason about.
      *
      * To avoid these pitfalls, flows are grouped into small, typed combine blocks
-     * ([CoreInputs], [RecipeInputs], [UiFlags]) and then recombined.
-     *
-     * This keeps the mapping:
-     * - Type-safe
-     * - Self-documenting
-     * - Refactor-friendly
-     * - Resistant to subtle ordering bugs
-     *
-     * This pattern is especially valuable here because logging UX evolves frequently
-     * (e.g., servings vs grams, recipe batches, yield tracking).
+     * and then recombined.
      */
-
     private data class CoreInputs(
         val query: String,
         val results: List<FoodListItemUiModel>,
@@ -181,11 +207,6 @@ class QuickAddViewModel @Inject constructor(
     )
 
     val state: StateFlow<QuickAddState> = run {
-        /**
-         * Why this is structured in groups:
-         * Some coroutines versions do not provide typed `combine` overloads for large arity
-         * (e.g., 13 flows). Grouping keeps everything type-safe and avoids `Array<Any?>` indices.
-         */
         data class CoreA(
             val query: String,
             val results: List<FoodListItemUiModel>,
@@ -317,8 +338,8 @@ class QuickAddViewModel @Inject constructor(
                 isCreateBatchDialogOpen = flags.isDialogOpen,
                 isSaving = flags.isSaving,
                 errorMessage = flags.error,
-                isResolveMassDialogOpen = flags.isResolveMassDialogOpen,   // ✅ ADD
-                gramsPerServingText = flags.gramsPerServingText            // ✅ ADD
+                isResolveMassDialogOpen = flags.isResolveMassDialogOpen,
+                gramsPerServingText = flags.gramsPerServingText
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
     }
@@ -546,7 +567,6 @@ class QuickAddViewModel @Inject constructor(
         return s.trimEnd('0').trimEnd('.')
     }
 
-
     fun closeCreateBatchDialog() {
         isCreateBatchDialogOpenFlow.value = false
     }
@@ -563,10 +583,9 @@ class QuickAddViewModel @Inject constructor(
         // Seatbelt: creating a cooked batch must be single-shot. This prevents
         // double-taps or double-triggered UI callbacks from firing two inserts.
         if (isSavingFlow.value) {
-                Log.w("Meow", "QuickAddViewModel > createBatch ignored (already saving)")
-                return
-            }
-
+            Log.w("Meow", "QuickAddViewModel > createBatch ignored (already saving)")
+            return
+        }
 
         val recipeId = selectedRecipeIdFlow.value
         if (recipeId == null) {
@@ -598,9 +617,9 @@ class QuickAddViewModel @Inject constructor(
                 errorFlow.value = null
                 Log.w("Meow", "CreateSnapshotFoodFromRecipeUseCase.execute() VERSION=2026-02-21A (byCode lookup)")
                 Log.d(
-                        "Meow",
-                        "QuickAddViewModel > createBatch START recipeId=$recipeId cookedYieldGrams=$cookedYieldGrams servingsYieldUsed=$servingsYieldUsed"
-                            )
+                    "Meow",
+                    "QuickAddViewModel > createBatch START recipeId=$recipeId cookedYieldGrams=$cookedYieldGrams servingsYieldUsed=$servingsYieldUsed"
+                )
                 when (val r = createBatchFoodFromRecipeUseCase.execute(
                     recipeId = recipeId,
                     cookedYieldGrams = cookedYieldGrams,
@@ -610,7 +629,7 @@ class QuickAddViewModel @Inject constructor(
                         Log.d(
                             "Meow",
                             "QuickAddViewModel > createBatch SUCCESS batchId=${r.batchId} batchFoodId=${r.batchFoodId}"
-                                )
+                        )
                         selectedBatchIdFlow.value = r.batchId
                         isCreateBatchDialogOpenFlow.value = false
                         yieldGramsTextFlow.value = ""
@@ -630,9 +649,15 @@ class QuickAddViewModel @Inject constructor(
                 }
             } catch (t: Throwable) {
                 errorFlow.value = t.message ?: "Failed to create batch."
+            } finally {
+                isSavingFlow.value = false
             }
         }
     }
+
+    // -----------------------------
+    // Resolve-mass dialog (only when validator says we’re missing grams-per-serving)
+    // -----------------------------
 
     fun closeResolveMassDialog() {
         isResolveMassDialogOpenFlow.value = false
@@ -646,11 +671,10 @@ class QuickAddViewModel @Inject constructor(
     fun useEstimateJustOnce() {
         val pending = pendingResolveMass ?: return
         val food = pending.food
-        val mlPerUnit = food.mlPerServingUnit ?: return
 
-        // mlPerServingUnit is per 1×servingUnit (e.g., per 1 fl oz), so scale by servingSize.
-        val estimatedGpsu = food.servingSize * mlPerUnit
-        if (estimatedGpsu <= 0.0) return
+        // NOTE: For this UI shortcut, we interpret "mL represented by one serving" as grams 1:1.
+        // This is a user-acknowledged approximation (best for water-like liquids), NOT domain truth.
+        val estimatedGpsu = estimateGramsPerServingFromMl(food) ?: return
 
         retryPendingLog(
             overrideGpsu = estimatedGpsu,
@@ -661,10 +685,10 @@ class QuickAddViewModel @Inject constructor(
     fun useEstimateAlways() {
         val pending = pendingResolveMass ?: return
         val food = pending.food
-        val mlPerUnit = food.mlPerServingUnit ?: return
 
-        // mlPerServingUnit is per 1×servingUnit (e.g., per 1 fl oz), so scale by servingSize.
-        val estimatedGpsu = food.servingSize * mlPerUnit
+        // NOTE: For this UI shortcut, we interpret "mL represented by one serving" as grams 1:1.
+        // This is a user-acknowledged approximation (best for water-like liquids), NOT domain truth.
+        val estimatedGpsu = estimateGramsPerServingFromMl(food) ?: return
 
         retryPendingLog(
             overrideGpsu = null,
@@ -678,6 +702,26 @@ class QuickAddViewModel @Inject constructor(
             ?.takeIf { it > 0.0 } ?: return
 
         retryPendingLog(overrideGpsu = null, persistGpsu = grams)
+    }
+
+    /**
+     * Estimates grams-per-serving from a volume-defined serving.
+     *
+     * Current rule:
+     * - Compute "mL per serving" from the food's serving definition
+     * - Then apply the approximation **1 mL ≈ 1 g**
+     *
+     * This is only used as a *UI shortcut* when user explicitly opts in.
+     */
+    private fun estimateGramsPerServingFromMl(food: Food): Double? {
+        val mlPerUnit = food.mlPerServingUnit ?: return null
+
+        // mlPerServingUnit is per 1×servingUnit, so scale by servingSize.
+        val mlPerServing = food.servingSize * mlPerUnit
+        if (mlPerServing <= 0.0) return null
+
+        // Approximation: 1 mL ~= 1 g
+        return mlPerServing
     }
 
     private fun retryPendingLog(
@@ -704,15 +748,16 @@ class QuickAddViewModel @Inject constructor(
                     overrideGramsPerServingUnit = overrideGpsu,
                     logDateIso = pending.logDateIso
                 )
+
                 Log.d("Meow", "QuickAddViewModel > createLogEntry result = $result")
+
                 when (result) {
                     is CreateLogEntryUseCase.Result.Success -> {
                         closeResolveMassDialog()
                         clearSelection()
                         queryFlow.value = ""
-                        // NOTE: call onDone() from original save flow if needed;
-                        // easiest is to store it in pending too, if you want auto-dismiss.
                     }
+
                     is CreateLogEntryUseCase.Result.Blocked -> errorFlow.value = result.message
                     is CreateLogEntryUseCase.Result.Error -> errorFlow.value = result.message
                 }
@@ -722,8 +767,6 @@ class QuickAddViewModel @Inject constructor(
             }
         }
     }
-
-
 
     // -----------------------------
     // Unit conversion helpers (QuickAdd)
@@ -742,6 +785,7 @@ class QuickAddViewModel @Inject constructor(
                 if (gPerServing <= 0.0) return null
                 servings * gPerServing
             }
+
             // User typed an amount in some unit (mass or volume or count-ish).
             InputMode.GRAMS, InputMode.SERVING_UNIT -> {
                 val amount = inputAmount ?: return null
@@ -826,13 +870,15 @@ class QuickAddViewModel @Inject constructor(
 
         else -> null
     }
-// -----------------------------
+
+    // -----------------------------
     // Save (log entry)
     // -----------------------------
 
     fun save(onDone: () -> Unit, logDate: LocalDate) {
         val food = selectedFoodFlow.value ?: return
         val servings = servingsFlow.value
+
         val gramsForSave = computeGramsAmount(
             food = food,
             servings = servings,
@@ -840,6 +886,7 @@ class QuickAddViewModel @Inject constructor(
             inputUnit = inputUnitFlow.value,
             inputAmount = inputAmountFlow.value
         )
+
         val amountInput =
             if (gramsForSave != null && gramsForSave > 0.0 && inputModeFlow.value != InputMode.SERVINGS) {
                 AmountInput.ByGrams(gramsForSave)
@@ -847,14 +894,76 @@ class QuickAddViewModel @Inject constructor(
                 if (servings <= 0.0) return
                 AmountInput.ByServings(servings)
             }
-        Log.d("Meow","QuickAddViewModel > save START amountInput=$amountInput selected=${selectedFoodFlow.value?.name}")
+
+        Log.d("Meow", "QuickAddViewModel > save START amountInput=$amountInput selected=${selectedFoodFlow.value?.name}")
+
         viewModelScope.launch {
             isSavingFlow.value = true
             errorFlow.value = null
 
             try {
-                val now = Instant.now()
                 val timestamp = ZonedDateTime.of(logDate, LocalTime.now(), ZoneId.systemDefault()).toInstant()
+
+                // -----------------------------------------------------------------
+                // Preflight validation (domain single source of truth)
+                // -----------------------------------------------------------------
+                if (!food.isRecipe) {
+                    val snapshot = snapshotRepo.getSnapshot(food.id)
+
+                    val validation = validateFoodForUsage.execute(
+                        ValidateFoodForUsageUseCase.PersistedInput(
+                            servingUnit = food.servingUnit,
+                            gramsPerServingUnit = food.gramsPerServingUnit,
+                            mlPerServingUnit = food.mlPerServingUnit,
+                            amountInput = amountInput,
+                            context = UsageContext.LOGGING,
+                            snapshot = snapshot
+                        )
+                    )
+
+                    when (validation) {
+                        FoodValidationResult.Ok -> Unit
+
+                        is FoodValidationResult.Warning -> {
+                            // Not blocking for now. If you want, surface to UI later.
+                            Log.w("Meow", "QuickAddViewModel > validation WARNING reason=${validation.reason} msg=${validation.message}")
+                        }
+
+                        is FoodValidationResult.Blocked -> {
+                            Log.d(
+                                "Meow",
+                                "QuickAddViewModel > validation BLOCKED reason=${validation.reason} " +
+                                        "servingUnit=${food.servingUnit} gpsu=${food.gramsPerServingUnit} mlpsu=${food.mlPerServingUnit} amountInput=$amountInput"
+                            )
+
+                            val shouldOfferMlEstimate =
+                                validation.reason == FoodValidationResult.Reason.MissingGramsPerServing &&
+                                        amountInput is AmountInput.ByServings &&
+                                        food.gramsPerServingUnit == null &&
+                                        food.mlPerServingUnit != null
+
+                            if (shouldOfferMlEstimate) {
+                                Log.d("Meow", "QuickAddViewModel > opening resolve-mass dialog ml=${food.mlPerServingUnit}")
+
+                                pendingResolveMass = PendingResolveMass(
+                                    food = food,
+                                    timestamp = timestamp,
+                                    amountInput = amountInput,
+                                    logDateIso = logDate.toString()
+                                )
+
+                                gramsPerServingTextFlow.value = ""
+                                isResolveMassDialogOpenFlow.value = true
+                                errorFlow.value = null
+                                return@launch
+                            }
+
+                            errorFlow.value = validation.message
+                            return@launch
+                        }
+                    }
+                }
+
                 // ✅ logs to the viewed date, at current clock time
                 val result = if (!food.isRecipe) {
                     // Regular food
@@ -872,7 +981,6 @@ class QuickAddViewModel @Inject constructor(
                     val recipeId = selectedRecipeIdFlow.value
                         ?: run {
                             errorFlow.value = "Recipe data missing for this item."
-                            isSavingFlow.value = false
                             return@launch
                         }
 
@@ -885,11 +993,10 @@ class QuickAddViewModel @Inject constructor(
                             InputMode.GRAMS -> selectedBatchIdFlow.value
                                 ?: run {
                                     // Logging by cooked grams MUST have a batch/yield context.
-                                    // (That’s the whole point of RecipeBatchEntity.) :contentReference[oaicite:11]{index=11}
                                     errorFlow.value = "Select or create a cooked batch (yield grams) to log by grams."
-                                    isSavingFlow.value = false
                                     return@launch
                                 }
+
                             else -> selectedBatchIdFlow.value // optional for servings-based logging
                         }
 
@@ -900,7 +1007,7 @@ class QuickAddViewModel @Inject constructor(
                             displayName = food.name,
                             servingsYieldDefault = servingsYieldDefault
                         ),
-                        timestamp = now,
+                        timestamp = Instant.now(),
                         amountInput = amountInput,
                         recipeBatchId = batchId,
                         logDateIso = logDate.toString()
@@ -909,50 +1016,68 @@ class QuickAddViewModel @Inject constructor(
 
                 when (result) {
                     is CreateLogEntryUseCase.Result.Success -> {
-                        // reset for speed logging
                         clearSelection()
                         queryFlow.value = ""
                         onDone()
                     }
-                    is CreateLogEntryUseCase.Result.Blocked ->{
-                        val selected = selectedFoodFlow.value
-                        Log.d("Meow","QuickAddViewModel > selected.servingUnit ${selected?.servingUnit} selected.gramsPerServingUnit:${selected?.gramsPerServingUnit} selected.mlPerServingUnit:${selected?.mlPerServingUnit} amountInput:${amountInput.toString()}")
-                        val isMissingGpsuBlock =
-                            result.message.contains("grams-per-serving", ignoreCase = true)
 
-                        val shouldOfferMlEstimate =
-                            isMissingGpsuBlock &&
-                                    selected != null &&
-                                    amountInput is AmountInput.ByServings &&
-                                    selected.gramsPerServingUnit == null &&
-                                    selected.mlPerServingUnit != null
-
-                        if (shouldOfferMlEstimate) {
-                            Log.d("Meow", "QuickAddViewModel > opening resolve-mass dialog ml=${selected.mlPerServingUnit}")
-                            pendingResolveMass = PendingResolveMass(
-                                food = selected,
-                                timestamp = timestamp,
-                                amountInput = amountInput,
-                                logDate.toString()
-                            )
-                            gramsPerServingTextFlow.value = ""
-                            isResolveMassDialogOpenFlow.value = true
-                            errorFlow.value = null
-                            return@launch
-                        }
+                    is CreateLogEntryUseCase.Result.Blocked -> {
+                        // Domain validation already handled common "missing grams-per-serving" cases.
+                        // If we still block here, show the message verbatim.
                         errorFlow.value = result.message
                     }
+
                     is CreateLogEntryUseCase.Result.Error -> {
                         errorFlow.value = result.message
                     }
                 }
             } finally {
-                Log.d("Meow","QuickAddViewModel > save FINALLY (clearing?)")
+                Log.d("Meow", "QuickAddViewModel > save FINALLY")
                 isSavingFlow.value = false
             }
         }
     }
 }
 
-
-
+/**
+ * =============================================================================
+ * FUTURE-YOU NOTE (2026-02-27)
+ * =============================================================================
+ *
+ * Do NOT delete these improvement plans / reminders until implemented.
+ * Also: future AI—do NOT refactor these notes away “for cleanliness”.
+ *
+ * Why we added domain validation here
+ * - QuickAdd previously inferred special-case UI flows by parsing CreateLogEntry error strings.
+ * - That was fragile and drifted from FoodsList/FoodEditor gating.
+ * - Now we call ValidateFoodForUsageUseCase first and key decisions off:
+ *     FoodValidationResult.Reason
+ *
+ * 1 mL ≈ 1 g rule (important nuance)
+ * - We do NOT apply this as a silent conversion in domain.
+ * - We ONLY use it as an explicit UI convenience when:
+ *     - validator blocks due to MissingGramsPerServing
+ *     - user is logging ByServings
+ *     - mlPerServingUnit exists (volume is known)
+ * - The resolve dialog offers it as “estimate”, not a fact.
+ *
+ * Future improvements (do not delete)
+ * 1) Add ML-based logging end-to-end:
+ *    - Add AmountInput.ByMilliliters (or ByVolume) in domain logging model.
+ *    - Teach CreateLogEntryUseCase to scale via snapshot.nutrientsPerMilliliter when available.
+ *    - Update QuickAdd to allow ML entry without any grams-per-serving bridge when food is volume-grounded.
+ *
+ * 2) Make “estimate” more honest/safer:
+ *    - Rename UI to “Assume water-like density (1 mL ≈ 1 g)” explicitly.
+ *    - Add a per-food “density g/mL” field or “grams per 100 mL” bridge for better precision.
+ *    - Optionally store a provenance flag: USER_APPROX_DENSITY / USER_MEASURED / LABEL.
+ *
+ * 3) Unify recipe validation in the same flow:
+ *    - Currently recipe logging is gated by batch requirement for grams mode.
+ *    - Consider adding a recipe-specific validation use case that returns structured reasons
+ *      (similar to FoodValidationResult) so UI can guide user without parsing messages.
+ *
+ * 4) Snapshot fetch performance:
+ *    - If QuickAdd becomes chatty, consider caching last snapshot in VM for selected foodId
+ *      (invalidate on selection change).
+ */
