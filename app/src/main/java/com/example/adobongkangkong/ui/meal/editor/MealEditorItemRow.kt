@@ -1,0 +1,108 @@
+package com.example.adobongkangkong.ui.meal.editor
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+//import androidx.compose.material.icons.Icons
+//import androidx.compose.material.icons.filled.ArrowDownward
+//import androidx.compose.material.icons.filled.ArrowUpward
+//import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.example.adobongkangkong.R
+
+@Composable
+fun MealEditorItemRow(
+    item: MealEditorUiState.Item,
+    onServingsChanged: (String) -> Unit,
+    onGramsChanged: (String) -> Unit,
+    onMillilitersChanged: (String) -> Unit,
+    onRemove: () -> Unit,
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.foodName,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "foodId=${item.foodId}",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onRemove) {
+                    Icon(painter = painterResource(R.drawable.trash), contentDescription = "Remove")
+                }
+                if (onMoveUp != null) {
+                    IconButton(onClick = onMoveUp) {
+                        Icon(painter = painterResource(R.drawable.angle_double_small_down), contentDescription = "Move up")
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                if (onMoveDown != null) {
+                    IconButton(onClick = onMoveDown) {
+                        Icon(painter = painterResource(R.drawable.angle_double_small_up), contentDescription = "Move down")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.padding(top = 8.dp))
+
+        // Primary input: servings text
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = item.servings,
+            onValueChange = onServingsChanged,
+            label = { Text("Servings") },
+            singleLine = true
+        )
+
+        // Optional overrides (kept simple; you can hide behind an expand toggle later)
+        Spacer(modifier = Modifier.padding(top = 8.dp))
+
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = item.grams?.toString().orEmpty(),
+            onValueChange = onGramsChanged,
+            label = { Text("Grams override (optional)") },
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.padding(top = 8.dp))
+
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = item.milliliters?.toString().orEmpty(),
+            onValueChange = onMillilitersChanged,
+            label = { Text("mL override (optional)") },
+            singleLine = true
+        )
+    }
+}

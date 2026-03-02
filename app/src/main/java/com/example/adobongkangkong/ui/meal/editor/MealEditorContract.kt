@@ -18,18 +18,17 @@ interface MealEditorContract {
 
     fun addFood(foodId: Long)
 
-    fun updateServings(itemId: Long, servings: Double?)
+    fun updateServings(lineId: String, servingsText: String)
 
-    fun removeItem(itemId: Long)
+    fun updateGrams(lineId: String, gramsText: String)
+
+    fun updateMilliliters(lineId: String, mlText: String)
+
+    fun removeItem(lineId: String)
 
     fun moveItem(fromIndex: Int, toIndex: Int)
 
     fun save()
-    fun updateServings(lineId: String, servingsText: String)
 
-    fun removeItem(lineId: String)
-
-    fun updateGrams(lineId: String, grams: String)
-
-    fun updateMilliliters(lineId: String, ml: String)
+    fun discardChanges()
 }
