@@ -48,4 +48,9 @@ data class QuickAddState(
     val isResolveMassDialogOpen: Boolean = false,
     val gramsPerServingText: String = "",
 
-    )
+    // Barcode scan UI state
+    val isScannerOpen: Boolean = false,
+    val foundBarcodeDialogFood: Food? = null,
+    val foundBarcodeDialogBarcode: String? = null,
+    val notFoundBarcodeDialogBarcode: String? = null,
+)

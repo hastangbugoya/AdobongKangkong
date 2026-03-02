@@ -19,6 +19,7 @@ import kotlin.math.max
 import kotlin.math.abs
 import java.util.Locale
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 
 /**
  * Shared, QuickAdd-canonical "selected food" input panel.
@@ -67,9 +68,14 @@ fun SelectedFoodPanel(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(food.name, style = MaterialTheme.typography.titleMedium)
+
+                val gramsPerServing: Double? = run {
+                        food.gramsPerServingResolved()
+                }
+
                 Text(
-                    "${food.servingSize.clean()} ${food.servingUnit}" +
-                            (food.gramsPerServingUnitResolved()?.let { " (${it.clean()} g)" } ?: ""),
+                    "${food.servingSize.clean()} ${food.servingUnit.display}" +
+                            (gramsPerServing?.let { " (${it.clean()} g)" } ?: ""),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -162,7 +168,7 @@ fun SelectedFoodPanel(
 
         // Grams input if available
         val canLogGrams = food.gramsPerServingUnitResolved() != null
-        val gramsDefault = servings * (food.gramsPerServingUnitResolved() ?: 0.0)
+        val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
         if (canLogGrams) {
             var isUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 

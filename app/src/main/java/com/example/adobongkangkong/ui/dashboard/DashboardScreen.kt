@@ -44,25 +44,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
-import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import kotlin.math.max
-import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
+import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
 import com.example.adobongkangkong.ui.theme.LimitRed
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
-
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +76,7 @@ fun DashboardScreen(
     onOpenPlanner: () -> Unit,
     initialDate: LocalDate? = null,
     onOpenBackup: () -> Unit,
+    onCreateFoodWithBarcode: (String) -> Unit,
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -94,7 +94,7 @@ fun DashboardScreen(
     val pinOptions by vm.pinOptions.collectAsState()
 
     val selectedDate = state.date
-    val today = remember { LocalDate.now() } // or compute inline
+    val today = remember { LocalDate.now() }
     val isToday = selectedDate == today
 
     val exportLauncher =
@@ -102,17 +102,16 @@ fun DashboardScreen(
             contract = ActivityResultContracts.CreateDocument("application/zip")
         ) { uri: Uri? ->
             if (uri != null) {
-                vm.exportTo(uri) // ✅ pass Uri, VM opens the stream
+                vm.exportTo(uri)
             }
         }
-
 
     val importLauncher =
         rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument()
         ) { uri: Uri? ->
             if (uri != null) {
-                vm.onImportZipPicked(uri) // or vm.importFromZip(uri)
+                vm.onImportZipPicked(uri)
             }
         }
 
@@ -214,7 +213,7 @@ fun DashboardScreen(
                 },
                 onOpenMeowLogs = onOpenMeowLogs,
                 onOpenPlanner = onOpenPlanner,
-                onOpenBackup =  onOpenBackup,
+                onOpenBackup = onOpenBackup,
             )
         }
     }
@@ -223,8 +222,9 @@ fun DashboardScreen(
         QuickAddBottomSheet(
             onDismiss = { showQuickAdd = false },
             onCreateFood = onCreateFood,
+            onCreateFoodWithBarcode = onCreateFoodWithBarcode, // ✅ FIX: wire this through
             onOpenFoodEditor = { foodId ->
-                onEditFood(foodId) // DashboardScreen callback
+                onEditFood(foodId)
             },
             logDate = state.date
         )
@@ -256,7 +256,6 @@ fun DashboardScreen(
             )
         }
     ) { padding ->
-        // Single scroll surface for the entire dashboard.
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -267,7 +266,6 @@ fun DashboardScreen(
                 top = 16.dp,
                 bottom = 24.dp
             ),
-//            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             item {
                 Row(
@@ -280,14 +278,14 @@ fun DashboardScreen(
                     TextButton(onClick = onOpenCalendar) { Text("Calendar") }
                 }
             }
-            item {
 
+            item {
                 val formatter = DateTimeFormatter.ofPattern(
                     "EEE, MMM/d/yyyy",
                     Locale.getDefault()
                 )
 
-                val dateLabel = state.date.format(formatter) // or format it
+                val dateLabel = state.date.format(formatter)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -298,10 +296,9 @@ fun DashboardScreen(
                         Icon(
                             painter = painterResource(R.drawable.angle_small_left),
                             contentDescription = "Previous day",
-                            tint = MaterialTheme.colorScheme.onSurface // <- force visibility
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
-
 
                     Text(
                         text = if (isToday) "Today" else dateLabel,
@@ -316,7 +313,7 @@ fun DashboardScreen(
                         Icon(
                             painter = painterResource(R.drawable.angle_small_right),
                             contentDescription = "Next day",
-                            tint = MaterialTheme.colorScheme.onSurface // <- force visibility
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -330,7 +327,6 @@ fun DashboardScreen(
             }
 
             item {
-                // Logged Today: compact and resilient to font scaling.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -402,42 +398,6 @@ private fun formatTime(instant: Instant): String {
 internal fun Double.round0(): String = "%,.0f".format(this)
 internal fun Double.round2(): String = "%,.2f".format(this).trimEnd('0').trimEnd('.')
 
-//@Composable
-//private fun DashboardNutrientCardRow(
-//    card: DashboardNutrientCard
-//) {
-//    val unit = card.unit.orEmpty()
-//
-//    val display = remember(card) { card.toDisplay(unit) }
-//
-//    Column(
-//        Modifier
-//            .fillMaxWidth()
-//            .padding(vertical = 8.dp)
-//    ) {
-//        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-//            Text(card.displayName, style = MaterialTheme.typography.titleMedium)
-//            Text(display.rightText, style = MaterialTheme.typography.bodyMedium)
-//        }
-//
-//        Spacer(Modifier.height(6.dp))
-//        LinearProgressIndicator(progress = display.progress, modifier = Modifier.fillMaxWidth())
-//
-//        Spacer(Modifier.height(4.dp))
-//        Text(
-//            text = "Status: ${card.status.name}",
-//            style = MaterialTheme.typography.bodySmall
-//        )
-//
-//        card.rollingAverage?.let { avg ->
-//            Text(
-//                text = "Avg: ${avg.round1()} $unit",
-//                style = MaterialTheme.typography.bodySmall
-//            )
-//        }
-//    }
-//}
-
 @Composable
 private fun DashboardNutrientCardRow(
     card: DashboardNutrientCard
@@ -454,7 +414,6 @@ private fun DashboardNutrientCardRow(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             Text(
                 card.displayName,
                 style = MaterialTheme.typography.titleMedium
@@ -462,7 +421,6 @@ private fun DashboardNutrientCardRow(
 
             Spacer(Modifier.weight(1f))
 
-            // RIGHT TEXT (unchanged)
             Text(
                 display.rightText,
                 style = MaterialTheme.typography.bodyMedium
@@ -470,7 +428,6 @@ private fun DashboardNutrientCardRow(
 
             Spacer(Modifier.width(6.dp))
 
-            // --- STATUS ICON (new) ---
             val icon = when (card.status) {
                 TargetStatus.OK -> R.drawable.check_circle__1_
                 TargetStatus.LOW -> R.drawable.exclamation
@@ -481,14 +438,14 @@ private fun DashboardNutrientCardRow(
             val tint = when (card.status) {
                 TargetStatus.OK -> EatMoreGreen
                 TargetStatus.LOW, TargetStatus.HIGH -> LimitRed
-                else -> LocalContentColor.current
+                TargetStatus.NO_TARGET -> LocalContentColor.current
             }
 
             Icon(
                 painter = painterResource(icon),
                 contentDescription = card.status.name,
                 tint = tint,
-                modifier = Modifier.size(16.dp), // small enough to avoid height growth
+                modifier = Modifier.size(16.dp),
             )
         }
 
@@ -515,7 +472,6 @@ private fun DashboardNutrientCardRow(
     }
 }
 
-
 private data class NutrientCardDisplay(
     val rightText: String,
     val progress: Float
@@ -541,7 +497,6 @@ private fun DashboardNutrientCard.toDisplay(
         }
 
         min != null && min > 0.0 -> {
-            // Below min -> fill up toward 100%. At/above min -> cap at 100%.
             val p = (consumed / min).coerceIn(0.0, 1.0).toFloat()
             NutrientCardDisplay(
                 rightText = "${consumed.round1()} / ≥${min.round1()} $unit",
@@ -550,7 +505,6 @@ private fun DashboardNutrientCard.toDisplay(
         }
 
         max != null && max > 0.0 -> {
-            // Under max -> progress approaches 100%. Over max -> show full (you already convey HIGH via status).
             val p = (consumed / max).coerceIn(0.0, 1.0).toFloat()
             NutrientCardDisplay(
                 rightText = "${consumed.round1()} / ≤${max.round1()} $unit",

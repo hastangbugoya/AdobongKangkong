@@ -13,6 +13,8 @@ import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
+import com.example.adobongkangkong.domain.model.isVolumeUnit
+import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
@@ -29,8 +31,6 @@ import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SoftDeleteFoodUseCase
-import com.example.adobongkangkong.domain.model.isVolumeUnit
-import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -112,7 +112,7 @@ class FoodEditorViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun load(foodId: Long?, initialName: String?, force: Boolean = false) {
-        Log.d("Meow","foodId: $foodId initialName: $initialName force: $force")
+        Log.d("Meow", "foodId: $foodId initialName: $initialName force: $force")
         val current = _state.value
 
         // ✅ honor force
@@ -147,7 +147,6 @@ class FoodEditorViewModel @Inject constructor(
                     else -> gramsPerServingUnit
                 }
 
-
             val inferredBasisType: BasisType? =
                 current.basisType
                     ?: when {
@@ -165,9 +164,8 @@ class FoodEditorViewModel @Inject constructor(
                     }
 
             val assignedBarcodes = if (foodId != null) {
-                    // You may need to rename this depending on your repo API.
-                    foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
-                } else emptyList()
+                foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
+            } else emptyList()
 
             val next = current.copy(
                 hasLoaded = true,
@@ -357,15 +355,17 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    fun onPickBasisType(type: BasisType) { update {
-        it.copy(
-            hasUnsavedChanges = it.basisType != type || it.gramsPerServingUnit.isNotBlank() || it.mlPerServingUnit.isNotBlank(),
-            basisType = type,
-            // Invariant: only keep the bridge for the active basis
-            gramsPerServingUnit = if (type == BasisType.PER_100ML) "" else it.gramsPerServingUnit,
-            mlPerServingUnit = if (type == BasisType.PER_100G) "" else it.mlPerServingUnit,
-        )
-    } }
+    fun onPickBasisType(type: BasisType) {
+        update {
+            it.copy(
+                hasUnsavedChanges = it.basisType != type || it.gramsPerServingUnit.isNotBlank() || it.mlPerServingUnit.isNotBlank(),
+                basisType = type,
+                // Invariant: only keep the bridge for the active basis
+                gramsPerServingUnit = if (type == BasisType.PER_100ML) "" else it.gramsPerServingUnit,
+                mlPerServingUnit = if (type == BasisType.PER_100G) "" else it.mlPerServingUnit,
+            )
+        }
+    }
 
     fun dismissBarcodeFallback() {
         update {
@@ -417,6 +417,8 @@ class FoodEditorViewModel @Inject constructor(
                     isLowSodium = null
                 )
 
+                // NOTE: This path still persists immediately by design (minimal create).
+                // Keeping behavior unchanged per request (no extra changes).
                 val newFoodId = saveFoodWithNutrients(food, emptyList())
 
                 // Upsert mapping (may conflict → confirm first)
@@ -543,7 +545,9 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    fun closeGroundingDialog() { update { it.copy(isGroundingDialogOpen = false) }}
+    fun closeGroundingDialog() {
+        update { it.copy(isGroundingDialogOpen = false) }
+    }
 
     fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null, hasUnsavedChanges = true) }
     fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
@@ -584,7 +588,7 @@ class FoodEditorViewModel @Inject constructor(
         val perUnit = totalMl / servingSize
 
         base.copy(
-            mlPerServingUnit = perUnit.roundForUi() // use your existing rounding helper
+            mlPerServingUnit = perUnit.roundForUi()
         )
     }
 
@@ -710,7 +714,6 @@ class FoodEditorViewModel @Inject constructor(
         val finalMlBridge =
             if (s.groundingMode == GroundingMode.SOLID) null else mlPerServingUnitFinal
 
-        val id = s.foodId ?: 0L
         val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
         val defaultBasisType =
@@ -862,7 +865,6 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-
     fun deleteFood() {
         val foodId = _state.value.foodId ?: return
 
@@ -948,7 +950,7 @@ class FoodEditorViewModel @Inject constructor(
         }?.takeIf { it > 0.0 }
     }
 
-    // Barcode flow (unchanged)
+    // Barcode flow
     fun openBarcodeScanner() = update { it.copy(isBarcodeScannerOpen = true, errorMessage = null) }
 
     fun closeBarcodeScanner() = update {
@@ -963,11 +965,22 @@ class FoodEditorViewModel @Inject constructor(
         val cleaned = barcode.trim()
         if (cleaned.isBlank()) return
 
+        // NEW LOGS (requested)
+        Log.d("Meow", "FoodEditor> onBarcodeScanned raw='$barcode' cleaned='$cleaned'")
+        Log.d("Meow", "FoodEditor> barcode lookup START barcode='$cleaned'")
+
         update { it.copy(isBarcodeScannerOpen = false) }
 
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val existing = foodBarcodeRepo.getByBarcode(cleaned)
+
+            // NEW LOGS (requested)
+            Log.d(
+                "Meow",
+                "FoodEditor> barcode lookup RESULT barcode='$cleaned' " +
+                        "existing=${existing != null} source=${existing?.source} foodId=${existing?.foodId} usdaFdcId=${existing?.usdaFdcId}"
+            )
 
             // ✅ Fast-path: existing USDA mapping → open immediately, skip USDA search/network
             if (existing != null && existing.source == BarcodeMappingSource.USDA) {
@@ -993,8 +1006,13 @@ class FoodEditorViewModel @Inject constructor(
             // For USER_ASSIGNED mappings, we still perform USDA search so we can present
             // a meaningful collision prompt (with incoming candidate context) when picked.
 
+            Log.d("Meow", "FoodEditor> USDA search START barcode='$cleaned'")
             when (val r = searchUsdaByBarcode(cleaned)) {
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {
+                    Log.d(
+                        "Meow",
+                        "FoodEditor> USDA search SUCCESS barcode='${r.scannedBarcode}' candidates=${r.candidates.size}"
+                    )
                     update {
                         it.copy(
                             scannedBarcode = r.scannedBarcode,
@@ -1005,12 +1023,14 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeCollisionDialog = null
                         )
                     }
-                    if (r.candidates.size == 1) {
-                        onPickBarcodeCandidate(r.candidates.first().fdcId)
-                    }
+
+                    // IMPORTANT FIX:
+                    // Do NOT auto-pick/import when candidates.size == 1.
+                    // This prevents "Cancel" leaving an imported USDA food in the DB.
                 }
 
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked -> {
+                    Log.d("Meow", "FoodEditor> USDA search BLOCKED barcode='$cleaned' reason='${r.reason}'")
                     // No results: open fallback. If user-assigned mapping exists, tell them it's mapped.
                     val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
                         "Barcode already assigned to a manual food (foodId=${existing.foodId}). " +
@@ -1032,6 +1052,7 @@ class FoodEditorViewModel @Inject constructor(
                 }
 
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Failed -> {
+                    Log.d("Meow", "FoodEditor> USDA search FAILED barcode='$cleaned' message='${r.message}'")
                     val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
                         "Barcode already assigned to a manual food (foodId=${existing.foodId}). " +
                                 "USDA lookup failed: ${r.message}"
@@ -1247,10 +1268,10 @@ class FoodEditorViewModel @Inject constructor(
                             )
                         }
                     )
-
                 }
             }
         }
+
         viewModelScope.launch {
             savedState.getStateFlow<Any?>("barcode_assign_foodId", null)
                 .collect { raw ->
@@ -1303,7 +1324,7 @@ class FoodEditorViewModel @Inject constructor(
                             errorMessage = null,
                             isBarcodeScannerOpen = false,
                             isBarcodeFallbackOpen = false,
-                            assignedBarcodes = refreshed   // ← THIS IS MISSING
+                            assignedBarcodes = refreshed
                         )
                     }
 

@@ -71,6 +71,26 @@ fun Food.gramsPerServingUnitResolved(): Double? {
     }
 }
 
+
+/**
+ * Resolves grams represented by ONE declared serving (servingSize × servingUnit).
+ *
+ * This builds on gramsPerServingUnitResolved() and multiplies by servingSize.
+ *
+ * Example:
+ * - servingSize = 2
+ * - servingUnit = TBSP
+ * - gramsPerServingUnit = 18.5
+ *
+ * → 1 serving = 2 tbsp = 37 g
+ */
+fun Food.gramsPerServingResolved(): Double? {
+    val gramsPerUnit = gramsPerServingUnitResolved() ?: return null
+    if (gramsPerUnit <= 0.0) return null
+    if (servingSize <= 0.0) return null
+    return gramsPerUnit * servingSize
+}
+
 /**
  * FUTURE-AI / MAINTENANCE KDoc (Do not remove)
  *

@@ -106,7 +106,10 @@ fun AppNavHost(
                 onOpenDayLog = { date -> navController.navigate(NavRoutes.DayLog.dayLog(date)) },
                 onOpenMeowLogs = { navController.navigate(NavRoutes.Debug.meowLogs) },
                 onOpenPlanner = { navController.navigate(NavRoutes.Planner.plannerDay(LocalDate.now().toString())) },
-                onOpenBackup = { navController.navigate("backup") }
+                onOpenBackup = { navController.navigate("backup") },
+                onCreateFoodWithBarcode = { barcode ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                },
             )
         }
 

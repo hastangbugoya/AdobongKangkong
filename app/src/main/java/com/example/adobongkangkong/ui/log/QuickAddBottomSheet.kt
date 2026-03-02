@@ -7,8 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import com.example.adobongkangkong.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,6 +28,7 @@ import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
+import com.example.adobongkangkong.ui.food.editor.BarcodeScannerSheet
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -45,6 +47,7 @@ import java.util.Locale
 fun QuickAddBottomSheet(
     onDismiss: () -> Unit,
     onCreateFood: (String) -> Unit,
+    onCreateFoodWithBarcode: (String) -> Unit = {},
     onOpenFoodEditor: (foodId: Long) -> Unit = {},
     logDate: LocalDate,
     vm: QuickAddViewModel = hiltViewModel()
@@ -61,7 +64,64 @@ fun QuickAddBottomSheet(
         Locale.getDefault()
     )
 
-    rememberScrollState()
+    val foundFood = state.foundBarcodeDialogFood
+    val foundBarcode = state.foundBarcodeDialogBarcode
+
+    if (foundFood != null && foundBarcode != null) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissFoundBarcodeDialog() },
+            title = { Text("Food found") },
+            text = { Text("Log \"${foundFood.name}\"?") },
+            confirmButton = {
+                TextButton(onClick = { vm.confirmFoundBarcodeLogByServings() }) {
+                    Text("Log by servings")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { vm.confirmFoundBarcodeLogByGrams() }) {
+                        Text("Log by grams")
+                    }
+                    TextButton(onClick = { vm.dismissFoundBarcodeDialog() }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
+
+    val notFoundBarcode = state.notFoundBarcodeDialogBarcode
+    if (notFoundBarcode != null) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissNotFoundBarcodeDialog() },
+            title = { Text("Barcode not found") },
+            text = { Text("Add new food?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // IMPORTANT: actually trigger the create flow
+                        Log.d("Meow", "QuickAddBottomSheet> Add food clicked for barcode=$notFoundBarcode")
+
+                        vm.dismissNotFoundBarcodeDialog()
+
+                        // Call navigation callback FIRST (prevents dismissal from swallowing nav)
+                        onCreateFoodWithBarcode(notFoundBarcode)
+
+                        // Then dismiss the sheet
+                        onDismiss()
+                    }
+                ) {
+                    Text("Add food")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissNotFoundBarcodeDialog() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Log.d("Meow", "QuickAddBottomSheet> resolveMassOpen=${state.isResolveMassDialogOpen}")
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -84,10 +144,25 @@ fun QuickAddBottomSheet(
                     onValueChange = vm::onQueryChange,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Search foods") },
-                    singleLine = true
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = { vm.openBarcodeScanner() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.barcode_read),
+                                contentDescription = "Scan barcode"
+                            )
+                        }
+                    }
                 )
 
                 Spacer(Modifier.height(12.dp))
+            }
+
+            if (state.isScannerOpen) {
+                BarcodeScannerSheet(
+                    onClose = { vm.closeBarcodeScanner() },
+                    onBarcode = { code -> vm.onBarcodeScanned(code) }
+                )
             }
 
             if (state.isResolveMassDialogOpen) {
@@ -182,8 +257,6 @@ fun QuickAddBottomSheet(
                 val selected = state.selectedFood!!
                 val context = LocalContext.current
 
-                // Proof-of-concept: show the saved banner JPG as a subtle background behind the panel
-                // (no extra vertical space).
                 val bannerBitmapState = produceState<android.graphics.Bitmap?>(
                     initialValue = null,
                     key1 = selected.id
@@ -225,7 +298,6 @@ fun QuickAddBottomSheet(
                         onGramsChanged = vm::onGramsChanged,
                         onInputUnitChanged = vm::onInputUnitChanged,
                         onInputAmountChanged = { amount ->
-                            // keep behavior identical to before: only forward when non-null
                             amount?.let { vm.onInputAmountChanged(it) }
                         },
                         onPackage = vm::onPackageClicked,
@@ -272,9 +344,6 @@ fun QuickAddBottomSheet(
             }
         }
     }
-
-
-
 }
 
 @Composable
@@ -302,7 +371,7 @@ private fun FoodSearchResults(
                 supportingContent = {
                     val subtitle = buildString {
                         if (!food.brand.isNullOrBlank()) append(food.brand).append(" • ")
-                        append("${food.servingSize.clean()} ${food.servingUnit}")
+                        append("${food.servingSize.clean()} ${food.servingUnit.display}")
                         food.gramsPerServingUnitResolved()?.let { append(" (${it.clean()} g)") }
                     }
                     Text(subtitle)
@@ -318,8 +387,6 @@ private fun FoodSearchResults(
         }
     }
 }
-
-
 
 @Composable
 private fun BatchSelector(
@@ -377,7 +444,7 @@ private fun BatchSelector(
                 )
             }
 
-            Divider()
+            HorizontalDivider()
 
             DropdownMenuItem(
                 text = { Text("➕ New cooked batch") },
@@ -433,7 +500,6 @@ private fun CreateBatchDialog(
         }
     )
 }
-
 
 private fun Double.clean(): String =
     if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this)

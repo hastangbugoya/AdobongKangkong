@@ -179,43 +179,43 @@ fun FoodEditorScreen(
 
     BackHandler { requestExit() }
 
-    // ---------------- Barcode picker overlay ----------------
-    if (state.isBarcodeScannerOpen) {
-        if (state.barcodePickItems.size > 1) {
-            AlertDialog(
-                onDismissRequest = onCloseBarcodeScanner,
-                title = { Text("Pick a match") },
-                text = {
-                    LazyColumn {
-                        items(state.barcodePickItems, key = { it.fdcId }) { item ->
-                            Column(
-                                modifier = androidx.compose.ui.Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onPickBarcodeCandidate(item.fdcId) }
-                                    .padding(vertical = 10.dp)
-                            ) {
-                                Text(item.description.ifBlank { "(No description)" })
-                                val line2 = listOf(item.brand, item.servingText, item.gtinUpc)
-                                    .filter { it.isNotBlank() }
-                                    .joinToString(" • ")
-                                if (line2.isNotBlank()) {
-                                    Text(
-                                        line2,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+
+// ---------------- Barcode picker overlay ----------------
+// Show whenever we have candidates, regardless of "scanner open" flag.
+    if (state.barcodePickItems.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = onCloseBarcodeScanner,
+            title = { Text("Pick a match") },
+            text = {
+                LazyColumn {
+                    items(state.barcodePickItems, key = { it.fdcId }) { item ->
+                        Column(
+                            modifier = androidx.compose.ui.Modifier
+                                .fillMaxWidth()
+                                .clickable { onPickBarcodeCandidate(item.fdcId) }
+                                .padding(vertical = 10.dp)
+                        ) {
+                            Text(item.description.ifBlank { "(No description)" })
+                            val line2 = listOf(item.brand, item.servingText, item.gtinUpc)
+                                .filter { it.isNotBlank() }
+                                .joinToString(" • ")
+                            if (line2.isNotBlank()) {
+                                Text(
+                                    line2,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            HorizontalDivider()
                         }
+                        HorizontalDivider()
                     }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = onCloseBarcodeScanner) { Text("Cancel") }
                 }
-            )
-        }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = onCloseBarcodeScanner) { Text("Cancel") }
+            }
+        )
     }
 
     if (showDeleteDialog) {
@@ -794,7 +794,7 @@ fun FoodEditorScreen(
                     }
                 }
 
-                Log.d("Meow", "${state.name} : ${state}")
+                Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : ${state}")
 
                 item {
                     Text("State", style = MaterialTheme.typography.bodyMedium)
@@ -1141,13 +1141,61 @@ private fun ServingSection(
                 )
             }
         } else {
+
+            val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
+            val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
+
+            val gramsPerServingComputed: Double? =
+                if (servingSizeD != null && gramsPerUnitD != null)
+                    servingSizeD * gramsPerUnitD
+                else null
+
+            var gramsPerServingText by rememberSaveable { mutableStateOf("") }
+            var gramsPerServingFocused by rememberSaveable { mutableStateOf(false) }
+
+            if (!gramsPerServingFocused) {
+                val next = gramsPerServingComputed?.toString().orEmpty()
+                if (gramsPerServingText != next) gramsPerServingText = next
+            }
+
+            // ✅ USER-EDITABLE FIELD (label-style)
             OutlinedTextField(
-                value = gramsPerServingUnit,
-                onValueChange = onGramsPerServingChange,
+                value = gramsPerServingText,
+                onValueChange = { newTotalText ->
+                    gramsPerServingText = newTotalText
+
+                    val newTotal = newTotalText.toDoubleOrNull()?.takeIf { it > 0.0 }
+                    val s = servingSizeD
+
+                    if (newTotal != null && s != null) {
+                        val newBridge = newTotal / s
+                        onGramsPerServingChange(newBridge.toString())
+                    }
+                },
                 label = { Text("Grams per serving") },
                 singleLine = true,
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focus ->
+                        gramsPerServingFocused = focus.isFocused
+                        if (!focus.isFocused) {
+                            gramsPerServingText =
+                                gramsPerServingComputed?.toString().orEmpty()
+                        }
+                    }
             )
+
+            // ✅ SUPPORT STRING: grams per 1 unit
+            if (gramsPerUnitD != null) {
+                OutlinedTextField(
+                    value = gramsPerServingUnit,
+                    onValueChange = {},
+                    enabled = false,
+                    label = { Text("Grams per 1 ${servingUnit.display}") },
+                    singleLine = true,
+                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                )
+            }
         }
 
         OutlinedTextField(
