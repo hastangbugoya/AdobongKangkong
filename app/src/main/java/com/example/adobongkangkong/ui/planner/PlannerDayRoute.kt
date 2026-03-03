@@ -12,6 +12,7 @@ fun PlannerDayRoute(
     date: LocalDate,
     onBack: () -> Unit,
     onPickDate: (LocalDate) -> Unit,
+    onOpenPlannedMealEditor: (Long) -> Unit,
     viewModel: PlannerDayViewModel = hiltViewModel()
 ) {
     LaunchedEffect(date) {
@@ -24,6 +25,9 @@ fun PlannerDayRoute(
             when (e) {
                 is PlannerDayViewModel.PlannerDayUiEvent.ShowToast ->
                     Toast.makeText(context, e.message, Toast.LENGTH_SHORT).show()
+
+                is PlannerDayViewModel.PlannerDayUiEvent.NavigateToPlannedMealEditor ->
+                    onOpenPlannedMealEditor(e.mealId)
             }
         }
     }

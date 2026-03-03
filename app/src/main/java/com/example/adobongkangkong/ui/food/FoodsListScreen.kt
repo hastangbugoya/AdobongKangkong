@@ -66,6 +66,13 @@ fun FoodsListScreen(
     onEditRecipe: (Long) -> Unit,
     onCreateFood: () -> Unit,
     onCreateRecipe: () -> Unit,
+    /**
+     * Optional picker-mode callback.
+     *
+     * When non-null, tapping a *food* row returns the selected foodId instead of opening the food editor.
+     * Recipe rows remain non-pickable here because the shared meal editor contract supports addFood(foodId).
+     */
+    onPickFood: ((Long) -> Unit)? = null,
     vm: FoodsListViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -155,7 +162,11 @@ fun FoodsListScreen(
                     FoodRow(
                         row = row,
                         onClick = {
-                            if (row.isRecipe) onEditRecipe(row.foodId) else onEditFood(row.foodId)
+                            if (onPickFood != null) {
+                                if (!row.isRecipe) onPickFood(row.foodId)
+                            } else {
+                                if (row.isRecipe) onEditRecipe(row.foodId) else onEditFood(row.foodId)
+                            }
                         }
                     )
                     HorizontalDivider()

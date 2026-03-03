@@ -67,6 +67,9 @@ class PlannerDayViewModel @Inject constructor(
 
     sealed interface PlannerDayUiEvent {
         data class ShowToast(val message: String) : PlannerDayUiEvent
+
+        /** Navigate to the dedicated Planned Meal editor screen. */
+        data class NavigateToPlannedMealEditor(val mealId: Long) : PlannerDayUiEvent
     }
     private val _events = MutableSharedFlow<PlannerDayUiEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<PlannerDayUiEvent> = _events.asSharedFlow()
@@ -124,6 +127,10 @@ class PlannerDayViewModel @Inject constructor(
 
             is PlannerDayEvent.AddMeal -> {
                 openAddSheet(slot = event.slot)
+            }
+
+            is PlannerDayEvent.OpenMealPlanner -> {
+                openMealPlanner(slot = event.slot)
             }
 
             // ✅ Close sheet immediately, then cleanup empty created meal (async) + log notice.
@@ -615,6 +622,31 @@ class PlannerDayViewModel @Inject constructor(
                 ),
                 errorMessage = null
             )
+        }
+    }
+
+    private fun openMealPlanner(slot: MealSlot) {
+        // CUSTOM requires a label; keep the existing bottom-sheet flow for that.
+        if (slot == MealSlot.CUSTOM) {
+            openAddSheet(slot)
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val dateIso = _state.value.date.toString()
+                val mealId = createPlannedMeal(
+                    dateIso = dateIso,
+                    slot = slot,
+                    customLabel = null,
+                    nameOverride = null,
+                    sortOrder = null
+                )
+
+                _events.tryEmit(PlannerDayUiEvent.NavigateToPlannedMealEditor(mealId))
+            } catch (t: Throwable) {
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to open meal") }
+            }
         }
     }
 

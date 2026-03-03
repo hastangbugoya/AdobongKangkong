@@ -143,7 +143,10 @@ fun PlannerDayScreen(
             MealSlot.entries.forEach { slot ->
                 val meals = s.mealsBySlot[slot].orEmpty()
 
-                item { SlotHeader(slot = slot, onAdd = { onEvent(PlannerDayEvent.AddMeal(slot)) }) }
+                // NOTE:
+                // - "+ Add" in the slot header opens the full meal editor screen.
+                // - The "Add" button inside EmptySlotCard still opens the bottom sheet.
+                item { SlotHeader(slot = slot, onAdd = { onEvent(PlannerDayEvent.OpenMealPlanner(slot)) }) }
 
                 if (meals.isEmpty()) {
                     item { EmptySlotCard(onAdd = { onEvent(PlannerDayEvent.AddMeal(slot)) }) }
@@ -366,7 +369,7 @@ private fun PlannedItemRow(
             Text(qtySummary, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.width(8.dp))
-        IconButton(onClick = { onRemove }) {
+        IconButton(onClick = onRemove) {
             Icon(
                 painter = painterResource(R.drawable.trash),
                 contentDescription = "Remove"

@@ -11,6 +11,13 @@ sealed interface PlannerDayEvent {
     data class AddMeal(val slot: MealSlot) : PlannerDayEvent
     data object DismissAddSheet : PlannerDayEvent
 
+    /**
+     * Open the full Planned Meal editor screen for this slot.
+     *
+     * NOTE: This is used by the "+ Add" button in the slot header.
+     */
+    data class OpenMealPlanner(val slot: MealSlot) : PlannerDayEvent
+
     data class OpenMeal(val mealId: Long) : PlannerDayEvent
 
     // Bottom sheet field edits
