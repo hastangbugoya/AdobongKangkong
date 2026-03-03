@@ -21,6 +21,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
@@ -257,6 +258,13 @@ fun QuickAddBottomSheet(
                 val selected = state.selectedFood!!
                 val context = LocalContext.current
 
+                MealSlotPicker(
+                    selected = state.mealSlot,
+                    onSelected = vm::onMealSlotChanged
+                )
+
+                Spacer(Modifier.height(12.dp))
+
                 val bannerBitmapState = produceState<android.graphics.Bitmap?>(
                     initialValue = null,
                     key1 = selected.id
@@ -384,6 +392,53 @@ private fun FoodSearchResults(
                     .clickable { onPick(item.food) }
             )
             HorizontalDivider()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MealSlotPicker(
+    selected: MealSlot?,
+    onSelected: (MealSlot?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selected?.display ?: "No slot",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Meal slot (optional)") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("No slot") },
+                onClick = {
+                    onSelected(null)
+                    expanded = false
+                }
+            )
+            MealSlot.entries.forEach { slot ->
+                DropdownMenuItem(
+                    text = { Text(slot.display) },
+                    onClick = {
+                        onSelected(slot)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }

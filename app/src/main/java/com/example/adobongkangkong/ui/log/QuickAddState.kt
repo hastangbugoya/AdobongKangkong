@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.log
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 
 enum class InputMode {
@@ -36,6 +37,9 @@ data class QuickAddState(
     // Recipe batch context (only relevant if selectedFood.isRecipe == true)
     val batches: List<BatchSummary> = emptyList(),
     val selectedBatchId: Long? = null,
+
+    // Optional categorization for Day Log grouping (not required to log)
+    val mealSlot: MealSlot? = null,
 
     // Create-batch dialog
     val yieldGramsText: String = "",

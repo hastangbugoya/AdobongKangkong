@@ -32,13 +32,21 @@ object NavRoutes {
         fun dayLog(date: LocalDate): String = "$BASE/${date}" // LocalDate.toString() => yyyy-MM-dd
     }
 
+    object QuickAdd {
+        private const val BASE = "quickAdd"
+        private const val ARG_DATE = "date" // yyyy-MM-dd
+
+        const val route: String = "$BASE/{$ARG_DATE}"
+
+        fun quickAdd(date: LocalDate): String = "$BASE/${date}"
+    }
+
     object Foods {
         private const val BASE = "food"
 
         private const val ARG_FOOD_ID = "foodId"
         private const val ARG_NAME = "name"
         private const val ARG_BARCODE = "barcode"
-        private const val ARG_REQUEST_KEY = "requestKey"
 
         // Routes (patterns)
         const val list: String = BASE
@@ -56,9 +64,6 @@ object NavRoutes {
         private const val PICK_BASE = "$BASE/pickBarcode"
         const val pickBarcode: String = "$PICK_BASE?$ARG_BARCODE={$ARG_BARCODE}"
 
-        // ✅ Food picker (returns a selected foodId to the caller via SavedStateHandle)
-        const val pickFood: String = "$BASE/pickFood/{$ARG_REQUEST_KEY}"
-
         // Builders
         fun details(foodId: Long): String = "$BASE/$foodId"
 
@@ -73,10 +78,6 @@ object NavRoutes {
 
         fun pickBarcode(barcode: String): String {
             return "$PICK_BASE?$ARG_BARCODE=${enc(barcode)}"
-        }
-
-        fun pickFood(requestKey: String): String {
-            return "$BASE/pickFood/${enc(requestKey)}"
         }
 
         private fun enc(s: String?): String {

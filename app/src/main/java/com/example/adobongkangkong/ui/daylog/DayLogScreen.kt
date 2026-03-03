@@ -28,6 +28,7 @@ import com.example.adobongkangkong.R
 fun DayLogScreen(
     date: LocalDate,
     onBack: () -> Unit,
+    onOpenQuickAdd: (() -> Unit)? = null,
     onDelete: ((Long) -> Unit)? = null,
     vm: DayLogViewModel = hiltViewModel()
 ) {
@@ -48,6 +49,16 @@ fun DayLogScreen(
                             painter = painterResource(R.drawable.angle_circle_left),
                             contentDescription = "Back"
                         )
+                    }
+                },
+                actions = {
+                    if (onOpenQuickAdd != null) {
+                        IconButton(onClick = onOpenQuickAdd) {
+                            Icon(
+                                painter = painterResource(R.drawable.add),
+                                contentDescription = "Quick add"
+                            )
+                        }
                     }
                 }
             )

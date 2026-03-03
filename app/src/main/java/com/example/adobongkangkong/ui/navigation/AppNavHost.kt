@@ -2,8 +2,6 @@ package com.example.adobongkangkong.ui.navigation
 
 import android.util.Log
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -19,6 +17,7 @@ import com.example.adobongkangkong.ui.daylog.DayLogScreen
 import com.example.adobongkangkong.ui.debug.MeowLogScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
+import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.shopping.ShoppingScreen
@@ -154,7 +153,36 @@ fun AppNavHost(
 
             DayLogScreen(
                 date = date,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenQuickAdd = { navController.navigate(NavRoutes.QuickAdd.quickAdd(date)) }
+            )
+        }
+
+        // ------------------------------------------------------------
+        // Quick Add (logging)
+        // ------------------------------------------------------------
+
+        composable(
+            route = NavRoutes.QuickAdd.route,
+            arguments = listOf(
+                navArgument("date") { type = NavType.StringType }
+            )
+        ) { entry ->
+            val dateIso = entry.arguments!!.getString("date")!!
+            val date = runCatching { LocalDate.parse(dateIso) }.getOrElse { LocalDate.now() }
+
+            QuickAddBottomSheet(
+                onDismiss = { navController.popBackStack() },
+                onCreateFood = { prefillName ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = prefillName))
+                },
+                onCreateFoodWithBarcode = { barcode ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                },
+                onOpenFoodEditor = { foodId ->
+                    navController.navigate(NavRoutes.Foods.edit(foodId))
+                },
+                logDate = date
             )
         }
 
@@ -164,7 +192,9 @@ fun AppNavHost(
 
         composable(route = NavRoutes.Foods.list) {
             FoodsListScreen(
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.popBackStack()
+                },
 
                 // Row tap → edit food
                 onEditFood = { foodId ->
@@ -174,50 +204,21 @@ fun AppNavHost(
                 // Row tap → edit recipe (or route to recipes entry for now)
                 onEditRecipe = { recipeId ->
                     navController.navigate(NavRoutes.Recipes.builder(editFoodId = recipeId))
+                    // or NavRoutes.Recipes.route / list if that’s your current setup
                 },
 
                 // Add button when filter = FOODS_ONLY or ALL
                 onCreateFood = {
-                    navController.navigate(NavRoutes.Foods.new(prefillName = null))
+                    navController.navigate(
+                        NavRoutes.Foods.new(prefillName = null)
+                    )
                 },
 
                 // Add button when filter = RECIPES_ONLY
                 onCreateRecipe = {
-                    navController.navigate(NavRoutes.Recipes.route)
-                }
-            )
-        }
-
-        // ------------------------------------------------------------
-        // Foods — pick a foodId and return it to the caller (meal editor, etc.)
-        // ------------------------------------------------------------
-
-        composable(
-            route = NavRoutes.Foods.pickFood,
-            arguments = listOf(
-                navArgument("requestKey") { type = NavType.StringType }
-            )
-        ) { entry ->
-            val requestKey = entry.arguments?.getString("requestKey").orEmpty()
-            val resultKey = "pickedFoodId:$requestKey"
-
-            FoodsListScreen(
-                onBack = { navController.popBackStack() },
-                onEditFood = { /* no-op in picker mode */ },
-                onEditRecipe = { /* no-op in picker mode */ },
-                onCreateFood = { /* no-op in picker mode */ },
-                onCreateRecipe = { /* no-op in picker mode */ },
-                onPickFood = { foodId ->
-                    Log.d(
-                        "Picker",
-                        "SET resultKey=$resultKey foodId=$foodId prev=${navController.previousBackStackEntry?.destination?.route}"
+                    navController.navigate(
+                        NavRoutes.Recipes.route
                     )
-
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set(resultKey, foodId)
-
-                    navController.popBackStack()
                 }
             )
         }
@@ -241,7 +242,9 @@ fun AppNavHost(
             FoodsListScreen(
                 onBack = { navController.popBackStack() },
                 onEditFood = { pickedFoodId ->
+                    // Go straight to the editor for that food and carry the barcode as a query param.
                     navController.navigate(NavRoutes.Foods.edit(pickedFoodId, barcode)) {
+                        // Remove the picker from back stack so back goes where it used to.
                         popUpTo(NavRoutes.Foods.pickBarcode) { inclusive = true }
                         launchSingleTop = true
                     }
@@ -251,7 +254,6 @@ fun AppNavHost(
                 onCreateRecipe = { /* no-op */ }
             )
         }
-
         composable(
             route = NavRoutes.Foods.edit,
             arguments = listOf(
@@ -265,6 +267,7 @@ fun AppNavHost(
         ) { entry ->
             val foodId = entry.arguments!!.getLong("foodId")
             val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
+            // In Foods.edit composable (right before FoodEditorRoute call)
             Log.d("Meow", "NAV -> Foods.edit destination. foodId=$foodId initialBarcode=$initialBarcode route=${entry.destination.route}")
 
             FoodEditorRoute(
@@ -301,8 +304,8 @@ fun AppNavHost(
         ) { entry ->
             val initialName = entry.arguments?.getString("name").orEmpty().ifBlank { null }
             val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
+            // In Foods.new composable (right before FoodEditorRoute call)
             Log.d("Meow", "NAV -> Foods.new destination. initialName=$initialName initialBarcode=$initialBarcode route=${entry.destination.route}")
-
             FoodEditorRoute(
                 foodId = null,
                 initialName = initialName,
@@ -314,16 +317,17 @@ fun AppNavHost(
                 },
                 bannerCaptureController = bannerCaptureController,
                 bannerRefreshTick = bannerRefreshTick,
+                // ✅ add this
                 onOpenFoodEditor = { targetFoodId ->
                     navController.navigate(NavRoutes.Foods.edit(targetFoodId))
                 },
             )
         }
 
+
         // ------------------------------------------------------------
         // Recipes
         // ------------------------------------------------------------
-
         composable(route = NavRoutes.Recipes.route) {
             RecipeBuilderScreen(
                 editFoodId = null,
@@ -365,7 +369,9 @@ fun AppNavHost(
         composable(
             route = NavRoutes.Planner.plannerDay,
             arguments = listOf(navArgument("dateIso") { type = NavType.StringType })
-        ) { backStackEntry ->
+        ) {
+
+            backStackEntry ->
             val dateIso = backStackEntry.arguments?.getString("dateIso")
                 ?.takeIf { it.isNotBlank() }
                 ?: LocalDate.now().toString()
@@ -385,49 +391,6 @@ fun AppNavHost(
             )
         }
 
-        composable(
-            route = NavRoutes.Planner.plannedMealEditor,
-            arguments = listOf(navArgument("mealId") { type = NavType.LongType })
-        ) { backStackEntry ->
-            val mealId = backStackEntry.arguments?.getLong("mealId") ?: 0L
-
-            val vm: com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel =
-                androidx.hilt.navigation.compose.hiltViewModel()
-
-            androidx.compose.runtime.LaunchedEffect(mealId) {
-                if (mealId > 0L) vm.setMealId(mealId)
-            }
-
-            // ---- picker wiring (stable + correct handle) ----
-            val requestKey = androidx.compose.runtime.remember(mealId) { "plannedMealEditorAddFood:$mealId" }
-            val resultKey = androidx.compose.runtime.remember(requestKey) { "pickedFoodId:$requestKey" }
-
-            Log.d(
-                "Picker",
-                "OBS resultKey=$resultKey current=${backStackEntry.destination.route}"
-            )
-
-            val pickedFoodId by backStackEntry.savedStateHandle
-                .getStateFlow(resultKey, 0L)
-                .collectAsState()
-
-            androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
-                if (pickedFoodId != 0L) {
-                    vm.addFood(pickedFoodId)
-                    backStackEntry.savedStateHandle[resultKey] = 0L // consume
-                }
-            }
-            // ---- end picker wiring ----
-
-            com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
-                contract = vm,
-                onBack = { navController.popBackStack() },
-                onRequestAddFood = {
-                    navController.navigate(NavRoutes.Foods.pickFood(requestKey))
-                }
-            )
-        }
-
         composable("backup") {
             val context = androidx.compose.ui.platform.LocalContext.current
             BackupScreen(
@@ -443,7 +406,6 @@ fun AppNavHost(
         Log.d("NavDbg", "Recipes.builderSample=${NavRoutes.Recipes.builder(recipeId = 123)}")
     }
 }
-
 /**
  * FOR-FUTURE-ME — AppNavHost and global controller plumbing
  *
@@ -458,6 +420,7 @@ fun AppNavHost(
  * Why this matters:
  * - BannerCaptureHost observes the controller instance from MainScreen.
  * - If a destination uses a different instance, controller.open() will silently do nothing.
+ * - This failure mode has no crash, no log, no warning — just a dead button.
  *
  * Mental model:
  * - Controllers are identity-sensitive.

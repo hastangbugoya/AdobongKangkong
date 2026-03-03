@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
@@ -79,6 +80,9 @@ class QuickAddViewModel @Inject constructor(
     private val yieldGramsTextFlow = MutableStateFlow("")
     private val servingsYieldTextFlow = MutableStateFlow("")
     private val isCreateBatchDialogOpenFlow = MutableStateFlow(false)
+
+    // Optional categorization for Day Log grouping (not required to log)
+    private val mealSlotFlow = MutableStateFlow<MealSlot?>(null)
 
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
@@ -266,6 +270,7 @@ class QuickAddViewModel @Inject constructor(
         val results: List<FoodListItemUiModel>,
         val selected: Food?,
         val servings: Double,
+        val mealSlot: MealSlot?,
         val inputMode: InputMode,
         val inputUnit: ServingUnit,
         val inputAmount: Double?
@@ -297,7 +302,8 @@ class QuickAddViewModel @Inject constructor(
             val query: String,
             val results: List<FoodListItemUiModel>,
             val selected: Food?,
-            val servings: Double
+            val servings: Double,
+            val mealSlot: MealSlot?
         )
 
         data class CoreB(
@@ -310,9 +316,10 @@ class QuickAddViewModel @Inject constructor(
             queryFlow,
             resultsUiFlow,
             selectedFoodFlow,
-            servingsFlow
-        ) { query, results, selected, servings ->
-            CoreA(query, results, selected, servings)
+            servingsFlow,
+            mealSlotFlow
+        ) { query, results, selected, servings, mealSlot ->
+            CoreA(query, results, selected, servings, mealSlot)
         }
 
         val coreBFlow = combine(
@@ -329,6 +336,7 @@ class QuickAddViewModel @Inject constructor(
                 results = a.results,
                 selected = a.selected,
                 servings = a.servings,
+                mealSlot = a.mealSlot,
                 inputMode = b.inputMode,
                 inputUnit = b.inputUnit,
                 inputAmount = b.inputAmount
@@ -420,6 +428,7 @@ class QuickAddViewModel @Inject constructor(
 
                 batches = recipe.batches,
                 selectedBatchId = recipe.selectedBatchId,
+                mealSlot = core.mealSlot,
                 yieldGramsText = recipe.yieldGramsText,
                 servingsYieldText = recipe.servingsYieldText,
 
@@ -500,12 +509,18 @@ class QuickAddViewModel @Inject constructor(
         servingsFlow.value = 1.0
         inputModeFlow.value = InputMode.SERVINGS
 
+        mealSlotFlow.value = null
+
         selectedRecipeIdFlow.value = null
         selectedRecipeStableIdFlow.value = null
         selectedRecipeServingsYieldDefaultFlow.value = null
         selectedBatchIdFlow.value = null
 
         errorFlow.value = null
+    }
+
+    fun onMealSlotChanged(slot: MealSlot?) {
+        mealSlotFlow.value = slot
     }
 
     fun onInputModeChanged(mode: InputMode) {
@@ -901,6 +916,7 @@ class QuickAddViewModel @Inject constructor(
     fun save(onDone: () -> Unit, logDate: LocalDate) {
         val food = selectedFoodFlow.value ?: return
         val servings = servingsFlow.value
+        val mealSlot = mealSlotFlow.value
 
         val gramsForSave = computeGramsAmount(
             food = food,
@@ -991,7 +1007,8 @@ class QuickAddViewModel @Inject constructor(
                         timestamp = timestamp,
                         amountInput = amountInput,
                         recipeBatchId = null,
-                        logDateIso = logDate.toString()
+                        logDateIso = logDate.toString(),
+                        mealSlot = mealSlot
                     )
                 } else {
                     val recipeId = selectedRecipeIdFlow.value
@@ -1025,7 +1042,8 @@ class QuickAddViewModel @Inject constructor(
                         timestamp = Instant.now(),
                         amountInput = amountInput,
                         recipeBatchId = batchId,
-                        logDateIso = logDate.toString()
+                        logDateIso = logDate.toString(),
+                        mealSlot = mealSlot
                     )
                 }
 
