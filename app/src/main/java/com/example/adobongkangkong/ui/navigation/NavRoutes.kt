@@ -112,7 +112,6 @@ object NavRoutes {
     object Planner {
         const val plannerDay = "planner/{dateIso}"
         fun plannerDay(dateIso: String): String = "planner/$dateIso"
-
         private const val ARG_MEAL_ID = "mealId"
         const val plannedMealEditor: String = "planner/mealEditor/{$ARG_MEAL_ID}"
         fun plannedMealEditor(mealId: Long): String = "planner/mealEditor/$mealId"
