@@ -21,7 +21,6 @@ fun MealTemplatePickerRoute(
                 is MealTemplatePickerEvent.SelectTemplate -> onPicked(e.templateId)
             }
         },
-        dateIso = dateIso,
-        slotContext = initialSlotContext
+        dateIso = dateIso
     )
 }

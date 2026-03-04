@@ -7,6 +7,9 @@ interface MealTemplateItemRepository {
     fun observeItemsForTemplate(templateId: Long): Flow<List<MealTemplateItemEntity>>
     suspend fun getItemsForTemplate(templateId: Long): List<MealTemplateItemEntity>
 
+    /** Bulk lookup to avoid N+1 callers (missing templates return empty lists). */
+    suspend fun getItemsForTemplates(templateIds: List<Long>): List<MealTemplateItemEntity>
+
     suspend fun insert(entity: MealTemplateItemEntity): Long
     suspend fun update(entity: MealTemplateItemEntity)
     suspend fun delete(entity: MealTemplateItemEntity)

@@ -29,16 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
-import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MealTemplatePickerScreen(
     state: StateFlow<MealTemplatePickerUiState>,
     onEvent: (MealTemplatePickerEvent) -> Unit,
-    dateIso: String,
-    slotContext: MealSlot?
+    dateIso: String
 ) {
     val s by state.collectAsState()
 
@@ -48,14 +47,7 @@ fun MealTemplatePickerScreen(
                 title = {
                     Column {
                         Text("Pick Template")
-                        val subtitle = buildString {
-                            append(dateIso)
-                            if (slotContext != null) {
-                                append(" • ")
-                                append(slotContext.display)
-                            }
-                        }
-                        Text(subtitle, style = MaterialTheme.typography.bodySmall)
+                        Text(dateIso, style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 navigationIcon = {
@@ -105,6 +97,7 @@ fun MealTemplatePickerScreen(
                         items = s.templates,
                         key = { it.id }
                     ) { t ->
+                        val macros = s.macrosByTemplateId[t.id]
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -117,9 +110,14 @@ fun MealTemplatePickerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
+                                    // Names, not slots.
                                     Text(t.name, style = MaterialTheme.typography.titleMedium)
-                                    t.defaultSlot?.let { slot ->
-                                        Text("Default: ${slot.display}", style = MaterialTheme.typography.bodySmall)
+
+                                    if (macros != null) {
+                                        Text(
+                                            macrosLine(macros),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
                                     }
                                 }
                                 Text("Pick", style = MaterialTheme.typography.bodyMedium)
@@ -130,4 +128,12 @@ fun MealTemplatePickerScreen(
             }
         }
     }
+}
+
+private fun macrosLine(m: com.example.adobongkangkong.domain.model.MacroTotals): String {
+    val kcal = m.caloriesKcal.roundToInt()
+    val p = m.proteinG.roundToInt()
+    val c = m.carbsG.roundToInt()
+    val f = m.fatG.roundToInt()
+    return "$kcal kcal • P $p • C $c • F $f"
 }

@@ -15,6 +15,9 @@ class MealTemplateItemRepositoryImpl @Inject constructor(
     override suspend fun getItemsForTemplate(templateId: Long): List<MealTemplateItemEntity> =
         dao.getItemsForTemplate(templateId)
 
+    override suspend fun getItemsForTemplates(templateIds: List<Long>): List<MealTemplateItemEntity> =
+        if (templateIds.isEmpty()) emptyList() else dao.getItemsForTemplates(templateIds)
+
     override suspend fun insert(entity: MealTemplateItemEntity): Long = dao.insert(entity)
     override suspend fun update(entity: MealTemplateItemEntity) = dao.update(entity)
     override suspend fun delete(entity: MealTemplateItemEntity) = dao.delete(entity)
