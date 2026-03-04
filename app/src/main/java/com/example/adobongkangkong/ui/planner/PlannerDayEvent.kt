@@ -18,6 +18,13 @@ sealed interface PlannerDayEvent {
      */
     data class OpenMealPlanner(val slot: MealSlot) : PlannerDayEvent
 
+    /**
+     * Open the template picker (navigation-only).
+     *
+     * The ViewModel does not navigate; PlannerDayRoute/NavHost handles navigation.
+     */
+    data class OpenTemplatePicker(val slot: MealSlot?) : PlannerDayEvent
+
     data class OpenMeal(val mealId: Long) : PlannerDayEvent
 
     // Bottom sheet field edits
@@ -67,4 +74,13 @@ sealed interface PlannerDayEvent {
     data class MakeMealRecurring(val mealId: Long) : PlannerDayEvent
 
     data class LogMeal(val mealId: Long) : PlannerDayEvent
+
+    // Save planned meal as template
+    data class SaveMealAsTemplate(val mealId: Long) : PlannerDayEvent
+
+    // Create a new planned meal from an existing template.
+    data class CreateMealFromTemplate(
+        val templateId: Long,
+        val overrideSlot: MealSlot? = null
+    ) : PlannerDayEvent
 }

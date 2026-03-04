@@ -50,11 +50,11 @@ import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
-import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.flow.StateFlow
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import kotlin.math.round
+import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +66,10 @@ fun PlannerDayScreen(
     val dateText = s.date.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // NEW: Slot header "+ Add" now opens a chooser (empty vs template).
+    // "From template" is intentionally DISABLED until PlannerDayEvent + navigation plumbing is added.
+    var addOptionsSlot by remember { mutableStateOf<MealSlot?>(null) }
 
     // Show Undo snackbar when requested
     val undo = s.undo
@@ -82,7 +86,6 @@ fun PlannerDayScreen(
         }
         onEvent(PlannerDayEvent.UndoSnackbarConsumed(u.id))
     }
-
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -144,9 +147,14 @@ fun PlannerDayScreen(
                 val meals = s.mealsBySlot[slot].orEmpty()
 
                 // NOTE:
-                // - "+ Add" in the slot header opens the full meal editor screen.
+                // - "+ Add" in the slot header now opens a chooser (empty vs template).
                 // - The "Add" button inside EmptySlotCard still opens the bottom sheet.
-                item { SlotHeader(slot = slot, onAdd = { onEvent(PlannerDayEvent.OpenMealPlanner(slot)) }) }
+                item {
+                    SlotHeader(
+                        slot = slot,
+                        onAdd = { addOptionsSlot = slot }
+                    )
+                }
 
                 if (meals.isEmpty()) {
                     item { EmptySlotCard(onAdd = { onEvent(PlannerDayEvent.AddMeal(slot)) }) }
@@ -159,12 +167,14 @@ fun PlannerDayScreen(
                             onRemoveItem = { itemId -> onEvent(PlannerDayEvent.RemovePlannedItem(itemId)) },
                             onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) },
                             onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) },
-                            onLogMeal = { mealId -> onEvent(PlannerDayEvent.LogMeal(mealId)) }
+                            onLogMeal = { mealId -> onEvent(PlannerDayEvent.LogMeal(mealId)) },
+                            onSaveMealAsTemplate = { mealId -> onEvent(PlannerDayEvent.SaveMealAsTemplate(mealId)) }
                         )
                     }
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
+
             // TEMP DEBUG: create a sample recurring series (remove later)
             item {
                 Row(
@@ -178,6 +188,48 @@ fun PlannerDayScreen(
             }
 
             item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+
+    // NEW: Slot header "+ Add" chooser.
+    val openSlot = addOptionsSlot
+    if (openSlot != null) {
+        ModalBottomSheet(
+            onDismissRequest = { addOptionsSlot = null }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Add ${openSlot.display}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                TextButton(
+                    onClick = {
+                        addOptionsSlot = null
+                        onEvent(PlannerDayEvent.OpenMealPlanner(openSlot))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("New empty meal")
+                }
+
+                TextButton(
+                    onClick = {
+                        addOptionsSlot = null
+                        onEvent(PlannerDayEvent.OpenTemplatePicker(slot = openSlot))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("From template")
+                }
+
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
 
@@ -197,7 +249,6 @@ fun PlannerDayScreen(
             onEvent = onEvent
         )
     }
-
 }
 
 @Composable
@@ -262,7 +313,8 @@ private fun PlannedMealCard(
     onRemoveItem: (Long) -> Unit,
     onRemoveEmptyMeal: (Long) -> Unit,
     onDuplicateMeal: (Long) -> Unit,
-    onLogMeal: (Long) -> Unit
+    onLogMeal: (Long) -> Unit,
+    onSaveMealAsTemplate: (Long) -> Unit
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
 
@@ -281,8 +333,6 @@ private fun PlannedMealCard(
                 )
 
                 if (isRecurring) {
-                    // Option 1 (no new drawable): use Material icon if available
-                    // You may need: implementation("androidx.compose.material:material-icons-extended")
                     Icon(
                         painter = painterResource(R.drawable.rotate_reverse),
                         contentDescription = "Recurring",
@@ -331,23 +381,31 @@ private fun PlannedMealCard(
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
                     }
-                    Row{
+
+                    Row {
                         Spacer(Modifier.weight(1f))
+
+                        // Save as template (textbutton) — flow > aesthetics for now.
+                        TextButton(onClick = { onSaveMealAsTemplate(meal.id) }) {
+                            Text("Save as template")
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
                         IconButton(onClick = { onLogMeal(meal.id) }) {
                             Icon(
                                 painter = painterResource(R.drawable.log_file),
-                                contentDescription = "Back"
+                                contentDescription = "Log"
                             )
                         }
                         Spacer(Modifier.width(8.dp))
                         IconButton(onClick = { onDuplicateMeal(meal.id) }) {
                             Icon(
                                 painter = painterResource(R.drawable.duplicate),
-                                contentDescription = "Back"
+                                contentDescription = "Duplicate"
                             )
                         }
                     }
-
                 }
             }
         }
@@ -448,7 +506,7 @@ private fun AddToPlanBottomSheet(
                             onClick = {
                                 focusManager.clearFocus(force = true)
                                 onEvent(PlannerDayEvent.CreateMealIfNeeded)
-                          },
+                            },
                             enabled = !sheet.isCreating
                         ) {
                             Text(if (sheet.isCreating) "Creating…" else "Retry create meal")
@@ -517,8 +575,6 @@ private fun AddToPlanBottomSheet(
                     }
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
@@ -739,4 +795,3 @@ private fun DuplicateMealBottomSheet(
         }
     }
 }
-

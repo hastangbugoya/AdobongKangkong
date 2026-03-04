@@ -44,6 +44,4 @@ class PlannedMealRepositoryImpl @Inject constructor(
         plannedMealId: Long,
         loggedAtEpochMs: Long
     ): Boolean = dao.markLoggedIfNotYet(plannedMealId, loggedAtEpochMs) == 1
-
-
 }

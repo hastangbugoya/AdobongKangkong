@@ -1,0 +1,4 @@
+package com.example.adobongkangkong.domain.planner.usecase
+
+class ObserveMealTemplateSummariesUseCase {
+}

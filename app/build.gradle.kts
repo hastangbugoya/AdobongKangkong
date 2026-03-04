@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 
+    id("org.jetbrains.kotlin.kapt")
+
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
 
@@ -20,9 +22,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
 
-    defaultConfig {
         buildConfigField("String", "USDA_API_KEY", "\"NW8f6sDOwtWk6EOjKZLefMR6wO3JSX8KkcRDHBUg\"")
     }
 
@@ -53,6 +53,10 @@ kotlin {
     jvmToolchain(17)
 }
 
+kapt {
+    correctErrorTypes = true
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
@@ -60,6 +64,7 @@ ksp {
 dependencies {
     implementation(libs.androidx.material3)
     testImplementation(libs.junit.jupiter)
+
     // Compose BOM
     val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
@@ -85,19 +90,16 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // Hilt
+    // Hilt (KAPT)
     implementation("com.google.dagger:hilt-android:2.52")
-    ksp("com.google.dagger:hilt-compiler:2.52")
+    kapt("com.google.dagger:hilt-compiler:2.52")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Serialization (optional)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Unit testing
-    // Local JVM unit tests
     testImplementation("junit:junit:4.13.2")
-
-    // Optional but very useful for Kotlin-friendly assertions
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 
     // Android instrumented testing
@@ -113,7 +115,6 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
-
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Retrofit
@@ -124,7 +125,7 @@ dependencies {
     // Core WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
-    // Hilt + WorkManager integration
+    // Hilt + WorkManager integration (KAPT)
     implementation("androidx.hilt:hilt-work:1.2.0")
-    ksp("androidx.hilt:hilt-compiler:1.2.0")
+    kapt("androidx.hilt:hilt-compiler:1.2.0")
 }
