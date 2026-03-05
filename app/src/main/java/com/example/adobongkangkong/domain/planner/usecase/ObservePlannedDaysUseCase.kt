@@ -317,13 +317,17 @@ class ObservePlannedDaysUseCase @Inject constructor(
                 mapItem(entity, titleByItemId[entity.id])
             }
 
-        val title: String? = when (slot) {
-            MealSlot.CUSTOM -> meal.customLabel?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException(
-                    "PlannedMealEntity(${meal.id}) is CUSTOM but customLabel is null/blank"
-                )
-            else -> null
-        }
+        val title: String? =
+            meal.nameOverride
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: when (slot) {
+                    MealSlot.CUSTOM -> meal.customLabel?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalStateException(
+                            "PlannedMealEntity(${meal.id}) is CUSTOM but customLabel is null/blank"
+                        )
+                    else -> null
+                }
 
         return PlannedMeal(
             id = meal.id,
