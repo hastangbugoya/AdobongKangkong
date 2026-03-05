@@ -6,12 +6,16 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
+import com.example.adobongkangkong.data.local.db.entity.PlannerIouEntity
 import com.example.adobongkangkong.domain.planner.model.PlannedDay
+import com.example.adobongkangkong.domain.planner.model.PlannerIou
 import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import com.example.adobongkangkong.domain.repository.PlannedMealRepository
+import com.example.adobongkangkong.domain.repository.PlannerIouRepository
+import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -142,6 +146,7 @@ import kotlinx.coroutines.flow.map
 class ObservePlannedDaysUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
     private val items: PlannedItemRepository,
+    private val ious: PlannerIouRepository,
 
     // Title resolution (derived) — no planner schema changes
     private val foodDao: FoodDao,
@@ -189,9 +194,21 @@ class ObservePlannedDaysUseCase @Inject constructor(
         val end = LocalDate.parse(endDateIso)
         require(!end.isBefore(start)) { "endDateIso must be >= startDateIso" }
 
-        return meals.observeMealsInRange(startDateIso, endDateIso).flatMapLatest { mealEntities ->
+        val mealsFlow = meals.observeMealsInRange(startDateIso, endDateIso)
+        val iousFlow = ious.observeInRange(startDateIso, endDateIso)
+
+        return combine(mealsFlow, iousFlow) { mealEntities, iouEntities ->
+            MealAndIousSeed(mealEntities = mealEntities, iouEntities = iouEntities)
+        }.flatMapLatest { seed ->
+            val mealEntities = seed.mealEntities
+            val iouEntities = seed.iouEntities
+
             if (mealEntities.isEmpty()) {
-                flowOf(emptyList())
+                if (iouEntities.isEmpty()) {
+                    flowOf(emptyList())
+                } else {
+                    flowOf(daysFromIousOnly(iouEntities))
+                }
             } else {
                 val perMealFlows: List<Flow<MealAndItems>> = mealEntities.map { mealEntity ->
                     items.observeItemsForMeal(mealEntity.id).map { itemEntities ->
@@ -210,7 +227,12 @@ class ObservePlannedDaysUseCase @Inject constructor(
 
                     val titleByItemId: Map<Long, String> = resolveItemTitles(rows)
 
-                    rows
+                    val iousByDate: Map<LocalDate, List<PlannerIou>> =
+                        iouEntities
+                            .groupBy { LocalDate.parse(it.dateIso) }
+                            .mapValues { (_, list) -> list.map { it.toDomainIou() } }
+
+                    val daysFromMeals: List<PlannedDay> = rows
                         .groupBy { LocalDate.parse(it.meal.date) }
                         .toSortedMap()
                         .map { (date, mealsForDayRows) ->
@@ -224,13 +246,57 @@ class ObservePlannedDaysUseCase @Inject constructor(
                                 date = date,
                                 mealsBySlot = plannedMeals
                                     .groupBy { it.slot }
-                                    .toMealsBySlotWithEmpties()
+                                    .toMealsBySlotWithEmpties(),
+                                ious = iousByDate[date].orEmpty()
                             )
                         }
+
+                    // Add IOU-only dates (no meals) in-range.
+                    val mealDates: Set<LocalDate> = daysFromMeals.map { it.date }.toSet()
+                    val iouOnlyDays: List<PlannedDay> = iousByDate
+                        .filterKeys { it !in mealDates }
+                        .toSortedMap()
+                        .map { (date, dayIous) ->
+                            PlannedDay(
+                                date = date,
+                                mealsBySlot = emptyMealsBySlot(),
+                                ious = dayIous
+                            )
+                        }
+
+                    (daysFromMeals + iouOnlyDays).sortedBy { it.date }
                 }
             }
         }
     }
+
+    private data class MealAndIousSeed(
+        val mealEntities: List<PlannedMealEntity>,
+        val iouEntities: List<PlannerIouEntity>
+    )
+
+    private fun daysFromIousOnly(iouEntities: List<PlannerIouEntity>): List<PlannedDay> {
+        val iousByDate = iouEntities
+            .groupBy { LocalDate.parse(it.dateIso) }
+            .toSortedMap()
+            .mapValues { (_, list) -> list.map { it.toDomainIou() } }
+
+        return iousByDate.map { (date, dayIous) ->
+            PlannedDay(
+                date = date,
+                mealsBySlot = emptyMealsBySlot(),
+                ious = dayIous
+            )
+        }
+    }
+
+    private fun PlannerIouEntity.toDomainIou(): PlannerIou =
+        PlannerIou(
+            id = id,
+            description = description,
+            createdAt = Instant.ofEpochMilli(createdAtEpochMs),
+            updatedAt = Instant.ofEpochMilli(updatedAtEpochMs)
+        )
 
     private data class MealAndItems(
         val meal: PlannedMealEntity,

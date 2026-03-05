@@ -140,6 +140,15 @@ fun QuickAddBottomSheet(
             Spacer(Modifier.height(12.dp))
 
             if (state.selectedFood == null) {
+                TextButton(
+                    onClick = { vm.openIouDialog() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("IOU")
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = vm::onQueryChange,
@@ -351,6 +360,53 @@ fun QuickAddBottomSheet(
                 )
             }
         }
+    }
+
+    if (state.isIouDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { if (!state.isSavingIou) vm.closeIouDialog() },
+            title = { Text("New IOU") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = state.iouDescription,
+                        onValueChange = vm::onIouDescriptionChanged,
+                        label = { Text("Description") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp),
+                        isError = state.iouErrorMessage != null,
+                        supportingText = {
+                            val err = state.iouErrorMessage
+                            if (err != null) {
+                                Text(err, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.saveIou(logDate = logDate) {
+                            // Close the entire quick log sheet after saving.
+                            onDismiss()
+                        }
+                    },
+                    enabled = !state.isSavingIou
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = vm::closeIouDialog,
+                    enabled = !state.isSavingIou
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

@@ -15,6 +15,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreatePlannerIouUseCase
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -57,6 +58,9 @@ class QuickAddViewModel @Inject constructor(
     private val snapshotRepo: FoodNutritionSnapshotRepository,
     private val validateFoodForUsage: ValidateFoodForUsageUseCase,
     private val foodBarcodeRepository: FoodBarcodeRepository,
+
+    // IOUs (planner narrative placeholders)
+    private val createPlannerIou: CreatePlannerIouUseCase,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -159,6 +163,59 @@ class QuickAddViewModel @Inject constructor(
 
     private val foundBarcodeDialogFlow = MutableStateFlow<FoundBarcodeDialogState?>(null)
     private val notFoundBarcodeDialogFlow = MutableStateFlow<NotFoundBarcodeDialogState?>(null)
+
+    // -----------------------------
+    // IOU (planner narrative)
+    // -----------------------------
+
+    private val isIouDialogOpenFlow = MutableStateFlow(false)
+    private val iouDescriptionFlow = MutableStateFlow("")
+    private val isSavingIouFlow = MutableStateFlow(false)
+    private val iouErrorFlow = MutableStateFlow<String?>(null)
+
+    fun openIouDialog() {
+        iouDescriptionFlow.value = ""
+        iouErrorFlow.value = null
+        isIouDialogOpenFlow.value = true
+    }
+
+    fun closeIouDialog() {
+        isIouDialogOpenFlow.value = false
+        iouErrorFlow.value = null
+    }
+
+    fun onIouDescriptionChanged(value: String) {
+        iouDescriptionFlow.value = value
+        iouErrorFlow.value = null
+    }
+
+    fun saveIou(logDate: LocalDate, onSaved: () -> Unit) {
+        if (isSavingIouFlow.value) return
+
+        val desc = iouDescriptionFlow.value.trim()
+        if (desc.isBlank()) {
+            iouErrorFlow.value = "Description is required."
+            return
+        }
+
+        isSavingIouFlow.value = true
+        iouErrorFlow.value = null
+
+        viewModelScope.launch {
+            try {
+                createPlannerIou(
+                    dateIso = logDate.toString(),
+                    description = desc
+                )
+                isSavingIouFlow.value = false
+                isIouDialogOpenFlow.value = false
+                onSaved()
+            } catch (t: Throwable) {
+                isSavingIouFlow.value = false
+                iouErrorFlow.value = t.message ?: "Failed to save IOU"
+            }
+        }
+    }
 
     fun openBarcodeScanner() {
         isScannerOpenFlow.value = true
@@ -297,6 +354,13 @@ class QuickAddViewModel @Inject constructor(
         val notFound: NotFoundBarcodeDialogState?
     )
 
+    private data class IouUi(
+        val isOpen: Boolean,
+        val description: String,
+        val isSaving: Boolean,
+        val error: String?
+    )
+
     val state: StateFlow<QuickAddState> = run {
         data class CoreA(
             val query: String,
@@ -385,7 +449,21 @@ class QuickAddViewModel @Inject constructor(
             )
         }
 
-        combine(coreFlow, recipeFlow, flagsFlow, barcodeFlow) { core, recipe, flags, barcode ->
+        val iouFlow = combine(
+            isIouDialogOpenFlow,
+            iouDescriptionFlow,
+            isSavingIouFlow,
+            iouErrorFlow
+        ) { isOpen, description, isSaving, error ->
+            IouUi(
+                isOpen = isOpen,
+                description = description,
+                isSaving = isSaving,
+                error = error
+            )
+        }
+
+        combine(coreFlow, recipeFlow, flagsFlow, barcodeFlow, iouFlow) { core, recipe, flags, barcode, iou ->
 
             val gramsAmount: Double? = core.selected?.let { food ->
                 computeGramsAmount(
@@ -442,6 +520,11 @@ class QuickAddViewModel @Inject constructor(
                 foundBarcodeDialogFood = barcode.found?.food,
                 foundBarcodeDialogBarcode = barcode.found?.barcode,
                 notFoundBarcodeDialogBarcode = barcode.notFound?.barcode,
+
+                isIouDialogOpen = iou.isOpen,
+                iouDescription = iou.description,
+                isSavingIou = iou.isSaving,
+                iouErrorMessage = iou.error,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
     }

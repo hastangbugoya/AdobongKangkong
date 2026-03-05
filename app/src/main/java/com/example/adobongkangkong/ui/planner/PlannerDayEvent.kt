@@ -83,4 +83,26 @@ sealed interface PlannerDayEvent {
         val templateId: Long,
         val overrideSlot: MealSlot? = null
     ) : PlannerDayEvent
+
+    // ------------------------------------------------------------
+    // IOUs
+    // ------------------------------------------------------------
+
+    /** Open the IOU editor in "create" mode. */
+    data object OpenCreateIou : PlannerDayEvent
+
+    /** Open the IOU editor for an existing IOU. */
+    data class OpenEditIou(val iouId: Long) : PlannerDayEvent
+
+    /** Close the IOU editor dialog. */
+    data object DismissIouEditor : PlannerDayEvent
+
+    /** Update the IOU description field while editing. */
+    data class UpdateIouDescription(val value: String) : PlannerDayEvent
+
+    /** Persist the IOU currently being edited (create or update). */
+    data object SaveIou : PlannerDayEvent
+
+    /** Delete an IOU. */
+    data class DeleteIou(val iouId: Long) : PlannerDayEvent
 }

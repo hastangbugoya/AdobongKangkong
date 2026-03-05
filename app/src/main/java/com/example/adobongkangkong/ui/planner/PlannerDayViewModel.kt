@@ -13,6 +13,8 @@ import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCa
 import com.example.adobongkangkong.domain.planner.usecase.ComputePlannedDayMacroTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedSeriesUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreateSeriesAndEnsureHorizonUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreatePlannerIouUseCase
+import com.example.adobongkangkong.domain.planner.usecase.DeletePlannerIouUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.EnsurePlannerHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
@@ -22,6 +24,7 @@ import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMeal
 import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.SavePlannedMealAsTemplateUseCase
+import com.example.adobongkangkong.domain.planner.usecase.UpdatePlannerIouUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -69,6 +72,11 @@ class PlannerDayViewModel @Inject constructor(
 
     // TEMP (Phase 1)
     private val createPlannedMealFromTemplate: CreatePlannedMealFromTemplateUseCase,
+
+    // IOUs
+    private val createPlannerIou: CreatePlannerIouUseCase,
+    private val updatePlannerIou: UpdatePlannerIouUseCase,
+    private val deletePlannerIou: DeletePlannerIouUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
@@ -356,8 +364,122 @@ class PlannerDayViewModel @Inject constructor(
                 )
             }
 
+            // ------------------------------------------------------------
+            // IOUs
+            // ------------------------------------------------------------
+
+            PlannerDayEvent.OpenCreateIou -> {
+                openIouEditorCreate()
+            }
+
+            is PlannerDayEvent.OpenEditIou -> {
+                openIouEditorEdit(event.iouId)
+            }
+
+            PlannerDayEvent.DismissIouEditor -> {
+                _state.update { it.copy(iouEditor = null) }
+            }
+
+            is PlannerDayEvent.UpdateIouDescription -> {
+                _state.update { s ->
+                    val ed = s.iouEditor ?: return@update s
+                    s.copy(iouEditor = ed.copy(description = event.value, errorMessage = null))
+                }
+            }
+
+            PlannerDayEvent.SaveIou -> {
+                saveIou()
+            }
+
+            is PlannerDayEvent.DeleteIou -> {
+                deleteIou(event.iouId)
+            }
+
             is PlannerDayEvent.OpenTemplatePicker -> {
                 // Navigation-only; handled by Route/NavHost.
+            }
+        }
+    }
+
+    private fun openIouEditorCreate() {
+        _state.update {
+            it.copy(
+                iouEditor = IouEditorState(
+                    iouId = null,
+                    description = "",
+                    isSaving = false,
+                    errorMessage = null
+                )
+            )
+        }
+    }
+
+    private fun openIouEditorEdit(iouId: Long) {
+        val day = _state.value.day
+        val existing = day?.ious?.firstOrNull { it.id == iouId }
+
+        if (existing == null) {
+            _events.tryEmit(PlannerDayUiEvent.ShowToast("IOU not found."))
+            return
+        }
+
+        _state.update {
+            it.copy(
+                iouEditor = IouEditorState(
+                    iouId = existing.id,
+                    description = existing.description,
+                    isSaving = false,
+                    errorMessage = null
+                )
+            )
+        }
+    }
+
+    private fun saveIou() {
+        val snapshot = _state.value.iouEditor ?: return
+        val desc = snapshot.description.trim()
+        if (desc.isBlank()) {
+            _state.update { s ->
+                val ed = s.iouEditor ?: return@update s
+                s.copy(iouEditor = ed.copy(errorMessage = "Description is required."))
+            }
+            return
+        }
+
+        _state.update { s ->
+            val ed = s.iouEditor ?: return@update s
+            s.copy(iouEditor = ed.copy(isSaving = true, errorMessage = null))
+        }
+
+        val dateIso = _state.value.date.toString()
+        viewModelScope.launch {
+            try {
+                val iouId = snapshot.iouId
+                if (iouId == null) {
+                    createPlannerIou(dateIso = dateIso, description = desc)
+                } else {
+                    updatePlannerIou(iouId = iouId, newDescription = desc)
+                }
+
+                _state.update { it.copy(iouEditor = null) }
+            } catch (t: Throwable) {
+                _state.update { s ->
+                    val ed = s.iouEditor
+                    if (ed == null) s
+                    else s.copy(iouEditor = ed.copy(isSaving = false, errorMessage = t.message ?: "Failed to save IOU"))
+                }
+            }
+        }
+    }
+
+    private fun deleteIou(iouId: Long) {
+        if (iouId <= 0L) return
+
+        viewModelScope.launch {
+            try {
+                deletePlannerIou(iouId)
+            } catch (t: Throwable) {
+                _events.tryEmit(PlannerDayUiEvent.ShowToast(t.message ?: "Failed to delete IOU"))
             }
         }
     }

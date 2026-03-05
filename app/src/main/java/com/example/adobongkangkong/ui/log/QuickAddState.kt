@@ -57,4 +57,10 @@ data class QuickAddState(
     val foundBarcodeDialogFood: Food? = null,
     val foundBarcodeDialogBarcode: String? = null,
     val notFoundBarcodeDialogBarcode: String? = null,
+
+    // IOU (planner narrative placeholder)
+    val isIouDialogOpen: Boolean = false,
+    val iouDescription: String = "",
+    val isSavingIou: Boolean = false,
+    val iouErrorMessage: String? = null,
 )

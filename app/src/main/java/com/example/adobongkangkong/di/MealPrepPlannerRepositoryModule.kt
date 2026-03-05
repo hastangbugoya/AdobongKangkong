@@ -2,8 +2,10 @@ package com.example.adobongkangkong.di
 
 import com.example.adobongkangkong.data.repository.PlannedItemRepositoryImpl
 import com.example.adobongkangkong.data.repository.PlannedMealRepositoryImpl
+import com.example.adobongkangkong.data.repository.PlannerIouRepositoryImpl
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import com.example.adobongkangkong.domain.repository.PlannedMealRepository
+import com.example.adobongkangkong.domain.repository.PlannerIouRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,5 +27,11 @@ abstract class MealPrepPlannerRepositoryModule {
     abstract fun bindPlannedItemRepository(
         impl: PlannedItemRepositoryImpl
     ): PlannedItemRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPlannerIouRepository(
+        impl: PlannerIouRepositoryImpl
+    ): PlannerIouRepository
 
 }

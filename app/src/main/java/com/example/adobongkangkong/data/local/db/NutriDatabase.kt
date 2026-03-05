@@ -32,9 +32,10 @@ import com.example.adobongkangkong.data.local.db.dao.*
         FoodBarcodeEntity::class,
         PlannedSeriesEntity::class,
         PlannedSeriesSlotRuleEntity::class,
-        PlannedSeriesItemEntity::class
+        PlannedSeriesItemEntity::class,
+        PlannerIouEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -63,6 +64,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun debugResetDao(): DebugResetDao
     abstract fun plannedSeriesDao(): PlannedSeriesDao
     abstract fun plannedSeriesItemDao(): PlannedSeriesItemDao
+    abstract fun plannerIouDao(): PlannerIouDao
 
     companion object {
         /**
@@ -220,6 +222,31 @@ abstract class NutriDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_slot_rules_seriesId ON planned_series_slot_rules(seriesId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_slot_rules_seriesId_weekday ON planned_series_slot_rules(seriesId, weekday)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_series_slot_rules_seriesId_weekday_slot ON planned_series_slot_rules(seriesId, weekday, slot)")
+            }
+        }
+
+        /**
+         * v12
+         * - Add planner_ious table to store IOU narrative placeholders.
+         */
+        val MIGRATION_11_12: Migration = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS planner_ious (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        dateIso TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        createdAtEpochMs INTEGER NOT NULL,
+                        updatedAtEpochMs INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planner_ious_dateIso ON planner_ious(dateIso)")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_planner_ious_dateIso_createdAtEpochMs ON planner_ious(dateIso, createdAtEpochMs)"
+                )
             }
         }
     }

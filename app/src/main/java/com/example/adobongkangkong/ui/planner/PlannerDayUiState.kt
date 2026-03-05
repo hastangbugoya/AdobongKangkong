@@ -24,7 +24,10 @@ data class PlannerDayUiState(
     val mealMacroTotals: Map<Long, MacroTotals> = emptyMap(),
 
     /** Macro totals for the entire day (sum of all planned meals/items). */
-    val dayMacroTotals: MacroTotals = MacroTotals()
+    val dayMacroTotals: MacroTotals = MacroTotals(),
+
+    /** IOU editor dialog state (null when closed). */
+    val iouEditor: IouEditorState? = null
 ) {
     val mealsBySlot: Map<MealSlot, List<PlannedMeal>>
         get() {
@@ -33,6 +36,13 @@ data class PlannerDayUiState(
             return MealSlot.entries.associateWith { slot -> actual[slot].orEmpty() }
         }
 }
+
+data class IouEditorState(
+    val iouId: Long? = null,
+    val description: String = "",
+    val isSaving: Boolean = false,
+    val errorMessage: String? = null
+)
 
 data class DuplicateSheetState(
     val sourceMealId: Long,
