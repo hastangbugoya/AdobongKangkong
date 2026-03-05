@@ -22,13 +22,9 @@ class RecipeBatchLookupRepositoryImpl @Inject constructor(
             .map { it.toDomain() }
     }
 
-    override suspend fun getBatchFoodId(batchId: Long): Long? {
-        return recipeBatchDao.getById(batchId)?.batchFoodId
-    }
-
-    override suspend fun getBatchFoodIds(batchIds: Set<Long>): Map<Long, Long> {
-        if (batchIds.isEmpty()) return emptyMap()
-        return recipeBatchDao.getByIds(batchIds.toList())
-            .associate { it.id to it.batchFoodId }
-    }
+override suspend fun getBatchFoodIds(batchIds: Set<Long>): Map<Long, Long> {
+    if (batchIds.isEmpty()) return emptyMap()
+    return recipeBatchDao.getByIds(batchIds.toList())
+        .associate { it.id to it.batchFoodId }
+}
 }

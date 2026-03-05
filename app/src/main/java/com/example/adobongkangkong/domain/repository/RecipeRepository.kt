@@ -31,4 +31,7 @@ interface RecipeRepository {
 
     suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader?
 
+    /** Bulk lookup to avoid N+1 in planner/day aggregation (recipeId -> recipe.foodId). */
+    suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long>
+
 }

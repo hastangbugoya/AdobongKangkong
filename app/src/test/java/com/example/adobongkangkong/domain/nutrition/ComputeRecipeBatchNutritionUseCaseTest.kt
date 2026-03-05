@@ -42,6 +42,15 @@ class ComputeRecipeBatchNutritionUseCaseTest {
 
         override suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader? =
             headerByFoodId.values.firstOrNull { it.recipeId == recipeId }
+
+        override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long> {
+            return recipeIds.associateWith { recipeId ->
+                headerByFoodId.values
+                    .firstOrNull { it.recipeId == recipeId }
+                    ?.foodId
+                    ?: error("Recipe not found: $recipeId")
+            }
+        }
     }
 
     private class FakeSnapshotRepo(

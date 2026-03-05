@@ -232,6 +232,12 @@ class RecipeRepositoryImpl @Inject constructor(
             totalYieldGrams = r.totalYieldGrams
         )
     }
+
+override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long> {
+    if (recipeIds.isEmpty()) return emptyMap()
+    return recipeDao.getByIds(recipeIds.toList())
+        .associate { it.id to it.foodId }
+}
 }
 
 /**

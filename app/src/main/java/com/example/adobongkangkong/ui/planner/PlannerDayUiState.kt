@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.planner
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.planner.model.PlannedDay
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
+import com.example.adobongkangkong.domain.model.MacroTotals
 import java.time.LocalDate
 
 data class PlannerDayUiState(
@@ -17,7 +18,13 @@ data class PlannerDayUiState(
      * One-shot snackbar request for "Removed • Undo".
      * Screen should show it and then notify VM via UndoSnackbarConsumed.
      */
-    val undo: UndoUiState? = null
+    val undo: UndoUiState? = null,
+
+    /** Macro totals per planned meal (mealId -> totals) for the currently loaded day. */
+    val mealMacroTotals: Map<Long, MacroTotals> = emptyMap(),
+
+    /** Macro totals for the entire day (sum of all planned meals/items). */
+    val dayMacroTotals: MacroTotals = MacroTotals()
 ) {
     val mealsBySlot: Map<MealSlot, List<PlannedMeal>>
         get() {

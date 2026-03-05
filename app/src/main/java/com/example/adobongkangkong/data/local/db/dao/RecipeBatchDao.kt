@@ -22,7 +22,6 @@ interface RecipeBatchDao {
     @Query("SELECT * FROM recipe_batches WHERE id IN (:batchIds)")
     suspend fun getByIds(batchIds: List<Long>): List<RecipeBatchEntity>
 
-
     // -------------------------
     // Dependency counts
     // -------------------------

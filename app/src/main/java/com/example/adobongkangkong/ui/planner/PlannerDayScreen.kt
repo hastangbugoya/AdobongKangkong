@@ -48,6 +48,7 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
+import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import java.time.Instant
@@ -55,6 +56,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.round
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -131,6 +133,26 @@ fun PlannerDayScreen(
                 )
             }
 
+// Daily macro totals (best-effort; may be zero if data is missing)
+item {
+    val dayTotals = s.dayMacroTotals
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Day total",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(macrosLine(dayTotals), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
             if (s.errorMessage != null) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
@@ -162,6 +184,7 @@ fun PlannerDayScreen(
                     items(items = meals, key = { it.id }) { meal ->
                         PlannedMealCard(
                             meal = meal,
+                            mealTotals = s.mealMacroTotals[meal.id],
                             isRecurring = meal.seriesId != null,
                             onMakeRecurring = { mealId -> onEvent(PlannerDayEvent.MakeMealRecurring(mealId)) },
                             onRemoveItem = { itemId -> onEvent(PlannerDayEvent.RemovePlannedItem(itemId)) },
@@ -308,6 +331,7 @@ private fun EmptySlotCard(
 @Composable
 private fun PlannedMealCard(
     meal: PlannedMeal,
+    mealTotals: MacroTotals?,
     isRecurring: Boolean,
     onMakeRecurring: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
@@ -346,6 +370,16 @@ private fun PlannedMealCard(
                         Text("Make recurring")
                     }
                 }
+            }
+
+            if (mealTotals != null) {
+                Text(
+                    macrosLine(mealTotals),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(Modifier.height(6.dp))
+            } else {
+                Spacer(Modifier.height(6.dp))
             }
 
             val items = meal.items
@@ -794,4 +828,12 @@ private fun DuplicateMealBottomSheet(
             DatePicker(state = pickerState)
         }
     }
+}
+
+private fun macrosLine(m: MacroTotals): String {
+    val kcal = m.caloriesKcal.roundToInt()
+    val p = m.proteinG.roundToInt()
+    val c = m.carbsG.roundToInt()
+    val f = m.fatG.roundToInt()
+    return "$kcal kcal • P $p • C $c • F $f"
 }

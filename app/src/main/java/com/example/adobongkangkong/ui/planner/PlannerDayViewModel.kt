@@ -10,6 +10,7 @@ import com.example.adobongkangkong.domain.planner.usecase.AddPlannedFoodItemUseC
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedRecipeItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealFromTemplateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ComputePlannedDayMacroTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedSeriesUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreateSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
@@ -44,6 +45,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class PlannerDayViewModel @Inject constructor(
     private val observePlannedDay: ObservePlannedDayUseCase,
+    private val computeDayMacros: ComputePlannedDayMacroTotalsUseCase,
     private val createPlannedMeal: CreatePlannedMealUseCase,
     private val removeEmptyPlannedMeal: RemoveEmptyPlannedMealUseCase,
     private val addPlannedFoodItem: AddPlannedFoodItemUseCase,
@@ -814,11 +816,25 @@ class PlannerDayViewModel @Inject constructor(
                     }
                 }
                 .collectLatest { plannedDay ->
+                    // Compute macro totals for the loaded day (best-effort; never blocks planner rendering).
+                    val meals = plannedDay.mealsBySlot.values.flatten()
+                    val macros = try {
+                        computeDayMacros(meals)
+                    } catch (t: Throwable) {
+                        Log.e("Meow", "PlannerDay> computeDayMacros failed", t)
+                        ComputePlannedDayMacroTotalsUseCase.Output(
+                            mealTotals = emptyMap(),
+                            dayTotals = com.example.adobongkangkong.domain.model.MacroTotals()
+                        )
+                    }
+
                     _state.update {
                         it.copy(
                             isLoading = false,
                             day = plannedDay,
-                            errorMessage = null
+                            errorMessage = null,
+                            mealMacroTotals = macros.mealTotals,
+                            dayMacroTotals = macros.dayTotals
                         )
                     }
                 }
