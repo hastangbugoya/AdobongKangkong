@@ -7,5 +7,5 @@ import java.time.LocalDate
 data class PlannedDay(
     val date: LocalDate,
     val mealsBySlot: Map<MealSlot, List<PlannedMeal>>,
-    val ious: List<PlannerIou> = emptyList()
+    val ious: List<Iou> = emptyList()
 )

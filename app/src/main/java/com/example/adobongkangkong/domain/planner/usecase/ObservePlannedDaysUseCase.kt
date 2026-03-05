@@ -6,15 +6,15 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
-import com.example.adobongkangkong.data.local.db.entity.PlannerIouEntity
+import com.example.adobongkangkong.data.local.db.entity.IouEntity
 import com.example.adobongkangkong.domain.planner.model.PlannedDay
-import com.example.adobongkangkong.domain.planner.model.PlannerIou
+import com.example.adobongkangkong.domain.planner.model.Iou
 import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import com.example.adobongkangkong.domain.repository.PlannedMealRepository
-import com.example.adobongkangkong.domain.repository.PlannerIouRepository
+import com.example.adobongkangkong.domain.repository.IouRepository
 import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
@@ -146,7 +146,7 @@ import kotlinx.coroutines.flow.map
 class ObservePlannedDaysUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
     private val items: PlannedItemRepository,
-    private val ious: PlannerIouRepository,
+    private val ious: IouRepository,
 
     // Title resolution (derived) — no planner schema changes
     private val foodDao: FoodDao,
@@ -227,7 +227,7 @@ class ObservePlannedDaysUseCase @Inject constructor(
 
                     val titleByItemId: Map<Long, String> = resolveItemTitles(rows)
 
-                    val iousByDate: Map<LocalDate, List<PlannerIou>> =
+                    val iousByDate: Map<LocalDate, List<Iou>> =
                         iouEntities
                             .groupBy { LocalDate.parse(it.dateIso) }
                             .mapValues { (_, list) -> list.map { it.toDomainIou() } }
@@ -272,10 +272,10 @@ class ObservePlannedDaysUseCase @Inject constructor(
 
     private data class MealAndIousSeed(
         val mealEntities: List<PlannedMealEntity>,
-        val iouEntities: List<PlannerIouEntity>
+        val iouEntities: List<IouEntity>
     )
 
-    private fun daysFromIousOnly(iouEntities: List<PlannerIouEntity>): List<PlannedDay> {
+    private fun daysFromIousOnly(iouEntities: List<IouEntity>): List<PlannedDay> {
         val iousByDate = iouEntities
             .groupBy { LocalDate.parse(it.dateIso) }
             .toSortedMap()
@@ -290,8 +290,8 @@ class ObservePlannedDaysUseCase @Inject constructor(
         }
     }
 
-    private fun PlannerIouEntity.toDomainIou(): PlannerIou =
-        PlannerIou(
+    private fun IouEntity.toDomainIou(): Iou =
+        Iou(
             id = id,
             description = description,
             createdAt = Instant.ofEpochMilli(createdAtEpochMs),

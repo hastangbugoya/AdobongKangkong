@@ -33,9 +33,9 @@ import com.example.adobongkangkong.data.local.db.dao.*
         PlannedSeriesEntity::class,
         PlannedSeriesSlotRuleEntity::class,
         PlannedSeriesItemEntity::class,
-        PlannerIouEntity::class
+        IouEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -64,7 +64,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun debugResetDao(): DebugResetDao
     abstract fun plannedSeriesDao(): PlannedSeriesDao
     abstract fun plannedSeriesItemDao(): PlannedSeriesItemDao
-    abstract fun plannerIouDao(): PlannerIouDao
+    abstract fun iouDao(): IouDao
 
     companion object {
         /**
@@ -227,13 +227,13 @@ abstract class NutriDatabase : RoomDatabase() {
 
         /**
          * v12
-         * - Add planner_ious table to store IOU narrative placeholders.
+         * - Add ious table to store IOU narrative placeholders.
          */
         val MIGRATION_11_12: Migration = object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
-                    CREATE TABLE IF NOT EXISTS planner_ious (
+                    CREATE TABLE IF NOT EXISTS ious (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         dateIso TEXT NOT NULL,
                         description TEXT NOT NULL,
@@ -243,9 +243,9 @@ abstract class NutriDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
 
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_planner_ious_dateIso ON planner_ious(dateIso)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_ious_dateIso ON ious(dateIso)")
                 db.execSQL(
-                    "CREATE INDEX IF NOT EXISTS index_planner_ious_dateIso_createdAtEpochMs ON planner_ious(dateIso, createdAtEpochMs)"
+                    "CREATE INDEX IF NOT EXISTS index_ious_dateIso_createdAtEpochMs ON ious(dateIso, createdAtEpochMs)"
                 )
             }
         }

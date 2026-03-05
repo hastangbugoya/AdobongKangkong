@@ -15,7 +15,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
-import com.example.adobongkangkong.domain.planner.usecase.CreatePlannerIouUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreateIouUseCase
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -60,7 +60,7 @@ class QuickAddViewModel @Inject constructor(
     private val foodBarcodeRepository: FoodBarcodeRepository,
 
     // IOUs (planner narrative placeholders)
-    private val createPlannerIou: CreatePlannerIouUseCase,
+    private val createPlannerIou: CreateIouUseCase,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")

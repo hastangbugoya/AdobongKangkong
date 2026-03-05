@@ -23,11 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
-import com.example.adobongkangkong.domain.planner.model.PlannerIou
+import com.example.adobongkangkong.domain.planner.model.Iou
 
 @Composable
 fun IouSection(
-    ious: List<PlannerIou>,
+    ious: List<Iou>,
     onEdit: (Long) -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -50,7 +50,7 @@ fun IouSection(
 
 @Composable
 private fun IouRow(
-    iou: PlannerIou,
+    iou: Iou,
     onEdit: (Long) -> Unit,
     onDelete: (Long) -> Unit
 ) {

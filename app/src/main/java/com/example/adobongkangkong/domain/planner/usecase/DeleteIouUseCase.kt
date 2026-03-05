@@ -1,10 +1,10 @@
 package com.example.adobongkangkong.domain.planner.usecase
 
-import com.example.adobongkangkong.domain.repository.PlannerIouRepository
+import com.example.adobongkangkong.domain.repository.IouRepository
 import javax.inject.Inject
 
-class DeletePlannerIouUseCase @Inject constructor(
-    private val ious: PlannerIouRepository
+class DeleteIouUseCase @Inject constructor(
+    private val ious: IouRepository
 ) {
 
     suspend operator fun invoke(iouId: Long) {

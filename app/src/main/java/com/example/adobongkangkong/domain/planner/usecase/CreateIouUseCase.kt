@@ -1,11 +1,11 @@
 package com.example.adobongkangkong.domain.planner.usecase
 
-import com.example.adobongkangkong.data.local.db.entity.PlannerIouEntity
-import com.example.adobongkangkong.domain.repository.PlannerIouRepository
+import com.example.adobongkangkong.data.local.db.entity.IouEntity
+import com.example.adobongkangkong.domain.repository.IouRepository
 import javax.inject.Inject
 
-class CreatePlannerIouUseCase @Inject constructor(
-    private val ious: PlannerIouRepository
+class CreateIouUseCase @Inject constructor(
+    private val ious: IouRepository
 ) {
 
     suspend operator fun invoke(
@@ -17,7 +17,7 @@ class CreatePlannerIouUseCase @Inject constructor(
         require(description.isNotBlank()) { "description must not be blank" }
 
         return ious.insert(
-            PlannerIouEntity(
+            IouEntity(
                 id = 0L,
                 dateIso = dateIso,
                 description = description,

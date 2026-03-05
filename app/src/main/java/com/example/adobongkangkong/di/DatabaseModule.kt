@@ -72,6 +72,6 @@ object DatabaseModule {
         db.plannedSeriesItemDao()
 
     @Provides
-    fun providePlannerIouDao(db: NutriDatabase): PlannerIouDao =
-        db.plannerIouDao()
+    fun provideIouDao(db: NutriDatabase): IouDao =
+        db.iouDao()
 }

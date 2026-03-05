@@ -7,7 +7,7 @@ import java.time.Instant
  *
  * IOUs are narrative-only placeholders and carry no nutrition.
  */
-data class PlannerIou(
+data class Iou(
     val id: Long,
     val description: String,
     val createdAt: Instant,

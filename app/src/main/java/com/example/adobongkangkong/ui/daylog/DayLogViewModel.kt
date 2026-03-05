@@ -3,9 +3,12 @@ package com.example.adobongkangkong.ui.daylog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.domain.model.DailyNutritionTotals
+import com.example.adobongkangkong.domain.planner.usecase.DeleteIouUseCase
 import com.example.adobongkangkong.domain.usecase.DeleteLogEntryUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
+import com.example.adobongkangkong.ui.daylog.model.DayLogIouRow
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
+import com.example.adobongkangkong.ui.daylog.usecase.ObserveDayLogIousUseCase
 import com.example.adobongkangkong.ui.daylog.usecase.ObserveDayLogRowsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +25,10 @@ import javax.inject.Inject
 @HiltViewModel
 class DayLogViewModel @Inject constructor(
     private val observeDayLogRows: ObserveDayLogRowsUseCase,
+    private val observeDayLogIous: ObserveDayLogIousUseCase,
     private val observeDailyTotals: ObserveDailyNutritionTotalsUseCase,
     private val deleteLogEntry: DeleteLogEntryUseCase,
+    private val deletePlannerIou: DeleteIouUseCase,
     private val zoneId: ZoneId
 ) : ViewModel() {
 
@@ -33,6 +38,12 @@ class DayLogViewModel @Inject constructor(
         selectedDate
             .filterNotNull()
             .flatMapLatest { date -> observeDayLogRows(date.toString()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val ious: StateFlow<List<DayLogIouRow>> =
+        selectedDate
+            .filterNotNull()
+            .flatMapLatest { date -> observeDayLogIous(date.toString()) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val totals: StateFlow<DailyNutritionTotals?> =
@@ -48,6 +59,13 @@ class DayLogViewModel @Inject constructor(
     fun deleteEntry(logId: Long) {
         viewModelScope.launch {
             deleteLogEntry(logId)
+            // no manual refresh needed; flows update from Room invalidation
+        }
+    }
+
+    fun deleteIou(iouId: Long) {
+        viewModelScope.launch {
+            deletePlannerIou(iouId)
             // no manual refresh needed; flows update from Room invalidation
         }
     }

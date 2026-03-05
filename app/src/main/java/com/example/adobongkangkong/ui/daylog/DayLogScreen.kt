@@ -9,6 +9,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -18,10 +19,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import java.time.LocalDate
 import com.example.adobongkangkong.R
-
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,7 @@ fun DayLogScreen(
     vm: DayLogViewModel = hiltViewModel()
 ) {
     val entries by vm.entries.collectAsState()
+    val ious by vm.ious.collectAsState()
     val totals by vm.totals.collectAsState()
 
     val delete = onDelete ?: { id -> vm.deleteEntry(id) }
@@ -81,6 +83,27 @@ fun DayLogScreen(
                         onDelete = { delete(row.logId) }
                     )
                     HorizontalDivider()
+                }
+
+                if (ious.isNotEmpty()) {
+                    item(key = "iou_header") {
+                        Text(
+                            text = "IOUs",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+
+                    items(
+                        items = ious,
+                        key = { "iou_${it.iouId}" }
+                    ) { row ->
+                        DayLogIouRowCard(
+                            row = row,
+                            onDelete = { vm.deleteIou(row.iouId) }
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }

@@ -14,13 +14,13 @@ import androidx.room.PrimaryKey
  * - IOUs do NOT contribute to macro totals.
  */
 @Entity(
-    tableName = "planner_ious",
+    tableName = "ious",
     indices = [
         Index(value = ["dateIso"]),
         Index(value = ["dateIso", "createdAtEpochMs"])
     ]
 )
-data class PlannerIouEntity(
+data class IouEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
 

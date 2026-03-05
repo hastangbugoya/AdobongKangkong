@@ -13,8 +13,8 @@ import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCa
 import com.example.adobongkangkong.domain.planner.usecase.ComputePlannedDayMacroTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedSeriesUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreateSeriesAndEnsureHorizonUseCase
-import com.example.adobongkangkong.domain.planner.usecase.CreatePlannerIouUseCase
-import com.example.adobongkangkong.domain.planner.usecase.DeletePlannerIouUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreateIouUseCase
+import com.example.adobongkangkong.domain.planner.usecase.DeleteIouUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.EnsurePlannerHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
@@ -24,7 +24,7 @@ import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMeal
 import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.SavePlannedMealAsTemplateUseCase
-import com.example.adobongkangkong.domain.planner.usecase.UpdatePlannerIouUseCase
+import com.example.adobongkangkong.domain.planner.usecase.UpdateIouUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -74,9 +74,9 @@ class PlannerDayViewModel @Inject constructor(
     private val createPlannedMealFromTemplate: CreatePlannedMealFromTemplateUseCase,
 
     // IOUs
-    private val createPlannerIou: CreatePlannerIouUseCase,
-    private val updatePlannerIou: UpdatePlannerIouUseCase,
-    private val deletePlannerIou: DeletePlannerIouUseCase,
+    private val createPlannerIou: CreateIouUseCase,
+    private val updatePlannerIou: UpdateIouUseCase,
+    private val deletePlannerIou: DeleteIouUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
