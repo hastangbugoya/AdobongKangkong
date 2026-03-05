@@ -9,5 +9,6 @@ data class DayLogRow(
     val caloriesKcal: Double?,
     val proteinG: Double?,
     val carbsG: Double?,
-    val fatG: Double?
+    val fatG: Double?,
+    val bannerFoodId: Long? = null
 )

@@ -14,11 +14,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
 import com.example.adobongkangkong.ui.format.toPrettyTime
 import kotlin.math.roundToInt
@@ -28,55 +30,65 @@ fun DayLogRowCard(
     row: DayLogRow,
     onDelete: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        tonalElevation = 1.dp,
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Row(
+    val cardContent: @Composable () -> Unit = {
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            tonalElevation = 1.dp,
+            shape = MaterialTheme.shapes.medium,
+            color = if (row.bannerFoodId != null) Color.Transparent else MaterialTheme.colorScheme.surface
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = row.itemName,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = row.itemName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-                Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(4.dp))
 
-                Text(
-                    text = "${row.timestamp.toPrettyTime()} • ${row.caloriesKcal?.roundToInt() ?: "0"} kcal",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    Text(
+                        text = "${row.timestamp.toPrettyTime()} • ${row.caloriesKcal?.roundToInt() ?: "0"} kcal",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(4.dp))
 
-                Text(
-                    text = /*"Cal ${row.caloriesKcal?.roundToInt() ?: "0"}  " +*/
+                    Text(
+                        text =
                             "Protein ${row.proteinG?.format1() ?: "0.0"}g  " +
-                            "Carbs ${row.carbsG?.format1() ?: "0.0"}g  " +
-                            "Fat ${row.fatG?.format1() ?: "0,0"}g",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                                "Carbs ${row.carbsG?.format1() ?: "0.0"}g  " +
+                                "Fat ${row.fatG?.format1() ?: "0.0"}g",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            IconButton(onClick = onDelete) {
-                Icon(
-                    painter = painterResource(R.drawable.trash),
-                    contentDescription = "Delete log"
-                )
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        painter = painterResource(R.drawable.trash),
+                        contentDescription = "Delete log"
+                    )
+                }
             }
         }
+    }
+
+    val bannerFoodId = row.bannerFoodId
+    if (bannerFoodId != null) {
+        FoodBannerCardBackground(foodId = bannerFoodId) { cardContent() }
+    } else {
+        cardContent()
     }
 }
 
