@@ -2,8 +2,10 @@ package com.example.adobongkangkong.di
 
 import com.example.adobongkangkong.data.repository.MealTemplateItemRepositoryImpl
 import com.example.adobongkangkong.data.repository.MealTemplateRepositoryImpl
+import com.example.adobongkangkong.data.repository.MealTemplateWriterRepositoryImpl
 import com.example.adobongkangkong.domain.repository.MealTemplateItemRepository
 import com.example.adobongkangkong.domain.repository.MealTemplateRepository
+import com.example.adobongkangkong.domain.repository.MealTemplateWriterRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -23,4 +25,9 @@ abstract class MealTemplateRepositoryModule {
     abstract fun bindMealTemplateItemRepository(
         impl: MealTemplateItemRepositoryImpl
     ): MealTemplateItemRepository
+
+    @Binds @Singleton
+    abstract fun bindMealTemplateWriterRepository(
+        impl: MealTemplateWriterRepositoryImpl
+    ): MealTemplateWriterRepository
 }
