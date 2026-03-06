@@ -12,8 +12,10 @@ data class RecipeIngredientUi(
     val servings: Double?,
     /** Human-readable serving unit label (e.g., "can", "cup"). Optional for legacy rows. */
     val servingUnitLabel: String? = null,
-    /** Convenience display: servings converted to grams using grams-per-serving, if available. */
+    /** Convenience display weight used by the recipe UI. */
     val grams: Double? = null,
+    /** True when the displayed grams were approximated using 1 mL ≈ 1 g. */
+    val isApproximateWeight: Boolean = false,
 
     /** What the user actually entered (for reminder + edit UX). */
     val enteredAmount: Double? = null,

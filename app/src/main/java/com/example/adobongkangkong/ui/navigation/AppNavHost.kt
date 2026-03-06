@@ -445,6 +445,14 @@ composable(route = NavRoutes.Foods.pickFood) {
                 onOpenPlannedMealEditor = { mealId ->
                     navController.navigate(NavRoutes.Planner.plannedMealEditor(mealId))
                 },
+                onOpenNewPlannedMealEditor = { pickedDateIso, slot ->
+                    navController.navigate(
+                        NavRoutes.Planner.plannedMealEditorNew(
+                            dateIso = pickedDateIso,
+                            slot = slot.name
+                        )
+                    )
+                },
                 onOpenTemplatePicker = { slot ->
                     navController.navigate(
                         NavRoutes.Planner.templatePicker(
@@ -541,6 +549,49 @@ composable(route = NavRoutes.Foods.pickFood) {
             }
 
 com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
+                contract = vm,
+                onBack = { navController.popBackStack() },
+                onRequestAddFood = {
+                    navController.navigate(NavRoutes.Foods.pickFood)
+                }
+            )
+        }
+
+
+        composable(
+            route = NavRoutes.Planner.plannedMealEditorNew,
+            arguments = listOf(
+                navArgument("dateIso") { type = NavType.StringType },
+                navArgument("slot") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val dateIso = backStackEntry.arguments?.getString("dateIso").orEmpty()
+            val slotName = backStackEntry.arguments?.getString("slot").orEmpty()
+
+            val vm: com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel =
+                androidx.hilt.navigation.compose.hiltViewModel()
+
+            androidx.compose.runtime.LaunchedEffect(dateIso, slotName) {
+                if (dateIso.isNotBlank() && slotName.isNotBlank()) {
+                    runCatching {
+                        com.example.adobongkangkong.data.local.db.entity.MealSlot.valueOf(slotName)
+                    }.getOrNull()?.let { slot ->
+                        vm.startNewPlannedMeal(dateIso = dateIso, slot = slot)
+                    }
+                }
+            }
+
+            val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
+            androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
+                pickedFoodId.collect { id ->
+                    if (id != null && id > 0L) {
+                        vm.addFood(id)
+                        backStackEntry.savedStateHandle[KEY_FOOD_PICK_FOOD_ID] = null
+                    }
+                }
+            }
+
+            com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
                 contract = vm,
                 onBack = { navController.popBackStack() },
                 onRequestAddFood = {

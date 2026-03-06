@@ -98,6 +98,9 @@ object NavRoutes {
 
         private const val ARG_DATE_ISO = "dateIso"
         private const val ARG_SLOT = "slot"
+        const val plannedMealEditorNew: String = "planner/mealEditor/new/{$ARG_DATE_ISO}?$ARG_SLOT={$ARG_SLOT}"
+        fun plannedMealEditorNew(dateIso: String, slot: String): String =
+            "planner/mealEditor/new/$dateIso?$ARG_SLOT=$slot"
 
         // Template Picker
         const val templatePicker: String = "planner/templatePicker/{$ARG_DATE_ISO}?$ARG_SLOT={$ARG_SLOT}"

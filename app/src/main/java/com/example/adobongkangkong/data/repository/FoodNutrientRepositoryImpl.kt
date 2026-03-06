@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.data.repository
 
+import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
 import com.example.adobongkangkong.data.local.db.entity.BasisType
@@ -14,6 +15,7 @@ import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import javax.inject.Inject
 
 class FoodNutrientRepositoryImpl @Inject constructor(
+    private val foodDao: FoodDao,
     private val foodNutrientDao: FoodNutrientDao,
     private val nutrientDao: NutrientDao
 ) : FoodNutrientRepository {
@@ -23,8 +25,6 @@ class FoodNutrientRepositoryImpl @Inject constructor(
     ): RecipeMacroPreview {
         if (ingredients.isEmpty()) return RecipeMacroPreview()
 
-        // Resolve macro nutrient IDs once per call (fast enough for v1).
-        // If you want, we can cache these later.
         val caloriesId = nutrientDao.getIdByCode(NutrientCodes.CALORIES_KCAL)
         val proteinId = nutrientDao.getIdByCode(NutrientCodes.PROTEIN_G)
         val carbsId = nutrientDao.getIdByCode(NutrientCodes.CARBS_G)
@@ -38,26 +38,40 @@ class FoodNutrientRepositoryImpl @Inject constructor(
         for ((foodId, servings) in ingredients) {
             if (servings <= 0.0) continue
 
-            // You already have this DAO method. :contentReference[oaicite:2]{index=2}
+            val food = foodDao.getById(foodId) ?: continue
             val nutrients = foodNutrientDao.getForFood(foodId)
 
-            fun amountPerGramFor(nutrientId: Long?): Double {
+            val gramsPerServing = food.gramsPerServingUnit
+                ?: food.servingUnit.asG?.let { asG -> food.servingSize * asG }
+            val mlPerServing = food.mlPerServingUnit
+                ?: food.servingUnit.asMl?.let { asMl -> food.servingSize * asMl }
+
+            fun scaledAmountFor(nutrientId: Long?): Double {
                 if (nutrientId == null) return 0.0
 
                 val row = nutrients.firstOrNull { it.nutrientId == nutrientId } ?: return 0.0
 
                 return when (row.basisType) {
-                    BasisType.PER_100G,
-                    BasisType.PER_100ML -> row.nutrientAmountPerBasis / 100.0
-                    else -> row.nutrientAmountPerBasis
+                    BasisType.PER_100G -> {
+                        val grams = gramsPerServing ?: return 0.0
+                        row.nutrientAmountPerBasis * ((servings * grams) / 100.0)
+                    }
+
+                    BasisType.PER_100ML -> {
+                        val ml = mlPerServing ?: return 0.0
+                        row.nutrientAmountPerBasis * ((servings * ml) / 100.0)
+                    }
+
+                    BasisType.USDA_REPORTED_SERVING -> {
+                        row.nutrientAmountPerBasis * servings
+                    }
                 }
             }
 
-
-            totalCalories += amountPerGramFor(caloriesId) * servings
-            totalProtein += amountPerGramFor(proteinId) * servings
-            totalCarbs += amountPerGramFor(carbsId) * servings
-            totalFat += amountPerGramFor(fatId) * servings
+            totalCalories += scaledAmountFor(caloriesId)
+            totalProtein += scaledAmountFor(proteinId)
+            totalCarbs += scaledAmountFor(carbsId)
+            totalFat += scaledAmountFor(fatId)
         }
 
         return RecipeMacroPreview(

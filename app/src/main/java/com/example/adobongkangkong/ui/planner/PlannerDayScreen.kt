@@ -196,16 +196,6 @@ item {
                     }
                 }
             }
-
-            // IOUs (narrative-only; do not affect macros)
-            item {
-                IouSection(
-                    ious = s.day?.ious.orEmpty(),
-                    onEdit = { id -> onEvent(PlannerDayEvent.OpenEditIou(id)) },
-                    onDelete = { id -> onEvent(PlannerDayEvent.DeleteIou(id)) }
-                )
-            }
-
             item { Spacer(Modifier.height(24.dp)) }
 
             // TEMP DEBUG: create a sample recurring series (remove later)
@@ -222,16 +212,6 @@ item {
 
             item { Spacer(Modifier.height(24.dp)) }
         }
-    }
-
-    val iouEditor = s.iouEditor
-    if (iouEditor != null) {
-        IouEditorDialog(
-            state = iouEditor,
-            onDismiss = { onEvent(PlannerDayEvent.DismissIouEditor) },
-            onDescriptionChange = { onEvent(PlannerDayEvent.UpdateIouDescription(it)) },
-            onSave = { onEvent(PlannerDayEvent.SaveIou) }
-        )
     }
 
     // NEW: Slot header "+ Add" chooser.
@@ -256,6 +236,7 @@ item {
                         addOptionsSlot = null
                         onEvent(PlannerDayEvent.OpenMealPlanner(openSlot))
                     },
+                    enabled = openSlot != MealSlot.CUSTOM,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("New empty meal")

@@ -65,7 +65,7 @@ fun MealEditorScreen(
     }
 
     val title = when (state.mode) {
-        MealEditorMode.PLANNED -> "Edit Planned Meal"
+        MealEditorMode.PLANNED -> if (state.mealId == null) "New Planned Meal" else "Edit Planned Meal"
         MealEditorMode.TEMPLATE -> "Edit Meal Template"
     }
 

@@ -5,6 +5,7 @@ import com.example.adobongkangkong.domain.recipes.Recipe
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionResult
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
 import com.example.adobongkangkong.domain.recipes.nutrientsForGrams
+import com.example.adobongkangkong.domain.recipes.nutrientsForMilliliters
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -179,11 +180,6 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
         // totals for entire recipe batch
         val totals = lines.fold(NutrientMap.EMPTY) { acc, line ->
             val foodId = line.ingredientFoodId
-            // ⚠️ Default null servings to 1.0.
-            // UI layer allows nullable servings during editing, but the domain draft
-            // requires a non-null Double for nutrition scaling and planner expansion.
-            // We intentionally default to 1.0 (NOT 0.0) to preserve recipe math integrity
-            // and make unexpected null states visible in the UI.
             val servings = line.ingredientServings ?: 1.0
 
             if (servings <= 0.0) {
@@ -197,19 +193,34 @@ class ComputeRecipeBatchNutritionUseCase @Inject constructor(
                 return@fold acc
             }
 
-            val gpsu = snapshot.gramsPerServingUnit
-            if (gpsu == null || gpsu <= 0.0) {
-                warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
-                return@fold acc
-            }
+            val gramsPerServingUnit = snapshot.gramsPerServingUnit
+            val mlPerServingUnit = snapshot.mlPerServingUnit
 
-            if (snapshot.nutrientsPerGram == null) {
-                warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
-                return@fold acc
-            }
+            when {
+                gramsPerServingUnit != null && gramsPerServingUnit > 0.0 -> {
+                    if (snapshot.nutrientsPerGram == null) {
+                        warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
+                        return@fold acc
+                    }
+                    val grams = servings * gramsPerServingUnit
+                    acc + snapshot.nutrientsForGrams(grams)
+                }
 
-            val grams = servings * gpsu
-            acc + snapshot.nutrientsForGrams(grams)
+                mlPerServingUnit != null && mlPerServingUnit > 0.0 -> {
+                    if (snapshot.nutrientsPerMilliliter == null) {
+                        warnings += RecipeNutritionWarning.MissingNutrientsPerMilliliter(foodId)
+                        return@fold acc
+                    }
+                    val milliliters = servings * mlPerServingUnit
+                    acc + snapshot.nutrientsForMilliliters(milliliters)
+                }
+
+                else -> {
+                    warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
+                    warnings += RecipeNutritionWarning.MissingMlPerServing(foodId)
+                    acc
+                }
+            }
         }
 
         // per-serving

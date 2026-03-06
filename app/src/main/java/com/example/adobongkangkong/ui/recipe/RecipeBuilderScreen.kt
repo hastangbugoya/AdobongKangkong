@@ -83,24 +83,6 @@ import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import androidx.compose.material3.CircularProgressIndicator
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 
-/**
- * Recipe builder / editor screen.
- *
- * ## Important architecture points
- *
- * ### Point-of-use enforcement (data integrity)
- * The importer may allow foods with missing grams-per-serving (nullable). That’s OK.
- * We enforce correctness **right when the user tries to use the food by servings**
- * (adding an ingredient in the recipe builder).
- *
- * The ViewModel signals this condition by setting [RecipeBuilderState.blockingSheet].
- * The UI displays a modal blocking sheet that offers a primary action to edit the food.
- *
- * ### Navigation request pattern (Compose-safe)
- * The ViewModel does NOT navigate directly. Instead it sets a one-shot
- * [RecipeBuilderState.navigateToEditFoodId]. The UI consumes it via [LaunchedEffect],
- * calls [onEditFood], then tells the VM the navigation has been handled so it won’t re-trigger.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipeBuilderScreen(
@@ -134,29 +116,21 @@ fun RecipeBuilderScreen(
     val bringAddIntoView = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
 
-    // --------------------------------------------------------------------------
-    // Deterministic scroll: when a food is picked, bring the "Picked" section into view.
     LaunchedEffect(state.pickedFood?.id) {
         if (state.pickedFood != null) {
-            // Wait for LazyColumn to insert the conditional "Picked" item.
             delay(16)
-
-            // Compute the index of the "Picked" item based on current list structure.
             var idx = 0
-            idx += 1 // name
-            idx += 1 // servings yield
+            idx += 1
+            idx += 1
             if (state.errorMessage != null) idx += 1
-            idx += 1 // spacer
-            idx += 1 // "Add ingredient" title
-            idx += 1 // search field
-            if (state.results.isNotEmpty()) idx += 1 // results list
+            idx += 1
+            idx += 1
+            idx += 1
+            if (state.results.isNotEmpty()) idx += 1
 
-            // Nudge a bit so the input area (Amount/Grams/Add ingredient) is actually visible.
             delay(16)
             listState.animateScrollBy(with(density) { 220.dp.toPx() })
 
-            // If the keyboard is showing, nudge down a bit so the bottom of SelectedFoodPanel
-            // (especially the "Add ingredient" button) sits above the IME.
             if (imeBottomPx > 0) {
                 delay(16)
                 listState.animateScrollBy(with(density) { 180.dp.toPx() })
@@ -166,19 +140,16 @@ fun RecipeBuilderScreen(
         }
     }
 
-    // --- Edit-mode load -------------------------------------------------------
     LaunchedEffect(editFoodId) {
         vm.loadForEdit(editFoodId)
     }
 
-    // --- One-shot navigation request -----------------------------------------
     LaunchedEffect(state.navigateToEditFoodId) {
         val id = state.navigateToEditFoodId ?: return@LaunchedEffect
         onEditFood(id)
         vm.onEditFoodNavigationHandled()
     }
 
-    // --- Blocking sheet UI ----------------------------------------------------
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     state.blockingSheet?.let { sheetModel ->
         ModalBottomSheet(
@@ -194,7 +165,6 @@ fun RecipeBuilderScreen(
 
     val canSave = !state.isSaving
 
-    // --- Screen UI ------------------------------------------------------------
     Scaffold(
         topBar = {
             TopAppBar(
@@ -210,7 +180,6 @@ fun RecipeBuilderScreen(
             )
         },
         bottomBar = {
-            // Sticky save so it's always reachable when font is large / screen is short.
             Button(
                 onClick = { vm.save(onDone = onBack) },
                 enabled = canSave,
@@ -238,7 +207,7 @@ fun RecipeBuilderScreen(
         ) {
             item {
                 val context = LocalContext.current
-                val bannerOwnerId =editFoodId
+                val bannerOwnerId = editFoodId
                 val canCaptureBanner = bannerOwnerId != null
 
                 val bannerFile = remember(bannerOwnerId) {
@@ -247,7 +216,6 @@ fun RecipeBuilderScreen(
 
                 val bannerBitmapState = if (canCaptureBanner) {
                     val file = bannerFile!!
-
                     produceState<android.graphics.Bitmap?>(
                         initialValue = null,
                         key1 = bannerOwnerId,
@@ -377,7 +345,6 @@ fun RecipeBuilderScreen(
                 }
             }
             item { Spacer(Modifier.height(4.dp)) }
-            // Ingredients list
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Ingredients", style = MaterialTheme.typography.titleMedium) }
             item {
@@ -388,7 +355,7 @@ fun RecipeBuilderScreen(
                         state.ingredients.forEachIndexed { index, ing ->
                             Column {
                                 FoodBannerCardBackground(
-                                    foodId = ing.foodId, // make sure Ingredient has this; otherwise pass null/0 and it will fallback
+                                    foodId = ing.foodId,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Row(
@@ -401,7 +368,6 @@ fun RecipeBuilderScreen(
                                             modifier = Modifier.weight(1f),
                                             verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
-                                            // Primary: food name
                                             Text(
                                                 text = ing.foodName,
                                                 style = MaterialTheme.typography.bodyMedium,
@@ -409,7 +375,6 @@ fun RecipeBuilderScreen(
                                                 overflow = TextOverflow.Ellipsis
                                             )
 
-                                            // Secondary: amount + grams
                                             val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
                                             val amountText = if (unitLabel.isNotBlank()) {
                                                 "${"%,.2f".format(ing.servings)} $unitLabel"
@@ -417,7 +382,8 @@ fun RecipeBuilderScreen(
                                                 "${"%,.2f".format(ing.servings)} servings"
                                             }
                                             val gramsText = ing.grams?.let { g ->
-                                                " • ≈ ${"%,.0f".format(g)} g"
+                                                val prefix = if (ing.isApproximateWeight) " • ≈ " else " • "
+                                                prefix + "%,.0f".format(g) + " g"
                                             }.orEmpty()
 
                                             Text(
@@ -427,7 +393,6 @@ fun RecipeBuilderScreen(
                                                 maxLines = 1
                                             )
 
-                                            // Tertiary: entered-as hint
                                             val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
                                             if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
                                                 Text(
@@ -458,13 +423,10 @@ fun RecipeBuilderScreen(
                                 )
                             }
                         }
-
-
                     }
                 }
             }
             item { Spacer(Modifier.height(4.dp)) }
-            // Query
             item { Text("Add ingredient", style = MaterialTheme.typography.titleMedium) }
             item {
                 OutlinedTextField(
@@ -496,9 +458,6 @@ fun RecipeBuilderScreen(
             }
             state.pickedFood?.let { pickedFood ->
                 item {
-                    // ------------------------------------------------------------------
-                    // IDENTICAL steps to QuickAddBottomSheet (SelectedFoodPanel)
-                    // ------------------------------------------------------------------
                     val gramsPerServingUnit = pickedFood.gramsPerServingUnitResolved()
                     var inputUnit by rememberSaveable(pickedFood.id) { mutableStateOf(ServingUnit.G) }
                     var inputAmount by rememberSaveable(pickedFood.id) { mutableStateOf<Double?>(null) }
@@ -511,7 +470,6 @@ fun RecipeBuilderScreen(
                         mutableStateOf(gramsPerServingUnit?.let { g -> state.pickedServings * g })
                     }
 
-                    // Keep derived fields synced whenever canonical servings changes (same behavior as QuickAdd VM).
                     LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServingUnit) {
                         servingUnitAmount = state.pickedServings * pickedFood.servingSize
                         gramsAmount = gramsPerServingUnit?.let { g -> state.pickedServings * g }
@@ -522,7 +480,6 @@ fun RecipeBuilderScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(shape)
-//                            .background(MaterialTheme.colorScheme.surfaceVariant, shape)
                             .border(1.dp, MaterialTheme.colorScheme.primary, shape)
                             .padding(12.dp)
                     ) {
@@ -535,9 +492,7 @@ fun RecipeBuilderScreen(
                             inputAmount = inputAmount,
                             errorMessage = state.errorMessage,
                             onBack = vm::clearSelection,
-                            onServingsChanged = { s ->
-                                vm.onServingsChanged(s)
-                            },
+                            onServingsChanged = { s -> vm.onServingsChanged(s) },
                             onServingUnitAmountChanged = { amt ->
                                 servingUnitAmount = amt
                                 vm.onServingUnitAmountChanged(amt)
@@ -554,9 +509,7 @@ fun RecipeBuilderScreen(
                                 inputAmount = amt
                                 vm.onInputAmountChanged(amt)
                             },
-                            onPackage = { mult ->
-                                vm.onPackageClicked(mult)
-                            },
+                            onPackage = { mult -> vm.onPackageClicked(mult) },
                             onEditFoodInEditor = { onEditFood(pickedFood.id) },
                             primaryButtonLabel = "Add ingredient",
                             onPrimaryAction = vm::addPickedIngredient
@@ -569,7 +522,6 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
-            // Nutrients Preview
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Preview", style = MaterialTheme.typography.titleMedium) }
             item {
@@ -584,16 +536,11 @@ fun RecipeBuilderScreen(
                 val numberColWidth = 88.dp
 
                 Column {
-
-                    // Header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "",
-                            modifier = Modifier.weight(1f)
-                        )
+                        Text("", modifier = Modifier.weight(1f))
                         Text(
                             "batch",
                             style = MaterialTheme.typography.bodySmall,
@@ -617,10 +564,7 @@ fun RecipeBuilderScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                label,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Text(label, modifier = Modifier.weight(1f))
                             Text(
                                 batch,
                                 textAlign = TextAlign.End,
@@ -636,7 +580,7 @@ fun RecipeBuilderScreen(
                     }
 
                     RowItem(
-                        "Ingredient weight (g)",
+                        "Approx. ingredient weight (g)",
                         fmt0(ingredientTotalGrams),
                         fmt0(perServing(ingredientTotalGrams))
                     )
@@ -696,10 +640,8 @@ fun RecipeBuilderScreen(
                 }
             }
 
-
             item {
                 Text("State", style = MaterialTheme.typography.bodyMedium)
-
                 Divider(
                     modifier = Modifier.padding(start = 0.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
@@ -739,7 +681,6 @@ fun RecipeBuilderScreen(
             }
         )
     }
-
 }
 
 

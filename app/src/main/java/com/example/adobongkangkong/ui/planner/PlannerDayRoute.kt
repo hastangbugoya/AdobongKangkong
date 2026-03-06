@@ -14,6 +14,7 @@ fun PlannerDayRoute(
     onBack: () -> Unit,
     onPickDate: (LocalDate) -> Unit,
     onOpenPlannedMealEditor: (Long) -> Unit,
+    onOpenNewPlannedMealEditor: (dateIso: String, slot: MealSlot) -> Unit,
     onOpenTemplatePicker: (slot: MealSlot?) -> Unit,
     templatePick: Pair<Long, MealSlot?>?,
     onTemplatePickConsumed: () -> Unit,
@@ -72,6 +73,12 @@ fun PlannerDayRoute(
 
                 is PlannerDayEvent.OpenTemplatePicker ->
                     onOpenTemplatePicker(event.slot)
+
+                is PlannerDayEvent.OpenMealPlanner ->
+                    onOpenNewPlannedMealEditor(
+                        viewModel.state.value.date.toString(),
+                        event.slot
+                    )
 
                 is PlannerDayEvent.OpenMeal -> {
                     // no-op for now

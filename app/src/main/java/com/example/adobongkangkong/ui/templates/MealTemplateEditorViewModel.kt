@@ -171,13 +171,19 @@ class MealTemplateEditorViewModel @Inject constructor(
                 templateItems.deleteItemsForTemplate(templateId)
 
                 _state.value.items.forEachIndexed { index, ui ->
+                    val sourceType = if (foods.getById(ui.foodId)?.isRecipe == true) {
+                        PlannedItemSource.RECIPE
+                    } else {
+                        PlannedItemSource.FOOD
+                    }
+
                     templateItems.insert(
                         MealTemplateItemEntity(
                             id = 0L,
                             templateId = templateId,
-                            type = PlannedItemSource.FOOD,
-                            refId = ui.foodId, // FOOD => refId = foodId
-                            grams = ui.grams,
+                            type = sourceType,
+                            refId = ui.foodId,
+                            grams = if (sourceType == PlannedItemSource.RECIPE) null else ui.grams,
                             servings = ui.servings.toDoubleOrNull(),
                             sortOrder = index
                         )

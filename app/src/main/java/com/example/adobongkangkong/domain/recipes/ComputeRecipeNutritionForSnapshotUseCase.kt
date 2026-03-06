@@ -158,11 +158,6 @@ class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
 
         val totals = recipe.ingredients.fold(NutrientMap.Companion.EMPTY) { acc, ingredient ->
             val foodId = ingredient.foodId
-            // ⚠️ Default null servings to 1.0.
-            // UI layer allows nullable servings during editing, but the domain draft
-            // requires a non-null Double for nutrition scaling and planner expansion.
-            // We intentionally default to 1.0 (NOT 0.0) to preserve recipe math integrity
-            // and make unexpected null states visible in the UI.
             val servings = ingredient.servings ?: 1.0
 
             if (servings <= 0.0) {
@@ -177,19 +172,35 @@ class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
             }
 
             val gramsPerServingUnit = snapshot.gramsPerServingUnit
-            if (gramsPerServingUnit == null || gramsPerServingUnit <= 0.0) {
-                warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
-                return@fold acc
-            }
-
+            val mlPerServingUnit = snapshot.mlPerServingUnit
             val nutrientsPerGram = snapshot.nutrientsPerGram
-            if (nutrientsPerGram == null) {
-                warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
-                return@fold acc
-            }
+            val nutrientsPerMilliliter = snapshot.nutrientsPerMilliliter
 
-            val grams = servings * gramsPerServingUnit
-            acc + nutrientsPerGram.scaledBy(grams)
+            when {
+                gramsPerServingUnit != null && gramsPerServingUnit > 0.0 -> {
+                    if (nutrientsPerGram == null) {
+                        warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
+                        return@fold acc
+                    }
+                    val grams = servings * gramsPerServingUnit
+                    acc + snapshot.nutrientsForGrams(grams)
+                }
+
+                mlPerServingUnit != null && mlPerServingUnit > 0.0 -> {
+                    if (nutrientsPerMilliliter == null) {
+                        warnings += RecipeNutritionWarning.MissingNutrientsPerMilliliter(foodId)
+                        return@fold acc
+                    }
+                    val milliliters = servings * mlPerServingUnit
+                    acc + snapshot.nutrientsForMilliliters(milliliters)
+                }
+
+                else -> {
+                    warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
+                    warnings += RecipeNutritionWarning.MissingMlPerServing(foodId)
+                    acc
+                }
+            }
         }
 
         val servingsYield = recipe.servingsYield

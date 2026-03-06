@@ -11,7 +11,9 @@ sealed interface RecipeNutritionWarning {
     data class MissingFood(val foodId: Long) : RecipeNutritionWarning
 
     data class MissingGramsPerServing(val foodId: Long) : RecipeNutritionWarning
+    data class MissingMlPerServing(val foodId: Long) : RecipeNutritionWarning
     data class MissingNutrientsPerGram(val foodId: Long) : RecipeNutritionWarning
+    data class MissingNutrientsPerMilliliter(val foodId: Long) : RecipeNutritionWarning
 
     data class IngredientServingsNonPositive(
         val foodId: Long,
