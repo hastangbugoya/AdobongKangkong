@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.planner
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -186,6 +187,7 @@ item {
                             meal = meal,
                             mealTotals = s.mealMacroTotals[meal.id],
                             isRecurring = meal.seriesId != null,
+                            onOpenMeal = { mealId -> onEvent(PlannerDayEvent.OpenMeal(mealId)) },
                             onMakeRecurring = { mealId -> onEvent(PlannerDayEvent.MakeMealRecurring(mealId)) },
                             onRemoveItem = { itemId -> onEvent(PlannerDayEvent.RemovePlannedItem(itemId)) },
                             onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) },
@@ -334,6 +336,7 @@ private fun PlannedMealCard(
     meal: PlannedMeal,
     mealTotals: MacroTotals?,
     isRecurring: Boolean,
+    onOpenMeal: (Long) -> Unit,
     onMakeRecurring: (Long) -> Unit,
     onRemoveItem: (Long) -> Unit,
     onRemoveEmptyMeal: (Long) -> Unit,
@@ -343,7 +346,11 @@ private fun PlannedMealCard(
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenMeal(meal.id) }
+    ) {
         Column(modifier = Modifier.padding(12.dp)) {
 
             // Header row: title + recurring badge + actions

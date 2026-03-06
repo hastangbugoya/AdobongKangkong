@@ -30,6 +30,15 @@ fun MealEditorHeader(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+        state.warnings.forEach { warning ->
+            Text(
+                text = warning,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
             value = state.name,

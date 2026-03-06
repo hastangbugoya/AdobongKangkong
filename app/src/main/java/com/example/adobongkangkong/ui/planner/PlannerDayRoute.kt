@@ -81,7 +81,7 @@ fun PlannerDayRoute(
                     )
 
                 is PlannerDayEvent.OpenMeal -> {
-                    // no-op for now
+                    onOpenPlannedMealEditor(event.mealId)
                 }
 
                 // Everything else is planner logic -> ViewModel

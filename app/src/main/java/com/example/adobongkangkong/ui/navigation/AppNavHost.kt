@@ -536,7 +536,16 @@ composable(route = NavRoutes.Foods.pickFood) {
                 if (mealId > 0L) vm.setMealId(mealId)
             }
 
-            
+            androidx.compose.runtime.LaunchedEffect(vm) {
+                vm.effects.collect { effect ->
+                    when (effect) {
+                        com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel.Effect.Saved -> {
+                            navController.popBackStack()
+                        }
+                    }
+                }
+            }
+
             // Returned from food picker -> add to meal and consume.
             val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
             androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
@@ -577,6 +586,16 @@ com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
                         com.example.adobongkangkong.data.local.db.entity.MealSlot.valueOf(slotName)
                     }.getOrNull()?.let { slot ->
                         vm.startNewPlannedMeal(dateIso = dateIso, slot = slot)
+                    }
+                }
+            }
+
+            androidx.compose.runtime.LaunchedEffect(vm) {
+                vm.effects.collect { effect ->
+                    when (effect) {
+                        com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel.Effect.Saved -> {
+                            navController.popBackStack()
+                        }
                     }
                 }
             }

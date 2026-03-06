@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
+import com.example.adobongkangkong.data.local.db.entity.PlannedOccurrenceStatus
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
@@ -13,8 +14,11 @@ import com.example.adobongkangkong.ui.meal.editor.MealEditorContract
 import com.example.adobongkangkong.ui.meal.editor.MealEditorMode
 import com.example.adobongkangkong.ui.meal.editor.MealEditorUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -56,6 +60,13 @@ class PlannedMealEditorViewModel @Inject constructor(
     )
 
     override val state: StateFlow<MealEditorUiState> = _state.asStateFlow()
+
+    private val _effects = MutableSharedFlow<Effect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<Effect> = _effects.asSharedFlow()
+
+    sealed interface Effect {
+        data object Saved : Effect
+    }
 
     // Draft-only fields for NEW planned meals (no DB row until Save).
     private var draftDateIso: String? = null
@@ -104,7 +115,8 @@ class PlannedMealEditorViewModel @Inject constructor(
             name = defaultNameOverride(slot, dateIso),
             items = emptyList(),
             errorMessage = null,
-            isDirty = false
+            isDirty = false,
+            warnings = emptyList()
         )
     }
 
@@ -150,7 +162,8 @@ class PlannedMealEditorViewModel @Inject constructor(
                         name = resolvedName,
                         items = uiItems,
                         errorMessage = null,
-                        isDirty = false
+                        isDirty = false,
+                        warnings = buildWarnings(meal)
                     )
                 }
             } catch (t: Throwable) {
@@ -270,8 +283,17 @@ class PlannedMealEditorViewModel @Inject constructor(
                         val meal = plannedMeals.getById(existingMealId)
                             ?: throw IllegalStateException("Cannot save: meal not found.")
                         val nameOverride = resolveNonNullNameOverrideForExisting(meal)
-                        if (meal.nameOverride != nameOverride) {
-                            plannedMeals.update(meal.copy(nameOverride = nameOverride))
+                        val shouldMarkOverridden = meal.seriesId != null && current.isDirty
+                        val updatedMeal = meal.copy(
+                            nameOverride = nameOverride,
+                            status = if (shouldMarkOverridden) {
+                                PlannedOccurrenceStatus.OVERRIDDEN.name
+                            } else {
+                                meal.status
+                            }
+                        )
+                        if (meal != updatedMeal) {
+                            plannedMeals.update(updatedMeal)
                         }
                         existingMealId
                     }
@@ -293,6 +315,7 @@ class PlannedMealEditorViewModel @Inject constructor(
                 }
 
                 _state.value = _state.value.copy(isDirty = false)
+                _effects.tryEmit(Effect.Saved)
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Save failed")
             } finally {
@@ -337,7 +360,8 @@ class PlannedMealEditorViewModel @Inject constructor(
                     name = if (meal != null) resolveEditorName(meal) else _state.value.name,
                     items = uiItems,
                     errorMessage = null,
-                    isDirty = false
+                    isDirty = false,
+                    warnings = buildWarnings(meal)
                 )
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Discard failed")
@@ -347,6 +371,11 @@ class PlannedMealEditorViewModel @Inject constructor(
 
     private fun resolveEditorName(meal: PlannedMealEntity): String {
         return meal.nameOverride ?: defaultNameOverride(meal.slot, meal.date)
+    }
+
+    private fun buildWarnings(meal: PlannedMealEntity?): List<String> {
+        if (meal?.seriesId == null) return emptyList()
+        return listOf("Recurring occurrence: save applies to this occurrence only.")
     }
 
     private fun resolveNonNullNameOverrideForExisting(meal: PlannedMealEntity): String {
