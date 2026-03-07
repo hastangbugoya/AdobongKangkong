@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,7 +66,8 @@ fun MealEditorScreen(
     bannerOwner: BannerOwnerRef? = null,
     bannerRefreshTick: Int = 0,
     @DrawableRes bannerPlaceholderResId: Int = R.drawable.foods_banner,
-    bannerChangeLabel: String = "Change banner"
+    bannerChangeLabel: String = "Change banner",
+    extraActions: @Composable (RowScope.() -> Unit)? = null
 ) {
     val state = contract.state.collectAsState().value
 
@@ -99,6 +101,7 @@ fun MealEditorScreen(
                             CircularProgressIndicator(modifier = Modifier.height(18.dp))
                         }
                     }
+                    extraActions?.invoke(this)
                     Button(
                         onClick = { contract.save() },
                         enabled = state.canSave && !state.isSaving

@@ -6,14 +6,19 @@ import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateItemEntity
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.mealprep.usecase.DeleteMealTemplateUseCase
+import com.example.adobongkangkong.domain.mealprep.usecase.DuplicateMealTemplateUseCase
 import com.example.adobongkangkong.domain.repository.MealTemplateItemRepository
 import com.example.adobongkangkong.domain.repository.MealTemplateRepository
 import com.example.adobongkangkong.ui.meal.editor.MealEditorContract
 import com.example.adobongkangkong.ui.meal.editor.MealEditorMode
 import com.example.adobongkangkong.ui.meal.editor.MealEditorUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -23,7 +28,9 @@ import javax.inject.Inject
 class MealTemplateEditorViewModel @Inject constructor(
     private val templates: MealTemplateRepository,
     private val templateItems: MealTemplateItemRepository,
-    private val foods: FoodRepository
+    private val foods: FoodRepository,
+    private val duplicateMealTemplate: DuplicateMealTemplateUseCase,
+    private val deleteMealTemplate: DeleteMealTemplateUseCase
 ) : ViewModel(), MealEditorContract {
 
     private val _state = MutableStateFlow(
@@ -40,6 +47,14 @@ class MealTemplateEditorViewModel @Inject constructor(
     )
 
     override val state: StateFlow<MealEditorUiState> = _state.asStateFlow()
+
+    private val _effects = MutableSharedFlow<Effect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<Effect> = _effects.asSharedFlow()
+
+    sealed interface Effect {
+        data class OpenTemplate(val templateId: Long) : Effect
+        data class Deleted(val templateId: Long) : Effect
+    }
 
     /**
      * Optional edit mode (route-level wiring; not part of shared contract).
@@ -241,6 +256,42 @@ class MealTemplateEditorViewModel @Inject constructor(
                 )
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Discard failed")
+            }
+        }
+    }
+
+    /** Creates a copy of the current template and requests navigation into the duplicate. */
+    fun duplicateTemplate() {
+        val templateId = _state.value.mealId
+        if (templateId == null || templateId <= 0L) {
+            _state.value = _state.value.copy(errorMessage = "Save template before duplicating.")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val newTemplateId = duplicateMealTemplate(templateId)
+                _effects.tryEmit(Effect.OpenTemplate(newTemplateId))
+            } catch (t: Throwable) {
+                _state.value = _state.value.copy(errorMessage = t.message ?: "Duplicate failed")
+            }
+        }
+    }
+
+    /** Deletes the current template and requests navigation back out of the editor. */
+    fun deleteTemplate() {
+        val templateId = _state.value.mealId
+        if (templateId == null || templateId <= 0L) {
+            _state.value = _state.value.copy(errorMessage = "Template not found.")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                deleteMealTemplate(templateId)
+                _effects.tryEmit(Effect.Deleted(templateId))
+            } catch (t: Throwable) {
+                _state.value = _state.value.copy(errorMessage = t.message ?: "Delete failed")
             }
         }
     }
