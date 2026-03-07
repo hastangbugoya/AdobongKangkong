@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -42,7 +40,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +52,11 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
 
 /**
  * Shared editor screen for both Planned meals and Templates.
+ *
+ * For developers:
+ * - This screen stays generic and only depends on [MealEditorContract].
+ * - Template-specific overflow actions are injected via [extraActions].
+ * - Do not move template business logic into this file.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +69,7 @@ fun MealEditorScreen(
     bannerRefreshTick: Int = 0,
     @DrawableRes bannerPlaceholderResId: Int = R.drawable.foods_banner,
     bannerChangeLabel: String = "Change banner",
-    extraActions: @Composable (RowScope.() -> Unit)? = null
+    extraActions: (@Composable () -> Unit)? = null
 ) {
     val state = contract.state.collectAsState().value
 
@@ -101,7 +103,7 @@ fun MealEditorScreen(
                             CircularProgressIndicator(modifier = Modifier.height(18.dp))
                         }
                     }
-                    extraActions?.invoke(this)
+                    extraActions?.invoke()
                     Button(
                         onClick = { contract.save() },
                         enabled = state.canSave && !state.isSaving
@@ -228,7 +230,6 @@ private fun MealEditorBannerSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-//                .clip(RoundedCornerShape(20.dp))
                 .aspectRatio(3f / 1f)
         ) {
             if (bmp != null) {
@@ -329,3 +330,10 @@ private fun EmptyState(
         }
     }
 }
+
+/**
+ * Bottom KDoc for future AI assistant.
+ *
+ * The [extraActions] slot exists so template-specific top-bar actions can be restored without
+ * forking the shared meal editor screen. Keep this screen generic.
+ */

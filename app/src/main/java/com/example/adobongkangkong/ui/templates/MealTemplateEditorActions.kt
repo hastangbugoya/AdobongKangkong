@@ -1,11 +1,11 @@
 package com.example.adobongkangkong.ui.templates
 
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,28 +17,28 @@ import androidx.compose.ui.res.painterResource
 import com.example.adobongkangkong.R
 
 /**
- * Overflow actions for an existing meal template editor session.
+ * Overflow actions for the meal template editor.
  *
- * ## For developers
- * - Duplicate opens a newly created copy of the current template.
- * - Delete always asks for confirmation before invoking [onDeleteConfirmed].
- * - This composable is editor-only and should not be reused for planned meal editing.
+ * For developers:
+ * - This is intentionally template-only UI.
+ * - Duplicate/Delete are editor actions, not shared meal editor actions.
+ * - Delete confirmation lives here so AppNavHost and MealEditorScreen stay simpler.
  */
 @Composable
-fun RowScope.MealTemplateEditorActions(
+fun MealTemplateEditorActions(
     enabled: Boolean,
     onDuplicate: () -> Unit,
     onDeleteConfirmed: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     IconButton(
         enabled = enabled,
         onClick = { menuExpanded = true }
     ) {
         Icon(
-            painter = painterResource(R.drawable.menu_dots_vertical),
+            painter = painterResource(android.R.drawable.ic_menu_more),
             contentDescription = "Template actions"
         )
     }
@@ -55,23 +55,28 @@ fun RowScope.MealTemplateEditorActions(
             }
         )
         DropdownMenuItem(
-            text = { Text("Delete") },
+            text = {
+                Text(
+                    text = "Delete",
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
             onClick = {
                 menuExpanded = false
-                showDeleteConfirm = true
+                confirmDelete = true
             }
         )
     }
 
-    if (showDeleteConfirm) {
+    if (confirmDelete) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+            onDismissRequest = { confirmDelete = false },
             title = { Text("Delete template?") },
-            text = { Text("This will permanently delete the meal template.") },
+            text = { Text("This will permanently delete this meal template.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showDeleteConfirm = false
+                        confirmDelete = false
                         onDeleteConfirmed()
                     }
                 ) {
@@ -79,7 +84,7 @@ fun RowScope.MealTemplateEditorActions(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
+                TextButton(onClick = { confirmDelete = false }) {
                     Text("Cancel")
                 }
             }
@@ -90,6 +95,9 @@ fun RowScope.MealTemplateEditorActions(
 /**
  * Bottom KDoc for future AI assistant.
  *
- * Keep delete confirmation here rather than in AppNavHost so the route remains focused on
- * navigation/effect collection while this composable owns the template-specific top-bar UI.
+ * This overflow menu was restored after Step 2 wiring was lost while later template work was
+ * being reconciled. Keep this composable self-contained:
+ * - menu state here
+ * - delete confirmation here
+ * - business logic stays in the ViewModel
  */
