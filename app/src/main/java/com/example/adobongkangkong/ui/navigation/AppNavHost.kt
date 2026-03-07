@@ -28,7 +28,6 @@ import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
-import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
 import java.time.LocalDate
 
 // Returned from template picker -> consumed by PlannerDay destination
@@ -545,29 +544,12 @@ composable(route = NavRoutes.Foods.pickFood) {
             arguments = listOf(navArgument("templateId") { type = NavType.LongType })
         ) { backStackEntry ->
             val templateId = backStackEntry.arguments?.getLong("templateId") ?: 0L
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val bannerStorage = com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
 
             val vm: com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel()
 
             androidx.compose.runtime.LaunchedEffect(templateId) {
                 if (templateId > 0L) vm.setTemplateId(templateId)
-            }
-
-            androidx.compose.runtime.LaunchedEffect(vm) {
-                vm.effects.collect { effect ->
-                    when (effect) {
-                        is com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel.Effect.OpenTemplate -> {
-                            navController.popBackStack()
-                            navController.navigate(NavRoutes.Planner.templateEditor(effect.templateId))
-                        }
-                        is com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel.Effect.Deleted -> {
-                            bannerStorage.deleteBanner(BannerOwnerRef(BannerOwnerType.TEMPLATE, effect.templateId))
-                            navController.popBackStack()
-                        }
-                    }
-                }
             }
 
             val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
@@ -580,8 +562,6 @@ composable(route = NavRoutes.Foods.pickFood) {
                 }
             }
 
-            val templateEditorState = vm.state.collectAsState().value
-
             com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
                 contract = vm,
                 onBack = { navController.popBackStack() },
@@ -592,14 +572,7 @@ composable(route = NavRoutes.Foods.pickFood) {
                 bannerOwner = BannerOwnerRef(BannerOwnerType.TEMPLATE, templateId),
                 bannerRefreshTick = bannerRefreshTick,
                 bannerPlaceholderResId = R.drawable.recipe_banner,
-                bannerChangeLabel = "Change banner",
-                extraActions = {
-                    MealTemplateEditorActions(
-                        enabled = !templateEditorState.isSaving,
-                        onDuplicate = vm::duplicateTemplate,
-                        onDeleteConfirmed = vm::deleteTemplate
-                    )
-                }
+                bannerChangeLabel = "Change banner"
             )
         }
 
