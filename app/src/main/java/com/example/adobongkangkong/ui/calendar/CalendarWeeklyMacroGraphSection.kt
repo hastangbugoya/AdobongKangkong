@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,6 +43,28 @@ import kotlin.math.roundToInt
  * - Bar height reflects stored daily calories.
  * - Internal stacked segments show macro composition from protein / carbs / fat.
  */
+
+/**
+ * Weekly Macro Graph
+ *
+ * Design invariants (DO NOT change without reviewing Calendar screen layout):
+ *
+ * - Compact graph placed directly under the monthly calendar.
+ * - Shows a single independent week (Sun–Sat).
+ * - Bar height reflects stored daily calories.
+ * - Bar segments represent macro energy proportions:
+ *      protein = g * 4
+ *      carbs   = g * 4
+ *      fat     = g * 9
+ * - Stacked bars are rendered as ONE clipped column (not separate rounded blocks).
+ * - Graph dimensions and typography are intentionally compact.
+ *
+ * Future improvements may add:
+ * - reference lines (goal / average)
+ * - tap interaction
+ * - tooltips
+ * - "unaccounted calories" segment
+ */
 @Composable
 fun CalendarWeeklyMacroGraphSection(
     weekStart: LocalDate,
@@ -49,11 +72,14 @@ fun CalendarWeeklyMacroGraphSection(
     onPrevWeek: () -> Unit,
     onNextWeek: () -> Unit,
     onGoToCurrent: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    targetCalories: Int?,
 ) {
     val weekEnd = weekStart.plusDays(6)
     val weekLabel = "${weekStart.format(MM_DD)} to ${weekEnd.format(MM_DD)}"
-    val maxCalories = max(bars.maxOfOrNull { it.totalCalories.roundToInt() } ?: 0, 1)
+    val maxBarCalories = bars.maxOfOrNull { it.totalCalories.roundToInt() } ?: 0
+    val graphMaxCalories = max(max(maxBarCalories, targetCalories ?: 0), 1)
+    val targetFraction = targetCalories?.toFloat()?.div(graphMaxCalories.toFloat())
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -74,7 +100,7 @@ fun CalendarWeeklyMacroGraphSection(
             ) {
                 IconButton(onClick = onPrevWeek, modifier = Modifier.size(40.dp)) {
                     Icon(
-                        painter = painterResource(R.drawable.angle_circle_left),
+                        painter = painterResource(R.drawable.angle_small_left),
                         contentDescription = "Previous graph week"
                     )
                 }
@@ -86,7 +112,7 @@ fun CalendarWeeklyMacroGraphSection(
 
                 IconButton(onClick = onNextWeek, modifier = Modifier.size(40.dp)) {
                     Icon(
-                        painter = painterResource(R.drawable.angle_circle_right),
+                        painter = painterResource(R.drawable.angle_small_right),
                         contentDescription = "Next graph week"
                     )
                 }
@@ -102,23 +128,48 @@ fun CalendarWeeklyMacroGraphSection(
 
             Spacer(Modifier.height(10.dp))
 
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(164.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom
+                    .height(176.dp),
             ) {
-                bars.forEach { bar ->
-                    WeeklyMacroBar(
-                        dayLabel = bar.date.dayOfWeekLabel,
-                        totalCalories = bar.totalCalories.roundToInt(),
-                        proteinFraction = bar.proteinFraction,
-                        carbsFraction = bar.carbsFraction,
-                        fatFraction = bar.fatFraction,
-                        maxCalories = maxCalories,
-                        modifier = Modifier.weight(1f)
-                    )
+                targetFraction?.let { fraction ->
+                    val lineHeight = 120.dp * fraction.coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .align(Alignment.BottomCenter)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .align(Alignment.BottomCenter)
+                                .offset(y = -lineHeight)
+                                .background(
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                                )
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    bars.forEach { bar ->
+                        WeeklyMacroBar(
+                            dayLabel = bar.date.dayOfWeekLabel,
+                            totalCalories = bar.totalCalories.roundToInt(),
+                            proteinFraction = bar.proteinFraction,
+                            carbsFraction = bar.carbsFraction,
+                            fatFraction = bar.fatFraction,
+                            maxCalories = graphMaxCalories,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
@@ -184,7 +235,6 @@ private fun WeeklyMacroBar(
         ) {
 
             if (totalCalories > 0) {
-
                 val normalizedHeightFraction =
                     totalCalories.toFloat() / maxCalories.toFloat()
 
@@ -195,22 +245,18 @@ private fun WeeklyMacroBar(
                     modifier = Modifier
                         .width(26.dp)
                         .height(barHeight)
-                        .clip(RoundedCornerShape(8.dp)) // <-- key fix
+                        .clip(RoundedCornerShape(8.dp))
                 ) {
-
                     val proteinWeight = proteinFraction.coerceAtLeast(0f)
                     val carbsWeight = carbsFraction.coerceAtLeast(0f)
                     val fatWeight = fatFraction.coerceAtLeast(0f)
-
                     val weightSum = proteinWeight + carbsWeight + fatWeight
 
                     if (weightSum > 0f) {
-
                         Column(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.Bottom
                         ) {
-
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
