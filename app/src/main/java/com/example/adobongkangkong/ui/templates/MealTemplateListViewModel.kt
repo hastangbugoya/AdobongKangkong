@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
 import com.example.adobongkangkong.domain.model.MacroTotals
+import com.example.adobongkangkong.domain.planner.usecase.BuildMealTemplatePickerDetailsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ComputeMealTemplateMacroTotalsUseCase
 import com.example.adobongkangkong.domain.repository.MealTemplateItemRepository
 import com.example.adobongkangkong.domain.repository.MealTemplateRepository
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.update
  * - compute per-template item counts
  * - attach already-computed macro totals for each row
  * - pre-format compact macro summary text for LazyColumn row rendering
+ * - attach a short food preview line for each template row
  *
  * Performance notes:
  * - Macro totals are computed once per observed template set inside the ViewModel state pipeline,
@@ -37,12 +39,35 @@ import kotlinx.coroutines.flow.update
  * Design note:
  * - Macro display intentionally follows the same formatter used by the template picker so the two
  *   screens stay visually and semantically aligned.
+ *
+ * Renders the template library/browse screen.
+ *
+ * Relationship to Template Picker:
+ * - This screen and MealTemplatePickerScreen intentionally present nearly the same
+ *   template-card content:
+ *   - banner
+ *   - macro summary
+ *   - default meal slot
+ *   - food preview/details text
+ * - The flows differ in purpose (library management vs template selection), but
+ *   card-content changes should usually be reviewed in both places.
+ *
+ * Maintenance rule:
+ * - If you change template-card fields, formatting, or shared detail-building logic,
+ *   also inspect:
+ *   - MealTemplatePickerScreen
+ *   - MealTemplatePickerViewModel
+ *   - any shared template detail/card helpers
+ *
+ * Do not assume a change is list-only unless the difference is intentionally
+ * screen-specific.
  */
 @HiltViewModel
 class MealTemplateListViewModel @Inject constructor(
     private val templates: MealTemplateRepository,
     private val templateItems: MealTemplateItemRepository,
-    private val computeMacros: ComputeMealTemplateMacroTotalsUseCase
+    private val computeMacros: ComputeMealTemplateMacroTotalsUseCase,
+    private val buildDetails: BuildMealTemplatePickerDetailsUseCase
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
@@ -59,6 +84,7 @@ class MealTemplateListViewModel @Inject constructor(
             val items = templateItems.getItemsForTemplates(templateIds)
             val itemCountByTemplateId = items.groupingBy { it.templateId }.eachCount()
             val macrosByTemplateId = computeMacros(templateIds)
+            val detailsByTemplateId = buildDetails(templateIds)
 
             val needle = rawQuery.trim().lowercase()
             val filtered = if (needle.isBlank()) {
@@ -71,13 +97,15 @@ class MealTemplateListViewModel @Inject constructor(
                 .sortedWith(selectedSort.comparator)
                 .map { template ->
                     val macros = macrosByTemplateId[template.id] ?: MacroTotals()
+                    val details = detailsByTemplateId[template.id]
                     MealTemplateListRow(
                         id = template.id,
                         name = template.name,
                         defaultSlotLabel = template.defaultSlot?.display,
-                        itemCount = itemCountByTemplateId[template.id] ?: 0,
+                        itemCount = details?.itemCount ?: itemCountByTemplateId[template.id] ?: 0,
                         macroTotals = macros,
-                        macroSummaryLine = macros.toMealTemplateMacroSummaryLine()
+                        macroSummaryLine = macros.toMealTemplateMacroSummaryLine(),
+                        foodPreviewLine = details?.previewLine
                     )
                 }
 
@@ -121,7 +149,8 @@ data class MealTemplateListRow(
     val defaultSlotLabel: String?,
     val itemCount: Int,
     val macroTotals: MacroTotals,
-    val macroSummaryLine: String
+    val macroSummaryLine: String,
+    val foodPreviewLine: String?
 )
 
 /** Sort modes currently supported by the meal template list screen. */
@@ -147,10 +176,12 @@ enum class MealTemplateListSort(
  * Why macro text is stored on [MealTemplateListRow]:
  * - the template picker already established a compact macro-summary UX
  * - the list screen should mirror that output exactly
- * - precomputing the final text in the ViewModel avoids per-row formatting churn during
- *   LazyColumn recomposition
+ * - precomputing the final display string keeps row composables render-only
  *
- * If future sort modes are added (protein, calories, carbs, fat), prefer sorting using
- * [MealTemplateListRow.macroTotals] numeric values while continuing to render
- * [MealTemplateListRow.macroSummaryLine] for display.
+ * Why preview text is stored on [MealTemplateListRow]:
+ * - resolving FOOD / RECIPE / RECIPE_BATCH names belongs outside Compose
+ * - list rows should not perform repository work during recomposition
+ *
+ * If future chips/badges need numeric macro access, reuse [MealTemplateListRow.macroTotals]
+ * while continuing to render [MealTemplateListRow.macroSummaryLine] for display.
  */

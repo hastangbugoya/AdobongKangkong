@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -40,6 +41,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -54,9 +56,9 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
  * Shared editor screen for both Planned meals and Templates.
  *
  * For developers:
- * - This screen stays generic and only depends on [MealEditorContract].
- * - Template-specific overflow actions are injected via [extraActions].
- * - Do not move template business logic into this file.
+ * - Navigation stays outside this composable.
+ * - Template-only actions are injected through [extraActions].
+ * - Banner support is optional so planned-meal editor continues to work without banner ownership.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,14 +69,13 @@ fun MealEditorScreen(
     bannerCaptureController: BannerCaptureController? = null,
     bannerOwner: BannerOwnerRef? = null,
     bannerRefreshTick: Int = 0,
-    @DrawableRes bannerPlaceholderResId: Int = R.drawable.foods_banner,
+    @DrawableRes bannerPlaceholderResId: Int = R.drawable.recipe_banner,
     bannerChangeLabel: String = "Change banner",
     extraActions: (@Composable () -> Unit)? = null
 ) {
     val state = contract.state.collectAsState().value
 
     val snackbarHostState = remember { SnackbarHostState() }
-
     LaunchedEffect(state.errorMessage) {
         val msg = state.errorMessage?.trim().orEmpty()
         if (msg.isNotBlank()) snackbarHostState.showSnackbar(message = msg)
@@ -95,6 +96,7 @@ fun MealEditorScreen(
                     }
                 },
                 actions = {
+                    extraActions?.invoke()
                     if (state.isSaving) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -103,7 +105,6 @@ fun MealEditorScreen(
                             CircularProgressIndicator(modifier = Modifier.height(18.dp))
                         }
                     }
-                    extraActions?.invoke()
                     Button(
                         onClick = { contract.save() },
                         enabled = state.canSave && !state.isSaving
@@ -121,7 +122,6 @@ fun MealEditorScreen(
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -135,12 +135,12 @@ fun MealEditorScreen(
                     bannerChangeLabel = bannerChangeLabel,
                     bannerCaptureController = bannerCaptureController
                 )
-                Divider()
             }
 
             MealEditorHeader(
                 state = state,
-                onNameChanged = contract::setName
+                onNameChanged = contract::setName,
+                onTemplateDefaultSlotChanged = contract::setTemplateDefaultSlot
             )
 
             Divider()
@@ -169,18 +169,11 @@ fun MealEditorScreen(
                         onGramsChanged = { text -> contract.updateGrams(item.lineId, text) },
                         onMillilitersChanged = { text -> contract.updateMilliliters(item.lineId, text) },
                         onRemove = { contract.removeItem(item.lineId) },
-                        onMoveUp = if (index > 0) {
-                            { contract.moveItem(index, index - 1) }
-                        } else null,
-                        onMoveDown = if (index < state.items.lastIndex) {
-                            { contract.moveItem(index, index + 1) }
-                        } else null
+                        onMoveUp = if (index > 0) ({ contract.moveItem(index, index - 1) }) else null,
+                        onMoveDown = if (index < state.items.lastIndex) ({ contract.moveItem(index, index + 1) }) else null
                     )
                 }
-
-                item {
-                    Spacer(modifier = Modifier.height(84.dp))
-                }
+                item { Spacer(modifier = Modifier.height(84.dp)) }
             }
         }
     }
@@ -201,7 +194,6 @@ private fun MealEditorBannerSection(
     val bannerFile = remember(bannerOwner) {
         bannerOwner?.let { storage.bannerJpegFile(it) }
     }
-
     val hasStoredBanner = bannerFile?.exists() == true
 
     val bannerBitmapState = if (bannerOwner != null) {
@@ -211,25 +203,18 @@ private fun MealEditorBannerSection(
             key2 = bannerRefreshTick
         ) {
             val file = bannerFile
-            value = if (file != null && file.exists()) {
-                BitmapFactory.decodeFile(file.absolutePath)
-            } else {
-                null
-            }
+            value = if (file != null && file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
         }
-    } else {
-        null
-    }
+    } else null
 
     val bmp = bannerBitmapState?.value
 
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(20.dp))
                 .aspectRatio(3f / 1f)
         ) {
             if (bmp != null) {
@@ -253,9 +238,7 @@ private fun MealEditorBannerSection(
             if (canCaptureBanner) {
                 IconButton(
                     onClick = { bannerOwner?.let { bannerCaptureController.open(it) } },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
                 ) {
                     Icon(
                         painter = painterResource(android.R.drawable.ic_menu_camera),
@@ -266,19 +249,14 @@ private fun MealEditorBannerSection(
 
             if (hasStoredBanner && bmp == null) {
                 CircularProgressIndicator(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(10.dp)
-                        .size(50.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp).size(50.dp),
                     strokeWidth = 2.dp
                 )
             }
         }
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -287,10 +265,7 @@ private fun MealEditorBannerSection(
                 onClick = { bannerOwner?.let { bannerCaptureController.open(it) } },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Text(
-                    text = bannerChangeLabel,
-                    style = MaterialTheme.typography.labelSmall
-                )
+                Text(text = bannerChangeLabel, style = MaterialTheme.typography.labelSmall)
             }
         }
 
@@ -315,25 +290,17 @@ private fun EmptyState(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "No items yet.",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Text(text = "No items yet.", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Add a food to start building this meal.",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Text(text = "Add a food to start building this meal.", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedButton(onClick = onAddFood) {
-            Text("Add food")
-        }
+        OutlinedButton(onClick = onAddFood) { Text("Add food") }
     }
 }
 
 /**
  * Bottom KDoc for future AI assistant.
  *
- * The [extraActions] slot exists so template-specific top-bar actions can be restored without
- * forking the shared meal editor screen. Keep this screen generic.
+ * This shared screen intentionally accepts optional banner/action hooks so template-specific
+ * behavior can be injected without forking the entire editor UI.
  */

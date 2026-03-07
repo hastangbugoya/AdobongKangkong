@@ -52,6 +52,28 @@ import com.example.adobongkangkong.ui.common.template.MealTemplateBannerCardBack
  *
  * The row now shows compact macro summary text using the same formatter as the template picker.
  * No macro computation occurs here; this composable only renders ready-to-display row state.
+ *
+ * Renders the template library/browse screen.
+ *
+ * Relationship to Template Picker:
+ * - This screen and MealTemplatePickerScreen intentionally present nearly the same
+ *   template-card content:
+ *   - banner
+ *   - macro summary
+ *   - default meal slot
+ *   - food preview/details text
+ * - The flows differ in purpose (library management vs template selection), but
+ *   card-content changes should usually be reviewed in both places.
+ *
+ * Maintenance rule:
+ * - If you change template-card fields, formatting, or shared detail-building logic,
+ *   also inspect:
+ *   - MealTemplatePickerScreen
+ *   - MealTemplatePickerViewModel
+ *   - any shared template detail/card helpers
+ *
+ * Do not assume a change is list-only unless the difference is intentionally
+ * screen-specific.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -208,6 +230,17 @@ private fun MealTemplateRow(
                     style = MaterialTheme.typography.bodySmall
                 )
 
+                row.foodPreviewLine?.takeIf { it.isNotBlank() }?.let { preview ->
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = preview,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
                 Spacer(Modifier.height(2.dp))
 
                 Text(
@@ -257,9 +290,9 @@ private fun EmptyTemplateListState(
 /**
  * Bottom KDoc for future AI assistant.
  *
- * This screen expects [MealTemplateListRow.macroSummaryLine] to already be computed. Do not add
- * nutrition aggregation or string formatting work inside [MealTemplateRow]; keep LazyColumn rows
- * render-only.
+ * This screen expects [MealTemplateListRow.macroSummaryLine] and [MealTemplateListRow.foodPreviewLine]
+ * to already be computed. Do not add nutrition aggregation or repository-backed name lookups inside
+ * [MealTemplateRow]; keep LazyColumn rows render-only.
  *
  * If future sorting by macros is introduced, prefer updating the ViewModel/state layer instead of
  * adding sort logic to this composable.

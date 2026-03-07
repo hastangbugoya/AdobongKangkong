@@ -2,8 +2,10 @@ package com.example.adobongkangkong.ui.templates
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateItemEntity
+import com.example.adobongkangkong.domain.mealprep.usecase.ComputeMealTemplateDraftMacroTotalsUseCase
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.MealTemplateItemRepository
@@ -26,17 +28,26 @@ import javax.inject.Inject
  * ViewModel backing the meal template editor.
  *
  * For developers:
- * - Owns template draft load/save behavior.
- * - Restores Step 2 editor actions: duplicate + delete.
- * - Uses one-shot [effects] so AppNavHost can navigate after duplicate/delete.
- * - Duplicate copies header + items but intentionally does not copy banner files.
+ * - Supports create/edit/save/discard for templates.
+ * - Owns template-only actions: duplicate/delete.
+ * - Computes advisory live macro totals from the current in-memory draft.
+ * - Persists editable `defaultSlot` for template metadata.
  */
 @HiltViewModel
 class MealTemplateEditorViewModel @Inject constructor(
     private val templates: MealTemplateRepository,
     private val templateItems: MealTemplateItemRepository,
-    private val foods: FoodRepository
+    private val foods: FoodRepository,
+    private val computeDraftMacros: ComputeMealTemplateDraftMacroTotalsUseCase
 ) : ViewModel(), MealEditorContract {
+
+    sealed interface Effect {
+        data class OpenTemplate(val templateId: Long) : Effect
+        data class Deleted(val templateId: Long) : Effect
+    }
+
+    private val _effects = MutableSharedFlow<Effect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
     private val _state = MutableStateFlow(
         MealEditorUiState(
@@ -47,32 +58,18 @@ class MealTemplateEditorViewModel @Inject constructor(
             items = emptyList(),
             isSaving = false,
             canSave = true,
-            errorMessage = null
+            errorMessage = null,
+            liveMacroSummaryLine = "0 kcal • P 0 • C 0 • F 0"
         )
     )
-
     override val state: StateFlow<MealEditorUiState> = _state.asStateFlow()
 
-    private val _effects = MutableSharedFlow<Effect>(extraBufferCapacity = 1)
-    val effects: SharedFlow<Effect> = _effects.asSharedFlow()
-
-    sealed interface Effect {
-        data class OpenTemplate(val templateId: Long) : Effect
-        data class Deleted(val templateId: Long) : Effect
-    }
-
-    /**
-     * Optional edit mode (route-level wiring; not part of shared contract).
-     */
     fun setTemplateId(templateId: Long) {
         _state.value = _state.value.copy(mealId = templateId, errorMessage = null)
-
         viewModelScope.launch {
             try {
                 val template = templates.getById(templateId)
-                val items = templateItems.getItemsForTemplate(templateId)
-                    .sortedBy { it.sortOrder }
-
+                val items = templateItems.getItemsForTemplate(templateId).sortedBy { it.sortOrder }
                 val uiItems = items.map { entity ->
                     val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
                     MealEditorUiState.Item(
@@ -85,13 +82,14 @@ class MealTemplateEditorViewModel @Inject constructor(
                         milliliters = null
                     )
                 }
-
                 _state.value = _state.value.copy(
                     name = template?.name ?: _state.value.name,
+                    templateDefaultSlot = template?.defaultSlot,
                     items = uiItems,
                     errorMessage = null,
                     isDirty = false
                 )
+                recomputeDraftMacroGuidance(uiItems)
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Failed to load template")
             }
@@ -100,6 +98,10 @@ class MealTemplateEditorViewModel @Inject constructor(
 
     override fun setName(name: String) {
         _state.value = _state.value.copy(name = name, errorMessage = null, isDirty = true)
+    }
+
+    override fun setTemplateDefaultSlot(slot: MealSlot?) {
+        _state.value = _state.value.copy(templateDefaultSlot = slot, errorMessage = null, isDirty = true)
     }
 
     override fun addFood(foodId: Long) {
@@ -114,48 +116,36 @@ class MealTemplateEditorViewModel @Inject constructor(
                 grams = null,
                 milliliters = null
             )
-            _state.value = _state.value.copy(
-                items = _state.value.items + newItem,
-                errorMessage = null,
-                isDirty = true
-            )
+            val updated = _state.value.items + newItem
+            _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
+            recomputeDraftMacroGuidance(updated)
         }
     }
 
     override fun updateServings(lineId: String, servingsText: String) {
-        _state.value = _state.value.copy(
-            items = _state.value.items.map { if (it.lineId == lineId) it.copy(servings = servingsText) else it },
-            errorMessage = null,
-            isDirty = true
-        )
+        val updated = _state.value.items.map { if (it.lineId == lineId) it.copy(servings = servingsText) else it }
+        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
+        recomputeDraftMacroGuidance(updated)
     }
 
     override fun updateGrams(lineId: String, grams: String) {
         val g = grams.toDoubleOrNull()
-        _state.value = _state.value.copy(
-            items = _state.value.items.map { if (it.lineId == lineId) it.copy(grams = g) else it },
-            errorMessage = null,
-            isDirty = true
-        )
+        val updated = _state.value.items.map { if (it.lineId == lineId) it.copy(grams = g) else it }
+        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
+        recomputeDraftMacroGuidance(updated)
     }
 
     override fun updateMilliliters(lineId: String, ml: String) {
-        // NOTE: MealTemplateItemEntity currently does NOT have milliliters.
-        // Keep the UI field but don’t persist it.
         val v = ml.toDoubleOrNull()
-        _state.value = _state.value.copy(
-            items = _state.value.items.map { if (it.lineId == lineId) it.copy(milliliters = v) else it },
-            errorMessage = null,
-            isDirty = true
-        )
+        val updated = _state.value.items.map { if (it.lineId == lineId) it.copy(milliliters = v) else it }
+        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
+        recomputeDraftMacroGuidance(updated)
     }
 
     override fun removeItem(lineId: String) {
-        _state.value = _state.value.copy(
-            items = _state.value.items.filterNot { it.lineId == lineId },
-            errorMessage = null,
-            isDirty = true
-        )
+        val updated = _state.value.items.filterNot { it.lineId == lineId }
+        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
+        recomputeDraftMacroGuidance(updated)
     }
 
     override fun moveItem(fromIndex: Int, toIndex: Int) {
@@ -164,6 +154,7 @@ class MealTemplateEditorViewModel @Inject constructor(
         val moved = list.removeAt(fromIndex)
         list.add(toIndex, moved)
         _state.value = _state.value.copy(items = list, errorMessage = null, isDirty = true)
+        recomputeDraftMacroGuidance(list)
     }
 
     override fun save() {
@@ -173,7 +164,6 @@ class MealTemplateEditorViewModel @Inject constructor(
                 _state.value = _state.value.copy(errorMessage = "Template name is required.")
                 return@launch
             }
-
             _state.value = _state.value.copy(isSaving = true, errorMessage = null)
             try {
                 val existingTemplateId = _state.value.mealId
@@ -182,7 +172,7 @@ class MealTemplateEditorViewModel @Inject constructor(
                         MealTemplateEntity(
                             id = existingTemplateId,
                             name = name,
-                            defaultSlot = templates.getById(existingTemplateId)?.defaultSlot
+                            defaultSlot = _state.value.templateDefaultSlot
                         )
                     )
                     existingTemplateId
@@ -191,20 +181,18 @@ class MealTemplateEditorViewModel @Inject constructor(
                         MealTemplateEntity(
                             id = 0L,
                             name = name,
-                            defaultSlot = null
+                            defaultSlot = _state.value.templateDefaultSlot
                         )
                     )
                 }
 
                 templateItems.deleteItemsForTemplate(templateId)
-
                 _state.value.items.forEachIndexed { index, ui ->
                     val sourceType = if (foods.getById(ui.foodId)?.isRecipe == true) {
                         PlannedItemSource.RECIPE
                     } else {
                         PlannedItemSource.FOOD
                     }
-
                     templateItems.insert(
                         MealTemplateItemEntity(
                             id = 0L,
@@ -217,7 +205,6 @@ class MealTemplateEditorViewModel @Inject constructor(
                         )
                     )
                 }
-
                 _state.value = _state.value.copy(mealId = templateId, isDirty = false)
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Save failed")
@@ -228,36 +215,25 @@ class MealTemplateEditorViewModel @Inject constructor(
     }
 
     fun duplicateTemplate() {
-        val currentTemplateId = _state.value.mealId
-        if (currentTemplateId == null || currentTemplateId <= 0L) {
-            _state.value = _state.value.copy(errorMessage = "Save template before duplicating.")
-            return
-        }
-
         viewModelScope.launch {
             try {
-                val source = templates.getById(currentTemplateId)
-                val duplicateName = buildDuplicateName(_state.value.name.ifBlank { source?.name.orEmpty() })
-
-                val newTemplateId = templates.insert(
+                val newId = templates.insert(
                     MealTemplateEntity(
                         id = 0L,
-                        name = duplicateName,
-                        defaultSlot = source?.defaultSlot
+                        name = _state.value.name.ifBlank { "Template" } + " Copy",
+                        defaultSlot = _state.value.templateDefaultSlot
                     )
                 )
-
                 _state.value.items.forEachIndexed { index, ui ->
                     val sourceType = if (foods.getById(ui.foodId)?.isRecipe == true) {
                         PlannedItemSource.RECIPE
                     } else {
                         PlannedItemSource.FOOD
                     }
-
                     templateItems.insert(
                         MealTemplateItemEntity(
                             id = 0L,
-                            templateId = newTemplateId,
+                            templateId = newId,
                             type = sourceType,
                             refId = ui.foodId,
                             grams = if (sourceType == PlannedItemSource.RECIPE) null else ui.grams,
@@ -266,8 +242,7 @@ class MealTemplateEditorViewModel @Inject constructor(
                         )
                     )
                 }
-
-                _effects.tryEmit(Effect.OpenTemplate(newTemplateId))
+                _effects.tryEmit(Effect.OpenTemplate(newId))
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Duplicate failed")
             }
@@ -275,17 +250,12 @@ class MealTemplateEditorViewModel @Inject constructor(
     }
 
     fun deleteTemplate() {
-        val currentTemplateId = _state.value.mealId
-        if (currentTemplateId == null || currentTemplateId <= 0L) {
-            _state.value = _state.value.copy(errorMessage = "Nothing to delete.")
-            return
-        }
-
+        val templateId = _state.value.mealId ?: return
         viewModelScope.launch {
             try {
-                templateItems.deleteItemsForTemplate(currentTemplateId)
-                templates.getById(currentTemplateId)?.let { templates.delete(it) }
-                _effects.tryEmit(Effect.Deleted(currentTemplateId))
+                templateItems.deleteItemsForTemplate(templateId)
+                templates.getById(templateId)?.let { templates.delete(it) }
+                _effects.tryEmit(Effect.Deleted(templateId))
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Delete failed")
             }
@@ -296,15 +266,13 @@ class MealTemplateEditorViewModel @Inject constructor(
         val templateId = _state.value.mealId
         if (templateId == null) {
             _state.value = _state.value.copy(errorMessage = null, isDirty = false)
+            recomputeDraftMacroGuidance(_state.value.items)
             return
         }
-
         viewModelScope.launch {
             try {
                 val template = templates.getById(templateId)
-                val items = templateItems.getItemsForTemplate(templateId)
-                    .sortedBy { it.sortOrder }
-
+                val items = templateItems.getItemsForTemplate(templateId).sortedBy { it.sortOrder }
                 val uiItems = items.map { entity ->
                     val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
                     MealEditorUiState.Item(
@@ -317,38 +285,42 @@ class MealTemplateEditorViewModel @Inject constructor(
                         milliliters = null
                     )
                 }
-
                 _state.value = _state.value.copy(
                     name = template?.name ?: _state.value.name,
+                    templateDefaultSlot = template?.defaultSlot,
                     items = uiItems,
                     errorMessage = null,
                     isDirty = false
                 )
+                recomputeDraftMacroGuidance(uiItems)
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Discard failed")
             }
         }
     }
 
-    private fun buildDuplicateName(sourceName: String): String {
-        val trimmed = sourceName.trim()
-        return if (trimmed.isBlank()) "Meal Template Copy" else "$trimmed Copy"
+    private fun recomputeDraftMacroGuidance(items: List<MealEditorUiState.Item>) {
+        viewModelScope.launch {
+            val totals = computeDraftMacros(
+                items.map { item ->
+                    ComputeMealTemplateDraftMacroTotalsUseCase.DraftItem(
+                        foodId = item.foodId,
+                        servings = item.servings.toDoubleOrNull(),
+                        grams = item.grams
+                    )
+                }
+            )
+            _state.value = _state.value.copy(
+                liveMacroTotals = totals,
+                liveMacroSummaryLine = totals.toMealTemplateMacroSummaryLine()
+            )
+        }
     }
 }
 
 /**
  * Bottom KDoc for future AI assistant.
  *
- * Duplicate/Delete were intentionally restored here instead of being pushed into the shared
- * meal editor contract because they are template-only behaviors. Keep that separation.
- *
- * Duplicate policy:
- * - copy current editor draft rows
- * - preserve defaultSlot from source template
- * - do not copy banner media yet
- *
- * Delete policy:
- * - delete template items first
- * - delete template entity second
- * - banner file cleanup is handled by AppNavHost on Deleted effect
+ * This ViewModel intentionally owns template-only actions/effects so AppNavHost can react to
+ * duplicate/delete navigation outcomes without putting template business logic into the nav layer.
  */

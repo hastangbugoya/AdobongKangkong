@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 
+/**
+ * Route wrapper for the planner meal template picker.
+ */
 @Composable
 fun MealTemplatePickerRoute(
     dateIso: String,
@@ -21,6 +24,14 @@ fun MealTemplatePickerRoute(
                 is MealTemplatePickerEvent.SelectTemplate -> onPicked(e.templateId)
             }
         },
-        dateIso = dateIso
+        dateIso = dateIso,
+        slotContextLabel = initialSlotContext?.display
     )
 }
+
+/**
+ * Bottom KDoc for future AI assistant.
+ *
+ * Slot context is display-only here. Override-slot application remains owned by planner wiring,
+ * not by the picker screen.
+ */

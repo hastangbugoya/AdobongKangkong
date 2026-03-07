@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,8 +26,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.common.template.MealTemplateBannerCardBackground
@@ -37,24 +36,35 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * Renders the planner meal template picker.
  *
- * - Shows searchable template rows.
- * - Keeps all nutrition aggregation outside the composable.
- * - Reads already-shaped picker state from [MealTemplatePickerUiState].
+ * Renders the template library/browse screen.
  *
- * ## Notes for devs
- * - This screen should remain render-only.
- * - Query filtering belongs in the ViewModel.
- * - Template macro aggregation belongs upstream.
- * - Keep row rendering lightweight for smooth LazyColumn scrolling.
- * - This file intentionally stays close to the original picker implementation because
- *   the meal template list macro work should not silently rewrite picker behavior.
+ * Relationship to Template Picker:
+ * - This screen and MealTemplatePickerScreen intentionally present nearly the same
+ *   template-card content:
+ *   - banner
+ *   - macro summary
+ *   - default meal slot
+ *   - food preview/details text
+ * - The flows differ in purpose (library management vs template selection), but
+ *   card-content changes should usually be reviewed in both places.
+ *
+ * Maintenance rule:
+ * - If you change template-card fields, formatting, or shared detail-building logic,
+ *   also inspect:
+ *   - MealTemplatePickerScreen
+ *   - MealTemplatePickerViewModel
+ *   - any shared template detail/card helpers
+ *
+ * Do not assume a change is list-only unless the difference is intentionally
+ * screen-specific.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MealTemplatePickerScreen(
     state: StateFlow<MealTemplatePickerUiState>,
     onEvent: (MealTemplatePickerEvent) -> Unit,
-    dateIso: String
+    dateIso: String,
+    slotContextLabel: String? = null
 ) {
     val s by state.collectAsState()
 
@@ -64,10 +74,10 @@ fun MealTemplatePickerScreen(
                 title = {
                     Column {
                         Text("Pick Template")
-                        Text(
-                            text = dateIso,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text(dateIso, style = MaterialTheme.typography.bodySmall)
+                        slotContextLabel?.takeIf { it.isNotBlank() }?.let {
+                            Text("For $it", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 },
                 navigationIcon = {
@@ -99,13 +109,10 @@ fun MealTemplatePickerScreen(
             if (s.rows.isEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "No templates found.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text("No templates found.", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Create one from a planned meal first (Save as template).",
+                            "Create one from a planned meal first (Save as template).",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -118,42 +125,57 @@ fun MealTemplatePickerScreen(
                 ) {
                     items(
                         items = s.rows,
-                        key = { row -> row.id }
+                        key = { it.id }
                     ) { row ->
                         MealTemplateBannerCardBackground(templateId = row.id) {
-                            Card(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onEvent(MealTemplatePickerEvent.SelectTemplate(row.id)) },
-                                    colors = CardDefaults.cardColors(
-                                    containerColor = Color.Transparent
-                                )
+                                    .clickable { onEvent(MealTemplatePickerEvent.SelectTemplate(row.id)) }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = row.name,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-
-                                        row.macrosLine?.let { macrosLine ->
-                                            Text(
-                                                text = macrosLine,
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-                                        }
-                                    }
-
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Pick",
-                                        style = MaterialTheme.typography.bodyMedium
+                                        text = row.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
+                                    val meta = buildList {
+                                        if (row.itemCount > 0) {
+                                            add(if (row.itemCount == 1) "1 item" else "${row.itemCount} items")
+                                        }
+                                        row.defaultSlotLabel
+                                            ?.takeIf { it.isNotBlank() }
+                                            ?.let { add(it) }
+                                    }.joinToString(" • ")
+                                    if (meta.isNotBlank()) {
+                                        Text(
+                                            text = meta,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    row.foodPreviewLine?.takeIf { it.isNotBlank() }?.let { preview ->
+                                        Text(
+                                            text = preview,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    row.macrosLine?.takeIf { it.isNotBlank() }?.let { macroLine ->
+                                        Text(
+                                            text = macroLine,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
+                                Text("Pick", style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
@@ -166,18 +188,6 @@ fun MealTemplatePickerScreen(
 /**
  * Bottom KDoc for future AI assistant.
  *
- * This screen consumes the current picker state contract from the latest uploaded src:
- * - `query`
- * - `rows: List<MealTemplatePickerRowModel>`
- *
- * Each row is already UI-shaped and contains:
- * - `id`
- * - `name`
- * - `macrosLine`
- *
- * Important:
- * - Keep this screen render-only.
- * - Do not move template filtering or macro aggregation here.
- * - If picker/list macro text must be unified later, do that in the shared formatter /
- *   ViewModel mapping layer, not by pushing more logic into this composable.
+ * Picker rows are render-only. Banner presence is resolved by [MealTemplateBannerCardBackground],
+ * while default-slot labels, preview text, and macro text must already be prepared in picker state.
  */
