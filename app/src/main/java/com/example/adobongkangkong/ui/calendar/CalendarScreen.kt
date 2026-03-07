@@ -2,7 +2,13 @@ package com.example.adobongkangkong.ui.calendar
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,6 +45,8 @@ fun CalendarScreen(
     val plannedDates by vm.plannedDates.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
     val dayIconStatusByDate by vm.dayIconStatusByDate.collectAsState()
+    val graphWeekStart by vm.graphWeekStart.collectAsState()
+    val graphBars by vm.graphBars.collectAsState()
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -84,8 +92,18 @@ fun CalendarScreen(
                     onDateClick = vm::onDateClicked,
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
-                Spacer(Modifier.size(12.dp))
             }
+
+            Spacer(Modifier.size(12.dp))
+
+            CalendarWeeklyMacroGraphSection(
+                weekStart = graphWeekStart,
+                bars = graphBars,
+                onPrevWeek = vm::goPrevGraphWeek,
+                onNextWeek = vm::goNextGraphWeek,
+                onGoToCurrent = vm::goToCurrentGraphWeek,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
         }
 
         val date = selectedDate

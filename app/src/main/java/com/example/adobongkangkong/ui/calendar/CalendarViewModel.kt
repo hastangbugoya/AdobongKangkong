@@ -3,12 +3,14 @@ package com.example.adobongkangkong.ui.calendar
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.domain.nutrition.MacroKeys
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDaysInMonthUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodNeedsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutrientStatusesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -24,9 +26,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
 /**
@@ -45,6 +49,7 @@ class CalendarViewModel @Inject constructor(
     private val observePlannedFoodNeeds: ObservePlannedFoodNeedsUseCase,
     private val observePlannedFoodTotals: ObservePlannedFoodTotalsUseCase,
     private val observeDailyNutrientStatuses: ObserveDailyNutrientStatusesUseCase,
+    private val observeDailyNutritionTotals: ObserveDailyNutritionTotalsUseCase,
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(YearMonth.now())
@@ -54,6 +59,9 @@ class CalendarViewModel @Inject constructor(
 
     private val _selectedDate = MutableStateFlow<LocalDate?>(null)
     val selectedDate: StateFlow<LocalDate?> = _selectedDate
+
+    private val _graphWeekStart = MutableStateFlow(startOfWeek(LocalDate.now()))
+    val graphWeekStart: StateFlow<LocalDate> = _graphWeekStart
 
     //DEBUG
     private val _debugNeeds = MutableStateFlow<List<PlannedFoodNeed>>(emptyList())
@@ -98,6 +106,31 @@ class CalendarViewModel @Inject constructor(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    val graphBars: StateFlow<List<CalendarWeeklyMacroDayUi>> =
+        _graphWeekStart
+            .flatMapLatest { weekStart ->
+                val days = (0L..6L).map { weekStart.plusDays(it) }
+                val perDayFlows = days.map { date ->
+                    observeDailyNutritionTotals(date = date, zoneId = zoneId)
+                        .map { totals ->
+                            val map = totals.totalsByCode
+                            CalendarWeeklyMacroDayUi(
+                                date = date,
+                                totalCalories = map[MacroKeys.CALORIES] ?: 0.0,
+                                proteinG = map[MacroKeys.PROTEIN] ?: 0.0,
+                                carbsG = map[MacroKeys.CARBS] ?: 0.0,
+                                fatG = map[MacroKeys.FAT] ?: 0.0,
+                            )
+                        }
+                }
+
+                combine(perDayFlows) { barsAny ->
+                    @Suppress("UNCHECKED_CAST")
+                    barsAny.toList() as List<CalendarWeeklyMacroDayUi>
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun goPrevMonth() { _month.update { it.minusMonths(1) } }
     fun goNextMonth() { _month.update { it.plusMonths(1) } }
 
@@ -107,6 +140,18 @@ class CalendarViewModel @Inject constructor(
 
     fun dismissDayDetails() {
         _selectedDate.value = null
+    }
+
+    fun goPrevGraphWeek() {
+        _graphWeekStart.update { it.minusWeeks(1) }
+    }
+
+    fun goNextGraphWeek() {
+        _graphWeekStart.update { it.plusWeeks(1) }
+    }
+
+    fun goToCurrentGraphWeek() {
+        _graphWeekStart.value = startOfWeek(LocalDate.now())
     }
 
     // DEBUG
@@ -177,3 +222,6 @@ private fun List<com.example.adobongkangkong.domain.model.DailyNutrientStatus>.t
     val allOk = targeted.all { it.status == TargetStatus.OK }
     return if (allOk) DayIconStatus.OK else DayIconStatus.MISSED
 }
+
+private fun startOfWeek(date: LocalDate): LocalDate =
+    date.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
