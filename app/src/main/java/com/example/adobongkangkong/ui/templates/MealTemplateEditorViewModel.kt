@@ -156,17 +156,25 @@ class MealTemplateEditorViewModel @Inject constructor(
 
             _state.value = _state.value.copy(isSaving = true, errorMessage = null)
             try {
-                // Required behavior:
-                // - insert MealTemplateEntity
-                // - deleteItemsForTemplate(templateId)
-                // - insert MealTemplateItemEntity rows in UI order
-                val templateId = templates.insert(
-                    MealTemplateEntity(
-                        id = 0L,
-                        name = name,
-                        defaultSlot = null
+                val existingTemplateId = _state.value.mealId
+                val templateId = if (existingTemplateId != null && existingTemplateId > 0L) {
+                    templates.update(
+                        MealTemplateEntity(
+                            id = existingTemplateId,
+                            name = name,
+                            defaultSlot = templates.getById(existingTemplateId)?.defaultSlot
+                        )
                     )
-                )
+                    existingTemplateId
+                } else {
+                    templates.insert(
+                        MealTemplateEntity(
+                            id = 0L,
+                            name = name,
+                            defaultSlot = null
+                        )
+                    )
+                }
 
                 templateItems.deleteItemsForTemplate(templateId)
 

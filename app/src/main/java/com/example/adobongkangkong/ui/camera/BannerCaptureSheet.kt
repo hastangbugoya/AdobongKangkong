@@ -59,6 +59,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.exifinterface.media.ExifInterface
+import com.example.adobongkangkong.feature.camera.BannerOwnerType
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,7 +72,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Bottom sheet UI that captures a 3:1 “banner” image for a Food using CameraX.
+ * Bottom sheet UI that captures a 3:1 “banner” image using CameraX.
  *
  * ## Purpose
  * Provide a controlled camera capture flow that:
@@ -120,7 +121,7 @@ import kotlin.coroutines.resumeWithException
  * - Cleans up camera resources when sheet is dismissed.
  *
  * ## Parameters
- * - `request`: Contains foodId and capture context.
+ * - `request`: Contains the banner owner (food or meal template).
  * - `onDismiss`: Called when sheet is closed.
  * - `onCaptured`: Called after successful capture with banner URI.
  * - `onError`: Called if any camera, IO, or processing failure occurs.
@@ -151,7 +152,7 @@ import kotlin.coroutines.resumeWithException
 fun BannerCaptureSheet(
     request: BannerCaptureRequest,
     onDismiss: () -> Unit,
-    onCaptured: (foodId: Long, uri: Uri) -> Unit,
+    onCaptured: (owner: com.example.adobongkangkong.feature.camera.BannerOwnerRef, uri: Uri) -> Unit,
     onError: (Throwable) -> Unit,
 ) {
     val context = LocalContext.current
@@ -319,9 +320,9 @@ fun BannerCaptureSheet(
                             isCapturing = true
                             runCatching {
                                 withContext(Dispatchers.IO) {
-                                    storage.ensureAllBannerDirs(request.foodId)
-                                    val bannerFile = storage.bannerJpegFile(request.foodId)
-                                    val blurFile = storage.bannerBlurWebpFile(request.foodId)
+                                    storage.ensureAllBannerDirs(request.owner)
+                                    val bannerFile = storage.bannerJpegFile(request.owner)
+                                    val blurFile = storage.bannerBlurWebpFile(request.owner)
 
                                     takePictureToFile(
                                         capture = capture,
@@ -347,7 +348,7 @@ fun BannerCaptureSheet(
                                     bannerFile.toUri()
                                 }
                             }.onSuccess { uri ->
-                                onCaptured(request.foodId, uri)
+                                onCaptured(request.owner, uri)
                             }.onFailure(onError)
 
                             isCapturing = false

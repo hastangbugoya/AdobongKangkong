@@ -6,22 +6,25 @@ import java.io.File
 import javax.inject.Inject
 
 /**
- * Centralized, policy-locked storage rules for food images.
+ * Centralized, policy-locked storage rules for banner images.
  *
- * DO NOT add MediaStore, URIs, or gallery logic here.
- * Paths are deterministic and derived from foodId.
+ * Historical note:
+ * - The class name stays [FoodImageStorage] because that is already referenced across the app.
+ * - The implementation now also supports meal template banners via [BannerOwnerRef].
+ *
+ * Rules:
+ * - Master banner files live in filesDir.
+ * - Blur derivatives live in cacheDir and are safe to regenerate.
+ * - Paths are deterministic from the entity id.
  */
 class FoodImageStorage @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    /* ---------------- Banner (master) ---------------- */
+    /* ---------------- Food banner API (existing call sites) ---------------- */
 
     fun bannerJpegFile(foodId: Long): File =
-        File(
-            context.filesDir,
-            "food_images/$foodId/banner.jpg"
-        )
+        File(context.filesDir, "food_images/$foodId/banner.jpg")
 
     fun ensureBannerDir(foodId: Long) {
         bannerJpegFile(foodId).parentFile?.mkdirs()
@@ -35,40 +38,79 @@ class FoodImageStorage @Inject constructor(
         bannerBlurWebpFile(foodId).delete()
     }
 
-    /* ---------------- Banner (blur derivative) ---------------- */
-
     fun bannerBlurWebpFile(foodId: Long): File =
-        File(
-            context.cacheDir,
-            "food_images/$foodId/banner_blur.webp"
-        )
+        File(context.cacheDir, "food_images/$foodId/banner_blur.webp")
 
     fun ensureBlurDir(foodId: Long) {
         bannerBlurWebpFile(foodId).parentFile?.mkdirs()
     }
-
-    /* ---------------- Convenience ---------------- */
 
     fun ensureAllBannerDirs(foodId: Long) {
         ensureBannerDir(foodId)
         ensureBlurDir(foodId)
     }
 
-    /**
-    * Deletes all cached blur derivatives. Safe because they can be regenerated.
-    * @return number of files deleted
-    */
-    fun deleteAllBlurCache(): Int {
-        val root = File(context.cacheDir, "food_images")
-        if (!root.exists() || !root.isDirectory) return 0
+    /* ---------------- Shared owner-based API ---------------- */
 
+    fun bannerJpegFile(owner: BannerOwnerRef): File =
+        when (owner.type) {
+            BannerOwnerType.FOOD -> bannerJpegFile(owner.id)
+            BannerOwnerType.TEMPLATE -> File(
+                context.filesDir,
+                "meal_template_images/${owner.id}/banner.jpg"
+            )
+        }
+
+    fun bannerBlurWebpFile(owner: BannerOwnerRef): File =
+        when (owner.type) {
+            BannerOwnerType.FOOD -> bannerBlurWebpFile(owner.id)
+            BannerOwnerType.TEMPLATE -> File(
+                context.cacheDir,
+                "meal_template_images/${owner.id}/banner_blur.webp"
+            )
+        }
+
+    fun ensureBannerDir(owner: BannerOwnerRef) {
+        bannerJpegFile(owner).parentFile?.mkdirs()
+    }
+
+    fun ensureBlurDir(owner: BannerOwnerRef) {
+        bannerBlurWebpFile(owner).parentFile?.mkdirs()
+    }
+
+    fun ensureAllBannerDirs(owner: BannerOwnerRef) {
+        ensureBannerDir(owner)
+        ensureBlurDir(owner)
+    }
+
+    fun hasBanner(owner: BannerOwnerRef): Boolean =
+        bannerJpegFile(owner).exists()
+
+    fun deleteBanner(owner: BannerOwnerRef) {
+        bannerJpegFile(owner).delete()
+        bannerBlurWebpFile(owner).delete()
+    }
+
+    /* ---------------- Existing cleanup helpers ---------------- */
+
+    /**
+     * Deletes all cached blur derivatives. Safe because they can be regenerated.
+     * @return number of files deleted
+     */
+    fun deleteAllBlurCache(): Int {
+        val roots = listOf(
+            File(context.cacheDir, "food_images"),
+            File(context.cacheDir, "meal_template_images")
+        )
         var deleted = 0
-        root.listFiles()?.forEach { dir ->
-            if (!dir.isDirectory) return@forEach
-            val blur = File(dir, "banner_blur.webp")
-            if (blur.exists() && blur.delete()) deleted++
-            // best-effort: remove empty directory
-            dir.listFiles()?.takeIf { it.isEmpty() }?.let { dir.delete() }
+        roots.forEach { root ->
+            if (!root.exists() || !root.isDirectory) return@forEach
+            root.listFiles()?.forEach { dir ->
+                if (!dir.isDirectory) return@forEach
+                val blur = File(dir, "banner_blur.webp")
+                if (blur.exists() && blur.delete()) deleted++
+                dir.listFiles()?.takeIf { it.isEmpty() }?.let { dir.delete() }
+            }
         }
         return deleted
     }
@@ -98,16 +140,13 @@ class FoodImageStorage @Inject constructor(
     fun deleteAllFoodMediaDirs(foodId: Long): Int {
         var deleted = 0
 
-        // filesDir
         run {
             val dir = File(context.filesDir, "food_images/$foodId")
             val banner = File(dir, "banner.jpg")
             if (banner.exists() && banner.delete()) deleted++
-            // remove dir if empty
             dir.listFiles()?.takeIf { it.isEmpty() }?.let { dir.delete() }
         }
 
-        // cacheDir
         run {
             val dir = File(context.cacheDir, "food_images/$foodId")
             val blur = File(dir, "banner_blur.webp")

@@ -31,6 +31,7 @@ fun CalendarScreen(
     onNavigateToPlannerDay: (LocalDate) -> Unit = {},
     onNavigateToShopping: (LocalDate) -> Unit = {},
     onNavigateToDashboard: (LocalDate) -> Unit = {},
+    onNavigateToTemplates: (LocalDate) -> Unit = {},
     onBack: () -> Unit,
     vm: CalendarViewModel = hiltViewModel()
 ) {
@@ -148,6 +149,18 @@ fun CalendarScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Open day log")
+                    }
+
+                    Spacer(Modifier.size(8.dp))
+
+                    Button(
+                        onClick = {
+                            vm.dismissDayDetails()
+                            onNavigateToTemplates(date)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open meal templates")
                     }
 
                     if (!hasPlanner) {

@@ -106,6 +106,14 @@ object NavRoutes {
         const val templatePicker: String = "planner/templatePicker/{$ARG_DATE_ISO}?$ARG_SLOT={$ARG_SLOT}"
         fun templatePicker(dateIso: String, slot: String = ""): String =
             "planner/templatePicker/$dateIso?$ARG_SLOT=$slot"
+
+        const val templates: String = "planner/templates"
+
+        private const val ARG_TEMPLATE_ID = "templateId"
+        const val templateEditor: String = "planner/templateEditor/{$ARG_TEMPLATE_ID}"
+        fun templateEditor(templateId: Long): String = "planner/templateEditor/$templateId"
+
+        const val templateEditorNew: String = "planner/templateEditorNew"
     }
 
     object Shopping {

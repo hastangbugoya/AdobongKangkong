@@ -1,21 +1,23 @@
 package com.example.adobongkangkong.ui.meal.editor
 
+import android.graphics.BitmapFactory
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-//import androidx.compose.material.icons.Icons
-//import androidx.compose.material.icons.filled.Add
-//import androidx.compose.material.icons.filled.ArrowDownward
-//import androidx.compose.material.icons.filled.ArrowUpward
-//import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -29,31 +31,41 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.feature.camera.BannerOwnerRef
+import com.example.adobongkangkong.feature.camera.FoodImageStorage
+import com.example.adobongkangkong.ui.camera.BannerCaptureController
 
 /**
  * Shared editor screen for both Planned meals and Templates.
- *
- * Navigation note:
- * - This screen does NOT know how to pick a food.
- * - Use [onRequestAddFood] to navigate to your food picker/search UI.
- * - When the user picks a food, call: contract.addFood(foodId)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MealEditorScreen(
     contract: MealEditorContract,
     onBack: () -> Unit,
-    onRequestAddFood: () -> Unit
+    onRequestAddFood: () -> Unit,
+    bannerCaptureController: BannerCaptureController? = null,
+    bannerOwner: BannerOwnerRef? = null,
+    bannerRefreshTick: Int = 0,
+    @DrawableRes bannerPlaceholderResId: Int = R.drawable.foods_banner,
+    bannerChangeLabel: String = "Change banner"
 ) {
     val state = contract.state.collectAsState().value
 
@@ -110,6 +122,17 @@ fun MealEditorScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            if (bannerCaptureController != null) {
+                MealEditorBannerSection(
+                    bannerOwner = bannerOwner,
+                    bannerRefreshTick = bannerRefreshTick,
+                    bannerPlaceholderResId = bannerPlaceholderResId,
+                    bannerChangeLabel = bannerChangeLabel,
+                    bannerCaptureController = bannerCaptureController
+                )
+                Divider()
+            }
+
             MealEditorHeader(
                 state = state,
                 onNameChanged = contract::setName
@@ -151,9 +174,129 @@ fun MealEditorScreen(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(84.dp)) // space for FAB
+                    Spacer(modifier = Modifier.height(84.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MealEditorBannerSection(
+    bannerOwner: BannerOwnerRef?,
+    bannerRefreshTick: Int,
+    @DrawableRes bannerPlaceholderResId: Int,
+    bannerChangeLabel: String,
+    bannerCaptureController: BannerCaptureController
+) {
+    val context = LocalContext.current
+    val storage = remember(context) { FoodImageStorage(context) }
+    val canCaptureBanner = bannerOwner != null
+
+    val bannerFile = remember(bannerOwner) {
+        bannerOwner?.let { storage.bannerJpegFile(it) }
+    }
+
+    val hasStoredBanner = bannerFile?.exists() == true
+
+    val bannerBitmapState = if (bannerOwner != null) {
+        produceState<android.graphics.Bitmap?>(
+            initialValue = null,
+            key1 = bannerOwner,
+            key2 = bannerRefreshTick
+        ) {
+            val file = bannerFile
+            value = if (file != null && file.exists()) {
+                BitmapFactory.decodeFile(file.absolutePath)
+            } else {
+                null
+            }
+        }
+    } else {
+        null
+    }
+
+    val bmp = bannerBitmapState?.value
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+//                .clip(RoundedCornerShape(20.dp))
+                .aspectRatio(3f / 1f)
+        ) {
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    alignment = Alignment.Center,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Image(
+                    painter = painterResource(bannerPlaceholderResId),
+                    contentDescription = null,
+                    alignment = Alignment.Center,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            if (canCaptureBanner) {
+                IconButton(
+                    onClick = { bannerOwner?.let { bannerCaptureController.open(it) } },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(android.R.drawable.ic_menu_camera),
+                        contentDescription = bannerChangeLabel
+                    )
+                }
+            }
+
+            if (hasStoredBanner && bmp == null) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp)
+                        .size(50.dp),
+                    strokeWidth = 2.dp
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                enabled = canCaptureBanner,
+                onClick = { bannerOwner?.let { bannerCaptureController.open(it) } },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = bannerChangeLabel,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+
+        if (!canCaptureBanner) {
+            Text(
+                text = "Save first to enable banner image.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            )
         }
     }
 }

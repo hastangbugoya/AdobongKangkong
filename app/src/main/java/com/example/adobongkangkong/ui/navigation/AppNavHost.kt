@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.navigation
 
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -13,6 +14,9 @@ import androidx.navigation.navArgument
 import com.example.adobongkangkong.core.util.restartApp
 import com.example.adobongkangkong.ui.backup.BackupScreen
 import com.example.adobongkangkong.ui.calendar.CalendarScreen
+import com.example.adobongkangkong.R
+import com.example.adobongkangkong.feature.camera.BannerOwnerRef
+import com.example.adobongkangkong.feature.camera.BannerOwnerType
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.daylog.DayLogScreen
@@ -141,6 +145,9 @@ fun AppNavHost(
                 },
                 onNavigateToShopping = { startDate ->
                     navController.navigate(NavRoutes.Shopping.shopping(startDate = startDate, days = 7))
+                },
+                onNavigateToTemplates = { _ ->
+                    navController.navigate(NavRoutes.Planner.templates)
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -519,6 +526,86 @@ composable(route = NavRoutes.Foods.pickFood) {
             )
         }
 
+
+        composable(NavRoutes.Planner.templates) {
+            com.example.adobongkangkong.ui.templates.MealTemplateListRoute(
+                onBack = { navController.popBackStack() },
+                onOpenTemplate = { templateId ->
+                    navController.navigate(NavRoutes.Planner.templateEditor(templateId))
+                },
+                onCreateTemplate = {
+                    navController.navigate(NavRoutes.Planner.templateEditorNew)
+                }
+            )
+        }
+
+        composable(
+            route = NavRoutes.Planner.templateEditor,
+            arguments = listOf(navArgument("templateId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val templateId = backStackEntry.arguments?.getLong("templateId") ?: 0L
+
+            val vm: com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel =
+                androidx.hilt.navigation.compose.hiltViewModel()
+
+            androidx.compose.runtime.LaunchedEffect(templateId) {
+                if (templateId > 0L) vm.setTemplateId(templateId)
+            }
+
+            val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
+            androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
+                pickedFoodId.collect { id ->
+                    if (id != null && id > 0L) {
+                        vm.addFood(id)
+                        backStackEntry.savedStateHandle[KEY_FOOD_PICK_FOOD_ID] = null
+                    }
+                }
+            }
+
+            com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
+                contract = vm,
+                onBack = { navController.popBackStack() },
+                onRequestAddFood = {
+                    navController.navigate(NavRoutes.Foods.pickFood)
+                },
+                bannerCaptureController = bannerCaptureController,
+                bannerOwner = BannerOwnerRef(BannerOwnerType.TEMPLATE, templateId),
+                bannerRefreshTick = bannerRefreshTick,
+                bannerPlaceholderResId = R.drawable.recipe_banner,
+                bannerChangeLabel = "Change banner"
+            )
+        }
+
+        composable(route = NavRoutes.Planner.templateEditorNew) { backStackEntry ->
+            val vm: com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel =
+                androidx.hilt.navigation.compose.hiltViewModel()
+
+            val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
+            androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
+                pickedFoodId.collect { id ->
+                    if (id != null && id > 0L) {
+                        vm.addFood(id)
+                        backStackEntry.savedStateHandle[KEY_FOOD_PICK_FOOD_ID] = null
+                    }
+                }
+            }
+
+            com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
+                contract = vm,
+                onBack = { navController.popBackStack() },
+                onRequestAddFood = {
+                    navController.navigate(NavRoutes.Foods.pickFood)
+                },
+                bannerCaptureController = bannerCaptureController,
+                bannerOwner = vm.state.collectAsState().value.mealId?.let {
+                    BannerOwnerRef(BannerOwnerType.TEMPLATE, it)
+                },
+                bannerRefreshTick = bannerRefreshTick,
+                bannerPlaceholderResId = R.drawable.recipe_banner,
+                bannerChangeLabel = "Change banner"
+            )
+        }
+
         // ------------------------------------------------------------
         // Planner — Planned Meal Editor
         // ------------------------------------------------------------
@@ -536,16 +623,7 @@ composable(route = NavRoutes.Foods.pickFood) {
                 if (mealId > 0L) vm.setMealId(mealId)
             }
 
-            androidx.compose.runtime.LaunchedEffect(vm) {
-                vm.effects.collect { effect ->
-                    when (effect) {
-                        com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel.Effect.Saved -> {
-                            navController.popBackStack()
-                        }
-                    }
-                }
-            }
-
+            
             // Returned from food picker -> add to meal and consume.
             val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
             androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
@@ -586,16 +664,6 @@ com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
                         com.example.adobongkangkong.data.local.db.entity.MealSlot.valueOf(slotName)
                     }.getOrNull()?.let { slot ->
                         vm.startNewPlannedMeal(dateIso = dateIso, slot = slot)
-                    }
-                }
-            }
-
-            androidx.compose.runtime.LaunchedEffect(vm) {
-                vm.effects.collect { effect ->
-                    when (effect) {
-                        com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel.Effect.Saved -> {
-                            navController.popBackStack()
-                        }
                     }
                 }
             }
