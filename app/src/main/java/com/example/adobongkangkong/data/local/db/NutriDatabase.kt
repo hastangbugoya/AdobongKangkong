@@ -35,7 +35,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         PlannedSeriesItemEntity::class,
         IouEntity::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -246,6 +246,20 @@ abstract class NutriDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_ious_dateIso ON ious(dateIso)")
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_ious_dateIso_createdAtEpochMs ON ious(dateIso, createdAtEpochMs)"
+                )
+            }
+        }
+
+
+        /**
+         * v14
+         * - Add user_pinned_nutrients.isCritical for clinically/behaviorally important nutrients.
+         * - Default false for all existing rows.
+         */
+        val MIGRATION_13_14: Migration = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE user_pinned_nutrients ADD COLUMN isCritical INTEGER NOT NULL DEFAULT 0"
                 )
             }
         }

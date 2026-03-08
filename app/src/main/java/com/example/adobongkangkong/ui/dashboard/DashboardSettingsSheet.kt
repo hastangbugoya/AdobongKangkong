@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.domain.model.TargetDraft
+import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
@@ -41,7 +44,10 @@ fun DashboardSettingsSheet(
     targetDraft: TargetDraft?,
     onDismiss: () -> Unit,
     pinOptions: List<DashboardPinOption>,
+    nutrientPreferences: List<UserNutrientPreference>,
     onApplyPins: (slot0: String?, slot1: String?) -> Unit,
+    onPinnedChange: (NutrientKey, Boolean) -> Unit,
+    onCriticalChange: (NutrientKey, Boolean) -> Unit,
     onStartTargetEditPrefilled: (NutrientKey, String, String, String) -> Unit,
     onDraftMinChange: (String) -> Unit,
     onDraftTargetChange: (String) -> Unit,
@@ -58,9 +64,6 @@ fun DashboardSettingsSheet(
     // NEW: Full backup/restore screen (DB + images)
     onOpenBackup: () -> Unit
 ) {
-    var slot0Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(0)?.value) }
-    var slot1Code by remember(pinnedKeys) { mutableStateOf(pinnedKeys.getOrNull(1)?.value) }
-
     Column(
         Modifier
             .fillMaxWidth()
@@ -70,40 +73,55 @@ fun DashboardSettingsSheet(
         Text("Dashboard Settings", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
 
-        // ---------------- Pins ----------------
+        // ---------------- Nutrient preferences ----------------
 
         Text("Pinned nutrients (2)", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
 
-        PinDropdown(
-            title = "Slot 1",
-            selectedCode = slot0Code,
-            options = pinOptions,
-            disabledCodes = setOfNotNull(slot1Code),
-            onSelect = { slot0Code = it }
-        )
+        val preferenceByKey = remember(nutrientPreferences) {
+            nutrientPreferences.associateBy { it.key.value }
+        }
 
-        Spacer(Modifier.height(8.dp))
+        pinOptions.forEach { option ->
+            val preference = preferenceByKey[option.key.value]
 
-        PinDropdown(
-            title = "Slot 2",
-            selectedCode = slot1Code,
-            options = pinOptions,
-            disabledCodes = setOfNotNull(slot0Code),
-            onSelect = { slot1Code = it }
-        )
-
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                onApplyPins(slot0Code, slot1Code)
-            }) { Text("Apply pins") }
-
-            TextButton(onClick = {
-                slot0Code = null
-                slot1Code = null
-                onApplyPins(null, null)
-            }) { Text("Clear") }
+            ListItem(
+                headlineContent = { Text(option.displayName) },
+                supportingContent = {
+                    Text(
+                        buildString {
+                            append(option.key.value)
+                            option.unit?.takeIf { it.isNotBlank() }?.let {
+                                append(" • ")
+                                append(it)
+                            }
+                        }
+                    )
+                },
+                trailingContent = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Pin")
+                            Switch(
+                                checked = preference?.isPinned == true,
+                                onCheckedChange = { checked ->
+                                    onPinnedChange(option.key, checked)
+                                }
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Critical")
+                            Switch(
+                                checked = preference?.isCritical == true,
+                                onCheckedChange = { checked ->
+                                    onCriticalChange(option.key, checked)
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+            HorizontalDivider()
         }
 
         Spacer(Modifier.height(20.dp))

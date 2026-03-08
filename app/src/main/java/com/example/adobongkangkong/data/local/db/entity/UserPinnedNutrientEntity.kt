@@ -20,9 +20,13 @@ import androidx.room.PrimaryKey
     ]
 )
 data class UserPinnedNutrientEntity(
-    /** 0 or 1 (unique), used to preserve slot ordering. */
+    /**
+     * 0/1 for pinned dashboard slots.
+     * Negative values are reserved for preference-only rows (e.g. critical but not pinned).
+     */
     @PrimaryKey
     val position: Int,
-    val nutrientCode: String
+    val nutrientCode: String,
+    val isCritical: Boolean = false
 )
 

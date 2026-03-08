@@ -9,6 +9,7 @@ import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
 import com.example.adobongkangkong.domain.model.TargetDraft
+import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.model.TargetEdit
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
@@ -140,6 +141,11 @@ class DashboardViewModel @Inject constructor(
 
     private val pinnedKeysFlow: StateFlow<List<NutrientKey>> =
         userPinnedNutrientRepository.observePinnedKeys()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+
+    val nutrientPreferences: StateFlow<List<UserNutrientPreference>> =
+        userPinnedNutrientRepository.observePreferences()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val rollingStats: StateFlow<RollingNutritionStats> =
@@ -464,6 +470,42 @@ class DashboardViewModel @Inject constructor(
                 slot0 = slot0.toKeyOrNull(),
                 slot1 = slot1.toKeyOrNull()
             )
+        }
+    }
+
+
+    fun setPinnedFromSettings(key: NutrientKey, isPinned: Boolean) {
+        viewModelScope.launch {
+            val canonicalKey = NutrientKey(key.value.trim().uppercase())
+            val existingPrefs = nutrientPreferences.value
+            val slot0 = existingPrefs.firstOrNull { it.position == 0 }?.key
+            val slot1 = existingPrefs.firstOrNull { it.position == 1 }?.key
+
+            when {
+                isPinned && slot0 == canonicalKey -> Unit
+                isPinned && slot1 == canonicalKey -> Unit
+                isPinned && slot0 == null -> {
+                    userPinnedNutrientRepository.setPinned(position = 0, key = canonicalKey)
+                }
+                isPinned && slot1 == null -> {
+                    userPinnedNutrientRepository.setPinned(position = 1, key = canonicalKey)
+                }
+                isPinned -> {
+                    _snackbar.value = "You can pin up to 2 nutrients"
+                }
+                !isPinned && slot0 == canonicalKey -> {
+                    userPinnedNutrientRepository.setPinned(position = 0, key = null)
+                }
+                !isPinned && slot1 == canonicalKey -> {
+                    userPinnedNutrientRepository.setPinned(position = 1, key = null)
+                }
+            }
+        }
+    }
+
+    fun setCriticalFromSettings(key: NutrientKey, isCritical: Boolean) {
+        viewModelScope.launch {
+            userPinnedNutrientRepository.setCritical(key, isCritical)
         }
     }
 

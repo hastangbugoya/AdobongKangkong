@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.data.repository
 
 import com.example.adobongkangkong.data.local.db.dao.UserPinnedNutrientDao
+import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +19,28 @@ class UserPinnedNutrientRepositoryImpl @Inject constructor(
                 .mapNotNull { e -> e.nutrientCode.toNutrientKeyOrNull() }
         }
 
+    override fun observePreferences(): Flow<List<UserNutrientPreference>> =
+        dao.observeAll().map { entities ->
+            entities
+                .groupBy { it.nutrientCode }
+                .mapNotNull { (nutrientCode, rows) ->
+                    val key = nutrientCode.toNutrientKeyOrNull() ?: return@mapNotNull null
+                    val pinnedRow = rows
+                        .filter { it.position == 0 || it.position == 1 }
+                        .minByOrNull { it.position }
+                    UserNutrientPreference(
+                        key = key,
+                        isPinned = pinnedRow != null,
+                        isCritical = rows.any { it.isCritical },
+                        position = pinnedRow?.position
+                    )
+                }
+                .sortedWith(
+                    compareBy<UserNutrientPreference> { it.position ?: Int.MAX_VALUE }
+                        .thenBy { it.key.value }
+                )
+        }
+
     override suspend fun setPinned(position: Int, key: NutrientKey?) {
         require(position == 0 || position == 1) { "position must be 0 or 1" }
         dao.setPinned(position, key?.canonical()?.value)
@@ -33,6 +56,13 @@ class UserPinnedNutrientRepositoryImpl @Inject constructor(
         dao.setPinnedPositions(
             position0Code = c0?.value,
             position1Code = c1?.value
+        )
+    }
+
+    override suspend fun setCritical(key: NutrientKey, isCritical: Boolean) {
+        dao.setCritical(
+            nutrientCode = key.canonical().value,
+            isCritical = isCritical
         )
     }
 }
