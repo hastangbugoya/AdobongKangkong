@@ -32,6 +32,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 /**
  * Status used by the Calendar month grid to render a tiny icon per day.
@@ -130,6 +131,18 @@ class CalendarViewModel @Inject constructor(
                 }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val graphTargetCalories: StateFlow<Int?> =
+        _graphWeekStart
+            .flatMapLatest { weekStart ->
+                observeDailyNutrientStatuses(date = weekStart, zoneId = zoneId)
+                    .map { statuses ->
+                        statuses.firstOrNull { it.nutrientCode == MacroKeys.CALORIES.value }
+                            ?.target
+                            ?.roundToInt()
+                    }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun goPrevMonth() { _month.update { it.minusMonths(1) } }
     fun goNextMonth() { _month.update { it.plusMonths(1) } }
