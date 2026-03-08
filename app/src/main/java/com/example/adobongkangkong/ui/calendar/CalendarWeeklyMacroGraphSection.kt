@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
@@ -95,7 +97,7 @@ fun CalendarWeeklyMacroGraphSection(
     val targetFraction = targetCalories?.toFloat()?.div(graphMaxCalories.toFloat())
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().weekSwipe(onPrev = onPrevWeek, onNext = onNextWeek),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.background
         )
@@ -552,4 +554,26 @@ private fun resolvePopupStatus(
         min != null || target != null || max != null -> TargetStatus.OK
         else -> TargetStatus.NO_TARGET
     }
+}
+
+
+private fun Modifier.weekSwipe(
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    thresholdPx: Float = 120f
+): Modifier = pointerInput(Unit) {
+    var totalDx = 0f
+
+    detectHorizontalDragGestures(
+        onDragEnd = {
+            when {
+                totalDx > thresholdPx -> onPrev()
+                totalDx < -thresholdPx -> onNext()
+            }
+            totalDx = 0f
+        },
+        onHorizontalDrag = { _, dx ->
+            totalDx += dx
+        }
+    )
 }
