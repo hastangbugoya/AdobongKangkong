@@ -112,17 +112,39 @@ class CalendarViewModel @Inject constructor(
             .flatMapLatest { weekStart ->
                 val days = (0L..6L).map { weekStart.plusDays(it) }
                 val perDayFlows = days.map { date ->
-                    observeDailyNutritionTotals(date = date, zoneId = zoneId)
-                        .map { totals ->
-                            val map = totals.totalsByCode
-                            CalendarWeeklyMacroDayUi(
-                                date = date,
-                                totalCalories = map[MacroKeys.CALORIES] ?: 0.0,
-                                proteinG = map[MacroKeys.PROTEIN] ?: 0.0,
-                                carbsG = map[MacroKeys.CARBS] ?: 0.0,
-                                fatG = map[MacroKeys.FAT] ?: 0.0,
-                            )
-                        }
+                    combine(
+                        observeDailyNutritionTotals(date = date, zoneId = zoneId),
+                        observeDailyNutrientStatuses(date = date, zoneId = zoneId)
+                    ) { totals, statuses ->
+                        val map = totals.totalsByCode
+                        val proteinStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.PROTEIN.value }
+                        val carbsStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.CARBS.value }
+                        val fatStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.FAT.value }
+
+                        CalendarWeeklyMacroDayUi(
+                            date = date,
+                            totalCalories = map[MacroKeys.CALORIES] ?: 0.0,
+                            proteinG = map[MacroKeys.PROTEIN] ?: 0.0,
+                            carbsG = map[MacroKeys.CARBS] ?: 0.0,
+                            fatG = map[MacroKeys.FAT] ?: 0.0,
+
+                            proteinMinG = proteinStatus?.min,
+                            proteinTargetG = proteinStatus?.target,
+                            proteinMaxG = proteinStatus?.max,
+
+                            carbsMinG = carbsStatus?.min,
+                            carbsTargetG = carbsStatus?.target,
+                            carbsMaxG = carbsStatus?.max,
+
+                            fatMinG = fatStatus?.min,
+                            fatTargetG = fatStatus?.target,
+                            fatMaxG = fatStatus?.max,
+
+                            proteinStatus = proteinStatus?.status ?: TargetStatus.NO_TARGET,
+                            carbsStatus = carbsStatus?.status ?: TargetStatus.NO_TARGET,
+                            fatStatus = fatStatus?.status ?: TargetStatus.NO_TARGET,
+                        )
+                    }
                 }
 
                 combine(perDayFlows) { barsAny ->

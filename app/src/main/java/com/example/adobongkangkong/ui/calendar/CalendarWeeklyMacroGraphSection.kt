@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -22,6 +24,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,8 +35,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -78,6 +86,8 @@ fun CalendarWeeklyMacroGraphSection(
     modifier: Modifier = Modifier,
     targetCalories: Int?,
 ) {
+    var popupBar by remember { mutableStateOf<CalendarWeeklyMacroDayUi?>(null) }
+
     val weekEnd = weekStart.plusDays(6)
     val weekLabel = "${weekStart.format(MM_DD)} to ${weekEnd.format(MM_DD)}"
     val maxBarCalories = bars.maxOfOrNull { it.totalCalories.roundToInt() } ?: 0
@@ -163,13 +173,10 @@ fun CalendarWeeklyMacroGraphSection(
                 ) {
                     bars.forEach { bar ->
                         WeeklyMacroBar(
-                            dayLabel = bar.date.dayOfWeekLabel,
-                            totalCalories = bar.totalCalories.roundToInt(),
-                            proteinFraction = bar.proteinFraction,
-                            carbsFraction = bar.carbsFraction,
-                            fatFraction = bar.fatFraction,
+                            bar = bar,
                             maxCalories = graphMaxCalories,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onLongPress = { popupBar = bar }
                         )
                     }
                 }
@@ -200,25 +207,32 @@ fun CalendarWeeklyMacroGraphSection(
             }
         }
     }
+
+    popupBar?.let { bar ->
+        MacroStatusDialog(
+            bar = bar,
+            onDismiss = { popupBar = null }
+        )
+    }
 }
 
 @Composable
 private fun WeeklyMacroBar(
-    dayLabel: String,
-    totalCalories: Int,
-    proteinFraction: Float,
-    carbsFraction: Float,
-    fatFraction: Float,
+    bar: CalendarWeeklyMacroDayUi,
     maxCalories: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongPress: () -> Unit,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.combinedClickable(
+            onClick = {},
+            onLongClick = onLongPress
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Bottom
     ) {
         Text(
-            text = totalCalories.toString(),
+            text = bar.totalCalories.roundToInt().toString(),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -236,9 +250,9 @@ private fun WeeklyMacroBar(
             contentAlignment = Alignment.BottomCenter
         ) {
 
-            if (totalCalories > 0) {
+            if (bar.totalCalories.roundToInt() > 0) {
                 val normalizedHeightFraction =
-                    totalCalories.toFloat() / maxCalories.toFloat()
+                    bar.totalCalories.toFloat() / maxCalories.toFloat()
 
                 val barHeight =
                     120.dp * normalizedHeightFraction.coerceIn(0f, 1f)
@@ -249,9 +263,9 @@ private fun WeeklyMacroBar(
                         .height(barHeight)
                         .clip(RoundedCornerShape(8.dp))
                 ) {
-                    val proteinWeight = proteinFraction.coerceAtLeast(0f)
-                    val carbsWeight = carbsFraction.coerceAtLeast(0f)
-                    val fatWeight = fatFraction.coerceAtLeast(0f)
+                    val proteinWeight = bar.proteinFraction.coerceAtLeast(0f)
+                    val carbsWeight = bar.carbsFraction.coerceAtLeast(0f)
+                    val fatWeight = bar.fatFraction.coerceAtLeast(0f)
                     val weightSum = proteinWeight + carbsWeight + fatWeight
 
                     if (weightSum > 0f) {
@@ -288,10 +302,133 @@ private fun WeeklyMacroBar(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            text = dayLabel,
+            text = bar.date.dayOfWeekLabel,
             style = MaterialTheme.typography.labelMedium
         )
     }
+}
+
+@Composable
+private fun MacroStatusDialog(
+    bar: CalendarWeeklyMacroDayUi,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        title = {
+            Text(
+                text = bar.date.format(MMM_DD_YYYY),
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MacroStatusRow(
+                    color = ProteinColor,
+                    label = "Protein",
+                    actual = bar.proteinG,
+                    min = bar.proteinMinG,
+                    target = bar.proteinTargetG,
+                    max = bar.proteinMaxG,
+                    status = resolvePopupStatus(
+                        actual = bar.proteinG,
+                        min = bar.proteinMinG,
+                        target = bar.proteinTargetG,
+                        max = bar.proteinMaxG,
+                    ),
+                    unit = "g"
+                )
+                MacroStatusRow(
+                    color = CarbsColor,
+                    label = "Carbs",
+                    actual = bar.carbsG,
+                    min = bar.carbsMinG,
+                    target = bar.carbsTargetG,
+                    max = bar.carbsMaxG,
+                    status = resolvePopupStatus(
+                        actual = bar.carbsG,
+                        min = bar.carbsMinG,
+                        target = bar.carbsTargetG,
+                        max = bar.carbsMaxG,
+                    ),
+                    unit = "g"
+                )
+                MacroStatusRow(
+                    color = FatColor,
+                    label = "Fat",
+                    actual = bar.fatG,
+                    min = bar.fatMinG,
+                    target = bar.fatTargetG,
+                    max = bar.fatMaxG,
+                    status = resolvePopupStatus(
+                        actual = bar.fatG,
+                        min = bar.fatMinG,
+                        target = bar.fatTargetG,
+                        max = bar.fatMaxG,
+                    ),
+                    unit = "g"
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun MacroStatusRow(
+    color: Color,
+    label: String,
+    actual: Double,
+    min: Double?,
+    target: Double?,
+    max: Double?,
+    status: TargetStatus,
+    unit: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(color = color, shape = RoundedCornerShape(3.dp))
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = status.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = status.color
+            )
+        }
+        Text(
+            text = "Actual ${actual.formatForMacro()} $unit • ${goalText(min, target, max, unit)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun goalText(
+    min: Double?,
+    target: Double?,
+    max: Double?,
+    unit: String
+): String = when {
+    target != null -> "TARGET ${target.formatForMacro()} $unit"
+    min != null -> "MIN ${min.formatForMacro()} $unit"
+    max != null -> "MAX ${max.formatForMacro()} $unit"
+    else -> "NO TARGET"
 }
 
 @Composable
@@ -319,6 +456,18 @@ data class CalendarWeeklyMacroDayUi(
     val proteinG: Double,
     val carbsG: Double,
     val fatG: Double,
+    val proteinStatus: TargetStatus,
+    val carbsStatus: TargetStatus,
+    val fatStatus: TargetStatus,
+    val proteinMinG: Double?,
+    val proteinTargetG: Double?,
+    val proteinMaxG: Double?,
+    val carbsMinG: Double?,
+    val carbsTargetG: Double?,
+    val carbsMaxG: Double?,
+    val fatMinG: Double?,
+    val fatTargetG: Double?,
+    val fatMaxG: Double?,
 ) {
     val proteinFraction: Float
         get() = macroFractions().first
@@ -346,6 +495,7 @@ data class CalendarWeeklyMacroDayUi(
 }
 
 private val MM_DD: DateTimeFormatter = DateTimeFormatter.ofPattern("MM/dd")
+private val MMM_DD_YYYY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MMM dd yyyy")
 private val ProteinColor = Color(0xFF6787B3)
 private val CarbsColor = Color(0xFFC98669)
 private val FatColor = Color(0xFFAE8CB9)
@@ -360,3 +510,46 @@ private val LocalDate.dayOfWeekLabel: String
         5 -> "Fri"
         else -> "Sat"
     }
+
+private fun Double.formatForMacro(): String {
+    val rounded = roundToInt().toDouble()
+    return if (abs(this - rounded) < 0.05) rounded.roundToInt().toString() else String.format("%.1f", this)
+}
+
+private fun Double?.formatForMacroGoal(): String =
+    this?.formatForMacro() ?: "—"
+
+private val TargetStatus.label: String
+    get() = when (this) {
+        TargetStatus.LOW -> "LOW"
+        TargetStatus.OK -> "OK"
+        TargetStatus.HIGH -> "HIGH"
+        TargetStatus.NO_TARGET -> "NO TARGET"
+    }
+
+private val TargetStatus.color: Color
+    @Composable
+    get() = when (this) {
+        TargetStatus.OK -> MaterialTheme.colorScheme.primary
+        TargetStatus.LOW,
+        TargetStatus.HIGH -> MaterialTheme.colorScheme.error
+        TargetStatus.NO_TARGET -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+private fun resolvePopupStatus(
+    actual: Double,
+    min: Double?,
+    target: Double?,
+    max: Double?,
+): TargetStatus {
+    val epsilon = 0.05
+
+    return when {
+        min != null && actual + epsilon < min -> TargetStatus.LOW
+        max != null && actual - epsilon > max -> TargetStatus.HIGH
+        target != null && actual + epsilon < target -> TargetStatus.LOW
+        target != null && actual - epsilon > target -> TargetStatus.HIGH
+        min != null || target != null || max != null -> TargetStatus.OK
+        else -> TargetStatus.NO_TARGET
+    }
+}
