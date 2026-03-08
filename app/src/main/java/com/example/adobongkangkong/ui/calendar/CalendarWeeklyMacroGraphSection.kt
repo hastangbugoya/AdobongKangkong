@@ -35,6 +35,9 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
+ *
+ * DO NOT CHANGE THIS FILE (2025-03-07)
+ *
  * Compact weekly macro graph placed below the monthly calendar.
  *
  * Layout note:
@@ -84,9 +87,8 @@ fun CalendarWeeklyMacroGraphSection(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        ),
-        shape = RoundedCornerShape(24.dp)
+            containerColor = MaterialTheme.colorScheme.background
+        )
     ) {
         Column(
             modifier = Modifier
