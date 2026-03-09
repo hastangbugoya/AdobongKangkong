@@ -1,7 +1,6 @@
 package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
@@ -97,7 +95,7 @@ fun CalendarWeeklyMacroGraphSection(
     val targetFraction = targetCalories?.toFloat()?.div(graphMaxCalories.toFloat())
 
     Card(
-        modifier = modifier.fillMaxWidth().weekSwipe(onPrev = onPrevWeek, onNext = onNextWeek),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.background
         )
@@ -193,6 +191,32 @@ fun CalendarWeeklyMacroGraphSection(
                 GraphLegendItem(color = ProteinColor, label = "Protein")
                 GraphLegendItem(color = CarbsColor, label = "Carbs")
                 GraphLegendItem(color = FatColor, label = "Fat")
+            }
+
+            val weekIouProtein = bars.sumOf { it.iouProteinG }
+            val weekIouCarbs = bars.sumOf { it.iouCarbsG }
+            val weekIouFat = bars.sumOf { it.iouFatG }
+            val hasWeekIous = weekIouProtein > 0.0 || weekIouCarbs > 0.0 || weekIouFat > 0.0
+
+            if (hasWeekIous) {
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    text = "Has IOUs",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+
+                Text(
+                    text = buildString {
+                        append("IOUs:")
+                        if (weekIouProtein > 0.0) append(" P +${weekIouProtein.formatForMacro()}g")
+                        if (weekIouCarbs > 0.0) append(" C +${weekIouCarbs.formatForMacro()}g")
+                        if (weekIouFat > 0.0) append(" F +${weekIouFat.formatForMacro()}g")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
 
             Row(
@@ -470,6 +494,10 @@ data class CalendarWeeklyMacroDayUi(
     val fatMinG: Double?,
     val fatTargetG: Double?,
     val fatMaxG: Double?,
+    val iouCaloriesKcal: Double = 0.0,
+    val iouProteinG: Double = 0.0,
+    val iouCarbsG: Double = 0.0,
+    val iouFatG: Double = 0.0,
 ) {
     val proteinFraction: Float
         get() = macroFractions().first
@@ -554,26 +582,4 @@ private fun resolvePopupStatus(
         min != null || target != null || max != null -> TargetStatus.OK
         else -> TargetStatus.NO_TARGET
     }
-}
-
-
-private fun Modifier.weekSwipe(
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    thresholdPx: Float = 120f
-): Modifier = pointerInput(Unit) {
-    var totalDx = 0f
-
-    detectHorizontalDragGestures(
-        onDragEnd = {
-            when {
-                totalDx > thresholdPx -> onPrev()
-                totalDx < -thresholdPx -> onNext()
-            }
-            totalDx = 0f
-        },
-        onHorizontalDrag = { _, dx ->
-            totalDx += dx
-        }
-    )
 }

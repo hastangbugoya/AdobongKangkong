@@ -61,6 +61,10 @@ data class QuickAddState(
     // IOU (planner narrative placeholder)
     val isIouDialogOpen: Boolean = false,
     val iouDescription: String = "",
+    val iouCaloriesText: String = "",
+    val iouProteinText: String = "",
+    val iouCarbsText: String = "",
+    val iouFatText: String = "",
     val isSavingIou: Boolean = false,
     val iouErrorMessage: String? = null,
 )

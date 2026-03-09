@@ -170,11 +170,19 @@ class QuickAddViewModel @Inject constructor(
 
     private val isIouDialogOpenFlow = MutableStateFlow(false)
     private val iouDescriptionFlow = MutableStateFlow("")
+    private val iouCaloriesTextFlow = MutableStateFlow("")
+    private val iouProteinTextFlow = MutableStateFlow("")
+    private val iouCarbsTextFlow = MutableStateFlow("")
+    private val iouFatTextFlow = MutableStateFlow("")
     private val isSavingIouFlow = MutableStateFlow(false)
     private val iouErrorFlow = MutableStateFlow<String?>(null)
 
     fun openIouDialog() {
         iouDescriptionFlow.value = ""
+        iouCaloriesTextFlow.value = ""
+        iouProteinTextFlow.value = ""
+        iouCarbsTextFlow.value = ""
+        iouFatTextFlow.value = ""
         iouErrorFlow.value = null
         isIouDialogOpenFlow.value = true
     }
@@ -189,12 +197,49 @@ class QuickAddViewModel @Inject constructor(
         iouErrorFlow.value = null
     }
 
+    fun onIouCaloriesChanged(value: String) {
+        iouCaloriesTextFlow.value = value
+        iouErrorFlow.value = null
+    }
+
+    fun onIouProteinChanged(value: String) {
+        iouProteinTextFlow.value = value
+        iouErrorFlow.value = null
+    }
+
+    fun onIouCarbsChanged(value: String) {
+        iouCarbsTextFlow.value = value
+        iouErrorFlow.value = null
+    }
+
+    fun onIouFatChanged(value: String) {
+        iouFatTextFlow.value = value
+        iouErrorFlow.value = null
+    }
+
+    private fun parseOptionalNonNegativeDouble(raw: String): Double? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        val value = trimmed.toDoubleOrNull() ?: return Double.NaN
+        return if (value >= 0.0) value else Double.NaN
+    }
+
     fun saveIou(logDate: LocalDate, onSaved: () -> Unit) {
         if (isSavingIouFlow.value) return
 
         val desc = iouDescriptionFlow.value.trim()
         if (desc.isBlank()) {
             iouErrorFlow.value = "Description is required."
+            return
+        }
+
+        val estimatedCaloriesKcal = parseOptionalNonNegativeDouble(iouCaloriesTextFlow.value)
+        val estimatedProteinG = parseOptionalNonNegativeDouble(iouProteinTextFlow.value)
+        val estimatedCarbsG = parseOptionalNonNegativeDouble(iouCarbsTextFlow.value)
+        val estimatedFatG = parseOptionalNonNegativeDouble(iouFatTextFlow.value)
+
+        if (listOf(estimatedCaloriesKcal, estimatedProteinG, estimatedCarbsG, estimatedFatG).any { it?.isNaN() == true }) {
+            iouErrorFlow.value = "Macro estimates must be valid non-negative numbers."
             return
         }
 
@@ -205,7 +250,11 @@ class QuickAddViewModel @Inject constructor(
             try {
                 createPlannerIou(
                     dateIso = logDate.toString(),
-                    description = desc
+                    description = desc,
+                    estimatedCaloriesKcal = estimatedCaloriesKcal,
+                    estimatedProteinG = estimatedProteinG,
+                    estimatedCarbsG = estimatedCarbsG,
+                    estimatedFatG = estimatedFatG
                 )
                 isSavingIouFlow.value = false
                 isIouDialogOpenFlow.value = false
@@ -357,6 +406,10 @@ class QuickAddViewModel @Inject constructor(
     private data class IouUi(
         val isOpen: Boolean,
         val description: String,
+        val caloriesText: String,
+        val proteinText: String,
+        val carbsText: String,
+        val fatText: String,
         val isSaving: Boolean,
         val error: String?
     )
@@ -450,16 +503,32 @@ class QuickAddViewModel @Inject constructor(
         }
 
         val iouFlow = combine(
-            isIouDialogOpenFlow,
-            iouDescriptionFlow,
-            isSavingIouFlow,
-            iouErrorFlow
-        ) { isOpen, description, isSaving, error ->
+            combine(
+                isIouDialogOpenFlow,
+                iouDescriptionFlow,
+                iouCaloriesTextFlow,
+                iouProteinTextFlow
+            ) { isOpen, description, caloriesText, proteinText ->
+                arrayOf(isOpen, description, caloriesText, proteinText)
+            },
+            combine(
+                iouCarbsTextFlow,
+                iouFatTextFlow,
+                isSavingIouFlow,
+                iouErrorFlow
+            ) { carbsText, fatText, isSaving, error ->
+                arrayOf(carbsText, fatText, isSaving, error)
+            }
+        ) { left, right ->
             IouUi(
-                isOpen = isOpen,
-                description = description,
-                isSaving = isSaving,
-                error = error
+                isOpen = left[0] as Boolean,
+                description = left[1] as String,
+                caloriesText = left[2] as String,
+                proteinText = left[3] as String,
+                carbsText = right[0] as String,
+                fatText = right[1] as String,
+                isSaving = right[2] as Boolean,
+                error = right[3] as String?
             )
         }
 
@@ -523,6 +592,10 @@ class QuickAddViewModel @Inject constructor(
 
                 isIouDialogOpen = iou.isOpen,
                 iouDescription = iou.description,
+                iouCaloriesText = iou.caloriesText,
+                iouProteinText = iou.proteinText,
+                iouCarbsText = iou.carbsText,
+                iouFatText = iou.fatText,
                 isSavingIou = iou.isSaving,
                 iouErrorMessage = iou.error,
             )

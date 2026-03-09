@@ -11,6 +11,7 @@ import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
+import com.example.adobongkangkong.domain.repository.IouRepository
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutrientStatusesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -51,6 +52,7 @@ class CalendarViewModel @Inject constructor(
     private val observePlannedFoodTotals: ObservePlannedFoodTotalsUseCase,
     private val observeDailyNutrientStatuses: ObserveDailyNutrientStatusesUseCase,
     private val observeDailyNutritionTotals: ObserveDailyNutritionTotalsUseCase,
+    private val iouRepository: IouRepository,
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(YearMonth.now())
@@ -114,8 +116,9 @@ class CalendarViewModel @Inject constructor(
                 val perDayFlows = days.map { date ->
                     combine(
                         observeDailyNutritionTotals(date = date, zoneId = zoneId),
-                        observeDailyNutrientStatuses(date = date, zoneId = zoneId)
-                    ) { totals, statuses ->
+                        observeDailyNutrientStatuses(date = date, zoneId = zoneId),
+                        iouRepository.observeForDate(date.toString())
+                    ) { totals, statuses, ious ->
                         val map = totals.totalsByCode
                         val proteinStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.PROTEIN.value }
                         val carbsStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.CARBS.value }
@@ -143,6 +146,10 @@ class CalendarViewModel @Inject constructor(
                             proteinStatus = proteinStatus?.status ?: TargetStatus.NO_TARGET,
                             carbsStatus = carbsStatus?.status ?: TargetStatus.NO_TARGET,
                             fatStatus = fatStatus?.status ?: TargetStatus.NO_TARGET,
+                            iouCaloriesKcal = ious.sumOf { it.estimatedCaloriesKcal ?: 0.0 },
+                            iouProteinG = ious.sumOf { it.estimatedProteinG ?: 0.0 },
+                            iouCarbsG = ious.sumOf { it.estimatedCarbsG ?: 0.0 },
+                            iouFatG = ious.sumOf { it.estimatedFatG ?: 0.0 },
                         )
                     }
                 }

@@ -294,6 +294,10 @@ class ObservePlannedDaysUseCase @Inject constructor(
         Iou(
             id = id,
             description = description,
+            estimatedCaloriesKcal = estimatedCaloriesKcal,
+            estimatedProteinG = estimatedProteinG,
+            estimatedCarbsG = estimatedCarbsG,
+            estimatedFatG = estimatedFatG,
             createdAt = Instant.ofEpochMilli(createdAtEpochMs),
             updatedAt = Instant.ofEpochMilli(updatedAtEpochMs)
         )

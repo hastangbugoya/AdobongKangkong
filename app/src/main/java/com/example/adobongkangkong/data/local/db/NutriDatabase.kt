@@ -35,7 +35,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         PlannedSeriesItemEntity::class,
         IouEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -261,6 +261,20 @@ abstract class NutriDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE user_pinned_nutrients ADD COLUMN isCritical INTEGER NOT NULL DEFAULT 0"
                 )
+            }
+        }
+
+
+        /**
+         * v15
+         * - Add optional rough macro estimate fields to IOUs for reminder/display purposes.
+         */
+        val MIGRATION_14_15: Migration = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE ious ADD COLUMN estimatedCaloriesKcal REAL")
+                db.execSQL("ALTER TABLE ious ADD COLUMN estimatedProteinG REAL")
+                db.execSQL("ALTER TABLE ious ADD COLUMN estimatedCarbsG REAL")
+                db.execSQL("ALTER TABLE ious ADD COLUMN estimatedFatG REAL")
             }
         }
     }

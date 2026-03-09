@@ -28,5 +28,8 @@ data class DashboardNutrientCard(
     val rollingAverage: Double?,
 
     /** OK streak length (0 if none). */
-    val okStreakDays: Int
+    val okStreakDays: Int,
+
+    /** Optional IOU estimate reminder for this nutrient (not included in consumed/status). */
+    val iouEstimate: Double? = null
 )

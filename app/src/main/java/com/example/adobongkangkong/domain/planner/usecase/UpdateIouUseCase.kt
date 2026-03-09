@@ -10,6 +10,10 @@ class UpdateIouUseCase @Inject constructor(
     suspend operator fun invoke(
         iouId: Long,
         newDescription: String,
+        estimatedCaloriesKcal: Double? = null,
+        estimatedProteinG: Double? = null,
+        estimatedCarbsG: Double? = null,
+        estimatedFatG: Double? = null,
         nowEpochMs: Long = System.currentTimeMillis()
     ) {
         require(iouId > 0L) { "iouId must be > 0" }
@@ -20,6 +24,10 @@ class UpdateIouUseCase @Inject constructor(
         ious.update(
             existing.copy(
                 description = newDescription,
+                estimatedCaloriesKcal = estimatedCaloriesKcal,
+                estimatedProteinG = estimatedProteinG,
+                estimatedCarbsG = estimatedCarbsG,
+                estimatedFatG = estimatedFatG,
                 updatedAtEpochMs = nowEpochMs
             )
         )

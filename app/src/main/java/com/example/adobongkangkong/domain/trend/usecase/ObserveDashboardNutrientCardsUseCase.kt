@@ -6,6 +6,7 @@ import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientSpec
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionSummaryUseCase
+import com.example.adobongkangkong.domain.repository.IouRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
@@ -27,7 +28,8 @@ class ObserveDashboardNutrientCardsUseCase @Inject constructor(
     private val observeDashboardNutrients: ObserveDashboardNutrientsUseCase,
     private val observeDailyNutritionSummary: ObserveDailyNutritionSummaryUseCase,
     private val observeRollingNutritionStats: ObserveRollingNutritionStatsUseCase,
-    private val observeDashboardTargets: ObserveDashboardTargetsUseCase
+    private val observeDashboardTargets: ObserveDashboardTargetsUseCase,
+    private val iouRepository: IouRepository
 ) {
     operator fun invoke(
         date: LocalDate,
@@ -38,12 +40,19 @@ class ObserveDashboardNutrientCardsUseCase @Inject constructor(
             observeDashboardNutrients(), // Flow<List<DashboardNutrientSpec>>
             observeDailyNutritionSummary(date, zoneId),
             observeRollingNutritionStats(endDate = date, days = rollingDays, zoneId = zoneId),
-            observeDashboardTargets() // Flow<Map<String, UserNutrientTarget>>
-        ) { specs, dailySummary, rollingStats, targetsByCode ->
+            observeDashboardTargets(), // Flow<Map<String, UserNutrientTarget>>
+            iouRepository.observeForDate(date.toString())
+        ) { specs, dailySummary, rollingStats, targetsByCode, ious ->
 
             val totalsByCode = dailySummary.totals.totalsByCode
             val avgByCode = rollingStats.averages.averageByCode
             val okStreakByCode = rollingStats.okStreaks.associate { it.nutrientCode to it.days }
+            val iouByCode = mapOf(
+                NutrientKey.CALORIES_KCAL.value to ious.sumOf { it.estimatedCaloriesKcal ?: 0.0 },
+                NutrientKey.PROTEIN_G.value to ious.sumOf { it.estimatedProteinG ?: 0.0 },
+                NutrientKey.CARBS_G.value to ious.sumOf { it.estimatedCarbsG ?: 0.0 },
+                NutrientKey.FAT_G.value to ious.sumOf { it.estimatedFatG ?: 0.0 }
+            )
             android.util.Log.d("Meow", "targets keys=${targetsByCode.keys}")
             android.util.Log.d("Meow", "spec codes=${specs.map { it.code }}")
             specs.map { spec: DashboardNutrientSpec ->
@@ -64,7 +73,8 @@ class ObserveDashboardNutrientCardsUseCase @Inject constructor(
                     maxPerDay = target?.maxPerDay,
                     status = evaluateStatus(consumed, target),
                     rollingAverage = avgByCode[code],
-                    okStreakDays = okStreakByCode[code] ?: 0
+                    okStreakDays = okStreakByCode[code] ?: 0,
+                    iouEstimate = iouByCode[code]?.takeIf { it > 0.0 }
                 )
             }
         }

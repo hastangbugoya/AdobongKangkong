@@ -11,6 +11,10 @@ class CreateIouUseCase @Inject constructor(
     suspend operator fun invoke(
         dateIso: String,
         description: String,
+        estimatedCaloriesKcal: Double? = null,
+        estimatedProteinG: Double? = null,
+        estimatedCarbsG: Double? = null,
+        estimatedFatG: Double? = null,
         nowEpochMs: Long = System.currentTimeMillis()
     ): Long {
         require(dateIso.isNotBlank()) { "dateIso must not be blank" }
@@ -21,6 +25,10 @@ class CreateIouUseCase @Inject constructor(
                 id = 0L,
                 dateIso = dateIso,
                 description = description,
+                estimatedCaloriesKcal = estimatedCaloriesKcal,
+                estimatedProteinG = estimatedProteinG,
+                estimatedCarbsG = estimatedCarbsG,
+                estimatedFatG = estimatedFatG,
                 createdAtEpochMs = nowEpochMs,
                 updatedAtEpochMs = nowEpochMs
             )

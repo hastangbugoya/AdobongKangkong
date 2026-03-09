@@ -40,6 +40,10 @@ data class PlannerDayUiState(
 data class IouEditorState(
     val iouId: Long? = null,
     val description: String = "",
+    val caloriesText: String = "",
+    val proteinText: String = "",
+    val carbsText: String = "",
+    val fatText: String = "",
     val isSaving: Boolean = false,
     val errorMessage: String? = null
 )

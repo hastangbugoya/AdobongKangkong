@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,7 +42,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -293,12 +291,7 @@ fun DashboardScreen(
                 val dateLabel = state.date.format(formatter)
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .daySwipe(
-                            onPrev = vm::showPreviousDay,
-                            onNext = { if (state.date < LocalDate.now()) vm.showNextDay() }
-                        ),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -468,10 +461,24 @@ private fun DashboardNutrientCardRow(
 
         Spacer(Modifier.height(4.dp))
 
-        Text(
-            text = "Status: ${card.status.name}",
-            style = MaterialTheme.typography.bodySmall
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Status: ${card.status.name}",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            card.iouEstimate?.takeIf { it > 0.0 }?.let { iou ->
+                Text(
+                    text = "IOU: +${iou.round1()} $unit",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LimitRed
+                )
+            }
+        }
 
         card.rollingAverage?.let { avg ->
             Text(
@@ -529,26 +536,4 @@ private fun DashboardNutrientCard.toDisplay(
             )
         }
     }
-}
-
-
-private fun Modifier.daySwipe(
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    thresholdPx: Float = 120f
-): Modifier = pointerInput(Unit) {
-    var totalDx = 0f
-
-    detectHorizontalDragGestures(
-        onDragEnd = {
-            when {
-                totalDx > thresholdPx -> onPrev()
-                totalDx < -thresholdPx -> onNext()
-            }
-            totalDx = 0f
-        },
-        onHorizontalDrag = { _, dx ->
-            totalDx += dx
-        }
-    )
 }

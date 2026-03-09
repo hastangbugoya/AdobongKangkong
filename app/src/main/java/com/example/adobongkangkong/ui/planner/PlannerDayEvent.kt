@@ -100,6 +100,12 @@ sealed interface PlannerDayEvent {
     /** Update the IOU description field while editing. */
     data class UpdateIouDescription(val value: String) : PlannerDayEvent
 
+    /** Update optional macro estimate fields while editing. */
+    data class UpdateIouCaloriesText(val value: String) : PlannerDayEvent
+    data class UpdateIouProteinText(val value: String) : PlannerDayEvent
+    data class UpdateIouCarbsText(val value: String) : PlannerDayEvent
+    data class UpdateIouFatText(val value: String) : PlannerDayEvent
+
     /** Persist the IOU currently being edited (create or update). */
     data object SaveIou : PlannerDayEvent
 

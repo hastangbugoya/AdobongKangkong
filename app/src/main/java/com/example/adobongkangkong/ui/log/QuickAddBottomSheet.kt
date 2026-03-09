@@ -375,14 +375,61 @@ fun QuickAddBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 120.dp),
-                        isError = state.iouErrorMessage != null,
-                        supportingText = {
-                            val err = state.iouErrorMessage
-                            if (err != null) {
-                                Text(err, color = MaterialTheme.colorScheme.error)
-                            }
-                        }
+                        isError = state.iouErrorMessage != null
                     )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = state.iouCaloriesText,
+                        onValueChange = vm::onIouCaloriesChanged,
+                        label = { Text("Calories (kcal)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = state.iouProteinText,
+                        onValueChange = vm::onIouProteinChanged,
+                        label = { Text("Protein (g)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = state.iouCarbsText,
+                        onValueChange = vm::onIouCarbsChanged,
+                        label = { Text("Carbs (g)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = state.iouFatText,
+                        onValueChange = vm::onIouFatChanged,
+                        label = { Text("Fat (g)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+
+                    state.iouErrorMessage?.let { err ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = err,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = {

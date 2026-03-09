@@ -387,6 +387,34 @@ class PlannerDayViewModel @Inject constructor(
                 }
             }
 
+            is PlannerDayEvent.UpdateIouCaloriesText -> {
+                _state.update { s ->
+                    val ed = s.iouEditor ?: return@update s
+                    s.copy(iouEditor = ed.copy(caloriesText = event.value, errorMessage = null))
+                }
+            }
+
+            is PlannerDayEvent.UpdateIouProteinText -> {
+                _state.update { s ->
+                    val ed = s.iouEditor ?: return@update s
+                    s.copy(iouEditor = ed.copy(proteinText = event.value, errorMessage = null))
+                }
+            }
+
+            is PlannerDayEvent.UpdateIouCarbsText -> {
+                _state.update { s ->
+                    val ed = s.iouEditor ?: return@update s
+                    s.copy(iouEditor = ed.copy(carbsText = event.value, errorMessage = null))
+                }
+            }
+
+            is PlannerDayEvent.UpdateIouFatText -> {
+                _state.update { s ->
+                    val ed = s.iouEditor ?: return@update s
+                    s.copy(iouEditor = ed.copy(fatText = event.value, errorMessage = null))
+                }
+            }
+
             PlannerDayEvent.SaveIou -> {
                 saveIou()
             }
@@ -407,6 +435,10 @@ class PlannerDayViewModel @Inject constructor(
                 iouEditor = IouEditorState(
                     iouId = null,
                     description = "",
+                    caloriesText = "",
+                    proteinText = "",
+                    carbsText = "",
+                    fatText = "",
                     isSaving = false,
                     errorMessage = null
                 )
@@ -428,6 +460,10 @@ class PlannerDayViewModel @Inject constructor(
                 iouEditor = IouEditorState(
                     iouId = existing.id,
                     description = existing.description,
+                    caloriesText = existing.estimatedCaloriesKcal.toEditableNumberText(),
+                    proteinText = existing.estimatedProteinG.toEditableNumberText(),
+                    carbsText = existing.estimatedCarbsG.toEditableNumberText(),
+                    fatText = existing.estimatedFatG.toEditableNumberText(),
                     isSaving = false,
                     errorMessage = null
                 )
@@ -446,6 +482,20 @@ class PlannerDayViewModel @Inject constructor(
             return
         }
 
+        val estimatedCaloriesResult = parseOptionalNonNegativeDouble(snapshot.caloriesText, "Calories")
+        val estimatedProteinResult = parseOptionalNonNegativeDouble(snapshot.proteinText, "Protein")
+        val estimatedCarbsResult = parseOptionalNonNegativeDouble(snapshot.carbsText, "Carbs")
+        val estimatedFatResult = parseOptionalNonNegativeDouble(snapshot.fatText, "Fat")
+
+        if (!estimatedCaloriesResult.isValid || !estimatedProteinResult.isValid || !estimatedCarbsResult.isValid || !estimatedFatResult.isValid) {
+            return
+        }
+
+        val estimatedCaloriesKcal = estimatedCaloriesResult.value
+        val estimatedProteinG = estimatedProteinResult.value
+        val estimatedCarbsG = estimatedCarbsResult.value
+        val estimatedFatG = estimatedFatResult.value
+
         _state.update { s ->
             val ed = s.iouEditor ?: return@update s
             s.copy(iouEditor = ed.copy(isSaving = true, errorMessage = null))
@@ -456,9 +506,23 @@ class PlannerDayViewModel @Inject constructor(
             try {
                 val iouId = snapshot.iouId
                 if (iouId == null) {
-                    createPlannerIou(dateIso = dateIso, description = desc)
+                    createPlannerIou(
+                        dateIso = dateIso,
+                        description = desc,
+                        estimatedCaloriesKcal = estimatedCaloriesKcal,
+                        estimatedProteinG = estimatedProteinG,
+                        estimatedCarbsG = estimatedCarbsG,
+                        estimatedFatG = estimatedFatG
+                    )
                 } else {
-                    updatePlannerIou(iouId = iouId, newDescription = desc)
+                    updatePlannerIou(
+                        iouId = iouId,
+                        newDescription = desc,
+                        estimatedCaloriesKcal = estimatedCaloriesKcal,
+                        estimatedProteinG = estimatedProteinG,
+                        estimatedCarbsG = estimatedCarbsG,
+                        estimatedFatG = estimatedFatG
+                    )
                 }
 
                 _state.update { it.copy(iouEditor = null) }
@@ -470,6 +534,40 @@ class PlannerDayViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun parseOptionalNonNegativeDouble(raw: String, label: String): OptionalDoubleParseResult {
+        val trimmed = raw.trim()
+        if (trimmed.isBlank()) return OptionalDoubleParseResult(isValid = true, value = null)
+
+        val parsed = trimmed.toDoubleOrNull()
+        if (parsed == null) {
+            _state.update { s ->
+                val ed = s.iouEditor ?: return@update s
+                s.copy(iouEditor = ed.copy(errorMessage = "$label must be a valid number."))
+            }
+            return OptionalDoubleParseResult(isValid = false, value = null)
+        }
+
+        if (parsed < 0.0) {
+            _state.update { s ->
+                val ed = s.iouEditor ?: return@update s
+                s.copy(iouEditor = ed.copy(errorMessage = "$label cannot be negative."))
+            }
+            return OptionalDoubleParseResult(isValid = false, value = null)
+        }
+
+        return OptionalDoubleParseResult(isValid = true, value = parsed)
+    }
+
+    private data class OptionalDoubleParseResult(
+        val isValid: Boolean,
+        val value: Double?
+    )
+
+    private fun Double?.toEditableNumberText(): String {
+        val value = this ?: return ""
+        return if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
     }
 
     private fun deleteIou(iouId: Long) {
