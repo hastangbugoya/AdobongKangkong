@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -327,25 +328,29 @@ private fun WeeklyMacroBar(
 
         Spacer(Modifier.height(6.dp))
 
-        val hasDayIou = bar.iouProteinG > 0.0 || bar.iouCarbsG > 0.0 || bar.iouFatG > 0.0 || bar.iouCaloriesKcal > 0.0
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Box(
+            modifier = Modifier
+                .width(32.dp)
+                .height(20.dp)
         ) {
-            if (hasDayIou) {
-                Text(
-                    text = "•",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error
+            if (bar.hasIou) {
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            color = MaterialTheme.colorScheme.error,
+                            shape = CircleShape
+                        )
                 )
-            } else {
-                Spacer(Modifier.height(12.dp))
             }
 
             Text(
                 text = bar.date.dayOfWeekLabel,
-                style = MaterialTheme.typography.labelMedium
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
     }
@@ -416,6 +421,27 @@ private fun MacroStatusDialog(
                     ),
                     unit = "g"
                 )
+
+                if (bar.hasIou) {
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text = "Estimated IOUs",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+
+                    Text(
+                        text = buildString {
+                            if (bar.iouCaloriesKcal > 0.0) append("KCAL +${bar.iouCaloriesKcal.formatForMacro()}  ")
+                            if (bar.iouProteinG > 0.0) append("P +${bar.iouProteinG.formatForMacro()}g  ")
+                            if (bar.iouCarbsG > 0.0) append("C +${bar.iouCarbsG.formatForMacro()}g  ")
+                            if (bar.iouFatG > 0.0) append("F +${bar.iouFatG.formatForMacro()}g")
+                        }.trim(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     )
@@ -516,6 +542,9 @@ data class CalendarWeeklyMacroDayUi(
     val iouCarbsG: Double = 0.0,
     val iouFatG: Double = 0.0,
 ) {
+    val hasIou: Boolean
+        get() = iouCaloriesKcal > 0.0 || iouProteinG > 0.0 || iouCarbsG > 0.0 || iouFatG > 0.0
+
     val proteinFraction: Float
         get() = macroFractions().first
 
