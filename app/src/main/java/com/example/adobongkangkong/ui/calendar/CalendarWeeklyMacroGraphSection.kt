@@ -327,10 +327,27 @@ private fun WeeklyMacroBar(
 
         Spacer(Modifier.height(6.dp))
 
-        Text(
-            text = bar.date.dayOfWeekLabel,
-            style = MaterialTheme.typography.labelMedium
-        )
+        val hasDayIou = bar.iouProteinG > 0.0 || bar.iouCarbsG > 0.0 || bar.iouFatG > 0.0 || bar.iouCaloriesKcal > 0.0
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            if (hasDayIou) {
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Spacer(Modifier.height(12.dp))
+            }
+
+            Text(
+                text = bar.date.dayOfWeekLabel,
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
     }
 }
 
