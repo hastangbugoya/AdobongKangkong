@@ -136,25 +136,25 @@ fun PlannerDayScreen(
                 )
             }
 
-// Daily macro totals (best-effort; may be zero if data is missing)
-item {
-    val dayTotals = s.dayMacroTotals
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Day total",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-            Text(macrosLine(dayTotals), style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
+            // Daily macro totals (best-effort; may be zero if data is missing)
+            item {
+                val dayTotals = s.dayMacroTotals
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Day total",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(macrosLine(dayTotals), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
 
             if (s.errorMessage != null) {
                 item {

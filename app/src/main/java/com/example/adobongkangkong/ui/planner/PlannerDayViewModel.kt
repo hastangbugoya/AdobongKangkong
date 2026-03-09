@@ -656,7 +656,7 @@ class PlannerDayViewModel @Inject constructor(
                     if (result.errorCount > 0) append(" • Errors ${result.errorCount}")
                 }
 
-                _state.update { it.copy(errorMessage = msg) }
+                _events.tryEmit(PlannerDayUiEvent.ShowToast(msg))
             } catch (t: Throwable) {
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to log meal") }
             }
