@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -345,6 +347,7 @@ private fun PlannedMealCard(
     onSaveMealAsTemplate: (Long) -> Unit
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
+    var showActionsMenu by remember(meal.id) { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -353,7 +356,7 @@ private fun PlannedMealCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
 
-            // Header row: title + recurring badge + actions
+            // Header row: title + recurring badge + overflow actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -372,10 +375,40 @@ private fun PlannedMealCard(
                     )
                 }
 
-                // Keep functionality minimal: only show "Make recurring" if NOT already recurring
-                if (!isRecurring) {
-                    TextButton(onClick = { onMakeRecurring(meal.id) }) {
-                        Text("Make recurring")
+                Column(horizontalAlignment = Alignment.End) {
+                    IconButton(onClick = { showActionsMenu = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.menu_dots_vertical),
+                            contentDescription = "Meal actions"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showActionsMenu,
+                        onDismissRequest = { showActionsMenu = false }
+                    ) {
+                        if (!isRecurring) {
+                            DropdownMenuItem(
+                                text = { Text("Make recurring") },
+                                onClick = {
+                                    showActionsMenu = false
+                                    onMakeRecurring(meal.id)
+                                }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Save as template") },
+                            onClick = {
+                                showActionsMenu = false
+                                onSaveMealAsTemplate(meal.id)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Duplicate") },
+                            onClick = {
+                                showActionsMenu = false
+                                onDuplicateMeal(meal.id)
+                            }
+                        )
                     }
                 }
             }
@@ -427,24 +460,10 @@ private fun PlannedMealCard(
                     Row {
                         Spacer(Modifier.weight(1f))
 
-                        // Save as template (textbutton) — flow > aesthetics for now.
-                        TextButton(onClick = { onSaveMealAsTemplate(meal.id) }) {
-                            Text("Save as template")
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-
                         IconButton(onClick = { onLogMeal(meal.id) }) {
                             Icon(
                                 painter = painterResource(R.drawable.log_file),
                                 contentDescription = "Log"
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(onClick = { onDuplicateMeal(meal.id) }) {
-                            Icon(
-                                painter = painterResource(R.drawable.duplicate),
-                                contentDescription = "Duplicate"
                             )
                         }
                     }
