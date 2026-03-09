@@ -14,7 +14,7 @@ fun PlannerDayRoute(
     onBack: () -> Unit,
     onPickDate: (LocalDate) -> Unit,
     onOpenPlannedMealEditor: (Long) -> Unit,
-    onOpenNewPlannedMealEditor: (dateIso: String, slot: MealSlot) -> Unit,
+    onOpenNewPlannedMealEditor: (dateIso: String, slot: MealSlot, templateId: Long?) -> Unit,
     onOpenTemplatePicker: (slot: MealSlot?) -> Unit,
     templatePick: Pair<Long, MealSlot?>?,
     onTemplatePickConsumed: () -> Unit,
@@ -24,17 +24,17 @@ fun PlannerDayRoute(
         viewModel.setDate(date)
     }
 
-    // If we have a pending pick result from the picker destination, translate it into a VM event.
+    // If we have a pending pick result from the picker destination, open the NEW planned-meal editor
+    // with the selected template preloaded as an in-memory draft. Saving in the editor commits it.
     LaunchedEffect(templatePick) {
         val pick = templatePick ?: return@LaunchedEffect
         val templateId = pick.first
         val overrideSlot = pick.second
         if (templateId > 0L) {
-            viewModel.onEvent(
-                PlannerDayEvent.CreateMealFromTemplate(
-                    templateId = templateId,
-                    overrideSlot = overrideSlot
-                )
+            onOpenNewPlannedMealEditor(
+                date.toString(),
+                overrideSlot ?: MealSlot.CUSTOM,
+                templateId
             )
         }
         onTemplatePickConsumed()
@@ -77,7 +77,8 @@ fun PlannerDayRoute(
                 is PlannerDayEvent.OpenMealPlanner ->
                     onOpenNewPlannedMealEditor(
                         viewModel.state.value.date.toString(),
-                        event.slot
+                        event.slot,
+                        null
                     )
 
                 is PlannerDayEvent.OpenMeal -> {

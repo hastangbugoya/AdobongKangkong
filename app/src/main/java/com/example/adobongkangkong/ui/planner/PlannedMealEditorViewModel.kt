@@ -8,6 +8,8 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedOccurrenceStatus
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.repository.MealTemplateItemRepository
+import com.example.adobongkangkong.domain.repository.MealTemplateRepository
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import com.example.adobongkangkong.domain.repository.PlannedMealRepository
 import com.example.adobongkangkong.ui.meal.editor.MealEditorContract
@@ -43,7 +45,9 @@ import javax.inject.Inject
 class PlannedMealEditorViewModel @Inject constructor(
     private val plannedMeals: PlannedMealRepository,
     private val plannedItems: PlannedItemRepository,
-    private val foods: FoodRepository
+    private val foods: FoodRepository,
+    private val mealTemplates: MealTemplateRepository,
+    private val mealTemplateItems: MealTemplateItemRepository
 ) : ViewModel(), MealEditorContract {
 
     private val _state = MutableStateFlow(
@@ -71,6 +75,7 @@ class PlannedMealEditorViewModel @Inject constructor(
     // Draft-only fields for NEW planned meals (no DB row until Save).
     private var draftDateIso: String? = null
     private var draftSlot: MealSlot? = null
+    private var draftTemplateId: Long? = null
 
     /**
      * Initialize the editor for creating a NEW planned meal (draft mode).
@@ -85,13 +90,15 @@ class PlannedMealEditorViewModel @Inject constructor(
     fun startNewPlannedMeal(
         dateIso: String,
         slot: MealSlot,
-        subtitle: String? = null
+        subtitle: String? = null,
+        templateId: Long? = null
     ) {
         val current = _state.value
         val sameDraftContext =
             current.mealId == null &&
                 draftDateIso == dateIso &&
-                draftSlot == slot
+                draftSlot == slot &&
+                draftTemplateId == templateId
 
         val hasDraftContent =
             current.items.isNotEmpty() ||
@@ -107,6 +114,7 @@ class PlannedMealEditorViewModel @Inject constructor(
 
         draftDateIso = dateIso
         draftSlot = slot
+        draftTemplateId = templateId
 
         _state.value = _state.value.copy(
             mealId = null,
@@ -118,6 +126,50 @@ class PlannedMealEditorViewModel @Inject constructor(
             isDirty = false,
             warnings = emptyList()
         )
+
+        if (templateId != null && templateId > 0L) {
+            viewModelScope.launch {
+                try {
+                    val template = mealTemplates.getById(templateId)
+                        ?: throw IllegalStateException("Template not found.")
+                    val templateItems = mealTemplateItems.getItemsForTemplate(templateId)
+                        .sortedBy { it.sortOrder }
+
+                    val uiItems = templateItems.map { entity ->
+                        val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
+                        MealEditorUiState.Item(
+                            lineId = UUID.randomUUID().toString(),
+                            id = null,
+                            foodId = entity.refId,
+                            foodName = foodName,
+                            servings = entity.servings?.toString() ?: "",
+                            grams = entity.grams,
+                            milliliters = null
+                        )
+                    }
+
+                    val currentState = _state.value
+                    val stillSameDraft = currentState.mealId == null &&
+                        draftDateIso == dateIso &&
+                        draftSlot == slot &&
+                        draftTemplateId == templateId
+
+                    if (stillSameDraft && !currentState.isDirty) {
+                        _state.value = currentState.copy(
+                            name = template.name.ifBlank { defaultNameOverride(slot, dateIso) },
+                            items = uiItems,
+                            errorMessage = null,
+                            isDirty = false,
+                            warnings = emptyList()
+                        )
+                    }
+                } catch (t: Throwable) {
+                    _state.value = _state.value.copy(
+                        errorMessage = t.message ?: "Failed to load template."
+                    )
+                }
+            }
+        }
     }
 
     /**
@@ -128,6 +180,7 @@ class PlannedMealEditorViewModel @Inject constructor(
         // Clear draft fields when editing an existing meal.
         draftDateIso = null
         draftSlot = null
+        draftTemplateId = null
 
         _state.value = _state.value.copy(mealId = mealId, subtitle = subtitle, errorMessage = null)
 
