@@ -1,278 +1,354 @@
-======================================
-AdobongKangkong
-A Precision Nutrition + Recipe + Logging System for Android
-=====================================
 
-AdobongKangkong is a personal nutrition, recipe, and food logging application
-built for precision, correctness, and long-term usability.
+# AdobongKangkong
 
-It is designed for users who care about:
-- Accurate macro + micronutrient tracking
-- Recipe-based cooking with real cooked yields
-- Per-gram nutrition correctness
-- Fast, low-friction food logging
-- Long-term health and performance tracking
+AdobongKangkong is a **nutrition tracking and meal planning Android application** designed with a strong emphasis on:
 
-This is not a calorie counter.
-It is a nutrition system.
+- accurate nutrition data
+- extensible nutrient modeling
+- local‑first architecture
+- clean architecture patterns
+- long‑term maintainability
 
---------------------------------------------------------
-DESIGN PHILOSOPHY
---------------------------------------------------------
+The project is built to support **food logging, recipe creation, meal planning, barcode scanning, and nutrient analysis** while remaining highly extensible for future features.
 
-1) Data correctness > convenience
+---
 
-   Most nutrition apps prioritize speed at the cost of correctness.
-   AdobongKangkong does the opposite:
-   - Every logged item stores a nutrition snapshot.
-   - All math is domain-correct.
-   - Cooked recipe yield is treated as first-class data.
+# Core Goals
 
-   Once logged, nutrition data is immutable and historically accurate.
+The app is designed around several guiding principles:
 
-2) Per-gram accuracy for cooked recipes
+• Accurate nutrient tracking  
+• Local‑first data storage (offline capable)  
+• Extensible nutrient catalog  
+• Clean architecture separation  
+• Long‑term schema stability  
+• Developer and AI collaboration friendliness  
 
-   Cooked food weight is almost never equal to raw ingredient weight.
-   Therefore:
-   - Recipes have ingredient-level nutrition math.
-   - Cooked batches store real-world cooked yield in grams.
-   - Logging by grams scales nutrition from the cooked yield.
+---
 
-   This eliminates the biggest source of error in recipe logging.
-
-3) Explicit modeling over hidden heuristics
+# Tech Stack
 
-   Concepts like:
-   - servings
-   - grams per serving
-   - package sizes
-   - cooked yields
-   - batch history
+**Language**
+- Kotlin
 
-   are all modeled explicitly in the domain layer instead of being inferred.
+**UI**
+- Jetpack Compose
 
-4) Architecture first
+**Architecture**
+- Clean Architecture
 
-   The app follows a strict layered architecture:
+**Dependency Injection**
+- Hilt
 
-   UI → ViewModel → UseCase → Domain → Repository → Database
-
-   This ensures:
-   - Testability
-   - Maintainability
-   - Long-term extensibility
-
-5) Designed for long-term tracking
-
-   The system is built for:
-   - Multi-year logs
-   - Evolving nutrition goals
-   - Changing food databases
-   - Historical accuracy
+**Database**
+- Room
 
+**Background Work**
+- WorkManager
 
---------------------------------------------------------
-CORE FEATURES
---------------------------------------------------------
+**External Data**
+- USDA FoodData Central API
 
-• Food database with:
-  - Macros
-  - Vitamins
-  - Minerals
-  - Flexible serving units
-  - Per-gram normalization
-
-• Recipe builder:
-  - Ingredient-based nutrition computation
-  - Cooked yield modeling
-  - Servings-based and grams-based logging
-
-• Cooked batch system:
-  - Stores real cooked yield weight
-  - Enables per-gram logging for recipes
-  - Keeps nutrition math correct even after cooking
-
-• High-precision logging:
-  - Every log entry stores a nutrition snapshot
-  - Historical logs remain correct even if food data changes later
+**Barcode Scanning**
+- CameraX
 
-• Smart UX features:
-  - Package shortcuts (½ package, 1 package)
-  - Pound → gram conversion
-  - String-backed numeric inputs (no cursor jumps)
-  - Quick add logging
-
-• Food metadata flags:
-  - Favorite
-  - Eat more
-  - Limit this
-
---------------------------------------------------------
-SYSTEM ARCHITECTURE OVERVIEW
---------------------------------------------------------
+---
 
-Domain modeling is the foundation.
-
-Key domain concepts:
-
-Food
-  - A single nutritional entity.
-  - May represent:
-      • Raw ingredient
-      • Packaged food
-      • Recipe proxy
-
-Recipe
-  - A composition of Food + servings
-  - Computes macro + micronutrients mathematically
-
-RecipeBatch
-  - Represents one real cooking event
-  - Stores final cooked yield in grams
-  - Enables cooked-gram logging
+# Architecture Overview
 
-LogEntry
-  - Immutable nutrition snapshot
-  - Stores resolved nutrient values at log time
-  - Guarantees historical correctness
+The project follows a layered architecture:
 
-NutritionSnapshot
-  - Canonical normalized nutrition representation
-  - Per-serving + per-gram values
+```
+domain/
+data/
+ui/
+```
 
+## Domain Layer
 
---------------------------------------------------------
-USER MANUAL (BASIC WORKFLOW)
---------------------------------------------------------
+Contains:
 
---------------------------------------------------------
-1) ADDING FOODS
---------------------------------------------------------
+- core models
+- business rules
+- use cases
+- repository interfaces
 
-1. Open Food Editor
-2. Enter:
-   - Name
-   - Brand (optional)
-   - Serving size + unit
-   - Grams per serving (optional but recommended)
-   - Servings per package (optional)
+Examples:
 
-3. Optional:
-   - Mark as Favorite
-   - Mark as Eat More
-   - Mark as Limit
+- Food models
+- Recipe aggregation logic
+- Planner calculations
+- Nutrient computation
 
-4. Save
+The domain layer **does not depend on Android APIs**.
 
-TIP:
-You can long-tap / press the "lb" button next to grams input
-to enter pounds and auto-convert to grams.
+---
 
---------------------------------------------------------
-2) BUILDING RECIPES
---------------------------------------------------------
+## Data Layer
 
-1. Open Recipe Builder
-2. Enter recipe name
-3. Add ingredients:
-   - Select food
-   - Enter servings
-   - Optionally use:
-       • ½ package
-       • 1 package
+Responsible for:
 
-4. Set:
-   - Servings yield
-   - (Optional) expected cooked yield grams
+- Room database
+- DAO implementations
+- repository implementations
+- USDA import logic
+- barcode mapping
 
-5. Save recipe
+Key responsibilities:
 
-Recipes behave as foods and can be logged like normal foods.
+- persist foods
+- store recipes
+- maintain planner entries
+- maintain nutrient preferences
 
---------------------------------------------------------
-3) COOKING & CREATING A BATCH
---------------------------------------------------------
+---
 
-When you cook a recipe:
+## UI Layer
 
-1. Weigh the final cooked product
-2. Open Quick Add
-3. Select the recipe
-4. Tap "Create batch"
-5. Enter cooked yield in grams
-6. Save batch
+Implemented entirely using **Jetpack Compose**.
 
-This batch now represents *this specific cooking event*.
+Major screens include:
 
---------------------------------------------------------
-4) LOGGING FOOD
---------------------------------------------------------
+- Dashboard
+- Food Editor
+- Planner
+- Calendar
+- Recipe Editor
+- Shopping List
+- Quick Log
 
-A) Logging regular foods:
+ViewModels connect the UI to domain use cases.
 
-1. Open Quick Add
-2. Select food
-3. Enter:
-   - Servings
-   - Or grams (if available)
-4. Tap Log
+---
 
-B) Logging cooked recipes by grams:
+# Major Features
 
-1. Open Quick Add
-2. Select recipe
-3. Choose cooked batch
-4. Enter grams eaten
-5. Tap Log
+## Food Database
 
-The system scales nutrition by:
+Users can create foods manually or import foods from the USDA database.
 
-    grams eaten / cooked batch yield
+Stored information includes:
 
-This ensures accurate macro and micronutrient logging.
+- name
+- serving units
+- nutrient values
+- barcode mappings
+- optional banner images
 
---------------------------------------------------------
-WHY THIS SYSTEM IS DIFFERENT
---------------------------------------------------------
+---
 
-Most nutrition apps:
+## Barcode Scanning
 
-  - Guess cooked yield
-  - Ignore water loss/gain
-  - Log based on inaccurate serving assumptions
-  - Rewrite nutrition history when foods change
+Foods can be added quickly using barcode scanning.
 
-AdobongKangkong:
+Workflow:
 
-  - Stores real cooked yield
-  - Uses per-gram nutrition math
-  - Freezes nutrition snapshots at log time
-  - Preserves historical accuracy forever
+1. Scan barcode
+2. Search USDA database
+3. Import food if found
+4. If not found, user may create food manually
 
---------------------------------------------------------
-PROJECT STATUS
---------------------------------------------------------
+Barcode mappings are stored locally for future scans.
 
-This project is under active development.
+---
 
-Primary focus:
-  - Logging accuracy
-  - Domain correctness
-  - UX speed
+## Recipe System
 
-Future goals:
-  - Nutrient targets & limits
-  - Dashboard & analytics
-  - Long-term trend tracking
-  - Smart suggestions
+Users can construct recipes composed of multiple foods.
 
---------------------------------------------------------
-LICENSE
---------------------------------------------------------
+Recipes support:
 
-Personal research and development project.
-Not currently licensed for commercial use.
+- ingredient scaling
+- nutrient aggregation
+- batch calculations
 
---------------------------------------------------------
-END
---------------------------------------------------------
+Recipe nutrients are computed by summing ingredient nutrients.
+
+---
+
+## Meal Planner
+
+The planner allows scheduling foods and recipes across days.
+
+Supported features:
+
+- recurring meal series
+- template meals
+- meal slot organization
+- shopping list generation
+
+---
+
+## Nutrient Tracking
+
+The app tracks a wide range of nutrients including:
+
+- macronutrients
+- vitamins
+- minerals
+
+Users can:
+
+- pin nutrients
+- mark nutrients as critical
+- set minimum / target / maximum values
+
+---
+
+## Dashboard
+
+The dashboard provides a daily overview of:
+
+- calories
+- macronutrient distribution
+- selected nutrient targets
+
+The UI prioritizes nutrients that are **pinned or marked critical**.
+
+---
+
+# Nutrient System Design
+
+The nutrient system is designed to be **extensible**.
+
+Key ideas:
+
+• nutrients are defined in a central catalog  
+• foods store nutrient values dynamically  
+• UI renders nutrients based on catalog metadata  
+• users choose which nutrients matter to them  
+
+This allows the app to support new nutrients without redesigning the UI.
+
+See documentation:
+
+```
+docs/add_new_nutrient_procedure.md
+docs/nutrient_catalog_extension_guide.md
+```
+
+---
+
+# Database Design
+
+The app uses **Room** as the persistence layer.
+
+Important characteristics:
+
+- migration‑safe schema changes
+- stable primary keys
+- separation between entities and domain models
+
+All schema updates must include **explicit migrations**.
+
+---
+
+# User Preferences
+
+Users may configure nutrient monitoring using:
+
+- pinned nutrients
+- critical nutrients
+- target values
+
+These preferences control dashboard behavior and nutrient visibility.
+
+---
+
+# Offline‑First Design
+
+The app is built to function **without network access**.
+
+Key principles:
+
+- all foods stored locally
+- recipes computed locally
+- planner stored locally
+- USDA imports cached locally
+
+Network access is only required for:
+
+- initial food import
+- optional future cloud features
+
+---
+
+# Documentation
+
+Detailed development documentation can be found in the `/docs` directory.
+
+Examples:
+
+```
+docs/ai_patch_delivery_protocol.md
+docs/add_new_nutrient_procedure.md
+docs/nutrient_catalog_extension_guide.md
+```
+
+These guides help developers and AI assistants safely extend the project.
+
+---
+
+# Development Guidelines
+
+When modifying the codebase:
+
+• Avoid refactoring unrelated systems  
+• Preserve schema compatibility  
+• Follow existing repository patterns  
+• Maintain null‑safe nutrient handling  
+
+Always test migrations before release.
+
+---
+
+# Building the Project
+
+Requirements:
+
+- Android Studio
+- Android SDK
+- Gradle
+
+Steps:
+
+1. Clone the repository
+2. Open the project in Android Studio
+3. Allow Gradle to sync
+4. Run the app on an emulator or device
+
+---
+
+# Future Development
+
+Potential future features include:
+
+- cloud backup
+- multi‑device sync
+- advanced nutrient analytics
+- expanded food database
+- improved recipe tooling
+
+The architecture is intentionally designed to support these features.
+
+---
+
+# Project Philosophy
+
+AdobongKangkong aims to balance:
+
+- powerful nutrition tracking
+- flexible data modeling
+- maintainable architecture
+
+The system is built to evolve as nutritional science and user needs change.
+
+---
+
+# License
+
+Specify your project license here.
+
+Example:
+
+MIT License
