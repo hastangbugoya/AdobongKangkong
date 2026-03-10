@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -102,6 +103,11 @@ fun FoodEditorScreen(
     // Nutrient search/add
     onNutrientSearchQueryChange: (String) -> Unit,
     onAddNutrientFromSearch: (nutrientId: Long) -> Unit,
+
+    // Categories
+    onCategoryCheckedChange: (Long, Boolean) -> Unit,
+    onNewCategoryNameChange: (String) -> Unit,
+    onCreateCategory: () -> Unit,
 
     // Flags
     onToggleFavorite: (Boolean) -> Unit,
@@ -675,6 +681,56 @@ fun FoodEditorScreen(
                         onMlPerServingChange = onMlPerServingChange,
                         basisType = state.basisType,
                     )
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionHeader(
+                            title = "Categories",
+                            subtitle = "Create categories and assign them to this food."
+                        )
+
+                        if (state.categories.isEmpty()) {
+                            Text(
+                                text = "No categories yet.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            state.categories.forEach { category ->
+                                Row(
+                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = state.selectedCategoryIds.contains(category.id),
+                                        onCheckedChange = { checked ->
+                                            onCategoryCheckedChange(category.id, checked)
+                                        }
+                                    )
+                                    Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                                    Text(category.name)
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = state.newCategoryName,
+                                onValueChange = onNewCategoryNameChange,
+                                label = { Text("New category") },
+                                singleLine = true,
+                                modifier = androidx.compose.ui.Modifier.weight(1f)
+                            )
+                            Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                            Button(onClick = onCreateCategory) {
+                                Text("Add")
+                            }
+                        }
+                    }
                 }
 
                 item {

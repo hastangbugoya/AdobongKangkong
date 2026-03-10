@@ -15,8 +15,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-    @Provides @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): NutriDatabase {
+    @Provides
+    @Singleton
+    fun provideDatabase(
+        @ApplicationContext context: Context
+    ): NutriDatabase {
+
         return Room.databaseBuilder(
             context,
             NutriDatabase::class.java,
@@ -31,7 +35,7 @@ object DatabaseModule {
                 NutriDatabase.MIGRATION_9_10,
                 NutriDatabase.MIGRATION_11_12,
                 NutriDatabase.MIGRATION_13_14,
-                NutriDatabase.MIGRATION_14_15,
+                NutriDatabase.MIGRATION_15_16
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -47,28 +51,28 @@ object DatabaseModule {
 
     @Provides fun provideNutrientAliasDao(db: NutriDatabase): NutrientAliasDao = db.nutrientAliasDao()
     @Provides fun provideRecipeBatchDao(db: NutriDatabase): RecipeBatchDao = db.recipeBatchDao()
-
     @Provides fun provideFoodGoalFlagsDao(db: NutriDatabase): FoodGoalFlagsDao = db.foodGoalFlagsDao()
 
     @Provides
     fun provideUserNutrientTargetDao(db: NutriDatabase): UserNutrientTargetDao =
         db.userNutrientTargetDao()
 
-    @Provides fun provideUserPinnedNutrientDao(db: NutriDatabase): UserPinnedNutrientDao = db.userPinnedNutrientDao()
+    @Provides
+    fun provideUserPinnedNutrientDao(db: NutriDatabase): UserPinnedNutrientDao =
+        db.userPinnedNutrientDao()
 
     @Provides fun providePlannedMealDao(db: NutriDatabase): PlannedMealDao = db.plannedMealDao()
-
     @Provides fun providePlannedItemDao(db: NutriDatabase): PlannedItemDao = db.plannedItemDao()
-
     @Provides fun provideMealTemplateDao(db: NutriDatabase): MealTemplateDao = db.mealTemplateDao()
-
     @Provides fun provideMealTemplateItemDao(db: NutriDatabase): MealTemplateItemDao = db.mealTemplateItemDao()
-
     @Provides fun provideMealTemplatePrefsDao(db: NutriDatabase): MealTemplatePrefsDao = db.mealTemplatePrefsDao()
 
-    @Provides fun providesFoodBarcodeDao(db: NutriDatabase): FoodBarcodeDao = db.foodBarcodeEntityDao()
+    @Provides
+    fun providesFoodBarcodeDao(db: NutriDatabase): FoodBarcodeDao =
+        db.foodBarcodeEntityDao()
 
     @Provides fun providePlannedSeriesDao(db: NutriDatabase): PlannedSeriesDao = db.plannedSeriesDao()
+
     @Provides
     fun providePlannedSeriesItemDao(db: NutriDatabase): PlannedSeriesItemDao =
         db.plannedSeriesItemDao()
@@ -76,4 +80,8 @@ object DatabaseModule {
     @Provides
     fun provideIouDao(db: NutriDatabase): IouDao =
         db.iouDao()
+
+    @Provides
+    fun provideFoodCategoryDao(db: NutriDatabase): FoodCategoryDao =
+        db.foodCategoryDao()
 }

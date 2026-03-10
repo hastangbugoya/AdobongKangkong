@@ -34,6 +34,10 @@ data class FoodEditorState(
     val mlPerServingUnit: String = "",
     val servingsPerPackage: String = "",
 
+    val categories: List<FoodCategoryUi> = emptyList(),
+    val selectedCategoryIds: Set<Long> = emptySet(),
+    val newCategoryName: String = "",
+
     val nutrientRows: List<NutrientRowUi> = emptyList(),
 
     val nutrientSearchQuery: String = "",
@@ -135,6 +139,13 @@ data class FoodEditorState(
         }?.amount.orEmpty()
     }
 }
+
+data class FoodCategoryUi(
+    val id: Long,
+    val name: String,
+    val isSystem: Boolean = false,
+)
+
 
 data class NutrientSearchResultUi(
     val id: Long,

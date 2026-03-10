@@ -19,6 +19,7 @@ import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
+import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
@@ -52,6 +53,7 @@ class FoodEditorViewModel @Inject constructor(
     private val searchNutrients: SearchNutrientsUseCase,
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
     private val foodRepo: FoodRepository,
+    private val foodCategoryRepo: FoodCategoryRepository,
     private val nutrientAliasRepo: NutrientAliasRepository,
     private val flagsRepo: FoodGoalFlagsRepository,
     private val searchUsdaByBarcode: SearchUsdaFoodsByBarcodeUseCase,
@@ -129,6 +131,12 @@ class FoodEditorViewModel @Inject constructor(
             val data = getData(foodId)
             val food = data.food
             val rows = data.nutrients
+            val allCategories = foodCategoryRepo.getAll()
+            val selectedCategoryIds = if (foodId != null) {
+                foodCategoryRepo.getForFood(foodId).map { it.id }.toSet()
+            } else {
+                current.selectedCategoryIds
+            }
 
             val stableId =
                 food?.stableId
@@ -182,6 +190,17 @@ class FoodEditorViewModel @Inject constructor(
                     ?: food?.mlPerServingUnit?.toString().orEmpty(),
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
+                categories = allCategories
+                    .sortedBy { it.name.lowercase() }
+                    .map { category ->
+                        FoodCategoryUi(
+                            id = category.id,
+                            name = category.name,
+                            isSystem = category.isSystem,
+                        )
+                    },
+                selectedCategoryIds = selectedCategoryIds,
+                newCategoryName = "",
                 nutrientRows = sortNutrientRows(rows.map { r ->
                     val displayAmount =
                         when (r.basisType) {
@@ -594,6 +613,46 @@ class FoodEditorViewModel @Inject constructor(
 
     fun dismissGroundingDialog() = update { it.copy(isGroundingDialogOpen = false) }
 
+    fun onCategoryCheckedChange(categoryId: Long, checked: Boolean) {
+        update { s ->
+            val nextIds = s.selectedCategoryIds.toMutableSet().apply {
+                if (checked) add(categoryId) else remove(categoryId)
+            }
+            s.copy(selectedCategoryIds = nextIds, hasUnsavedChanges = true)
+        }
+    }
+
+    fun onNewCategoryNameChange(v: String) = update { it.copy(newCategoryName = v) }
+
+    fun createCategory() {
+        val rawName = _state.value.newCategoryName.trim()
+        if (rawName.isBlank()) {
+            update { it.copy(errorMessage = "Category name is required.") }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val created = foodCategoryRepo.getOrCreateByName(rawName)
+                update { s ->
+                    s.copy(
+                        categories = (s.categories + FoodCategoryUi(
+                            id = created.id,
+                            name = created.name,
+                            isSystem = created.isSystem,
+                        )).distinctBy { it.id }.sortedBy { it.name.lowercase() },
+                        selectedCategoryIds = s.selectedCategoryIds + created.id,
+                        newCategoryName = "",
+                        hasUnsavedChanges = true,
+                        errorMessage = null,
+                    )
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to create category.") }
+            }
+        }
+    }
+
     fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v, hasUnsavedChanges = true) }
     fun onEatMoreChange(v: Boolean) = update { it.copy(eatMore = v, hasUnsavedChanges = true) }
     fun onLimitChange(v: Boolean) = update { it.copy(limit = v, hasUnsavedChanges = true) }
@@ -819,6 +878,11 @@ class FoodEditorViewModel @Inject constructor(
                     favorite = s.favorite,
                     eatMore = s.eatMore,
                     limit = s.limit
+                )
+
+                foodCategoryRepo.replaceForFood(
+                    foodId = savedId,
+                    categoryIds = s.selectedCategoryIds,
                 )
 
                 update { it.copy(hasUnsavedChanges = false) }

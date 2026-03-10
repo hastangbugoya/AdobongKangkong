@@ -106,6 +106,9 @@ fun FoodEditorRoute(
         onDeleteFood = { viewModel.deleteFood() },
         onHardDeleteFood = { viewModel.hardDeleteFoodPermanently() },
 
+        onCategoryCheckedChange = viewModel::onCategoryCheckedChange,
+        onNewCategoryNameChange = viewModel::onNewCategoryNameChange,
+        onCreateCategory = viewModel::createCategory,
         onToggleFavorite = viewModel::onFavoriteChange,
         onToggleEatMore = viewModel::onEatMoreChange,
         onToggleLimit = viewModel::onLimitChange,
