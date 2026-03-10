@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,8 +15,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,142 +58,144 @@ fun CalendarScreen(
     }
 
     Surface(color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxSize()) {
-            Spacer(Modifier.size(32.dp))
-            Row {
-                IconButton(
-                    onClick = onBack,
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Calendar") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                painter = painterResource(R.drawable.angle_circle_left),
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                Spacer(Modifier.size(8.dp))
+
+                MonthHeader(
+                    month = month,
+                    onPrevMonth = vm::goPrevMonth,
+                    onNextMonth = vm::goNextMonth
+                )
+
+                Box(
                     modifier = Modifier
-                        .padding(start = 8.dp, top = 8.dp)
-                        .size(40.dp)
+                        .fillMaxWidth()
+                        .monthSwipe(
+                            onPrev = vm::goPrevMonth,
+                            onNext = vm::goNextMonth
+                        )
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.angle_circle_left),
-                        contentDescription = "Back"
+                    MonthlyCalendar(
+                        month = month,
+                        plannedDates = plannedDates,
+                        dayIconStatusByDate = dayIconStatusByDate,
+                        selectedDate = selectedDate,
+                        onDateClick = vm::onDateClicked,
+                        modifier = Modifier.padding(horizontal = 12.dp)
                     )
                 }
-                Spacer(Modifier.size(8.dp))
-                Text("Calendar", style = MaterialTheme.typography.titleSmall)
 
-            }
+                Spacer(Modifier.size(12.dp))
 
-
-            Spacer(Modifier.size(8.dp))
-            MonthHeader(
-                month = month,
-                onPrevMonth = vm::goPrevMonth,
-                onNextMonth = vm::goNextMonth
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .monthSwipe(
-                        onPrev = vm::goPrevMonth,
-                        onNext = vm::goNextMonth
-                    )
-            ) {
-                MonthlyCalendar(
-                    month = month,
-                    plannedDates = plannedDates,
-                    dayIconStatusByDate = dayIconStatusByDate,
-                    selectedDate = selectedDate,
-                    onDateClick = vm::onDateClicked,
-                    modifier = Modifier.padding(horizontal = 12.dp)
+                CalendarWeeklyMacroGraphSection(
+                    weekStart = graphWeekStart,
+                    bars = graphBars,
+                    onPrevWeek = vm::goPrevGraphWeek,
+                    onNextWeek = vm::goNextGraphWeek,
+                    onGoToCurrent = vm::goToCurrentGraphWeek,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    targetCalories = targetCalories,
                 )
             }
 
-            Spacer(Modifier.size(12.dp))
-
-            CalendarWeeklyMacroGraphSection(
-                weekStart = graphWeekStart,
-                bars = graphBars,
-                onPrevWeek = vm::goPrevGraphWeek,
-                onNextWeek = vm::goNextGraphWeek,
-                onGoToCurrent = vm::goToCurrentGraphWeek,
-                modifier = Modifier.padding(horizontal = 12.dp),
-                targetCalories = targetCalories,
-            )
-        }
-
-        val date = selectedDate
-        if (date != null) {
-            ModalBottomSheet(
-                sheetState = sheetState,
-                onDismissRequest = vm::dismissDayDetails
-            ) {
-                val hasPlanner = plannedDates.contains(date)
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 18.dp)
+            val date = selectedDate
+            if (date != null) {
+                ModalBottomSheet(
+                    sheetState = sheetState,
+                    onDismissRequest = vm::dismissDayDetails
                 ) {
-                    Text(date.toString())
-                    Spacer(Modifier.size(12.dp))
+                    val hasPlanner = plannedDates.contains(date)
 
-                    Button(
-                        onClick = {
-                            vm.dismissDayDetails()
-                            onNavigateToDashboard(date) // start from selected date
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 18.dp)
                     ) {
-                        Text("Open dashboard")
-                    }
-
-                    Spacer(Modifier.size(8.dp))
-
-                    Button(
-                        onClick = {
-                            vm.dismissDayDetails()
-                            onNavigateToShopping(date) // start from selected date
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open shopping list")
-                    }
-
-                    Spacer(Modifier.size(8.dp))
-
-                    Button(
-                        onClick = {
-                            vm.dismissDayDetails()
-                            onNavigateToPlannerDay(date)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open planner")
-                    }
-
-                    Spacer(Modifier.size(8.dp))
-
-                    Button(
-                        onClick = {
-                            vm.dismissDayDetails()
-                            onNavigateToDayLog(date)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open day log")
-                    }
-
-                    Spacer(Modifier.size(8.dp))
-
-                    Button(
-                        onClick = {
-                            vm.dismissDayDetails()
-                            onNavigateToTemplates(date)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open meal templates")
-                    }
-
-                    if (!hasPlanner) {
+                        Text(date.toString())
                         Spacer(Modifier.size(12.dp))
-                        Text("No planned meals for this day.")
+
+                        Button(
+                            onClick = {
+                                vm.dismissDayDetails()
+                                onNavigateToDashboard(date)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open dashboard")
+                        }
+
+                        Spacer(Modifier.size(8.dp))
+
+                        Button(
+                            onClick = {
+                                vm.dismissDayDetails()
+                                onNavigateToShopping(date)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open shopping list")
+                        }
+
+                        Spacer(Modifier.size(8.dp))
+
+                        Button(
+                            onClick = {
+                                vm.dismissDayDetails()
+                                onNavigateToPlannerDay(date)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open planner")
+                        }
+
+                        Spacer(Modifier.size(8.dp))
+
+                        Button(
+                            onClick = {
+                                vm.dismissDayDetails()
+                                onNavigateToDayLog(date)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open day log")
+                        }
+
+                        Spacer(Modifier.size(8.dp))
+
+                        Button(
+                            onClick = {
+                                vm.dismissDayDetails()
+                                onNavigateToTemplates(date)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open meal templates")
+                        }
+
+                        if (!hasPlanner) {
+                            Spacer(Modifier.size(12.dp))
+                            Text("No planned meals for this day.")
+                        }
                     }
                 }
             }
