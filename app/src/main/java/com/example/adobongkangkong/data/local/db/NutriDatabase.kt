@@ -34,9 +34,10 @@ import com.example.adobongkangkong.data.local.db.dao.*
         PlannedSeriesItemEntity::class,
         IouEntity::class,
         FoodCategoryEntity::class,
-        FoodCategoryCrossRefEntity::class
+        FoodCategoryCrossRefEntity::class,
+        RecipeCategoryCrossRefEntity::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -228,6 +229,35 @@ abstract class NutriDatabase : RoomDatabase() {
 
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_food_category_cross_refs_categoryId ON food_category_cross_refs(categoryId)"
+                )
+            }
+        }
+
+        /**
+         * v17
+         * - Add recipe/category cross references
+         */
+        val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS recipe_category_cross_refs (
+                        recipeId INTEGER NOT NULL,
+                        categoryId INTEGER NOT NULL,
+                        PRIMARY KEY(recipeId, categoryId),
+                        FOREIGN KEY(recipeId) REFERENCES recipes(id) ON DELETE CASCADE,
+                        FOREIGN KEY(categoryId) REFERENCES food_categories(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_recipe_category_cross_refs_recipeId ON recipe_category_cross_refs(recipeId)"
+                )
+
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_recipe_category_cross_refs_categoryId ON recipe_category_cross_refs(categoryId)"
                 )
             }
         }

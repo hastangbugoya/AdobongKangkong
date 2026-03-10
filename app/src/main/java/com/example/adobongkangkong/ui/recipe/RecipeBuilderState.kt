@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.recipe
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 
 data class RecipeIngredientUi(
@@ -22,7 +23,6 @@ data class RecipeIngredientUi(
     val enteredUnitLabel: String? = null
 )
 
-
 data class RecipeBuilderState(
     val name: String = "",
     val servingsYield: Double = 4.0,
@@ -41,6 +41,10 @@ data class RecipeBuilderState(
 
     // ✅ add default
     val totalYieldGrams: Double? = null,
+
+    val categories: List<FoodCategoryUi> = emptyList(),
+    val selectedCategoryIds: Set<Long> = emptySet(),
+    val newCategoryName: String = "",
 
     // UI state
     val isSaving: Boolean = false,

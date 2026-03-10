@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.food
 
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.FoodCategory
 
 enum class FoodsFilter { ALL, FOODS_ONLY, RECIPES_ONLY }
 
@@ -27,6 +28,8 @@ data class FoodSortState(
 data class FoodsListState(
     val query: String = "",
     val filter: FoodsFilter = FoodsFilter.ALL,
+    val selectedCategoryId: Long? = null,
+    val categories: List<FoodCategory> = emptyList(),
     val sort: FoodSortState = FoodSortState(),
     val rows: List<FoodsListRowUiModel> = emptyList(),
 )
@@ -53,7 +56,6 @@ data class FoodListItemUiModel(
     // See NutrientBasisScaler + its tests before adding anything here.
     // val macroPreview: FoodMacroPreviewUi?
 )
-
 
 data class FoodsListRowUiModel(
     val foodId: Long,

@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -321,6 +322,55 @@ fun RecipeBuilderScreen(
                 )
             }
             item { Spacer(Modifier.height(4.dp)) }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Categories",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    if (state.categories.isEmpty()) {
+                        Text(
+                            text = "No categories yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        state.categories.forEach { category ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = state.selectedCategoryIds.contains(category.id),
+                                    onCheckedChange = { checked ->
+                                        vm.onCategoryCheckedChange(category.id, checked)
+                                    }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(category.name)
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = state.newCategoryName,
+                            onValueChange = vm::onNewCategoryNameChange,
+                            label = { Text("New category") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = vm::createCategory) {
+                            Text("Add")
+                        }
+                    }
+                }
+            }
             item {
                 val configuration = LocalConfiguration.current
                 val isTablet = configuration.screenWidthDp >= 600

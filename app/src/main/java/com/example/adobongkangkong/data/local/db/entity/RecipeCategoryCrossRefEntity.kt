@@ -5,13 +5,13 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 
 @Entity(
-    tableName = "food_category_cross_refs",
-    primaryKeys = ["foodId", "categoryId"],
+    tableName = "recipe_category_cross_refs",
+    primaryKeys = ["recipeId", "categoryId"],
     foreignKeys = [
         ForeignKey(
-            entity = FoodEntity::class,
+            entity = RecipeEntity::class,
             parentColumns = ["id"],
-            childColumns = ["foodId"],
+            childColumns = ["recipeId"],
             onDelete = ForeignKey.CASCADE,
         ),
         ForeignKey(
@@ -22,11 +22,11 @@ import androidx.room.Index
         )
     ],
     indices = [
-        Index(value = ["foodId"]),
+        Index(value = ["recipeId"]),
         Index(value = ["categoryId"]),
     ]
 )
-data class FoodCategoryCrossRefEntity(
-    val foodId: Long,
+data class RecipeCategoryCrossRefEntity(
+    val recipeId: Long,
     val categoryId: Long,
 )

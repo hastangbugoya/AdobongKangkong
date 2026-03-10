@@ -16,6 +16,7 @@ import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
+import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.flowOf
 import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
 import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import kotlin.math.abs
 
@@ -51,6 +53,7 @@ class RecipeBuilderViewModel @Inject constructor(
     private val recipeRepo: RecipeRepository,
     private val createRecipe: CreateRecipeUseCase,
     private val flagsRepository: FoodGoalFlagsRepository,
+    private val foodCategoryRepo: FoodCategoryRepository,
     private val computeRecipeNutrition: ComputeRecipeNutritionForSnapshotUseCase,
     private val nutrientRepo: NutrientRepository,
     observePreview: ObserveRecipeMacroPreviewUseCase,
@@ -95,6 +98,10 @@ class RecipeBuilderViewModel @Inject constructor(
     private val eatMoreFlow = MutableStateFlow(false)
     private val limitFlow = MutableStateFlow(false)
 
+    private val categoriesFlow = MutableStateFlow<List<FoodCategoryUi>>(emptyList())
+    private val selectedCategoryIdsFlow = MutableStateFlow<Set<Long>>(emptySet())
+    private val newCategoryNameFlow = MutableStateFlow("")
+
     val ingredientTotalGrams: StateFlow<Double> =
         ingredientsFlow
             .map { lines -> lines.sumOf { it.grams ?: 0.0 } }
@@ -130,6 +137,10 @@ class RecipeBuilderViewModel @Inject constructor(
     private var didUserEditTotalYieldGrams: Boolean = false
     private val pickedInputUnitFlow = MutableStateFlow(ServingUnit.G)
     private val pickedInputAmountTextFlow = MutableStateFlow("")
+
+    init {
+        loadCategoriesForEditor()
+    }
 
     private fun maybeAutoPrefillTotalYieldGramsFromIngredients() {
         if (didUserEditTotalYieldGrams) return
@@ -187,6 +198,12 @@ class RecipeBuilderViewModel @Inject constructor(
         val favorite: Boolean,
         val eatMore: Boolean,
         val limit: Boolean
+    )
+
+    private data class CategoryState(
+        val categories: List<FoodCategoryUi>,
+        val selectedCategoryIds: Set<Long>,
+        val newCategoryName: String,
     )
 
     val state: StateFlow<RecipeBuilderState> =
@@ -280,6 +297,18 @@ class RecipeBuilderViewModel @Inject constructor(
                 Triple(f, e, l)
             }
 
+            val categoryFlow = combine(
+                categoriesFlow,
+                selectedCategoryIdsFlow,
+                newCategoryNameFlow
+            ) { categories, selectedCategoryIds, newCategoryName ->
+                CategoryState(
+                    categories = categories,
+                    selectedCategoryIds = selectedCategoryIds,
+                    newCategoryName = newCategoryName,
+                )
+            }
+
             val overlayFlow = combine(
                 blockingSheetFlow,
                 blockedFoodIdFlow,
@@ -298,7 +327,7 @@ class RecipeBuilderViewModel @Inject constructor(
                 )
             }
 
-            combine(leftFlow, rightFlow, overlayFlow) { left, right, overlay ->
+            combine(leftFlow, rightFlow, overlayFlow, categoryFlow) { left, right, overlay, categoryState ->
                 val pickedGrams =
                     left.pickedFood?.gramsPerServingUnitResolved()
                         ?.let { g -> right.pickedServings * g }
@@ -307,6 +336,9 @@ class RecipeBuilderViewModel @Inject constructor(
                     name = left.name,
                     servingsYield = left.servingsYield,
                     totalYieldGrams = left.totalYieldGrams,
+                    categories = categoryState.categories,
+                    selectedCategoryIds = categoryState.selectedCategoryIds,
+                    newCategoryName = categoryState.newCategoryName,
                     query = left.query,
                     results = left.results,
                     pickedFood = left.pickedFood,
@@ -335,6 +367,60 @@ class RecipeBuilderViewModel @Inject constructor(
                 RecipeBuilderState()
             )
         }
+
+    private fun loadCategoriesForEditor() {
+        viewModelScope.launch {
+            try {
+                categoriesFlow.value = foodCategoryRepo.getAll()
+                    .sortedBy { it.name.lowercase() }
+                    .map { category ->
+                        FoodCategoryUi(
+                            id = category.id,
+                            name = category.name,
+                            isSystem = category.isSystem,
+                        )
+                    }
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    fun onCategoryCheckedChange(categoryId: Long, checked: Boolean) {
+        val nextIds = selectedCategoryIdsFlow.value.toMutableSet().apply {
+            if (checked) add(categoryId) else remove(categoryId)
+        }
+        selectedCategoryIdsFlow.value = nextIds
+        markDirty()
+    }
+
+    fun onNewCategoryNameChange(v: String) {
+        newCategoryNameFlow.value = v
+    }
+
+    fun createCategory() {
+        val rawName = newCategoryNameFlow.value.trim()
+        if (rawName.isBlank()) {
+            errorFlow.value = "Category name is required."
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val created = foodCategoryRepo.getOrCreateByName(rawName)
+                categoriesFlow.value = (categoriesFlow.value + FoodCategoryUi(
+                    id = created.id,
+                    name = created.name,
+                    isSystem = created.isSystem,
+                )).distinctBy { it.id }.sortedBy { it.name.lowercase() }
+                selectedCategoryIdsFlow.value = selectedCategoryIdsFlow.value + created.id
+                newCategoryNameFlow.value = ""
+                errorFlow.value = null
+                markDirty()
+            } catch (t: Throwable) {
+                errorFlow.value = t.message ?: "Failed to create category."
+            }
+        }
+    }
 
     fun onFavoriteChange(v: Boolean) {
         favoriteFlow.value = v
@@ -779,7 +865,7 @@ class RecipeBuilderViewModel @Inject constructor(
             try {
                 val editingFoodId = editFoodId
                 Log.d("Meow", "SAVE RECIPE totalYieldGrams=${totalYieldGramsFlow.value} ingredientSum=${ingredientsFlow.value.sumOf { it.grams ?: 0.0 }}")
-                if (editingFoodId == null) {
+                val savedRecipeFoodId = if (editingFoodId == null) {
                     val newFoodId = createRecipe(
                         RecipeDraft(
                             name = name,
@@ -800,6 +886,7 @@ class RecipeBuilderViewModel @Inject constructor(
                         eatMore = eatMoreFlow.value,
                         limit = limitFlow.value
                     )
+                    newFoodId
                 } else {
                     recipeRepo.updateRecipeByFoodId(
                         foodId = editingFoodId,
@@ -823,8 +910,17 @@ class RecipeBuilderViewModel @Inject constructor(
                         eatMore = eatMoreFlow.value,
                         limit = limitFlow.value
                     )
+                    editingFoodId
                 }
 
+                recipeRepo.getRecipeByFoodId(savedRecipeFoodId)?.let { recipe ->
+                    foodCategoryRepo.replaceForRecipe(
+                        recipeId = recipe.recipeId,
+                        categoryIds = selectedCategoryIdsFlow.value,
+                    )
+                }
+
+                hasUnsavedChangesFlow.value = false
                 onDone()
             } catch (t: Throwable) {
                 errorFlow.value = t.message ?: "Failed to save recipe."
@@ -870,6 +966,18 @@ class RecipeBuilderViewModel @Inject constructor(
             favoriteFlow.value = flags?.favorite ?: false
             eatMoreFlow.value = flags?.eatMore ?: false
             limitFlow.value = flags?.limit ?: false
+
+            categoriesFlow.value = foodCategoryRepo.getAll()
+                .sortedBy { it.name.lowercase() }
+                .map { category ->
+                    FoodCategoryUi(
+                        id = category.id,
+                        name = category.name,
+                        isSystem = category.isSystem,
+                    )
+                }
+            selectedCategoryIdsFlow.value = foodCategoryRepo.getForRecipe(recipe.recipeId).map { it.id }.toSet()
+            newCategoryNameFlow.value = ""
 
             val ids = ingredients.map { it.ingredientFoodId }.distinct()
             val foodById: Map<Long, Food?> =

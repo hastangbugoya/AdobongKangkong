@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.food
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -146,6 +148,29 @@ fun FoodsListScreen(
 
             Spacer(Modifier.height(8.dp))
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.selectedCategoryId == null,
+                    onClick = { vm.onSelectedCategoryChange(null) },
+                    label = { Text("All categories") }
+                )
+
+                state.categories.forEach { category ->
+                    FilterChip(
+                        selected = state.selectedCategoryId == category.id,
+                        onClick = { vm.onSelectedCategoryChange(category.id) },
+                        label = { Text(category.name) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
             FoodsSortRow(
                 sort = state.sort,
                 onSortKey = vm::onSortKeyChange,
@@ -172,7 +197,6 @@ fun FoodsListScreen(
                     HorizontalDivider()
                 }
 
-                // (You had this debug; keep if you want, otherwise remove)
                 item {
                     Text(state.toString(), style = MaterialTheme.typography.bodySmall)
                 }
@@ -289,7 +313,6 @@ private fun FoodRow(
             supportingContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {
 
-                    // ✅ Needs-fix banner (non-blocking, derived from VM)
                     if (!row.fixMessage.isNullOrBlank()) {
                         NeedsFixBanner(
                             message = row.fixMessage,

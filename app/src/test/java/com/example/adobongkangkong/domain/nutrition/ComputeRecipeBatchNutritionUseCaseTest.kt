@@ -51,6 +51,15 @@ class ComputeRecipeBatchNutritionUseCaseTest {
                     ?: error("Recipe not found: $recipeId")
             }
         }
+
+        override suspend fun getRecipeIdsByFoodIds(foodIds: Set<Long>): Map<Long, Long> {
+            if (foodIds.isEmpty()) return emptyMap()
+
+            return foodIds.associateWith { foodId ->
+                headerByFoodId[foodId]?.recipeId
+                    ?: error("Recipe header not found for foodId: $foodId")
+            }
+        }
     }
 
     private class FakeSnapshotRepo(
@@ -211,7 +220,7 @@ class ComputeRecipeBatchNutritionUseCaseTest {
             ingredients = listOf(
                 RecipeIngredient(foodId = 7L, servings = 1.0)
             ),
-            servingsYield = null,          // <-- key
+            servingsYield = null,
             totalYieldGrams = 300.0
         )
 
@@ -226,7 +235,7 @@ class ComputeRecipeBatchNutritionUseCaseTest {
     fun missing_gramsPerServing_skips_ingredient_and_warns() {
         val foodMissingGpsu = FoodNutritionSnapshot(
             foodId = 1L,
-            gramsPerServingUnit = null, // <-- key
+            gramsPerServingUnit = null,
             mlPerServingUnit = null,
             nutrientsPerGram = NutrientMap.fromCodeMap(mapOf("kcal" to 10.0)),
             nutrientsPerMilliliter = null
@@ -268,7 +277,7 @@ class ComputeRecipeBatchNutritionUseCaseTest {
  * These tests intentionally construct FoodNutritionSnapshot directly.
  * Snapshot constructor params are now required even for grams-only tests:
  * - mlPerServingUnit
- * - nutrientsPerMilliliters
+ * - nutrientsPerMilliliter
  *
  * If I add more snapshot fields later, I must update every test construction site.
  * For grams-only tests, keep the new volume params = null; do NOT invent density or conversions.

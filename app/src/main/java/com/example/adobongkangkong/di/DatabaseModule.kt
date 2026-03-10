@@ -35,7 +35,8 @@ object DatabaseModule {
                 NutriDatabase.MIGRATION_9_10,
                 NutriDatabase.MIGRATION_11_12,
                 NutriDatabase.MIGRATION_13_14,
-                NutriDatabase.MIGRATION_15_16
+                NutriDatabase.MIGRATION_15_16,
+                NutriDatabase.MIGRATION_16_17
             )
             .fallbackToDestructiveMigration()
             .build()

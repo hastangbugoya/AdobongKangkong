@@ -7,6 +7,7 @@ import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.FoodCategory
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
@@ -14,6 +15,7 @@ import com.example.adobongkangkong.domain.recipes.ComputeRecipeKcalForFoodIdUseC
 import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 import com.example.adobongkangkong.domain.recipes.nutrientsForGrams
 import com.example.adobongkangkong.domain.recipes.nutrientsForMilliliters
+import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.usage.FoodValidationResult
 import com.example.adobongkangkong.domain.usage.UsageContext
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -57,6 +60,24 @@ import kotlin.math.roundToInt
  * Performance rules:
  * - Keep row construction cheap: compute once per list emission, no heavy composables.
  * - Use snapshot batch fetch to avoid N+1 queries.
+ *
+ * Category filter algorithm:
+ * - Foods and recipes store category membership in separate cross-ref tables:
+ *   - foods -> food_category_cross_refs
+ *   - recipes -> recipe_category_cross_refs
+ * - The Foods list ultimately renders Food rows, so recipe category membership must be
+ *   translated to recipe foodIds before filtering.
+ * - The repository exposes:
+ *   - observeFoodIdsForCategory(categoryId)
+ *   - observeRecipeFoodIdsForCategory(categoryId)
+ * - This ViewModel combines both flows into a single unified Set<Long> of foodIds.
+ * - Filtering is then a single O(1) membership test:
+ *   - food.id in categoryFoodIds
+ *
+ * Why this is better:
+ * - no per-row recipe lookup in the ViewModel
+ * - no N+1 repository calls during filtering
+ * - category filtering remains a simple foodId membership check for both foods and recipes
  */
 @HiltViewModel
 class FoodsListViewModel @Inject constructor(
@@ -65,10 +86,12 @@ class FoodsListViewModel @Inject constructor(
     private val snapshotRepo: FoodNutritionSnapshotRepository,
     private val computeRecipeKcalForFoodId: ComputeRecipeKcalForFoodIdUseCase,
     private val validateFood: ValidateFoodForUsageUseCase,
+    private val foodCategoryRepository: FoodCategoryRepository,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
     private val filterFlow = MutableStateFlow(FoodsFilter.ALL)
+    private val selectedCategoryIdFlow = MutableStateFlow<Long?>(null)
     private val sortFlow = MutableStateFlow(FoodSortState())
 
     val query: StateFlow<String> = queryFlow
@@ -81,19 +104,55 @@ class FoodsListViewModel @Inject constructor(
                 if (q.isBlank()) searchFoods("", limit = 500) else searchFoods(q, limit = 200)
             }
 
+    private val categoriesFlow: Flow<List<FoodCategory>> =
+        foodCategoryRepository.observeAll()
+
+    /**
+     * Unified category membership set.
+     *
+     * Contains all foodIds belonging to the selected category:
+     * - direct food/category matches
+     * - recipe/category matches translated to recipe foodIds
+     *
+     * When no category is selected, emits null so the downstream filter can skip
+     * category membership checks entirely.
+     */
+    private val selectedCategoryFoodIdsFlow: Flow<Set<Long>?> =
+        selectedCategoryIdFlow.flatMapLatest { categoryId ->
+            if (categoryId == null) {
+                flowOf(null)
+            } else {
+                combine(
+                    foodCategoryRepository.observeFoodIdsForCategory(categoryId),
+                    foodCategoryRepository.observeRecipeFoodIdsForCategory(categoryId)
+                ) { foodIds, recipeFoodIds ->
+                    buildSet {
+                        addAll(foodIds)
+                        addAll(recipeFoodIds)
+                    } as Set<Long>?
+                }
+            }
+        }
+
     private val flagsByFoodIdFlow: Flow<Map<Long, FoodGoalFlagsEntity>> =
         foodGoalFlagsDao
             .observeAll()
             .map { list -> list.associateBy { it.foodId } }
             .distinctUntilChanged()
 
-    /** Apply All/Foods/Recipes filter to raw search results. */
+    /** Apply All/Foods/Recipes filter + single category filter to raw search results. */
     private val filteredFoodsFlow: Flow<List<Food>> =
-        combine(filterFlow, resultsFlow) { filter, foods ->
-            when (filter) {
+        combine(filterFlow, resultsFlow, selectedCategoryFoodIdsFlow) { filter, foods, selectedCategoryFoodIds ->
+            val typeFiltered = when (filter) {
                 FoodsFilter.ALL -> foods
                 FoodsFilter.FOODS_ONLY -> foods.filter { !it.isRecipe }
                 FoodsFilter.RECIPES_ONLY -> foods.filter { it.isRecipe }
+            }
+
+            if (selectedCategoryFoodIds == null) {
+                typeFiltered
+            } else {
+                typeFiltered.filter { it.id in selectedCategoryFoodIds }
             }
         }
 
@@ -163,6 +222,8 @@ class FoodsListViewModel @Inject constructor(
     private data class Partial(
         val q: String,
         val filter: FoodsFilter,
+        val selectedCategoryId: Long?,
+        val categories: List<FoodCategory>,
         val sort: FoodSortState,
         val foods: List<Food>,
         val flagsById: Map<Long, FoodGoalFlagsEntity>,
@@ -170,18 +231,39 @@ class FoodsListViewModel @Inject constructor(
 
     val state: StateFlow<FoodsListState> =
         combine(
-            queryFlow,
-            filterFlow,
-            sortFlow,
-            filteredFoodsFlow,
-            flagsByFoodIdFlow
-        ) { q, filter, sort, foods, flagsById ->
+            combine(
+                queryFlow,
+                filterFlow,
+                selectedCategoryIdFlow,
+                categoriesFlow
+            ) { q, filter, selectedCategoryId, categories ->
+                QuadA(
+                    q = q,
+                    filter = filter,
+                    selectedCategoryId = selectedCategoryId,
+                    categories = categories
+                )
+            },
+            combine(
+                sortFlow,
+                filteredFoodsFlow,
+                flagsByFoodIdFlow
+            ) { sort, foods, flagsById ->
+                TripleB(
+                    sort = sort,
+                    foods = foods,
+                    flagsById = flagsById
+                )
+            }
+        ) { a, b ->
             Partial(
-                q = q,
-                filter = filter,
-                sort = sort,
-                foods = foods,
-                flagsById = flagsById
+                q = a.q,
+                filter = a.filter,
+                selectedCategoryId = a.selectedCategoryId,
+                categories = a.categories,
+                sort = b.sort,
+                foods = b.foods,
+                flagsById = b.flagsById
             )
         }
             .combine(per100ByFoodIdFlow) { partial, per100ById ->
@@ -189,7 +271,7 @@ class FoodsListViewModel @Inject constructor(
             }
             .combine(snapshotsByFoodIdFlow) { (partial, per100ById), snapshotsById ->
 
-                val (q, filter, sort, foods, flagsById) = partial
+                val (q, filter, selectedCategoryId, categories, sort, foods, flagsById) = partial
 
                 val rowsUnsorted = ArrayList<FoodsListRowUiModel>(foods.size)
                 for (food in foods) {
@@ -205,11 +287,10 @@ class FoodsListViewModel @Inject constructor(
                                     mlPerServingUnit = food.mlPerServingUnit,
                                     amountInput = AmountInput.ByServings(1.0),
                                     context = UsageContext.LOGGING,
-                                    snapshot = snapshotsById[food.id] // may be null
+                                    snapshot = snapshotsById[food.id]
                                 )
                             )
 
-                            // Recommended: list shows "fix" only for truly blocked foods.
                             when (result) {
                                 FoodValidationResult.Ok -> null
                                 is FoodValidationResult.Warning -> null
@@ -217,7 +298,6 @@ class FoodsListViewModel @Inject constructor(
                             }
                         }
 
-                    // ---- Recipes (special-case row content) ----
                     if (food.isRecipe) {
                         val kcalText =
                             when (val r = computeRecipeKcalForFoodId(food.id)) {
@@ -292,6 +372,8 @@ class FoodsListViewModel @Inject constructor(
                 FoodsListState(
                     query = q,
                     filter = filter,
+                    selectedCategoryId = selectedCategoryId,
+                    categories = categories,
                     sort = sort,
                     rows = sortedRows
                 )
@@ -305,6 +387,10 @@ class FoodsListViewModel @Inject constructor(
 
     fun onFilterChange(v: FoodsFilter) {
         filterFlow.value = v
+    }
+
+    fun onSelectedCategoryChange(categoryId: Long?) {
+        selectedCategoryIdFlow.value = categoryId
     }
 
     fun onSortKeyChange(key: FoodSortKey) {
@@ -520,6 +606,19 @@ class FoodsListViewModel @Inject constructor(
         }
     }
 }
+
+private data class QuadA(
+    val q: String,
+    val filter: FoodsFilter,
+    val selectedCategoryId: Long?,
+    val categories: List<FoodCategory>,
+)
+
+private data class TripleB(
+    val sort: FoodSortState,
+    val foods: List<Food>,
+    val flagsById: Map<Long, FoodGoalFlagsEntity>,
+)
 
 /**
  * =============================================================================

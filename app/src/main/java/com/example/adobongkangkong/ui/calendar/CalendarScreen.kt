@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,17 +59,23 @@ fun CalendarScreen(
     Surface(color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.size(32.dp))
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .padding(start = 8.dp, top = 8.dp)
-                    .size(40.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.angle_circle_left),
-                    contentDescription = "Back"
-                )
+            Row {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .padding(start = 8.dp, top = 8.dp)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.angle_circle_left),
+                        contentDescription = "Back"
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                Text("Calendar", style = MaterialTheme.typography.titleSmall)
+
             }
+
 
             Spacer(Modifier.size(8.dp))
             MonthHeader(

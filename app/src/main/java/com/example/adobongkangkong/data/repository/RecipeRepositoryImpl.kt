@@ -91,7 +91,7 @@ class RecipeRepositoryImpl @Inject constructor(
         val nutrition = computeRecipeNutritionForSnapshot(recipe = domainRecipe)
         val perCookedGram = nutrition.perCookedGram
 
-        perCookedGram?.takeIf{!it.isEmpty()}?.let() {
+        perCookedGram?.takeIf { !it.isEmpty() }?.let {
             val nutrientDao: NutrientDao = db.nutrientDao()
 
             // Replace existing nutrients for this recipe foodId.
@@ -131,7 +131,7 @@ class RecipeRepositoryImpl @Inject constructor(
 
     override suspend fun getIngredients(recipeId: Long): List<RecipeIngredientLine> {
         return ingredientDao.getForRecipe(recipeId).map { entity ->
-            // ✅ Keep nulls as null (do NOT coerce to 0.0)
+            // Keep nulls as null (do NOT coerce to 0.0)
             RecipeIngredientLine(
                 ingredientFoodId = entity.foodId,
                 ingredientServings = entity.amountServings,
@@ -145,83 +145,90 @@ class RecipeRepositoryImpl @Inject constructor(
         servingsYield: Double,
         totalYieldGrams: Double?,
         ingredients: List<RecipeIngredientLine>
-    ) { db.withTransaction {
-        val existing = recipeDao.getByFoodId(foodId) ?: return@withTransaction
-        val recipeId = existing.id
+    ) {
+        db.withTransaction {
+            val existing = recipeDao.getByFoodId(foodId) ?: return@withTransaction
+            val recipeId = existing.id
 
-        recipeDao.insert(existing.copy(servingsYield = servingsYield, totalYieldGrams = totalYieldGrams))
-
-        val gramsPerServing = totalYieldGrams
-            ?.takeIf { it > 0.0 && servingsYield > 0.0 }
-            ?.div(servingsYield)
-            ?.takeIf { it > 0.0 }
-
-        foodDao.updateGramsPerServingUnit(
-            id = foodId,
-            gramsPerServingUnit = gramsPerServing
-        )
-
-        // Replace ingredient rows
-        ingredientDao.deleteForRecipe(recipeId)
-        ingredientDao.insertAll(
-            ingredients.map { line ->
-                RecipeIngredientEntity(
-                    recipeId = recipeId,
-                    foodId = line.ingredientFoodId,
-                    amountServings = line.ingredientServings,
-                    amountGrams = line.ingredientGrams
+            recipeDao.insert(
+                existing.copy(
+                    servingsYield = servingsYield,
+                    totalYieldGrams = totalYieldGrams
                 )
-            }
-        )
+            )
 
-        // Refresh persisted recipe nutrients after edits
-        val domainRecipe = Recipe(
-            id = recipeId,
-            name = existing.name,
-            ingredients = ingredients.map { line ->
-                // ✅ Default to 1.0 ONLY for compute path if both null.
-                // This matches your “default-to-1” decision without destroying nulls in storage/output.
-                val servingsForCompute =
-                    line.ingredientServings
-                        ?: line.ingredientGrams?.let { _ -> 1.0 }
-                        ?: 1.0
+            val gramsPerServing = totalYieldGrams
+                ?.takeIf { it > 0.0 && servingsYield > 0.0 }
+                ?.div(servingsYield)
+                ?.takeIf { it > 0.0 }
 
-                RecipeIngredient(
-                    foodId = line.ingredientFoodId,
-                    servings = servingsForCompute
-                )
-            },
-            servingsYield = servingsYield,
-            totalYieldGrams = totalYieldGrams
-        )
+            foodDao.updateGramsPerServingUnit(
+                id = foodId,
+                gramsPerServingUnit = gramsPerServing
+            )
 
-        val computed = computeRecipeNutritionForSnapshot(recipe = domainRecipe)
-        val perCookedGram = computed.perCookedGram
+            // Replace ingredient rows
+            ingredientDao.deleteForRecipe(recipeId)
+            ingredientDao.insertAll(
+                ingredients.map { line ->
+                    RecipeIngredientEntity(
+                        recipeId = recipeId,
+                        foodId = line.ingredientFoodId,
+                        amountServings = line.ingredientServings,
+                        amountGrams = line.ingredientGrams
+                    )
+                }
+            )
 
-        perCookedGram?.takeIf{!it.isEmpty()}?.let() {
-            val nutrientDao: NutrientDao = db.nutrientDao()
+            // Refresh persisted recipe nutrients after edits
+            val domainRecipe = Recipe(
+                id = recipeId,
+                name = existing.name,
+                ingredients = ingredients.map { line ->
+                    // Default to 1.0 ONLY for compute path if both null.
+                    // This matches your “default-to-1” decision without destroying nulls in storage/output.
+                    val servingsForCompute =
+                        line.ingredientServings
+                            ?: line.ingredientGrams?.let { _ -> 1.0 }
+                            ?: 1.0
 
-            foodNutrientDao.deleteForFood(foodId)
+                    RecipeIngredient(
+                        foodId = line.ingredientFoodId,
+                        servings = servingsForCompute
+                    )
+                },
+                servingsYield = servingsYield,
+                totalYieldGrams = totalYieldGrams
+            )
 
-            val rows = perCookedGram.entries().mapNotNull { (key, amountPerGram) ->
-                val code = key.value
-                val nutrientId = nutrientDao.getIdByCode(code) ?: return@mapNotNull null
-                val unit = nutrientDao.getUnitByCode(code) ?: return@mapNotNull null
+            val computed = computeRecipeNutritionForSnapshot(recipe = domainRecipe)
+            val perCookedGram = computed.perCookedGram
 
-                FoodNutrientEntity(
-                    foodId = foodId,
-                    nutrientId = nutrientId,
-                    nutrientAmountPerBasis = amountPerGram * 100.0,
-                    unit = unit,
-                    basisType = BasisType.PER_100G
-                )
-            }
+            perCookedGram?.takeIf { !it.isEmpty() }?.let {
+                val nutrientDao: NutrientDao = db.nutrientDao()
 
-            if (rows.isNotEmpty()) {
-                foodNutrientDao.upsertAll(rows)
+                foodNutrientDao.deleteForFood(foodId)
+
+                val rows = perCookedGram.entries().mapNotNull { (key, amountPerGram) ->
+                    val code = key.value
+                    val nutrientId = nutrientDao.getIdByCode(code) ?: return@mapNotNull null
+                    val unit = nutrientDao.getUnitByCode(code) ?: return@mapNotNull null
+
+                    FoodNutrientEntity(
+                        foodId = foodId,
+                        nutrientId = nutrientId,
+                        nutrientAmountPerBasis = amountPerGram * 100.0,
+                        unit = unit,
+                        basisType = BasisType.PER_100G
+                    )
+                }
+
+                if (rows.isNotEmpty()) {
+                    foodNutrientDao.upsertAll(rows)
+                }
             }
         }
-    }}
+    }
 
     override suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader? {
         val r = recipeDao.getById(recipeId) ?: return null
@@ -233,11 +240,17 @@ class RecipeRepositoryImpl @Inject constructor(
         )
     }
 
-override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long> {
-    if (recipeIds.isEmpty()) return emptyMap()
-    return recipeDao.getByIds(recipeIds.toList())
-        .associate { it.id to it.foodId }
-}
+    override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long> {
+        if (recipeIds.isEmpty()) return emptyMap()
+        return recipeDao.getByIds(recipeIds.toList())
+            .associate { it.id to it.foodId }
+    }
+
+    override suspend fun getRecipeIdsByFoodIds(foodIds: Set<Long>): Map<Long, Long> {
+        if (foodIds.isEmpty()) return emptyMap()
+        return recipeDao.getByFoodIds(foodIds.toList())
+            .associate { it.foodId to it.id }
+    }
 }
 
 /**

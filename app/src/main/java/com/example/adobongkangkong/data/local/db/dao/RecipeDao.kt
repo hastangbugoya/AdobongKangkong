@@ -26,20 +26,24 @@ interface RecipeDao {
     @Query("SELECT * FROM recipes WHERE foodId = :foodId LIMIT 1")
     suspend fun getByFoodId(foodId: Long): RecipeEntity?
 
+    @Query("SELECT * FROM recipes WHERE foodId IN (:foodIds)")
+    suspend fun getByFoodIds(foodIds: List<Long>): List<RecipeEntity>
+
     @Query("SELECT * FROM recipes ORDER BY createdAt DESC")
     suspend fun getAll(): List<RecipeEntity>
 
     @Query("SELECT id FROM recipes WHERE stableId = :stableId LIMIT 1")
     suspend fun getIdByStableId(stableId: String): Long?
 
-
-    @Query("""
+    @Query(
+        """
         UPDATE recipes SET
           foodId = :foodId,
           name = :name,
           servingsYield = :servingsYield
         WHERE id = :id
-        """)
+        """
+    )
     suspend fun updateCore(
         id: Long,
         foodId: Long,

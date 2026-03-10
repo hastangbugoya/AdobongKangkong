@@ -1,6 +1,5 @@
 package com.example.adobongkangkong.domain.repository
 
-
 import com.example.adobongkangkong.domain.model.RecipeDraft
 
 data class RecipeHeader(
@@ -15,6 +14,7 @@ data class RecipeIngredientLine(
     val ingredientServings: Double? = null,
     val ingredientGrams: Double? = null
 )
+
 interface RecipeRepository {
     suspend fun createRecipe(draft: RecipeDraft): Long // returns recipeId
 
@@ -34,4 +34,6 @@ interface RecipeRepository {
     /** Bulk lookup to avoid N+1 in planner/day aggregation (recipeId -> recipe.foodId). */
     suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long>
 
+    /** Bulk lookup to avoid N+1 in foods-list category filtering (foodId -> recipeId). */
+    suspend fun getRecipeIdsByFoodIds(foodIds: Set<Long>): Map<Long, Long>
 }
