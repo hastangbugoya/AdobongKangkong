@@ -1,19 +1,28 @@
 package com.example.adobongkangkong.ui.planner
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -21,6 +30,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -30,7 +40,10 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,8 +54,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -99,7 +114,6 @@ fun PlannerDayScreen(
                 title = {
                     Column {
                         Text("Planner")
-                        Text(text = dateText, style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 navigationIcon = {
@@ -107,14 +121,6 @@ fun PlannerDayScreen(
                         Icon(
                             painter = painterResource(R.drawable.angle_circle_left),
                             contentDescription = "Back"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { onEvent(PlannerDayEvent.PickDate) }) {
-                        Icon(
-                            painter = painterResource(R.drawable.tasks),
-                            contentDescription = "Open date picker"
                         )
                     }
                 }
@@ -277,6 +283,14 @@ fun PlannerDayScreen(
             onEvent = onEvent
         )
     }
+
+    val recurringSheet = s.recurringEditor
+    if (recurringSheet != null) {
+        RecurringMealBottomSheet(
+            sheet = recurringSheet,
+            onEvent = onEvent
+        )
+    }
 }
 
 @Composable
@@ -331,6 +345,248 @@ private fun EmptySlotCard(
             TextButton(onClick = onAdd) { Text("Add") }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecurringMealBottomSheet(
+    sheet: RecurringEditorState,
+    onEvent: (PlannerDayEvent) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = { onEvent(PlannerDayEvent.DismissRecurringEditor) },
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.95f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Make recurring",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Text(
+                text = "Frequency",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.clickable { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.DAILY)) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = sheet.frequency == RecurrenceFrequencyUi.DAILY,
+                        onClick = { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.DAILY)) }
+                    )
+                    Text("Daily")
+                }
+                Row(
+                    modifier = Modifier.clickable { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.WEEKLY)) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = sheet.frequency == RecurrenceFrequencyUi.WEEKLY,
+                        onClick = { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.WEEKLY)) }
+                    )
+                    Text("Weekly")
+                }
+            }
+
+            Text(
+                text = "Details",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sheet.rules.forEach { rule ->
+                    RecurringDayRuleRow(
+                        rule = rule,
+                        anchorWeekday = sheet.anchorWeekday,
+                        frequency = sheet.frequency,
+                        onToggle = { enabled ->
+                            onEvent(PlannerDayEvent.ToggleRecurringWeekday(rule.weekday, enabled))
+                        },
+                        onSlotSelected = { slot ->
+                            onEvent(PlannerDayEvent.UpdateRecurringWeekdaySlot(rule.weekday, slot))
+                        }
+                    )
+                }
+            }
+
+            sheet.errorMessage?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { onEvent(PlannerDayEvent.DismissRecurringEditor) },
+                    enabled = !sheet.isSaving
+                ) {
+                    Text("Cancel")
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = { onEvent(PlannerDayEvent.ConfirmMakeRecurring) },
+                    enabled = !sheet.isSaving
+                ) {
+                    if (sheet.isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Save")
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun RecurringDayRuleRow(
+    rule: RecurringDayRuleUiState,
+    anchorWeekday: Int,
+    frequency: RecurrenceFrequencyUi,
+    onToggle: (Boolean) -> Unit,
+    onSlotSelected: (MealSlot) -> Unit,
+) {
+    val enabled = if (frequency == RecurrenceFrequencyUi.DAILY) true else rule.isEnabled
+    val isAnchor = rule.weekday == anchorWeekday
+    var showSlotMenu by remember(rule.weekday, rule.slot, enabled, frequency) { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.width(40.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            val toggleEnabled = frequency == RecurrenceFrequencyUi.WEEKLY && !isAnchor
+
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .border(
+                        width = 2.dp,
+                        color = if (enabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        },
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .background(
+                        if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                        else Color.Transparent
+                    )
+                    .clickable(
+                        enabled = toggleEnabled,
+                        onClick = { onToggle(!enabled) }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (enabled) {
+                    Text(
+                        text = "✓",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier.width(64.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = weekdayShortLabel(rule.weekday),
+                maxLines = 1
+            )
+        }
+
+        Box(
+            modifier = Modifier.width(88.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (isAnchor) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                ) {
+                    Text(
+                        text = "Anchor",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        Box(
+            modifier = Modifier.width(112.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Box {
+                TextButton(
+                    onClick = { showSlotMenu = true },
+                    enabled = enabled && !isAnchor
+                ) {
+                    Text(rule.slot.display)
+                }
+
+                DropdownMenu(
+                    expanded = showSlotMenu,
+                    onDismissRequest = { showSlotMenu = false }
+                ) {
+                    MealSlot.entries.forEach { slot ->
+                        DropdownMenuItem(
+                            text = { Text(slot.display) },
+                            onClick = {
+                                showSlotMenu = false
+                                onSlotSelected(slot)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun weekdayShortLabel(weekday: Int): String = when (weekday) {
+    1 -> "Mon"
+    2 -> "Tue"
+    3 -> "Wed"
+    4 -> "Thu"
+    5 -> "Fri"
+    6 -> "Sat"
+    7 -> "Sun"
+    else -> "Day $weekday"
 }
 
 @Composable

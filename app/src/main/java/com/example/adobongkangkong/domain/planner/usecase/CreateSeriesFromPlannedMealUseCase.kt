@@ -169,7 +169,10 @@ class CreateSeriesFromPlannedMealUseCase @Inject constructor(
         val anchorDate: LocalDate
     )
 
-    suspend fun execute(mealId: Long): Result = db.withTransaction {
+    suspend fun execute(
+        mealId: Long,
+        slotRulesOverride: List<CreatePlannedSeriesUseCase.SlotRuleInput>? = null
+    ): Result = db.withTransaction {
         val meal = meals.getById(mealId)
             ?: error("PlannedMeal not found: id=$mealId")
 
@@ -191,15 +194,23 @@ class CreateSeriesFromPlannedMealUseCase @Inject constructor(
             )
         )
 
-        // Slot rule for the anchor meal
-        val rule = PlannedSeriesSlotRuleEntity(
-            seriesId = seriesId,
-            weekday = anchorDate.dayOfWeek.value,
-            slot = meal.slot,
-            customLabel = meal.customLabel,
-            createdAtEpochMs = now
-        )
-        seriesRepo.replaceSlotRules(seriesId, listOf(rule))
+        // Slot rules for the series. Default = anchor meal weekday/slot.
+        val rules = (slotRulesOverride ?: listOf(
+            CreatePlannedSeriesUseCase.SlotRuleInput(
+                weekday = anchorDate.dayOfWeek.value,
+                slot = meal.slot,
+                customLabel = meal.customLabel,
+            )
+        )).map { input ->
+            PlannedSeriesSlotRuleEntity(
+                seriesId = seriesId,
+                weekday = input.weekday,
+                slot = input.slot,
+                customLabel = input.customLabel,
+                createdAtEpochMs = now
+            )
+        }
+        seriesRepo.replaceSlotRules(seriesId, rules)
 
         // Template items
         for (mi in mealItems) {

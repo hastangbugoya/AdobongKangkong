@@ -157,8 +157,12 @@ class PromoteMealToSeriesAndEnsureHorizonUseCase @Inject constructor(
     private val promote: CreateSeriesFromPlannedMealUseCase,
     private val ensure: EnsureSeriesOccurrencesWithinHorizonUseCase,
 ) {
-    suspend fun execute(mealId: Long, horizonDays: Long = 180): Long {
-        val result = promote.execute(mealId)
+    suspend fun execute(
+        mealId: Long,
+        horizonDays: Long = 180,
+        slotRulesOverride: List<CreatePlannedSeriesUseCase.SlotRuleInput>? = null,
+    ): Long {
+        val result = promote.execute(mealId = mealId, slotRulesOverride = slotRulesOverride)
         val startIso = result.anchorDate.toString()
         val endIso = result.anchorDate.plusDays(horizonDays).toString()
 

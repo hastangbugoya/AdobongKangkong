@@ -73,6 +73,12 @@ sealed interface PlannerDayEvent {
     // Promote an existing meal into a recurring series
     data class MakeMealRecurring(val mealId: Long) : PlannerDayEvent
 
+    data object DismissRecurringEditor : PlannerDayEvent
+    data class UpdateRecurringFrequency(val frequency: RecurrenceFrequencyUi) : PlannerDayEvent
+    data class ToggleRecurringWeekday(val weekday: Int, val enabled: Boolean) : PlannerDayEvent
+    data class UpdateRecurringWeekdaySlot(val weekday: Int, val slot: MealSlot) : PlannerDayEvent
+    data object ConfirmMakeRecurring : PlannerDayEvent
+
     data class LogMeal(val mealId: Long) : PlannerDayEvent
 
     // Save planned meal as template

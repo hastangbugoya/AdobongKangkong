@@ -27,7 +27,10 @@ data class PlannerDayUiState(
     val dayMacroTotals: MacroTotals = MacroTotals(),
 
     /** IOU editor dialog state (null when closed). */
-    val iouEditor: IouEditorState? = null
+    val iouEditor: IouEditorState? = null,
+
+    /** Recurring series editor state (null when closed). */
+    val recurringEditor: RecurringEditorState? = null
 ) {
     val mealsBySlot: Map<MealSlot, List<PlannedMeal>>
         get() {
@@ -58,4 +61,26 @@ data class DuplicateSheetState(
 data class UndoUiState(
     val id: Long,
     val message: String
+)
+
+
+enum class RecurrenceFrequencyUi {
+    DAILY,
+    WEEKLY,
+}
+
+data class RecurringDayRuleUiState(
+    val weekday: Int,
+    val isEnabled: Boolean,
+    val slot: MealSlot,
+    val customLabel: String? = null,
+)
+
+data class RecurringEditorState(
+    val mealId: Long,
+    val anchorWeekday: Int,
+    val frequency: RecurrenceFrequencyUi,
+    val rules: List<RecurringDayRuleUiState>,
+    val isSaving: Boolean = false,
+    val errorMessage: String? = null,
 )

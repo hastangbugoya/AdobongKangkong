@@ -346,7 +346,57 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             is PlannerDayEvent.MakeMealRecurring -> {
-                makeMealRecurring(event.mealId)
+                openRecurringEditor(event.mealId)
+            }
+
+            PlannerDayEvent.DismissRecurringEditor -> {
+                _state.update { it.copy(recurringEditor = null) }
+            }
+
+            is PlannerDayEvent.UpdateRecurringFrequency -> {
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    val nextRules = when (event.frequency) {
+                        RecurrenceFrequencyUi.DAILY -> ed.rules.map { it.copy(isEnabled = true) }
+                        RecurrenceFrequencyUi.WEEKLY -> ed.rules.map { rule ->
+                            if (rule.weekday == ed.anchorWeekday) rule.copy(isEnabled = true) else rule
+                        }
+                    }
+                    s.copy(recurringEditor = ed.copy(frequency = event.frequency, rules = nextRules, errorMessage = null))
+                }
+            }
+
+            is PlannerDayEvent.ToggleRecurringWeekday -> {
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    if (ed.frequency != RecurrenceFrequencyUi.WEEKLY) return@update s
+                    val nextRules = ed.rules.map { rule ->
+                        when {
+                            rule.weekday == ed.anchorWeekday -> rule.copy(isEnabled = true)
+                            rule.weekday == event.weekday -> rule.copy(isEnabled = event.enabled)
+                            else -> rule
+                        }
+                    }
+                    s.copy(recurringEditor = ed.copy(rules = nextRules, errorMessage = null))
+                }
+            }
+
+            is PlannerDayEvent.UpdateRecurringWeekdaySlot -> {
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    val nextRules = ed.rules.map { rule ->
+                        if (rule.weekday != event.weekday) rule
+                        else rule.copy(
+                            slot = event.slot,
+                            customLabel = if (event.slot == MealSlot.CUSTOM) (rule.customLabel ?: "Custom") else null
+                        )
+                    }
+                    s.copy(recurringEditor = ed.copy(rules = nextRules, errorMessage = null))
+                }
+            }
+
+            PlannerDayEvent.ConfirmMakeRecurring -> {
+                saveRecurringSeries()
             }
 
             is PlannerDayEvent.LogMeal -> {
@@ -663,14 +713,90 @@ class PlannerDayViewModel @Inject constructor(
         }
     }
 
-    private fun makeMealRecurring(mealId: Long) {
+    private fun openRecurringEditor(mealId: Long) {
         if (mealId <= 0L) return
+
+        val day = _state.value.day
+        val meal = day?.mealsBySlot
+            ?.values
+            ?.asSequence()
+            ?.flatten()
+            ?.firstOrNull { it.id == mealId }
+
+        if (meal == null) {
+            _events.tryEmit(PlannerDayUiEvent.ShowToast("Meal not found."))
+            return
+        }
+
+        val anchorWeekday = _state.value.date.dayOfWeek.value
+        val defaultCustomLabel = if (meal.slot == MealSlot.CUSTOM) "Custom" else null
+        val rules = (1..7).map { weekday ->
+            RecurringDayRuleUiState(
+                weekday = weekday,
+                isEnabled = weekday == anchorWeekday,
+                slot = meal.slot,
+                customLabel = defaultCustomLabel,
+            )
+        }
+
+        _state.update {
+            it.copy(
+                recurringEditor = RecurringEditorState(
+                    mealId = mealId,
+                    anchorWeekday = anchorWeekday,
+                    frequency = RecurrenceFrequencyUi.WEEKLY,
+                    rules = rules,
+                    isSaving = false,
+                    errorMessage = null,
+                )
+            )
+        }
+    }
+
+    private fun saveRecurringSeries() {
+        val snapshot = _state.value.recurringEditor ?: return
+        if (snapshot.isSaving) return
+
+        val selectedRules = when (snapshot.frequency) {
+            RecurrenceFrequencyUi.DAILY -> snapshot.rules
+            RecurrenceFrequencyUi.WEEKLY -> snapshot.rules.filter { it.isEnabled }
+        }
+
+        if (selectedRules.isEmpty()) {
+            _state.update { s ->
+                val ed = s.recurringEditor ?: return@update s
+                s.copy(recurringEditor = ed.copy(errorMessage = "Select at least one day."))
+            }
+            return
+        }
+
+        val slotRules = selectedRules.map { rule ->
+            CreatePlannedSeriesUseCase.SlotRuleInput(
+                weekday = rule.weekday,
+                slot = rule.slot,
+                customLabel = if (rule.slot == MealSlot.CUSTOM) (rule.customLabel ?: "Custom") else null,
+            )
+        }
+
+        _state.update { s ->
+            val ed = s.recurringEditor ?: return@update s
+            s.copy(recurringEditor = ed.copy(isSaving = true, errorMessage = null))
+        }
 
         viewModelScope.launch {
             try {
-                promoteMealToSeriesAndEnsureHorizon.execute(mealId = mealId, horizonDays = 180)
+                promoteMealToSeriesAndEnsureHorizon.execute(
+                    mealId = snapshot.mealId,
+                    horizonDays = 180,
+                    slotRulesOverride = slotRules,
+                )
+                _state.update { it.copy(recurringEditor = null) }
+                _events.tryEmit(PlannerDayUiEvent.ShowToast("Recurring series created."))
             } catch (t: Throwable) {
-                _state.update { it.copy(errorMessage = t.message ?: "Failed to make meal recurring") }
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    s.copy(recurringEditor = ed.copy(isSaving = false, errorMessage = t.message ?: "Failed to make meal recurring"))
+                }
             }
         }
     }
