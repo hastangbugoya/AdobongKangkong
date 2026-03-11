@@ -8,7 +8,6 @@ import com.example.adobongkangkong.domain.model.TodayLogItem
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 
-
 internal fun TodayLogRow.toDomain(converters: DbTypeConverters): TodayLogItem {
     val nutrients: NutrientMap = converters.nutrientMapFromJson(nutrientsJson)
 
@@ -17,12 +16,11 @@ internal fun TodayLogRow.toDomain(converters: DbTypeConverters): TodayLogItem {
         timestamp = timestamp,
         itemName = itemName,
         caloriesKcal = nutrients[MacroKeys.CALORIES],
-        proteinG     = nutrients[MacroKeys.PROTEIN],
-        carbsG       = nutrients[MacroKeys.CARBS],
-        fatG         = nutrients[MacroKeys.FAT],
+        proteinG = nutrients[MacroKeys.PROTEIN],
+        carbsG = nutrients[MacroKeys.CARBS],
+        fatG = nutrients[MacroKeys.FAT],
     )
 }
-
 
 internal fun LogEntry.toEntity(converters: DbTypeConverters): LogEntryEntity =
     LogEntryEntity(
@@ -30,8 +28,9 @@ internal fun LogEntry.toEntity(converters: DbTypeConverters): LogEntryEntity =
         timestamp = timestamp,
         itemName = itemName,
         foodStableId = foodStableId,
+        amount = amount,
+        unit = unit,
         nutrientsJson = converters.nutrientMapToJson(nutrients),
-        // ✅ NEW
         recipeBatchId = recipeBatchId,
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,
@@ -45,7 +44,8 @@ internal fun LogEntryEntity.toDomain(converters: DbTypeConverters): LogEntry =
         itemName = itemName,
         foodStableId = foodStableId,
         nutrients = converters.nutrientMapFromJson(nutrientsJson),
-        // ✅ NEW
+        amount = amount,
+        unit = unit,
         recipeBatchId = recipeBatchId,
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,
@@ -56,11 +56,11 @@ internal fun LogEntry.toLogEntryEntity(converters: DbTypeConverters): LogEntryEn
     LogEntryEntity(
         id = id,
         timestamp = timestamp,
-        logDateIso = logDateIso,      // keep if you added it to entity
+        logDateIso = logDateIso,
         itemName = itemName,
         foodStableId = foodStableId,
-//        amount = amount,              // keep if exists in entity
-//        unit = unit,                  // keep if exists in entity
+        amount = amount,
+        unit = unit,
         recipeBatchId = recipeBatchId,
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,
@@ -71,11 +71,11 @@ internal fun LogEntryEntity.toDomainLogEntry(converters: DbTypeConverters): LogE
     LogEntry(
         id = id,
         timestamp = timestamp,
-        logDateIso = logDateIso,      // keep if you added it to domain
+        logDateIso = logDateIso,
         itemName = itemName,
         foodStableId = foodStableId,
-//        amount = amount,              // keep if exists in domain
-//        unit = unit,                  // keep if exists in domain
+        amount = amount,
+        unit = unit,
         recipeBatchId = recipeBatchId,
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,

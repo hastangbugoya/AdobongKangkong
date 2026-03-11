@@ -12,11 +12,17 @@ data class LogEntry(
     val foodStableId: String?,
     val nutrients: NutrientMap,
 
+    /**
+     * Preserved user-entered amount intent for this log row.
+     *
+     * These fields are stored alongside the immutable nutrient snapshot so log rows can later be
+     * reopened in Quick Add edit mode without reverse-deriving the user's original quantity basis.
+     */
+    val amount: Double = 1.0,
+    val unit: LogUnit = LogUnit.ITEM,
+
     // ✅ NEW: provenance + UI grouping
     val recipeBatchId: Long? = null,
     val gramsPerServingCooked: Double? = null,
-    val mealSlot: MealSlot? = null,
-
-    val amount: Double = 1.0,
-    val unit: LogUnit = LogUnit.ITEM
+    val mealSlot: MealSlot? = null
 )

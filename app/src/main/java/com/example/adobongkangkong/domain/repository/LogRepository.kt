@@ -25,6 +25,21 @@ interface LogRepository {
     suspend fun insert(entry: LogEntry): Long
 
     /**
+     * Updates an existing log entry in place.
+     *
+     * Used by Quick Add edit mode so an existing log row can be modified without creating a second
+     * row.
+     */
+    suspend fun update(entry: LogEntry)
+
+    /**
+     * Returns a single log entry by primary key id, or null if missing.
+     *
+     * This is used by Quick Add edit mode to reopen an existing row.
+     */
+    suspend fun getById(logId: Long): LogEntry?
+
+    /**
      * Observes all log entries for exactly one calendar day.
      *
      * This MUST return only entries where:

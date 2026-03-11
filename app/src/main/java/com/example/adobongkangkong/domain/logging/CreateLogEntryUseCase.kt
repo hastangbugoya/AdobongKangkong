@@ -5,6 +5,7 @@ import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.LogEntry
+import com.example.adobongkangkong.domain.model.LogUnit
 import com.example.adobongkangkong.domain.model.gPerUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toMilliliters
@@ -76,6 +77,13 @@ class CreateLogEntryUseCase @Inject constructor(
                 mealSlot = mealSlot,
                 logDateIso = logDateIso
             )
+        }
+    }
+
+    private fun toStoredAmountAndUnit(amountInput: AmountInput): Pair<Double, LogUnit> {
+        return when (amountInput) {
+            is AmountInput.ByServings -> amountInput.servings to LogUnit.SERVING
+            is AmountInput.ByGrams -> amountInput.grams to LogUnit.GRAM_COOKED
         }
     }
 
@@ -182,11 +190,15 @@ class CreateLogEntryUseCase @Inject constructor(
                     "snapshot.hasNutrientsPerMilliliter=${snapshot.nutrientsPerMilliliter != null}"
         )
 
+        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
+
         val entry = LogEntry(
             timestamp = timestamp,
             foodStableId = food.stableId,
             itemName = food.name,
             nutrients = nutrients,
+            amount = storedAmount,
+            unit = storedUnit,
             mealSlot = mealSlot,
             logDateIso = logDateIso
         )
@@ -252,11 +264,15 @@ class CreateLogEntryUseCase @Inject constructor(
             null
         }
 
+        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
+
         val entry = LogEntry(
             timestamp = timestamp,
             foodStableId = recipeRef.stableId,
             itemName = recipeRef.displayName,
             nutrients = logged.totals,
+            amount = storedAmount,
+            unit = storedUnit,
             recipeBatchId = batch?.batchId,
             gramsPerServingCooked = gramsPerServingCooked,
             mealSlot = mealSlot,

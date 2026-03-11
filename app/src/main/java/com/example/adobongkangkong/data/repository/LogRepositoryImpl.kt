@@ -34,6 +34,14 @@ class LogRepositoryImpl @Inject constructor(
         return dao.insert(logEntry.toLogEntryEntity(converters))
     }
 
+    override suspend fun update(entry: LogEntry) {
+        dao.update(entry.toLogEntryEntity(converters))
+    }
+
+    override suspend fun getById(logId: Long): LogEntry? {
+        return dao.getById(logId)?.toDomainLogEntry(converters)
+    }
+
     /**
      * Observes log entries for exactly one ISO day.
      *

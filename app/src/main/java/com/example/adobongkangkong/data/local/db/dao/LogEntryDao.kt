@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -23,6 +24,9 @@ interface LogEntryDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entry: LogEntryEntity): Long
+
+    @Update
+    suspend fun update(entry: LogEntryEntity)
 
     @Query("""
         SELECT * FROM log_entries
