@@ -14,6 +14,9 @@ interface FoodDao {
     @Insert
     suspend fun insert(entity: FoodEntity): Long
 
+    @Query("SELECT * FROM foods WHERE stableId = :stableId LIMIT 1")
+    suspend fun getByStableId(stableId: String): FoodEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<FoodEntity>)
 

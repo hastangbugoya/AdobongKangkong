@@ -38,6 +38,10 @@ class FoodRepositoryImpl @Inject constructor(
     override suspend fun getById(id: Long): Food? =
         foodDao.getById(id)?.toDomain()
 
+    override suspend fun getByStableId(stableId: String): Food? {
+        return foodDao.getByStableId(stableId)?.toDomain()
+    }
+
     override suspend fun upsert(food: Food): Long {
         val entity = food.toEntity()
         Log.d("Meow","UPSERT > Food: ${food.name} >stableId=${entity.stableId} gtin=${entity.usdaGtinUpc} fdc=${entity.usdaFdcId} pub=${entity.usdaPublishedDate} mod=${entity.usdaModifiedDate}")

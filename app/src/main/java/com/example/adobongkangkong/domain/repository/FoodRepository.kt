@@ -39,6 +39,7 @@ interface FoodRepository {
 
     suspend fun cleanupOrphanFoodMedia(): Int
 
+    suspend fun getByStableId(stableId: String): Food?
 }
 
 
