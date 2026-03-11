@@ -14,8 +14,10 @@ import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
-import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
+import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import com.example.adobongkangkong.domain.planner.usecase.CreateIouUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ObserveTodayPlannedItemsForQuickAddUseCase
+import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUseCase
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -31,6 +33,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +64,9 @@ class QuickAddViewModel @Inject constructor(
 
     // IOUs (planner narrative placeholders)
     private val createPlannerIou: CreateIouUseCase,
+
+    // From Day Planner
+    private val observeTodayPlannedItemsForQuickAddUseCase: ObserveTodayPlannedItemsForQuickAddUseCase,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -93,6 +99,16 @@ class QuickAddViewModel @Inject constructor(
 
     private val isResolveMassDialogOpenFlow = MutableStateFlow(false)
     private val gramsPerServingTextFlow = MutableStateFlow("")
+
+    // -----------------------------
+    // From today's plan picker
+    // -----------------------------
+
+    private val isTodayPlanPickerOpenFlow = MutableStateFlow(false)
+    private val todayPlanSectionsFlow =
+        MutableStateFlow<Map<MealSlot, List<QuickAddPlannedItemCandidate>>>(emptyMap())
+    private val isTodayPlanLoadingFlow = MutableStateFlow(false)
+    private var todayPlanJob: Job? = null
 
     private data class PendingResolveMass(
         val food: Food,
@@ -238,7 +254,13 @@ class QuickAddViewModel @Inject constructor(
         val estimatedCarbsG = parseOptionalNonNegativeDouble(iouCarbsTextFlow.value)
         val estimatedFatG = parseOptionalNonNegativeDouble(iouFatTextFlow.value)
 
-        if (listOf(estimatedCaloriesKcal, estimatedProteinG, estimatedCarbsG, estimatedFatG).any { it?.isNaN() == true }) {
+        if (listOf(
+                estimatedCaloriesKcal,
+                estimatedProteinG,
+                estimatedCarbsG,
+                estimatedFatG
+            ).any { it?.isNaN() == true }
+        ) {
             iouErrorFlow.value = "Macro estimates must be valid non-negative numbers."
             return
         }
@@ -283,13 +305,9 @@ class QuickAddViewModel @Inject constructor(
     }
 
     private fun normalizeBarcode(raw: String): String {
-        // Keep digits only (scanner/labels often include whitespace).
         return raw.trim().filter { it.isDigit() }
     }
 
-    /**
-     * Called by the scanner UI when a barcode is read.
-     */
     fun onBarcodeScanned(barcode: String) {
         val code = normalizeBarcode(barcode)
         Log.d("Meow", "QuickAddViewModel > barcode scanned raw='$barcode' normalized='$code'")
@@ -352,10 +370,6 @@ class QuickAddViewModel @Inject constructor(
         dismissNotFoundBarcodeDialog()
     }
 
-    // -----------------------------
-    // Navigation events (optional)
-    // -----------------------------
-
     sealed class QuickAddNavEvent {
         data class Navigate(val route: String) : QuickAddNavEvent()
     }
@@ -366,10 +380,6 @@ class QuickAddViewModel @Inject constructor(
     fun consumeNavEvent() {
         navEventFlow.value = null
     }
-
-    // -----------------------------
-    // State combine (typed, grouped)
-    // -----------------------------
 
     private data class CoreInputs(
         val query: String,
@@ -412,6 +422,12 @@ class QuickAddViewModel @Inject constructor(
         val fatText: String,
         val isSaving: Boolean,
         val error: String?
+    )
+
+    private data class TodayPlanUi(
+        val isOpen: Boolean,
+        val sections: Map<MealSlot, List<QuickAddPlannedItemCandidate>>,
+        val isLoading: Boolean
     )
 
     val state: StateFlow<QuickAddState> = run {
@@ -532,79 +548,107 @@ class QuickAddViewModel @Inject constructor(
             )
         }
 
-        combine(coreFlow, recipeFlow, flagsFlow, barcodeFlow, iouFlow) { core, recipe, flags, barcode, iou ->
+        val todayPlanFlow = combine(
+            isTodayPlanPickerOpenFlow,
+            todayPlanSectionsFlow,
+            isTodayPlanLoadingFlow
+        ) { isOpen, sections, isLoading ->
+            TodayPlanUi(
+                isOpen = isOpen,
+                sections = sections,
+                isLoading = isLoading
+            )
+        }
 
-            val gramsAmount: Double? = core.selected?.let { food ->
-                computeGramsAmount(
-                    food = food,
-                    servings = core.servings,
-                    inputMode = core.inputMode,
-                    inputUnit = core.inputUnit,
-                    inputAmount = core.inputAmount
-                )
-            }
+        val topLevelFlow = combine(
+            combine(coreFlow, recipeFlow) { core, recipe -> core to recipe },
+            combine(flagsFlow, barcodeFlow) { flags, barcode -> flags to barcode },
+            combine(iouFlow, todayPlanFlow) { iou, todayPlan -> iou to todayPlan }
+        ) { left, middle, right ->
+            Triple(left, middle, right)
+        }
 
-            val servingsEquivalent: Double? = core.selected?.let { food ->
-                when (core.inputMode) {
-                    InputMode.SERVINGS -> core.servings
-                    else -> {
-                        val grams = gramsAmount ?: return@let null
-                        val gPerServing = gramsPerServingResolved(food) ?: return@let null
-                        if (gPerServing <= 0.0) return@let null
-                        grams / gPerServing
+        topLevelFlow
+            .map { triple ->
+                val core = triple.first.first
+                val recipe = triple.first.second
+                val flags = triple.second.first
+                val barcode = triple.second.second
+                val iou = triple.third.first
+                val todayPlan = triple.third.second
+
+                val gramsAmount: Double? = core.selected?.let { food ->
+                    computeGramsAmount(
+                        food = food,
+                        servings = core.servings,
+                        inputMode = core.inputMode,
+                        inputUnit = core.inputUnit,
+                        inputAmount = core.inputAmount
+                    )
+                }
+
+                val servingsEquivalent: Double? = core.selected?.let { food ->
+                    when (core.inputMode) {
+                        InputMode.SERVINGS -> core.servings
+                        else -> {
+                            val grams = gramsAmount ?: return@let null
+                            val gPerServing = gramsPerServingResolved(food) ?: return@let null
+                            if (gPerServing <= 0.0) return@let null
+                            grams / gPerServing
+                        }
                     }
                 }
+
+                val servingUnitAmount: Double? = core.selected?.let { food ->
+                    val s = servingsEquivalent ?: return@let null
+                    s * food.servingSize
+                }
+
+                QuickAddState(
+                    query = core.query,
+                    results = core.results,
+                    selectedFood = core.selected,
+                    servings = core.servings,
+                    servingsEquivalent = servingsEquivalent,
+                    inputUnit = core.inputUnit,
+                    inputAmount = core.inputAmount,
+                    servingUnitAmount = servingUnitAmount,
+                    gramsAmount = gramsAmount,
+                    inputMode = core.inputMode,
+
+                    batches = recipe.batches,
+                    selectedBatchId = recipe.selectedBatchId,
+                    mealSlot = core.mealSlot,
+                    yieldGramsText = recipe.yieldGramsText,
+                    servingsYieldText = recipe.servingsYieldText,
+
+                    isCreateBatchDialogOpen = flags.isDialogOpen,
+                    isSaving = flags.isSaving,
+                    errorMessage = flags.error,
+                    isResolveMassDialogOpen = flags.isResolveMassDialogOpen,
+                    gramsPerServingText = flags.gramsPerServingText,
+
+                    isScannerOpen = barcode.isScannerOpen,
+                    foundBarcodeDialogFood = barcode.found?.food,
+                    foundBarcodeDialogBarcode = barcode.found?.barcode,
+                    notFoundBarcodeDialogBarcode = barcode.notFound?.barcode,
+
+                    isIouDialogOpen = iou.isOpen,
+                    iouDescription = iou.description,
+                    iouCaloriesText = iou.caloriesText,
+                    iouProteinText = iou.proteinText,
+                    iouCarbsText = iou.carbsText,
+                    iouFatText = iou.fatText,
+                    isSavingIou = iou.isSaving,
+                    iouErrorMessage = iou.error,
+
+                    isTodayPlanPickerOpen = todayPlan.isOpen,
+                    todayPlanSections = todayPlan.sections,
+                    isTodayPlanLoading = todayPlan.isLoading,
+                )
             }
-
-            val servingUnitAmount: Double? = core.selected?.let { food ->
-                val s = servingsEquivalent ?: return@let null
-                s * food.servingSize
-            }
-
-            QuickAddState(
-                query = core.query,
-                results = core.results,
-                selectedFood = core.selected,
-                servings = core.servings,
-                servingsEquivalent = servingsEquivalent,
-                inputUnit = core.inputUnit,
-                inputAmount = core.inputAmount,
-                servingUnitAmount = servingUnitAmount,
-                gramsAmount = gramsAmount,
-                inputMode = core.inputMode,
-
-                batches = recipe.batches,
-                selectedBatchId = recipe.selectedBatchId,
-                mealSlot = core.mealSlot,
-                yieldGramsText = recipe.yieldGramsText,
-                servingsYieldText = recipe.servingsYieldText,
-
-                isCreateBatchDialogOpen = flags.isDialogOpen,
-                isSaving = flags.isSaving,
-                errorMessage = flags.error,
-                isResolveMassDialogOpen = flags.isResolveMassDialogOpen,
-                gramsPerServingText = flags.gramsPerServingText,
-
-                isScannerOpen = barcode.isScannerOpen,
-                foundBarcodeDialogFood = barcode.found?.food,
-                foundBarcodeDialogBarcode = barcode.found?.barcode,
-                notFoundBarcodeDialogBarcode = barcode.notFound?.barcode,
-
-                isIouDialogOpen = iou.isOpen,
-                iouDescription = iou.description,
-                iouCaloriesText = iou.caloriesText,
-                iouProteinText = iou.proteinText,
-                iouCarbsText = iou.carbsText,
-                iouFatText = iou.fatText,
-                isSavingIou = iou.isSaving,
-                iouErrorMessage = iou.error,
-            )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
     }
-
-    // -----------------------------
-    // Inputs
-    // -----------------------------
 
     fun onQueryChange(q: String) {
         queryFlow.value = q
@@ -635,29 +679,41 @@ class QuickAddViewModel @Inject constructor(
         errorFlow.value = null
 
         viewModelScope.launch {
-            if (!food.isRecipe) {
-                selectedRecipeIdFlow.value = null
-                selectedRecipeStableIdFlow.value = null
-                selectedRecipeServingsYieldDefaultFlow.value = null
-                selectedBatchIdFlow.value = null
-                return@launch
-            }
-
-            val recipe = recipeDao.getByFoodId(food.id)
-            if (recipe == null) {
-                selectedRecipeIdFlow.value = null
-                selectedRecipeStableIdFlow.value = null
-                selectedRecipeServingsYieldDefaultFlow.value = null
-                selectedBatchIdFlow.value = null
-                errorFlow.value = "Recipe data missing for this item."
-                return@launch
-            }
-
-            selectedRecipeIdFlow.value = recipe.id
-            selectedRecipeStableIdFlow.value = recipe.stableId
-            selectedRecipeServingsYieldDefaultFlow.value = recipe.servingsYield
-            selectedBatchIdFlow.value = null
+            applyRecipeContextForFood(
+                food = food,
+                selectedBatchIdOverride = null
+            )
         }
+    }
+
+    private suspend fun applyRecipeContextForFood(
+        food: Food,
+        selectedBatchIdOverride: Long?
+    ) {
+        if (!food.isRecipe) {
+            selectedRecipeIdFlow.value = null
+            selectedRecipeStableIdFlow.value = null
+            selectedRecipeServingsYieldDefaultFlow.value = null
+            selectedBatchIdFlow.value = null
+            return
+        }
+
+        val recipe = recipeDao.getByFoodId(food.id)
+            ?: recipeDao.getById(food.id)
+
+        if (recipe == null) {
+            selectedRecipeIdFlow.value = null
+            selectedRecipeStableIdFlow.value = null
+            selectedRecipeServingsYieldDefaultFlow.value = null
+            selectedBatchIdFlow.value = null
+            errorFlow.value = "Recipe data missing for this item."
+            return
+        }
+
+        selectedRecipeIdFlow.value = recipe.id
+        selectedRecipeStableIdFlow.value = recipe.stableId
+        selectedRecipeServingsYieldDefaultFlow.value = recipe.servingsYield
+        selectedBatchIdFlow.value = selectedBatchIdOverride
     }
 
     fun clearSelection() {
@@ -671,7 +727,7 @@ class QuickAddViewModel @Inject constructor(
         selectedRecipeStableIdFlow.value = null
         selectedRecipeServingsYieldDefaultFlow.value = null
         selectedBatchIdFlow.value = null
-
+        isTodayPlanPickerOpenFlow.value = false
         errorFlow.value = null
     }
 
@@ -712,8 +768,6 @@ class QuickAddViewModel @Inject constructor(
                     gPerUnit != null &&
                     gPerUnit > 0.0
                 ) {
-                    // Density derived from "per-unit" bridges:
-                    // gPerUnit / mlPerUnit (servingSize cancels out).
                     val density = gPerUnit / foodMlPerUnit
                     if (density > 0.0) {
                         val ml = grams / density
@@ -723,6 +777,79 @@ class QuickAddViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun openTodayPlanPicker() {
+        isTodayPlanPickerOpenFlow.value = true
+        errorFlow.value = null
+
+        if (todayPlanJob != null) return
+
+        isTodayPlanLoadingFlow.value = true
+
+        todayPlanJob = viewModelScope.launch {
+            observeTodayPlannedItemsForQuickAddUseCase()
+                .collect { sections ->
+                    todayPlanSectionsFlow.value = sections
+                    isTodayPlanLoadingFlow.value = false
+                }
+        }
+    }
+
+    fun closeTodayPlanPicker() {
+        isTodayPlanPickerOpenFlow.value = false
+    }
+
+    fun onPlannedItemSelected(candidate: QuickAddPlannedItemCandidate) {
+        viewModelScope.launch {
+            val resolvedFoodId = candidate.foodId ?: candidate.recipeId
+            if (resolvedFoodId == null) {
+                errorFlow.value = "Planned item is missing a food reference."
+                return@launch
+            }
+
+            val food = foodRepository.getById(resolvedFoodId)
+            if (food == null) {
+                errorFlow.value = "Planned item food not found."
+                return@launch
+            }
+
+            selectedFoodFlow.value = food
+            servingsFlow.value = 1.0
+            inputModeFlow.value = InputMode.SERVINGS
+
+            inputUnitFlow.value =
+                if (food.servingUnit == ServingUnit.SERVING ||
+                    food.servingUnit.asG != null ||
+                    food.servingUnit.asMl != null
+                ) {
+                    food.servingUnit
+                } else {
+                    ServingUnit.G
+                }
+
+            inputAmountFlow.value = food.servingSize.coerceAtLeast(0.0)
+            errorFlow.value = null
+
+            val batchOverride =
+                if (candidate.type == QuickAddPlannedItemCandidate.Type.RECIPE_BATCH) {
+                    candidate.batchId
+                } else {
+                    null
+                }
+
+            applyRecipeContextForFood(
+                food = food,
+                selectedBatchIdOverride = batchOverride
+            )
+
+            onMealSlotChanged(candidate.slot)
+
+            candidate.plannedServings?.let { onServingsChanged(it) }
+            candidate.plannedGrams?.let { onGramsChanged(it) }
+
+            isTodayPlanPickerOpenFlow.value = false
         }
     }
 
@@ -789,10 +916,6 @@ class QuickAddViewModel @Inject constructor(
         inputUnitFlow.value = food.servingUnit
         inputAmountFlow.value = s * food.servingSize
     }
-
-    // -----------------------------
-    // Recipe batch UI
-    // -----------------------------
 
     fun onBatchSelected(batchId: Long?) {
         selectedBatchIdFlow.value = batchId
@@ -914,10 +1037,6 @@ class QuickAddViewModel @Inject constructor(
         }
     }
 
-    // -----------------------------
-    // Resolve-mass dialog
-    // -----------------------------
-
     fun closeResolveMassDialog() {
         isResolveMassDialogOpenFlow.value = false
         pendingResolveMass = null
@@ -973,7 +1092,6 @@ class QuickAddViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (persistGpsu != null) {
-                    // Note: persistGpsu here is interpreted as grams-per-1-serving (consistent with the resolve dialog).
                     foodRepository.upsert(
                         pending.food.copy(gramsPerServingUnit = persistGpsu)
                     )
@@ -1006,10 +1124,6 @@ class QuickAddViewModel @Inject constructor(
             }
         }
     }
-
-    // -----------------------------
-    // Unit conversion helpers (ServingUnit.asG / asMl)
-    // -----------------------------
 
     private fun computeGramsAmount(
         food: Food,
@@ -1045,8 +1159,6 @@ class QuickAddViewModel @Inject constructor(
         }
 
         if (unit == food.servingUnit) {
-            // User entered an amount in the food’s servingUnit (e.g., TBSP).
-            // gramsPerServingUnitResolved() behaves like grams-per-1-unit here.
             val gPerUnit = food.gramsPerServingUnitResolved() ?: return null
             if (gPerUnit <= 0.0) return null
             return a * gPerUnit
@@ -1059,15 +1171,10 @@ class QuickAddViewModel @Inject constructor(
         val gPerUnit = food.gramsPerServingUnitResolved() ?: return null
         if (gPerUnit <= 0.0) return null
 
-        // Density derived from "per-unit" bridges: gPerUnit / mlPerUnit.
         val densityGPerMl = gPerUnit / foodMlPerUnit
         val ml = a * inputMlPerUnit
         return ml * densityGPerMl
     }
-
-    // -----------------------------
-    // Save (log entry)
-    // -----------------------------
 
     fun save(onDone: () -> Unit, logDate: LocalDate) {
         val food = selectedFoodFlow.value ?: return
@@ -1115,7 +1222,6 @@ class QuickAddViewModel @Inject constructor(
 
                     when (validation) {
                         FoodValidationResult.Ok -> Unit
-
                         is FoodValidationResult.Warning -> {
                             Log.w("Meow", "QuickAddViewModel > validation WARNING reason=${validation.reason} msg=${validation.message}")
                         }
@@ -1157,9 +1263,7 @@ class QuickAddViewModel @Inject constructor(
 
                 val result = if (!food.isRecipe) {
                     createLogEntry.execute(
-                        ref = FoodRef.Food(
-                            foodId = food.id,
-                        ),
+                        ref = FoodRef.Food(foodId = food.id),
                         timestamp = timestamp,
                         amountInput = amountInput,
                         recipeBatchId = null,
@@ -1174,8 +1278,7 @@ class QuickAddViewModel @Inject constructor(
                         }
 
                     val stableId = selectedRecipeStableIdFlow.value ?: food.stableId
-                    val servingsYieldDefault =
-                        selectedRecipeServingsYieldDefaultFlow.value ?: 1.0
+                    val servingsYieldDefault = selectedRecipeServingsYieldDefaultFlow.value ?: 1.0
 
                     val batchId =
                         when (inputModeFlow.value) {

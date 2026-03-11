@@ -24,16 +24,19 @@ import java.time.Instant
 import javax.inject.Inject
 
 // NOTE:
-// Recipe logging intentionally bypasses RecipeDraft.
-// We always load persisted RecipeEntity + ingredients from DB
-// to ensure correct identity and reproducible nutrition snapshots.
+// Recipe logging intentionally bypasses RecipeDraft editing state coming from UI.
+// We load the persisted recipe draft from DB so recipe-estimate logs and batch-backed
+// logs are derived from a stable persisted recipe definition.
+//
+// Logging concept:
+// - FoodRef.Food   -> direct food log
+// - FoodRef.Recipe -> recipe-estimate log when recipeBatchId == null
+// - FoodRef.Recipe -> batch-anchored recipe log when recipeBatchId != null
 class CreateLogEntryUseCase @Inject constructor(
     private val foodRepository: FoodRepository,
     private val snapshotRepository: FoodNutritionSnapshotRepository,
     private val logRepository: LogRepository,
     private val checkFoodUsable: CheckFoodUsableUseCase,
-
-    // NEW: recipe batch context + snapshot
     private val recipeDraftLookup: RecipeDraftLookupRepository,
     private val recipeBatchLookup: RecipeBatchLookupRepository,
     private val computeRecipeBatchNutritionUseCase: ComputeRecipeBatchNutritionUseCase,
@@ -88,9 +91,9 @@ class CreateLogEntryUseCase @Inject constructor(
             ?: return Result.Error("Food not found")
 
         // Interpret gramsPerServingUnit consistently as "grams per 1 servingUnit".
-        // Therefore grams-per-1-serving = servingSize * gramsPerServingUnit (for non-mass units too).
+        // Therefore grams-per-1-serving = servingSize * gramsPerServingUnit.
         val gramsPerServing: Double? = run {
-            // If override is provided, it is interpreted as grams-per-1-serving (matches UI resolve-mass dialog).
+            // If override is provided, it is interpreted as grams-per-1-serving.
             overrideGramsPerServingUnit?.takeIf { it > 0.0 }?.let { return@run it }
 
             // If servingUnit itself is mass, servingSize is already the mass per serving.
@@ -99,13 +102,12 @@ class CreateLogEntryUseCase @Inject constructor(
                 if (size > 0.0) return@run size * gPerUnit
             }
 
-            // Otherwise gramsPerServingUnit is grams per 1 servingUnit (e.g., g per TBSP).
+            // Otherwise gramsPerServingUnit is grams per 1 servingUnit (e.g. g per TBSP).
             val gPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 } ?: return@run null
             val size = food.servingSize
             if (size > 0.0) size * gPerUnit else null
         }
 
-        // Enforce logging rules (must pass mlPerServingUnit to avoid blocking volume-grounded foods).
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
             gramsPerServingUnit = gramsPerServing,
@@ -120,14 +122,13 @@ class CreateLogEntryUseCase @Inject constructor(
         val snapshot = snapshotRepository.getSnapshot(food.id)
             ?: return Result.Error("Nutrition snapshot unavailable")
 
-        // Compute scaling input based on snapshot basis availability.
         val nutrients = snapshot.nutrientsPerGram?.let { perG ->
             val grams = when (amountInput) {
                 is AmountInput.ByGrams -> amountInput.grams
                 is AmountInput.ByServings -> {
-                    val gramsPerServing = food.gramsPerServingResolved()
+                    val resolvedGramsPerServing = food.gramsPerServingResolved()
                         ?: return Result.Blocked("Set grams-per-serving before logging by servings.")
-                    amountInput.servings * gramsPerServing
+                    amountInput.servings * resolvedGramsPerServing
                 }
             }
 
@@ -138,16 +139,13 @@ class CreateLogEntryUseCase @Inject constructor(
 
             perG.scaledBy(grams)
         } ?: snapshot.nutrientsPerMilliliter?.let { perMl ->
-            // Volume basis: scale by mL (NOT grams).
             val ml = when (amountInput) {
                 is AmountInput.ByServings -> {
                     val mlPerServing: Double? = run {
-                        // If explicit ml bridge exists, it's mL per 1 servingUnit.
                         food.mlPerServingUnit?.takeIf { it > 0.0 }?.let { mlPerUnit ->
                             if (food.servingSize > 0.0) return@run food.servingSize * mlPerUnit
                         }
 
-                        // Else if servingUnit is deterministic volume, compute from servingSize.
                         if (food.servingUnit.isVolumeUnit()) {
                             return@run food.servingUnit.toMilliliters(food.servingSize)
                         }
@@ -155,14 +153,13 @@ class CreateLogEntryUseCase @Inject constructor(
                         null
                     }
 
-                    val mps = mlPerServing ?: return Result.Error(
+                    val resolvedMlPerServing = mlPerServing ?: return Result.Error(
                         "Food is volume-based but missing mL-per-serving (cannot scale)."
                     )
-                    amountInput.servings * mps
+                    amountInput.servings * resolvedMlPerServing
                 }
 
                 is AmountInput.ByGrams -> {
-                    // No density guessing. If caller passed grams for a volume-only food, block.
                     return Result.Blocked("This food is volume-based; log it by servings.")
                 }
             }
@@ -206,24 +203,32 @@ class CreateLogEntryUseCase @Inject constructor(
         mealSlot: MealSlot?,
         logDateIso: String
     ): Result {
-        val batchId = recipeBatchId
-            ?: return Result.Blocked("Select or create a cooked batch first.")
-
-        val batch = recipeBatchLookup.getBatchById(batchId)
-            ?: return Result.Error("Recipe batch not found")
-
-        if (batch.recipeId != recipeRef.recipeId) {
-            return Result.Blocked("Selected batch does not belong to this recipe.")
-        }
-
         val baseDraft = recipeDraftLookup.getRecipeDraft(recipeRef.recipeId)
             ?: return Result.Error("Recipe not found")
 
-        // Apply batch context (this is the *whole point* of the batch)
-        val effectiveDraft = baseDraft.copy(
-            totalYieldGrams = batch.cookedYieldGrams,
-            servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
-        )
+        val batch = if (recipeBatchId != null) {
+            val resolvedBatch = recipeBatchLookup.getBatchById(recipeBatchId)
+                ?: return Result.Error("Recipe batch not found")
+
+            if (resolvedBatch.recipeId != recipeRef.recipeId) {
+                return Result.Blocked("Selected batch does not belong to this recipe.")
+            }
+
+            resolvedBatch
+        } else {
+            null
+        }
+
+        // No batch => recipe-estimate logging using persisted recipe definition.
+        // Batch present => apply cooked-yield / servings-yield context from that exact batch.
+        val effectiveDraft = if (batch != null) {
+            baseDraft.copy(
+                totalYieldGrams = batch.cookedYieldGrams,
+                servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
+            )
+        } else {
+            baseDraft
+        }
 
         val computed = computeRecipeBatchNutritionUseCase(effectiveDraft.toRecipe())
             ?: return Result.Error("Recipe nutrition unavailable")
@@ -233,14 +238,18 @@ class CreateLogEntryUseCase @Inject constructor(
             input = amountInput.toRecipeLogInput()
         )
 
-        val gramsPerServingCooked = batch.gramsPerServingCooked(
-            fallbackServings = effectiveDraft.servingsYield
-        )
-
         if (!logged.isAllowed) {
             val reason = logged.warnings.firstOrNull()?.toString()
                 ?: "Logging blocked by recipe rules."
             return Result.Blocked(reason)
+        }
+
+        val gramsPerServingCooked = if (batch != null) {
+            batch.gramsPerServingCooked(
+                fallbackServings = effectiveDraft.servingsYield
+            )
+        } else {
+            null
         }
 
         val entry = LogEntry(
@@ -248,7 +257,7 @@ class CreateLogEntryUseCase @Inject constructor(
             foodStableId = recipeRef.stableId,
             itemName = recipeRef.displayName,
             nutrients = logged.totals,
-            recipeBatchId = batchId,
+            recipeBatchId = batch?.batchId,
             gramsPerServingCooked = gramsPerServingCooked,
             mealSlot = mealSlot,
             logDateIso = logDateIso

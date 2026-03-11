@@ -4,6 +4,7 @@ import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 
 enum class InputMode {
@@ -67,4 +68,12 @@ data class QuickAddState(
     val iouFatText: String = "",
     val isSavingIou: Boolean = false,
     val iouErrorMessage: String? = null,
+
+    // log planner items
+    val isTodayPlanPickerOpen: Boolean = false,
+
+    val todayPlanSections:
+    Map<MealSlot, List<QuickAddPlannedItemCandidate>> = emptyMap(),
+
+    val isTodayPlanLoading: Boolean = false
 )
