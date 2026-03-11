@@ -21,6 +21,7 @@ import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDayUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PromoteMealToSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMealUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ResolvePlannedItemToQuickAddCandidateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.SavePlannedMealAsTemplateUseCase
@@ -66,6 +67,7 @@ class PlannerDayViewModel @Inject constructor(
 
     private val promoteMealToSeriesAndEnsureHorizon: PromoteMealToSeriesAndEnsureHorizonUseCase,
     private val logPlannedMeal: LogPlannedMealUseCase,
+    private val resolvePlannedItemToQuickAddCandidate: ResolvePlannedItemToQuickAddCandidateUseCase,
 
     // NEW
     private val savePlannedMealAsTemplate: SavePlannedMealAsTemplateUseCase,
@@ -87,6 +89,12 @@ class PlannerDayViewModel @Inject constructor(
 
         /** Navigate to the dedicated Planned Meal editor screen. */
         data class NavigateToPlannedMealEditor(val mealId: Long) : PlannerDayUiEvent
+
+        /** Open Quick Add prefilled from an exact planned item. */
+        data class NavigateToQuickAddFromPlannedItem(
+            val candidate: com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate,
+            val dateIso: String,
+        ) : PlannerDayUiEvent
     }
 
     private val _events = MutableSharedFlow<PlannerDayUiEvent>(extraBufferCapacity = 1)
@@ -403,6 +411,10 @@ class PlannerDayViewModel @Inject constructor(
                 logMeal(event.mealId)
             }
 
+            is PlannerDayEvent.LogPlannedItem -> {
+                logPlannedItem(event.itemId)
+            }
+
             is PlannerDayEvent.SaveMealAsTemplate -> {
                 saveMealAsTemplate(event.mealId)
             }
@@ -709,6 +721,54 @@ class PlannerDayViewModel @Inject constructor(
                 _events.tryEmit(PlannerDayUiEvent.ShowToast(msg))
             } catch (t: Throwable) {
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to log meal") }
+            }
+        }
+    }
+
+    private fun logPlannedItem(itemId: Long) {
+        if (itemId <= 0L) return
+
+        val day = _state.value.day
+        val mealWithItem = day?.mealsBySlot
+            ?.values
+            ?.asSequence()
+            ?.flatten()
+            ?.firstOrNull { meal -> meal.items.any { it.id == itemId } }
+
+        val meal = mealWithItem ?: run {
+            _events.tryEmit(PlannerDayUiEvent.ShowToast("Planned item not found."))
+            return
+        }
+
+        val item = meal.items.firstOrNull { it.id == itemId } ?: run {
+            _events.tryEmit(PlannerDayUiEvent.ShowToast("Planned item not found."))
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val candidate = resolvePlannedItemToQuickAddCandidate(
+                    item = item,
+                    slot = meal.slot,
+                )
+
+                if (candidate == null) {
+                    _events.tryEmit(PlannerDayUiEvent.ShowToast("Unable to prepare Quick Add for this planned item."))
+                    return@launch
+                }
+
+                _events.tryEmit(
+                    PlannerDayUiEvent.NavigateToQuickAddFromPlannedItem(
+                        candidate = candidate,
+                        dateIso = _state.value.date.toString(),
+                    )
+                )
+            } catch (t: Throwable) {
+                _events.tryEmit(
+                    PlannerDayUiEvent.ShowToast(
+                        t.message ?: "Unable to prepare Quick Add for this planned item."
+                    )
+                )
             }
         }
     }

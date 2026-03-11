@@ -25,6 +25,7 @@ import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
+import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
@@ -51,6 +52,7 @@ fun QuickAddBottomSheet(
     onCreateFoodWithBarcode: (String) -> Unit = {},
     onOpenFoodEditor: (foodId: Long) -> Unit = {},
     logDate: LocalDate,
+    initialPlannedItemCandidate: QuickAddPlannedItemCandidate? = null,
     vm: QuickAddViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
@@ -64,6 +66,10 @@ fun QuickAddBottomSheet(
         "EEEE MMMM d, yyyy",
         Locale.getDefault()
     )
+
+    LaunchedEffect(initialPlannedItemCandidate?.id) {
+        initialPlannedItemCandidate?.let(vm::onPlannedItemSelected)
+    }
 
     val foundFood = state.foundBarcodeDialogFood
     val foundBarcode = state.foundBarcodeDialogBarcode

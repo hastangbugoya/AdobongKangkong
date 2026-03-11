@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import java.time.LocalDate
 
 @Composable
@@ -16,6 +17,7 @@ fun PlannerDayRoute(
     onOpenPlannedMealEditor: (Long) -> Unit,
     onOpenNewPlannedMealEditor: (dateIso: String, slot: MealSlot, templateId: Long?) -> Unit,
     onOpenTemplatePicker: (slot: MealSlot?) -> Unit,
+    onOpenQuickAddFromPlannedItem: (date: LocalDate, candidate: QuickAddPlannedItemCandidate) -> Unit,
     templatePick: Pair<Long, MealSlot?>?,
     onTemplatePickConsumed: () -> Unit,
     viewModel: PlannerDayViewModel = hiltViewModel(),
@@ -50,6 +52,12 @@ fun PlannerDayRoute(
 
                 is PlannerDayViewModel.PlannerDayUiEvent.NavigateToPlannedMealEditor ->
                     onOpenPlannedMealEditor(e.mealId)
+
+                is PlannerDayViewModel.PlannerDayUiEvent.NavigateToQuickAddFromPlannedItem ->
+                    onOpenQuickAddFromPlannedItem(
+                        LocalDate.parse(e.dateIso),
+                        e.candidate
+                    )
             }
         }
     }

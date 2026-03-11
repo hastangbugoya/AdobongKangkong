@@ -11,12 +11,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.example.adobongkangkong.core.util.restartApp
-import com.example.adobongkangkong.ui.backup.BackupScreen
-import com.example.adobongkangkong.ui.calendar.CalendarScreen
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.core.util.restartApp
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import com.example.adobongkangkong.feature.camera.BannerOwnerRef
 import com.example.adobongkangkong.feature.camera.BannerOwnerType
+import com.example.adobongkangkong.ui.backup.BackupScreen
+import com.example.adobongkangkong.ui.calendar.CalendarScreen
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.daylog.DayLogScreen
@@ -37,6 +39,67 @@ private const val KEY_FOOD_PICK_FOOD_ID = "food_pick_food_id"
 private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
 private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
 
+private const val KEY_QA_PI_ID = "qa_pi_id"
+private const val KEY_QA_PI_TITLE = "qa_pi_title"
+private const val KEY_QA_PI_SLOT = "qa_pi_slot"
+private const val KEY_QA_PI_TYPE = "qa_pi_type"
+private const val KEY_QA_PI_FOOD_ID = "qa_pi_food_id"
+private const val KEY_QA_PI_RECIPE_ID = "qa_pi_recipe_id"
+private const val KEY_QA_PI_BATCH_ID = "qa_pi_batch_id"
+private const val KEY_QA_PI_PLANNED_SERVINGS = "qa_pi_planned_servings"
+private const val KEY_QA_PI_PLANNED_GRAMS = "qa_pi_planned_grams"
+
+private fun androidx.navigation.NavBackStackEntry.putQuickAddPlannedItemCandidate(
+    candidate: QuickAddPlannedItemCandidate
+) {
+    savedStateHandle[KEY_QA_PI_ID] = candidate.id
+    savedStateHandle[KEY_QA_PI_TITLE] = candidate.title
+    savedStateHandle[KEY_QA_PI_SLOT] = candidate.slot.name
+    savedStateHandle[KEY_QA_PI_TYPE] = candidate.type.name
+    savedStateHandle[KEY_QA_PI_FOOD_ID] = candidate.foodId
+    savedStateHandle[KEY_QA_PI_RECIPE_ID] = candidate.recipeId
+    savedStateHandle[KEY_QA_PI_BATCH_ID] = candidate.batchId
+    savedStateHandle[KEY_QA_PI_PLANNED_SERVINGS] = candidate.plannedServings
+    savedStateHandle[KEY_QA_PI_PLANNED_GRAMS] = candidate.plannedGrams
+}
+
+private fun androidx.navigation.NavBackStackEntry.consumeQuickAddPlannedItemCandidate():
+        QuickAddPlannedItemCandidate? {
+    val id = savedStateHandle.get<Long>(KEY_QA_PI_ID) ?: return null
+    val title = savedStateHandle.get<String>(KEY_QA_PI_TITLE).orEmpty()
+    val slotName = savedStateHandle.get<String>(KEY_QA_PI_SLOT) ?: return null
+    val typeName = savedStateHandle.get<String>(KEY_QA_PI_TYPE) ?: return null
+    val foodId = savedStateHandle.get<Long>(KEY_QA_PI_FOOD_ID) ?: return null
+
+    val slot = runCatching { MealSlot.valueOf(slotName) }.getOrNull() ?: return null
+    val type = runCatching { QuickAddPlannedItemCandidate.Type.valueOf(typeName) }.getOrNull()
+        ?: return null
+
+    val candidate = QuickAddPlannedItemCandidate(
+        id = id,
+        title = title,
+        slot = slot,
+        type = type,
+        foodId = foodId,
+        recipeId = savedStateHandle.get<Long?>(KEY_QA_PI_RECIPE_ID),
+        batchId = savedStateHandle.get<Long?>(KEY_QA_PI_BATCH_ID),
+        plannedServings = savedStateHandle.get<Double?>(KEY_QA_PI_PLANNED_SERVINGS),
+        plannedGrams = savedStateHandle.get<Double?>(KEY_QA_PI_PLANNED_GRAMS),
+    )
+
+    savedStateHandle[KEY_QA_PI_ID] = null
+    savedStateHandle[KEY_QA_PI_TITLE] = null
+    savedStateHandle[KEY_QA_PI_SLOT] = null
+    savedStateHandle[KEY_QA_PI_TYPE] = null
+    savedStateHandle[KEY_QA_PI_FOOD_ID] = null
+    savedStateHandle[KEY_QA_PI_RECIPE_ID] = null
+    savedStateHandle[KEY_QA_PI_BATCH_ID] = null
+    savedStateHandle[KEY_QA_PI_PLANNED_SERVINGS] = null
+    savedStateHandle[KEY_QA_PI_PLANNED_GRAMS] = null
+
+    return candidate
+}
+
 @Composable
 fun AppNavHost(
     navController: NavHostController,
@@ -52,10 +115,8 @@ fun AppNavHost(
     ) {
 
         fun closeFoodEditor() {
-            // If Foods.list exists in back stack, go there
             val popped = navController.popBackStack(NavRoutes.Foods.list, inclusive = false)
 
-            // If not (e.g. opened editor from Dashboard), navigate to list as the landing page
             if (!popped) {
                 navController.navigate(NavRoutes.Foods.list) {
                     launchSingleTop = true
@@ -71,11 +132,11 @@ fun AppNavHost(
             )
         ) { entry ->
             val startIso = entry.arguments?.getString("start").orEmpty()
-            val days = entry.arguments?.getInt("days") ?: 7
 
             val startDate = runCatching {
                 startIso.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it) } ?: LocalDate.now()
             }.getOrElse { LocalDate.now() }
+
             ShoppingScreen(
                 startDate = startDate,
                 onBack = { navController.popBackStack() }
@@ -92,10 +153,6 @@ fun AppNavHost(
                 }
             )
         }
-
-        // ------------------------------------------------------------
-        // Dashboard (always today)
-        // ------------------------------------------------------------
 
         composable(
             route = NavRoutes.Dashboard.route,
@@ -127,10 +184,6 @@ fun AppNavHost(
             )
         }
 
-        // ------------------------------------------------------------
-        // Heatmap
-        // ------------------------------------------------------------
-
         composable(NavRoutes.Calendar.route) {
             CalendarScreen(
                 onNavigateToDashboard = { date ->
@@ -154,10 +207,6 @@ fun AppNavHost(
             )
         }
 
-        // ------------------------------------------------------------
-        // Day Log (shared)
-        // ------------------------------------------------------------
-
         composable(
             route = NavRoutes.DayLog.route,
             arguments = listOf(
@@ -174,10 +223,6 @@ fun AppNavHost(
             )
         }
 
-        // ------------------------------------------------------------
-        // Quick Add (logging)
-        // ------------------------------------------------------------
-
         composable(
             route = NavRoutes.QuickAdd.route,
             arguments = listOf(
@@ -186,6 +231,8 @@ fun AppNavHost(
         ) { entry ->
             val dateIso = entry.arguments!!.getString("date")!!
             val date = runCatching { LocalDate.parse(dateIso) }.getOrElse { LocalDate.now() }
+
+            val initialPlannedItemCandidate = entry.consumeQuickAddPlannedItemCandidate()
 
             QuickAddBottomSheet(
                 onDismiss = { navController.popBackStack() },
@@ -198,70 +245,44 @@ fun AppNavHost(
                 onOpenFoodEditor = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
                 },
-                logDate = date
+                logDate = date,
+                initialPlannedItemCandidate = initialPlannedItemCandidate,
             )
         }
 
-        // ------------------------------------------------------------
-        // Foods
-        // ------------------------------------------------------------
-
         composable(route = NavRoutes.Foods.list) {
             FoodsListScreen(
-                onBack = {
-                    navController.popBackStack()
-                },
-
-                // Row tap → edit food
+                onBack = { navController.popBackStack() },
                 onEditFood = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
                 },
-
-                // Row tap → edit recipe (or route to recipes entry for now)
                 onEditRecipe = { recipeId ->
                     navController.navigate(NavRoutes.Recipes.builder(editFoodId = recipeId))
                 },
-
-                // Add button when filter = FOODS_ONLY or ALL
                 onCreateFood = {
-                    navController.navigate(
-                        NavRoutes.Foods.new(prefillName = null)
-                    )
+                    navController.navigate(NavRoutes.Foods.new(prefillName = null))
                 },
-
-                // Add button when filter = RECIPES_ONLY
                 onCreateRecipe = {
-                    navController.navigate(
-                        NavRoutes.Recipes.route
-                    )
+                    navController.navigate(NavRoutes.Recipes.route)
                 }
             )
         }
 
-
-// ------------------------------------------------------------
-// Foods — picker mode (return selected foodId)
-// ------------------------------------------------------------
-
-composable(route = NavRoutes.Foods.pickFood) {
-    FoodsListScreen(
-        onBack = { navController.popBackStack() },
-        onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
-        onEditRecipe = { recipeId -> navController.navigate(NavRoutes.Recipes.builder(editFoodId = recipeId)) },
-        onCreateFood = { navController.navigate(NavRoutes.Foods.new(prefillName = null)) },
-        onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
-        onPickFood = { foodId ->
-            navController.previousBackStackEntry
-                ?.savedStateHandle
-                ?.set(KEY_FOOD_PICK_FOOD_ID, foodId)
-            navController.popBackStack()
+        composable(route = NavRoutes.Foods.pickFood) {
+            FoodsListScreen(
+                onBack = { navController.popBackStack() },
+                onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
+                onEditRecipe = { recipeId -> navController.navigate(NavRoutes.Recipes.builder(editFoodId = recipeId)) },
+                onCreateFood = { navController.navigate(NavRoutes.Foods.new(prefillName = null)) },
+                onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
+                onPickFood = { foodId ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(KEY_FOOD_PICK_FOOD_ID, foodId)
+                    navController.popBackStack()
+                }
+            )
         }
-    )
-}
-
-        // ------------------------------------------------------------
-        // Foods — assign barcode to existing food
-        // ------------------------------------------------------------
 
         composable(
             route = NavRoutes.Foods.pickBarcode,
@@ -283,9 +304,9 @@ composable(route = NavRoutes.Foods.pickFood) {
                         launchSingleTop = true
                     }
                 },
-                onEditRecipe = { /* no-op */ },
-                onCreateFood = { /* no-op */ },
-                onCreateRecipe = { /* no-op */ }
+                onEditRecipe = { },
+                onCreateFood = { },
+                onCreateRecipe = { }
             )
         }
 
@@ -357,9 +378,6 @@ composable(route = NavRoutes.Foods.pickFood) {
             )
         }
 
-        // ------------------------------------------------------------
-        // Recipes
-        // ------------------------------------------------------------
         composable(route = NavRoutes.Recipes.route) {
             RecipeBuilderScreen(
                 editFoodId = null,
@@ -398,15 +416,10 @@ composable(route = NavRoutes.Foods.pickFood) {
             )
         }
 
-        // ------------------------------------------------------------
-        // Planner — Day
-        // ------------------------------------------------------------
-
         composable(
             route = NavRoutes.Planner.plannerDay,
             arguments = listOf(navArgument("dateIso") { type = NavType.StringType })
         ) { backStackEntry ->
-            // ---- Template picker result plumbing (SavedStateHandle) ----
             val handle = backStackEntry.savedStateHandle
 
             val pickedTemplateIdFlow =
@@ -416,19 +429,18 @@ composable(route = NavRoutes.Foods.pickFood) {
                 handle.getStateFlow(KEY_TEMPLATE_PICK_OVERRIDE_SLOT, "")
 
             var pendingTemplatePick by androidx.compose.runtime.remember {
-                androidx.compose.runtime.mutableStateOf<Pair<Long, com.example.adobongkangkong.data.local.db.entity.MealSlot?>?>(null)
+                androidx.compose.runtime.mutableStateOf<Pair<Long, MealSlot?>?>(null)
             }
 
             androidx.compose.runtime.LaunchedEffect(Unit) {
                 pickedTemplateIdFlow.collect { templateId ->
                     if (templateId > 0L) {
-                        // Consume immediately (prevents double-trigger on recomposition)
                         handle[KEY_TEMPLATE_PICK_TEMPLATE_ID] = 0L
 
                         val slotName = pickedOverrideSlotNameFlow.value
                         val overrideSlot = runCatching {
                             slotName.takeIf { it.isNotBlank() }?.let {
-                                com.example.adobongkangkong.data.local.db.entity.MealSlot.valueOf(it)
+                                MealSlot.valueOf(it)
                             }
                         }.getOrNull()
 
@@ -470,14 +482,15 @@ composable(route = NavRoutes.Foods.pickFood) {
                         )
                     )
                 },
+                onOpenQuickAddFromPlannedItem = { quickAddDate, candidate ->
+                    navController.navigate(NavRoutes.QuickAdd.quickAdd(quickAddDate))
+                    navController.getBackStackEntry(NavRoutes.QuickAdd.quickAdd(quickAddDate))
+                        .putQuickAddPlannedItemCandidate(candidate)
+                },
                 templatePick = pendingTemplatePick,
                 onTemplatePickConsumed = { pendingTemplatePick = null }
             )
         }
-
-        // ------------------------------------------------------------
-        // Planner — Template Picker
-        // ------------------------------------------------------------
 
         composable(
             route = NavRoutes.Planner.templatePicker,
@@ -496,7 +509,7 @@ composable(route = NavRoutes.Foods.pickFood) {
             val slotName = backStackEntry.arguments?.getString("slot").orEmpty()
             val overrideSlot = runCatching {
                 slotName.takeIf { it.isNotBlank() }?.let {
-                    com.example.adobongkangkong.data.local.db.entity.MealSlot.valueOf(it)
+                    MealSlot.valueOf(it)
                 }
             }.getOrNull()
 
@@ -527,7 +540,6 @@ composable(route = NavRoutes.Foods.pickFood) {
                 }
             )
         }
-
 
         composable(NavRoutes.Planner.templates) {
             com.example.adobongkangkong.ui.templates.MealTemplateListRoute(
@@ -634,10 +646,6 @@ composable(route = NavRoutes.Foods.pickFood) {
             )
         }
 
-        // ------------------------------------------------------------
-        // Planner — Planned Meal Editor
-        // ------------------------------------------------------------
-
         composable(
             route = NavRoutes.Planner.plannedMealEditor,
             arguments = listOf(navArgument("mealId") { type = NavType.LongType })
@@ -661,7 +669,6 @@ composable(route = NavRoutes.Foods.pickFood) {
                 }
             }
 
-            // Returned from food picker -> add to meal and consume.
             val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
             androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
                 pickedFoodId.collect { id ->
@@ -672,7 +679,7 @@ composable(route = NavRoutes.Foods.pickFood) {
                 }
             }
 
-com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
+            com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
                 contract = vm,
                 onBack = { navController.popBackStack() },
                 onRequestAddFood = {
@@ -680,7 +687,6 @@ com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
                 }
             )
         }
-
 
         composable(
             route = NavRoutes.Planner.plannedMealEditorNew,
@@ -714,7 +720,7 @@ com.example.adobongkangkong.ui.meal.editor.MealEditorScreen(
             androidx.compose.runtime.LaunchedEffect(dateIso, slotName, templateId) {
                 if (dateIso.isNotBlank() && slotName.isNotBlank()) {
                     runCatching {
-                        com.example.adobongkangkong.data.local.db.entity.MealSlot.valueOf(slotName)
+                        MealSlot.valueOf(slotName)
                     }.getOrNull()?.let { slot ->
                         vm.startNewPlannedMeal(
                             dateIso = dateIso,

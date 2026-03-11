@@ -201,6 +201,7 @@ fun PlannerDayScreen(
                             onRemoveEmptyMeal = { mealId -> onEvent(PlannerDayEvent.RemoveEmptyPlannedMeal(mealId)) },
                             onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) },
                             onLogMeal = { mealId -> onEvent(PlannerDayEvent.LogMeal(mealId)) },
+                            onLogItem = { itemId -> onEvent(PlannerDayEvent.LogPlannedItem(itemId)) },
                             onSaveMealAsTemplate = { mealId -> onEvent(PlannerDayEvent.SaveMealAsTemplate(mealId)) }
                         )
                     }
@@ -600,6 +601,7 @@ private fun PlannedMealCard(
     onRemoveEmptyMeal: (Long) -> Unit,
     onDuplicateMeal: (Long) -> Unit,
     onLogMeal: (Long) -> Unit,
+    onLogItem: (Long) -> Unit,
     onSaveMealAsTemplate: (Long) -> Unit
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
@@ -665,6 +667,13 @@ private fun PlannedMealCard(
                                 onDuplicateMeal(meal.id)
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Log meal") },
+                            onClick = {
+                                showActionsMenu = false
+                                onLogMeal(meal.id)
+                            }
+                        )
                     }
                 }
             }
@@ -706,24 +715,13 @@ private fun PlannedMealCard(
                         PlannedItemRow(
                             title = item.title?.takeIf { it.isNotBlank() } ?: fallbackItemTitle(item),
                             qtySummary = qtySummary(item),
+                            onLog = { onLogItem(item.id) },
                             onRemove = { onRemoveItem(item.id) }
                         )
                     }
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
-                    }
-
-                    Row {
-                        Spacer(Modifier.weight(1f))
-
-                        IconButton(onClick = { onLogMeal(meal.id) }) {
-                            Icon(
-                                painter = painterResource(R.drawable.log_file),
-                                contentDescription = "Log"
-                            )
-                        }
-                    }
-                }
+                    }                }
             }
         }
     }
@@ -733,6 +731,7 @@ private fun PlannedMealCard(
 private fun PlannedItemRow(
     title: String,
     qtySummary: String,
+    onLog: () -> Unit,
     onRemove: () -> Unit
 ) {
     Row(
@@ -744,6 +743,12 @@ private fun PlannedItemRow(
             Text(qtySummary, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.width(8.dp))
+        IconButton(onClick = onLog) {
+            Icon(
+                painter = painterResource(R.drawable.log_file),
+                contentDescription = "Log"
+            )
+        }
         IconButton(onClick = onRemove) {
             Icon(
                 painter = painterResource(R.drawable.trash),

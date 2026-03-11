@@ -80,6 +80,7 @@ sealed interface PlannerDayEvent {
     data object ConfirmMakeRecurring : PlannerDayEvent
 
     data class LogMeal(val mealId: Long) : PlannerDayEvent
+    data class LogPlannedItem(val itemId: Long) : PlannerDayEvent
 
     // Save planned meal as template
     data class SaveMealAsTemplate(val mealId: Long) : PlannerDayEvent
