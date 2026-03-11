@@ -3,10 +3,15 @@ package com.example.adobongkangkong.ui.planner
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
+import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import java.time.LocalDate
 
 @Composable
@@ -17,7 +22,9 @@ fun PlannerDayRoute(
     onOpenPlannedMealEditor: (Long) -> Unit,
     onOpenNewPlannedMealEditor: (dateIso: String, slot: MealSlot, templateId: Long?) -> Unit,
     onOpenTemplatePicker: (slot: MealSlot?) -> Unit,
-    onOpenQuickAddFromPlannedItem: (date: LocalDate, candidate: QuickAddPlannedItemCandidate) -> Unit,
+    onCreateFood: (String) -> Unit,
+    onCreateFoodWithBarcode: (String) -> Unit,
+    onOpenFoodEditor: (Long) -> Unit,
     templatePick: Pair<Long, MealSlot?>?,
     onTemplatePickConsumed: () -> Unit,
     viewModel: PlannerDayViewModel = hiltViewModel(),
@@ -26,8 +33,6 @@ fun PlannerDayRoute(
         viewModel.setDate(date)
     }
 
-    // If we have a pending pick result from the picker destination, open the NEW planned-meal editor
-    // with the selected template preloaded as an in-memory draft. Saving in the editor commits it.
     LaunchedEffect(templatePick) {
         val pick = templatePick ?: return@LaunchedEffect
         val templateId = pick.first
@@ -44,6 +49,10 @@ fun PlannerDayRoute(
 
     val context = LocalContext.current
 
+    var quickAddCandidate by remember {
+        mutableStateOf<QuickAddPlannedItemCandidate?>(null)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.events.collect { e ->
             when (e) {
@@ -54,10 +63,7 @@ fun PlannerDayRoute(
                     onOpenPlannedMealEditor(e.mealId)
 
                 is PlannerDayViewModel.PlannerDayUiEvent.NavigateToQuickAddFromPlannedItem ->
-                    onOpenQuickAddFromPlannedItem(
-                        LocalDate.parse(e.dateIso),
-                        e.candidate
-                    )
+                    quickAddCandidate = e.candidate
             }
         }
     }
@@ -66,13 +72,11 @@ fun PlannerDayRoute(
         state = viewModel.state,
         onEvent = { event ->
             when (event) {
-                // Navigation-only events live here
                 PlannerDayEvent.Back -> onBack()
 
                 PlannerDayEvent.PickDate ->
                     onPickDate(viewModel.state.value.date)
 
-                // Date change lives in VM
                 PlannerDayEvent.PrevDay ->
                     viewModel.setDate(viewModel.state.value.date.minusDays(1))
 
@@ -93,9 +97,19 @@ fun PlannerDayRoute(
                     onOpenPlannedMealEditor(event.mealId)
                 }
 
-                // Everything else is planner logic -> ViewModel
                 else -> viewModel.onEvent(event)
             }
         }
     )
+
+    if (quickAddCandidate != null) {
+        QuickAddBottomSheet(
+            onDismiss = { quickAddCandidate = null },
+            onCreateFood = onCreateFood,
+            onCreateFoodWithBarcode = onCreateFoodWithBarcode,
+            onOpenFoodEditor = onOpenFoodEditor,
+            logDate = date,
+            initialPlannedItemCandidate = quickAddCandidate,
+        )
+    }
 }

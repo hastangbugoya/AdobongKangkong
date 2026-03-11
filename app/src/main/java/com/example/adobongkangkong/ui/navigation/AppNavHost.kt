@@ -14,7 +14,6 @@ import androidx.navigation.navArgument
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.core.util.restartApp
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
-import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import com.example.adobongkangkong.feature.camera.BannerOwnerRef
 import com.example.adobongkangkong.feature.camera.BannerOwnerType
 import com.example.adobongkangkong.ui.backup.BackupScreen
@@ -33,72 +32,10 @@ import com.example.adobongkangkong.ui.startup.StartupScreen
 import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
 import java.time.LocalDate
 
-// Returned from template picker -> consumed by PlannerDay destination
 private const val KEY_FOOD_PICK_FOOD_ID = "food_pick_food_id"
 
 private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
 private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
-
-private const val KEY_QA_PI_ID = "qa_pi_id"
-private const val KEY_QA_PI_TITLE = "qa_pi_title"
-private const val KEY_QA_PI_SLOT = "qa_pi_slot"
-private const val KEY_QA_PI_TYPE = "qa_pi_type"
-private const val KEY_QA_PI_FOOD_ID = "qa_pi_food_id"
-private const val KEY_QA_PI_RECIPE_ID = "qa_pi_recipe_id"
-private const val KEY_QA_PI_BATCH_ID = "qa_pi_batch_id"
-private const val KEY_QA_PI_PLANNED_SERVINGS = "qa_pi_planned_servings"
-private const val KEY_QA_PI_PLANNED_GRAMS = "qa_pi_planned_grams"
-
-private fun androidx.navigation.NavBackStackEntry.putQuickAddPlannedItemCandidate(
-    candidate: QuickAddPlannedItemCandidate
-) {
-    savedStateHandle[KEY_QA_PI_ID] = candidate.id
-    savedStateHandle[KEY_QA_PI_TITLE] = candidate.title
-    savedStateHandle[KEY_QA_PI_SLOT] = candidate.slot.name
-    savedStateHandle[KEY_QA_PI_TYPE] = candidate.type.name
-    savedStateHandle[KEY_QA_PI_FOOD_ID] = candidate.foodId
-    savedStateHandle[KEY_QA_PI_RECIPE_ID] = candidate.recipeId
-    savedStateHandle[KEY_QA_PI_BATCH_ID] = candidate.batchId
-    savedStateHandle[KEY_QA_PI_PLANNED_SERVINGS] = candidate.plannedServings
-    savedStateHandle[KEY_QA_PI_PLANNED_GRAMS] = candidate.plannedGrams
-}
-
-private fun androidx.navigation.NavBackStackEntry.consumeQuickAddPlannedItemCandidate():
-        QuickAddPlannedItemCandidate? {
-    val id = savedStateHandle.get<Long>(KEY_QA_PI_ID) ?: return null
-    val title = savedStateHandle.get<String>(KEY_QA_PI_TITLE).orEmpty()
-    val slotName = savedStateHandle.get<String>(KEY_QA_PI_SLOT) ?: return null
-    val typeName = savedStateHandle.get<String>(KEY_QA_PI_TYPE) ?: return null
-    val foodId = savedStateHandle.get<Long>(KEY_QA_PI_FOOD_ID) ?: return null
-
-    val slot = runCatching { MealSlot.valueOf(slotName) }.getOrNull() ?: return null
-    val type = runCatching { QuickAddPlannedItemCandidate.Type.valueOf(typeName) }.getOrNull()
-        ?: return null
-
-    val candidate = QuickAddPlannedItemCandidate(
-        id = id,
-        title = title,
-        slot = slot,
-        type = type,
-        foodId = foodId,
-        recipeId = savedStateHandle.get<Long?>(KEY_QA_PI_RECIPE_ID),
-        batchId = savedStateHandle.get<Long?>(KEY_QA_PI_BATCH_ID),
-        plannedServings = savedStateHandle.get<Double?>(KEY_QA_PI_PLANNED_SERVINGS),
-        plannedGrams = savedStateHandle.get<Double?>(KEY_QA_PI_PLANNED_GRAMS),
-    )
-
-    savedStateHandle[KEY_QA_PI_ID] = null
-    savedStateHandle[KEY_QA_PI_TITLE] = null
-    savedStateHandle[KEY_QA_PI_SLOT] = null
-    savedStateHandle[KEY_QA_PI_TYPE] = null
-    savedStateHandle[KEY_QA_PI_FOOD_ID] = null
-    savedStateHandle[KEY_QA_PI_RECIPE_ID] = null
-    savedStateHandle[KEY_QA_PI_BATCH_ID] = null
-    savedStateHandle[KEY_QA_PI_PLANNED_SERVINGS] = null
-    savedStateHandle[KEY_QA_PI_PLANNED_GRAMS] = null
-
-    return candidate
-}
 
 @Composable
 fun AppNavHost(
@@ -219,7 +156,15 @@ fun AppNavHost(
             DayLogScreen(
                 date = date,
                 onBack = { navController.popBackStack() },
-                onOpenQuickAdd = { navController.navigate(NavRoutes.QuickAdd.quickAdd(date)) }
+                onCreateFood = { prefillName ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = prefillName))
+                },
+                onCreateFoodWithBarcode = { barcode ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                },
+                onOpenFoodEditor = { foodId ->
+                    navController.navigate(NavRoutes.Foods.edit(foodId))
+                }
             )
         }
 
@@ -232,8 +177,6 @@ fun AppNavHost(
             val dateIso = entry.arguments!!.getString("date")!!
             val date = runCatching { LocalDate.parse(dateIso) }.getOrElse { LocalDate.now() }
 
-            val initialPlannedItemCandidate = entry.consumeQuickAddPlannedItemCandidate()
-
             QuickAddBottomSheet(
                 onDismiss = { navController.popBackStack() },
                 onCreateFood = { prefillName ->
@@ -245,8 +188,7 @@ fun AppNavHost(
                 onOpenFoodEditor = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
                 },
-                logDate = date,
-                initialPlannedItemCandidate = initialPlannedItemCandidate,
+                logDate = date
             )
         }
 
@@ -482,10 +424,14 @@ fun AppNavHost(
                         )
                     )
                 },
-                onOpenQuickAddFromPlannedItem = { quickAddDate, candidate ->
-                    navController.navigate(NavRoutes.QuickAdd.quickAdd(quickAddDate))
-                    navController.getBackStackEntry(NavRoutes.QuickAdd.quickAdd(quickAddDate))
-                        .putQuickAddPlannedItemCandidate(candidate)
+                onCreateFood = { prefillName ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = prefillName))
+                },
+                onCreateFoodWithBarcode = { barcode ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                },
+                onOpenFoodEditor = { foodId ->
+                    navController.navigate(NavRoutes.Foods.edit(foodId))
                 },
                 templatePick = pendingTemplatePick,
                 onTemplatePickConsumed = { pendingTemplatePick = null }

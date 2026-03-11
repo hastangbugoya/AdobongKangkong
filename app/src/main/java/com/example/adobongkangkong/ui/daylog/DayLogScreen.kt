@@ -17,11 +17,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,7 +33,9 @@ import java.time.LocalDate
 fun DayLogScreen(
     date: LocalDate,
     onBack: () -> Unit,
-    onOpenQuickAdd: (() -> Unit)? = null,
+    onCreateFood: (String) -> Unit,
+    onCreateFoodWithBarcode: (String) -> Unit = {},
+    onOpenFoodEditor: (Long) -> Unit = {},
     onDelete: ((Long) -> Unit)? = null,
     vm: DayLogViewModel = hiltViewModel()
 ) {
@@ -39,7 +45,19 @@ fun DayLogScreen(
 
     val delete = onDelete ?: { id -> vm.deleteEntry(id) }
 
+    var showQuickAdd by rememberSaveable { mutableStateOf(false) }
+
     LaunchedEffect(date) { vm.load(date) }
+
+    if (showQuickAdd) {
+        QuickAddBottomSheet(
+            onDismiss = { showQuickAdd = false },
+            onCreateFood = onCreateFood,
+            onCreateFoodWithBarcode = onCreateFoodWithBarcode,
+            onOpenFoodEditor = onOpenFoodEditor,
+            logDate = date
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -54,13 +72,11 @@ fun DayLogScreen(
                     }
                 },
                 actions = {
-                    if (onOpenQuickAdd != null) {
-                        IconButton(onClick = onOpenQuickAdd) {
-                            Icon(
-                                painter = painterResource(R.drawable.add),
-                                contentDescription = "Quick add"
-                            )
-                        }
+                    IconButton(onClick = { showQuickAdd = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.add),
+                            contentDescription = "Quick add"
+                        )
                     }
                 }
             )
@@ -69,7 +85,7 @@ fun DayLogScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding) // keeps totals below camera hole
+                .padding(padding)
         ) {
             totals?.let { DayTotalsCard(it) }
 
