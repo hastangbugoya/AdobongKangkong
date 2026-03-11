@@ -8,10 +8,13 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
+import com.example.adobongkangkong.domain.logging.UpdateLogEntryUseCase
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
 import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.model.LogEntry
+import com.example.adobongkangkong.domain.model.LogUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
@@ -21,6 +24,7 @@ import com.example.adobongkangkong.domain.recipes.CreateSnapshotFoodFromRecipeUs
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.usage.FoodValidationResult
 import com.example.adobongkangkong.domain.usage.UsageContext
 import com.example.adobongkangkong.domain.usage.ValidateFoodForUsageUseCase
@@ -47,15 +51,29 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/**
+ * Quick Add view model for both creating and editing log entries.
+ *
+ * Editing rules:
+ * - Quick Add is the single UI for create and edit.
+ * - In edit mode, food / recipe identity is locked.
+ * - Users may change amount and meal slot only.
+ * - If the wrong item was logged, the correct action is delete + recreate, not retargeting.
+ * - When current nutrition differs materially from the stored snapshot, the user must choose:
+ *   - use current nutrition, or
+ *   - keep original nutrition and scale the stored snapshot.
+ */
 @HiltViewModel
 class QuickAddViewModel @Inject constructor(
     private val searchFoods: SearchFoodsUseCase,
     private val createLogEntry: CreateLogEntryUseCase,
+    private val updateLogEntry: UpdateLogEntryUseCase,
     private val recipeDao: RecipeDao,
     private val recipeBatchDao: RecipeBatchDao,
     private val createBatchFoodFromRecipeUseCase: CreateSnapshotFoodFromRecipeUseCase,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
     private val foodRepository: FoodRepository,
+    private val logRepository: LogRepository,
 
     // validation + snapshot access for preflight gating
     private val snapshotRepo: FoodNutritionSnapshotRepository,
@@ -71,6 +89,10 @@ class QuickAddViewModel @Inject constructor(
 
     private val queryFlow = MutableStateFlow("")
     private val selectedFoodFlow = MutableStateFlow<Food?>(null)
+
+    private val modeFlow = MutableStateFlow(QuickAddMode.CREATE)
+    private val editingLogIdFlow = MutableStateFlow<Long?>(null)
+    private val isIdentityLockedFlow = MutableStateFlow(false)
 
     // canonical amount
     private val servingsFlow = MutableStateFlow(1.0)
@@ -100,6 +122,11 @@ class QuickAddViewModel @Inject constructor(
     private val isResolveMassDialogOpenFlow = MutableStateFlow(false)
     private val gramsPerServingTextFlow = MutableStateFlow("")
 
+    private val isNutritionChoiceDialogOpenFlow = MutableStateFlow(false)
+    private val nutritionChoiceMessageFlow = MutableStateFlow<String?>(null)
+
+    private var pendingNutritionChoice: PendingNutritionChoice? = null
+
     // -----------------------------
     // From today's plan picker
     // -----------------------------
@@ -115,6 +142,12 @@ class QuickAddViewModel @Inject constructor(
         val timestamp: Instant,
         val amountInput: AmountInput,
         val logDateIso: String
+    )
+
+    private data class PendingNutritionChoice(
+        val logId: Long,
+        val amountInput: AmountInput,
+        val mealSlot: MealSlot?
     )
 
     private var pendingResolveMass: PendingResolveMass? = null
@@ -192,6 +225,126 @@ class QuickAddViewModel @Inject constructor(
     private val iouFatTextFlow = MutableStateFlow("")
     private val isSavingIouFlow = MutableStateFlow(false)
     private val iouErrorFlow = MutableStateFlow<String?>(null)
+
+    fun startCreate() {
+        modeFlow.value = QuickAddMode.CREATE
+        editingLogIdFlow.value = null
+        isIdentityLockedFlow.value = false
+        pendingNutritionChoice = null
+        isNutritionChoiceDialogOpenFlow.value = false
+        nutritionChoiceMessageFlow.value = null
+        clearSelection()
+        queryFlow.value = ""
+    }
+
+    fun startEdit(logId: Long) {
+        if (modeFlow.value == QuickAddMode.EDIT &&
+            editingLogIdFlow.value == logId &&
+            selectedFoodFlow.value != null
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+            modeFlow.value = QuickAddMode.EDIT
+            editingLogIdFlow.value = logId
+            isIdentityLockedFlow.value = true
+            isSavingFlow.value = true
+            errorFlow.value = null
+            pendingNutritionChoice = null
+            isNutritionChoiceDialogOpenFlow.value = false
+            nutritionChoiceMessageFlow.value = null
+            isTodayPlanPickerOpenFlow.value = false
+
+            try {
+                val entry = logRepository.getById(logId)
+                if (entry == null) {
+                    errorFlow.value = "Log entry not found."
+                    return@launch
+                }
+
+                val stableId = entry.foodStableId
+                if (stableId.isNullOrBlank()) {
+                    errorFlow.value = "Log entry is missing food identity."
+                    return@launch
+                }
+
+                val food = foodRepository.getByStableId(stableId)
+                if (food == null) {
+                    errorFlow.value = "Logged food no longer exists."
+                    return@launch
+                }
+
+                selectedFoodFlow.value = food
+                mealSlotFlow.value = entry.mealSlot
+                errorFlow.value = null
+
+                applyRecipeContextForFood(
+                    food = food,
+                    selectedBatchIdOverride = entry.recipeBatchId
+                )
+
+                restoreAmountForEdit(
+                    food = food,
+                    entry = entry
+                )
+            } finally {
+                isSavingFlow.value = false
+            }
+        }
+    }
+
+    private fun restoreAmountForEdit(
+        food: Food,
+        entry: LogEntry
+    ) {
+        when (entry.unit) {
+            LogUnit.GRAM_COOKED -> {
+                onGramsChanged(entry.amount)
+            }
+
+            LogUnit.SERVING,
+            LogUnit.ITEM -> {
+                onServingsChanged(entry.amount)
+                inputUnitFlow.value = food.servingUnit
+                inputAmountFlow.value = entry.amount * food.servingSize
+            }
+        }
+    }
+
+    fun dismissNutritionChoiceDialog() {
+        isNutritionChoiceDialogOpenFlow.value = false
+        nutritionChoiceMessageFlow.value = null
+        pendingNutritionChoice = null
+    }
+
+    fun confirmUseCurrentNutrition(
+        onDone: () -> Unit,
+    ) {
+        val pending = pendingNutritionChoice ?: return
+        executeEditSave(
+            logId = pending.logId,
+            amountInput = pending.amountInput,
+            mealSlot = pending.mealSlot,
+            decision = UpdateLogEntryUseCase.NutritionDecision.USE_CURRENT,
+            onDone = onDone,
+//            logDate = logDate
+        )
+    }
+
+    fun confirmKeepOriginalNutrition(
+        onDone: () -> Unit,
+    ) {
+        val pending = pendingNutritionChoice ?: return
+        executeEditSave(
+            logId = pending.logId,
+            amountInput = pending.amountInput,
+            mealSlot = pending.mealSlot,
+            decision = UpdateLogEntryUseCase.NutritionDecision.KEEP_ORIGINAL,
+            onDone = onDone,
+//            logDate = logDate
+        )
+    }
 
     fun openIouDialog() {
         iouDescriptionFlow.value = ""
@@ -289,6 +442,7 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun openBarcodeScanner() {
+        if (modeFlow.value == QuickAddMode.EDIT) return
         isScannerOpenFlow.value = true
     }
 
@@ -309,6 +463,8 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun onBarcodeScanned(barcode: String) {
+        if (modeFlow.value == QuickAddMode.EDIT) return
+
         val code = normalizeBarcode(barcode)
         Log.d("Meow", "QuickAddViewModel > barcode scanned raw='$barcode' normalized='$code'")
 
@@ -389,7 +545,10 @@ class QuickAddViewModel @Inject constructor(
         val mealSlot: MealSlot?,
         val inputMode: InputMode,
         val inputUnit: ServingUnit,
-        val inputAmount: Double?
+        val inputAmount: Double?,
+        val mode: QuickAddMode,
+        val editingLogId: Long?,
+        val isIdentityLocked: Boolean
     )
 
     private data class RecipeInputs(
@@ -405,6 +564,8 @@ class QuickAddViewModel @Inject constructor(
         val error: String?,
         val isResolveMassDialogOpen: Boolean,
         val gramsPerServingText: String,
+        val isNutritionChoiceDialogOpen: Boolean,
+        val nutritionChoiceMessage: String?,
     )
 
     private data class BarcodeUi(
@@ -436,7 +597,10 @@ class QuickAddViewModel @Inject constructor(
             val results: List<FoodListItemUiModel>,
             val selected: Food?,
             val servings: Double,
-            val mealSlot: MealSlot?
+            val mealSlot: MealSlot?,
+            val mode: QuickAddMode,
+            val editingLogId: Long?,
+            val isIdentityLocked: Boolean
         )
 
         data class CoreB(
@@ -445,14 +609,58 @@ class QuickAddViewModel @Inject constructor(
             val inputAmount: Double?
         )
 
+        data class CoreALeft(
+            val query: String,
+            val results: List<FoodListItemUiModel>,
+            val selected: Food?,
+            val servings: Double
+        )
+
+        data class CoreARight(
+            val mealSlot: MealSlot?,
+            val mode: QuickAddMode,
+            val editingLogId: Long?,
+            val isIdentityLocked: Boolean
+        )
+
         val coreAFlow = combine(
-            queryFlow,
-            resultsUiFlow,
-            selectedFoodFlow,
-            servingsFlow,
-            mealSlotFlow
-        ) { query, results, selected, servings, mealSlot ->
-            CoreA(query, results, selected, servings, mealSlot)
+            combine(
+                queryFlow,
+                resultsUiFlow,
+                selectedFoodFlow,
+                servingsFlow
+            ) { query, results, selected, servings ->
+                CoreALeft(
+                    query = query,
+                    results = results,
+                    selected = selected,
+                    servings = servings
+                )
+            },
+            combine(
+                mealSlotFlow,
+                modeFlow,
+                editingLogIdFlow,
+                isIdentityLockedFlow
+            ) { mealSlot, mode, editingLogId, isIdentityLocked ->
+                CoreARight(
+                    mealSlot = mealSlot,
+                    mode = mode,
+                    editingLogId = editingLogId,
+                    isIdentityLocked = isIdentityLocked
+                )
+            }
+        ) { left, right ->
+            CoreA(
+                query = left.query,
+                results = left.results,
+                selected = left.selected,
+                servings = left.servings,
+                mealSlot = right.mealSlot,
+                mode = right.mode,
+                editingLogId = right.editingLogId,
+                isIdentityLocked = right.isIdentityLocked
+            )
         }
 
         val coreBFlow = combine(
@@ -472,7 +680,10 @@ class QuickAddViewModel @Inject constructor(
                 mealSlot = a.mealSlot,
                 inputMode = b.inputMode,
                 inputUnit = b.inputUnit,
-                inputAmount = b.inputAmount
+                inputAmount = b.inputAmount,
+                mode = a.mode,
+                editingLogId = a.editingLogId,
+                isIdentityLocked = a.isIdentityLocked
             )
         }
 
@@ -491,18 +702,30 @@ class QuickAddViewModel @Inject constructor(
         }
 
         val flagsFlow = combine(
-            isCreateBatchDialogOpenFlow,
-            isSavingFlow,
-            errorFlow,
-            isResolveMassDialogOpenFlow,
-            gramsPerServingTextFlow
-        ) { isDialogOpen, isSaving, error, isResolveMassDialogOpen, gramsPerServingText ->
+            combine(
+                isCreateBatchDialogOpenFlow,
+                isSavingFlow,
+                errorFlow,
+                isResolveMassDialogOpenFlow
+            ) { isDialogOpen, isSaving, error, isResolveMassDialogOpen ->
+                arrayOf(isDialogOpen, isSaving, error, isResolveMassDialogOpen)
+            },
+            combine(
+                gramsPerServingTextFlow,
+                isNutritionChoiceDialogOpenFlow,
+                nutritionChoiceMessageFlow
+            ) { gramsPerServingText, isNutritionChoiceDialogOpen, nutritionChoiceMessage ->
+                arrayOf(gramsPerServingText, isNutritionChoiceDialogOpen, nutritionChoiceMessage)
+            }
+        ) { left, right ->
             UiFlags(
-                isDialogOpen = isDialogOpen,
-                isSaving = isSaving,
-                error = error,
-                isResolveMassDialogOpen = isResolveMassDialogOpen,
-                gramsPerServingText = gramsPerServingText
+                isDialogOpen = left[0] as Boolean,
+                isSaving = left[1] as Boolean,
+                error = left[2] as String?,
+                isResolveMassDialogOpen = left[3] as Boolean,
+                gramsPerServingText = right[0] as String,
+                isNutritionChoiceDialogOpen = right[1] as Boolean,
+                nutritionChoiceMessage = right[2] as String?
             )
         }
 
@@ -607,6 +830,9 @@ class QuickAddViewModel @Inject constructor(
                 QuickAddState(
                     query = core.query,
                     results = core.results,
+                    mode = core.mode,
+                    editingLogId = core.editingLogId,
+                    isIdentityLocked = core.isIdentityLocked,
                     selectedFood = core.selected,
                     servings = core.servings,
                     servingsEquivalent = servingsEquivalent,
@@ -627,6 +853,8 @@ class QuickAddViewModel @Inject constructor(
                     errorMessage = flags.error,
                     isResolveMassDialogOpen = flags.isResolveMassDialogOpen,
                     gramsPerServingText = flags.gramsPerServingText,
+                    isNutritionChoiceDialogOpen = flags.isNutritionChoiceDialogOpen,
+                    nutritionChoiceMessage = flags.nutritionChoiceMessage,
 
                     isScannerOpen = barcode.isScannerOpen,
                     foundBarcodeDialogFood = barcode.found?.food,
@@ -651,10 +879,13 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun onQueryChange(q: String) {
+        if (modeFlow.value == QuickAddMode.EDIT) return
         queryFlow.value = q
     }
 
     fun onFoodSelected(food: Food) {
+        if (modeFlow.value == QuickAddMode.EDIT && isIdentityLockedFlow.value) return
+
         selectedFoodFlow.value = food
         servingsFlow.value = 1.0
         inputModeFlow.value = InputMode.SERVINGS
@@ -720,6 +951,8 @@ class QuickAddViewModel @Inject constructor(
         selectedFoodFlow.value = null
         servingsFlow.value = 1.0
         inputModeFlow.value = InputMode.SERVINGS
+        inputUnitFlow.value = ServingUnit.G
+        inputAmountFlow.value = null
 
         mealSlotFlow.value = null
 
@@ -781,6 +1014,8 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun openTodayPlanPicker() {
+        if (modeFlow.value == QuickAddMode.EDIT) return
+
         isTodayPlanPickerOpenFlow.value = true
         errorFlow.value = null
 
@@ -802,6 +1037,8 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun onPlannedItemSelected(candidate: QuickAddPlannedItemCandidate) {
+        if (modeFlow.value == QuickAddMode.EDIT) return
+
         viewModelScope.launch {
             val resolvedFoodId = candidate.foodId ?: candidate.recipeId
             if (resolvedFoodId == null) {
@@ -1176,10 +1413,9 @@ class QuickAddViewModel @Inject constructor(
         return ml * densityGPerMl
     }
 
-    fun save(onDone: () -> Unit, logDate: LocalDate) {
-        val food = selectedFoodFlow.value ?: return
+    private fun buildAmountInputForSave(): AmountInput? {
+        val food = selectedFoodFlow.value ?: return null
         val servings = servingsFlow.value
-        val mealSlot = mealSlotFlow.value
 
         val gramsForSave = computeGramsAmount(
             food = food,
@@ -1189,15 +1425,43 @@ class QuickAddViewModel @Inject constructor(
             inputAmount = inputAmountFlow.value
         )
 
-        val amountInput =
-            if (gramsForSave != null && gramsForSave > 0.0 && inputModeFlow.value != InputMode.SERVINGS) {
-                AmountInput.ByGrams(gramsForSave)
-            } else {
-                if (servings <= 0.0) return
-                AmountInput.ByServings(servings)
+        return if (gramsForSave != null &&
+            gramsForSave > 0.0 &&
+            inputModeFlow.value != InputMode.SERVINGS
+        ) {
+            AmountInput.ByGrams(gramsForSave)
+        } else {
+            if (servings <= 0.0) return null
+            AmountInput.ByServings(servings)
+        }
+    }
+
+    fun save(onDone: () -> Unit, logDate: LocalDate) {
+        val food = selectedFoodFlow.value ?: return
+        val mealSlot = mealSlotFlow.value
+        val amountInput = buildAmountInputForSave() ?: return
+
+        Log.d(
+            "Meow",
+            "QuickAddViewModel > save START mode=${modeFlow.value} amountInput=$amountInput selected=${selectedFoodFlow.value?.name}"
+        )
+
+        if (modeFlow.value == QuickAddMode.EDIT) {
+            val logId = editingLogIdFlow.value ?: run {
+                errorFlow.value = "Missing log id for edit."
+                return
             }
 
-        Log.d("Meow", "QuickAddViewModel > save START amountInput=$amountInput selected=${selectedFoodFlow.value?.name}")
+            executeEditSave(
+                logId = logId,
+                amountInput = amountInput,
+                mealSlot = mealSlot,
+                decision = null,
+                onDone = onDone,
+//                logDate = logDate
+            )
+            return
+        }
 
         viewModelScope.launch {
             isSavingFlow.value = true
@@ -1323,6 +1587,57 @@ class QuickAddViewModel @Inject constructor(
                 }
             } finally {
                 Log.d("Meow", "QuickAddViewModel > save FINALLY")
+                isSavingFlow.value = false
+            }
+        }
+    }
+
+    private fun executeEditSave(
+        logId: Long,
+        amountInput: AmountInput,
+        mealSlot: MealSlot?,
+        decision: UpdateLogEntryUseCase.NutritionDecision?,
+        onDone: () -> Unit,
+//        logDate: LocalDate
+    ) {
+        viewModelScope.launch {
+            isSavingFlow.value = true
+            errorFlow.value = null
+
+            try {
+                when (val result = updateLogEntry.execute(
+                    logId = logId,
+                    amountInput = amountInput,
+                    mealSlot = mealSlot,
+                    nutritionDecision = decision
+                )) {
+                    is UpdateLogEntryUseCase.Result.Success -> {
+                        pendingNutritionChoice = null
+                        isNutritionChoiceDialogOpenFlow.value = false
+                        nutritionChoiceMessageFlow.value = null
+                        onDone()
+                    }
+
+                    is UpdateLogEntryUseCase.Result.Blocked -> {
+                        errorFlow.value = result.message
+                    }
+
+                    is UpdateLogEntryUseCase.Result.Error -> {
+                        errorFlow.value = result.message
+                    }
+
+                    is UpdateLogEntryUseCase.Result.NutritionChoiceRequired -> {
+                        pendingNutritionChoice = PendingNutritionChoice(
+                            logId = logId,
+                            amountInput = amountInput,
+                            mealSlot = mealSlot
+                        )
+                        nutritionChoiceMessageFlow.value =
+                            "Nutrition has changed since this item was logged."
+                        isNutritionChoiceDialogOpenFlow.value = true
+                    }
+                }
+            } finally {
                 isSavingFlow.value = false
             }
         }

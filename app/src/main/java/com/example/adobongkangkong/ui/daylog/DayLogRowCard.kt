@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.daylog
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,16 +29,22 @@ import kotlin.math.roundToInt
 @Composable
 fun DayLogRowCard(
     row: DayLogRow,
+    onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     val cardContent: @Composable () -> Unit = {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clickable(onClick = onClick),
             tonalElevation = 1.dp,
             shape = MaterialTheme.shapes.medium,
-            color = if (row.bannerFoodId != null) Color.Transparent else MaterialTheme.colorScheme.surface
+            color = if (row.bannerFoodId != null) {
+                Color.Transparent
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
         ) {
             Row(
                 modifier = Modifier
@@ -67,8 +74,8 @@ fun DayLogRowCard(
                     Text(
                         text =
                             "Protein ${row.proteinG?.format1() ?: "0.0"}g  " +
-                                "Carbs ${row.carbsG?.format1() ?: "0.0"}g  " +
-                                "Fat ${row.fatG?.format1() ?: "0.0"}g",
+                                    "Carbs ${row.carbsG?.format1() ?: "0.0"}g  " +
+                                    "Fat ${row.fatG?.format1() ?: "0.0"}g",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

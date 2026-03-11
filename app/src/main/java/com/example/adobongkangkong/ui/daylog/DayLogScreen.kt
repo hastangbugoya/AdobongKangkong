@@ -48,6 +48,7 @@ fun DayLogScreen(
     val delete = onDelete ?: { id -> vm.deleteEntry(id) }
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
+    var editingLogId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(date) {
         vm.load(date)
@@ -55,11 +56,15 @@ fun DayLogScreen(
 
     if (showQuickAdd) {
         QuickAddBottomSheet(
-            onDismiss = { showQuickAdd = false },
+            onDismiss = {
+                showQuickAdd = false
+                editingLogId = null
+            },
             onCreateFood = onCreateFood,
             onCreateFoodWithBarcode = onCreateFoodWithBarcode,
             onOpenFoodEditor = onOpenFoodEditor,
-            logDate = date
+            logDate = date,
+            editingLogId = editingLogId
         )
     }
 
@@ -78,7 +83,12 @@ fun DayLogScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showQuickAdd = true }) {
+                    IconButton(
+                        onClick = {
+                            editingLogId = null
+                            showQuickAdd = true
+                        }
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.add),
                             contentDescription = "Quick add"
@@ -111,6 +121,10 @@ fun DayLogScreen(
                     ) { row ->
                         DayLogRowCard(
                             row = row,
+                            onClick = {
+                                editingLogId = row.logId
+                                showQuickAdd = true
+                            },
                             onDelete = { delete(row.logId) }
                         )
                         HorizontalDivider()

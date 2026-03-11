@@ -4,12 +4,47 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -42,6 +77,12 @@ import java.util.Locale
  * If the selected food uses a non-gram serving unit and is missing grams-per-serving,
  * an **Edit food** button is shown to jump to the food editor (so the user can fill in grams-per-serving).
  *
+ * In edit mode:
+ * - the existing log row is reopened inside Quick Add,
+ * - food / recipe identity stays locked,
+ * - only amount and meal slot are editable,
+ * - save updates the existing row instead of inserting a new one.
+ *
  * @param onOpenFoodEditor Navigate to the food editor for the given food id.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +94,7 @@ fun QuickAddBottomSheet(
     onOpenFoodEditor: (foodId: Long) -> Unit = {},
     logDate: LocalDate,
     initialPlannedItemCandidate: QuickAddPlannedItemCandidate? = null,
+    editingLogId: Long? = null,
     vm: QuickAddViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
@@ -67,8 +109,12 @@ fun QuickAddBottomSheet(
         Locale.getDefault()
     )
 
-    LaunchedEffect(initialPlannedItemCandidate?.id) {
-        initialPlannedItemCandidate?.let(vm::onPlannedItemSelected)
+    LaunchedEffect(editingLogId, initialPlannedItemCandidate?.id) {
+        when {
+            editingLogId != null -> vm.startEdit(editingLogId)
+            initialPlannedItemCandidate != null -> vm.onPlannedItemSelected(initialPlannedItemCandidate)
+            else -> vm.startCreate()
+        }
     }
 
     val foundFood = state.foundBarcodeDialogFood
@@ -107,7 +153,6 @@ fun QuickAddBottomSheet(
                 TextButton(
                     onClick = {
                         Log.d("Meow", "QuickAddBottomSheet> Add food clicked for barcode=$notFoundBarcode")
-
                         vm.dismissNotFoundBarcodeDialog()
                         onCreateFoodWithBarcode(notFoundBarcode)
                         onDismiss()
@@ -119,6 +164,46 @@ fun QuickAddBottomSheet(
             dismissButton = {
                 TextButton(onClick = { vm.dismissNotFoundBarcodeDialog() }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (state.isNutritionChoiceDialogOpen) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Nutrition changed") },
+            text = {
+                Text(
+                    state.nutritionChoiceMessage
+                        ?: "Nutrition has changed since this item was logged."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.confirmUseCurrentNutrition(
+                            onDone = onDismiss,
+                        )
+                    }
+                ) {
+                    Text("Use current nutrition")
+                }
+            },
+            dismissButton = {
+                Column {
+                    TextButton(
+                        onClick = {
+                            vm.confirmKeepOriginalNutrition(
+                                onDone = onDismiss,
+                            )
+                        }
+                    ) {
+                        Text("Keep original nutrition")
+                    }
+                    TextButton(onClick = vm::dismissNutritionChoiceDialog) {
+                        Text("Cancel")
+                    }
                 }
             }
         )
@@ -139,7 +224,10 @@ fun QuickAddBottomSheet(
                 .padding(16.dp)
                 .navigationBarsPadding()
         ) {
-            Text("Quick Add", style = MaterialTheme.typography.titleLarge)
+            Text(
+                if (state.mode == QuickAddMode.EDIT) "Edit Log" else "Quick Add",
+                style = MaterialTheme.typography.titleLarge
+            )
             Spacer(Modifier.height(8.dp))
             Text("${logDate.format(formatter)}", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(12.dp))
@@ -176,44 +264,59 @@ fun QuickAddBottomSheet(
                 Spacer(Modifier.height(12.dp))
             } else {
                 if (state.selectedFood == null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            onClick = { vm.openIouDialog() },
-                            modifier = Modifier.weight(1f)
+                    if (state.mode == QuickAddMode.CREATE) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("IOU")
-                        }
+                            TextButton(
+                                onClick = { vm.openIouDialog() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("IOU")
+                            }
 
-                        TextButton(
-                            onClick = { vm.openTodayPlanPicker() },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("From today's plan")
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = state.query,
-                        onValueChange = vm::onQueryChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Search foods") },
-                        singleLine = true,
-                        trailingIcon = {
-                            IconButton(onClick = { vm.openBarcodeScanner() }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.barcode_read),
-                                    contentDescription = "Scan barcode"
-                                )
+                            TextButton(
+                                onClick = { vm.openTodayPlanPicker() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("From today's plan")
                             }
                         }
-                    )
 
-                    Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = state.query,
+                            onValueChange = vm::onQueryChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Search foods") },
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { vm.openBarcodeScanner() }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.barcode_read),
+                                        contentDescription = "Scan barcode"
+                                    )
+                                }
+                            }
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                    } else {
+                        if (state.errorMessage != null) {
+                            Text(
+                                text = state.errorMessage!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            Text(
+                                text = "Loading log entry…",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
                 }
 
                 if (state.isScannerOpen) {
@@ -274,43 +377,41 @@ fun QuickAddBottomSheet(
                 }
 
                 if (state.selectedFood == null) {
-
-                    if (state.query.isNotBlank() && state.results.isEmpty()) {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-
-                            Text(
-                                text = "No matching foods",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Spacer(Modifier.height(12.dp))
-
-                            TextButton(
-                                onClick = {
-                                    onDismiss()
-                                    onCreateFood(state.query)
-                                }
+                    if (state.mode == QuickAddMode.CREATE) {
+                        if (state.query.isNotBlank() && state.results.isEmpty()) {
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text("Create food \"${state.query}\"")
+                                Text(
+                                    text = "No matching foods",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Spacer(Modifier.height(12.dp))
+
+                                TextButton(
+                                    onClick = {
+                                        onDismiss()
+                                        onCreateFood(state.query)
+                                    }
+                                ) {
+                                    Text("Create food \"${state.query}\"")
+                                }
                             }
+                        } else {
+                            FoodSearchResults(
+                                results = state.results,
+                                onPick = {
+                                    focus.clearFocus()
+                                    vm.onFoodSelected(it)
+                                }
+                            )
                         }
-
-                    } else {
-                        FoodSearchResults(
-                            results = state.results,
-                            onPick = {
-                                focus.clearFocus()
-                                vm.onFoodSelected(it)
-                            }
-                        )
                     }
-
                 } else {
                     val selected = state.selectedFood!!
                     val context = LocalContext.current
@@ -332,7 +433,7 @@ fun QuickAddBottomSheet(
                     }
 
                     val isLoggingByGrams = state.inputMode == InputMode.GRAMS
-                    val isLogEnabled =
+                    val isPrimaryEnabled =
                         !selected.isRecipe ||
                                 !isLoggingByGrams ||
                                 state.selectedBatchId != null
@@ -351,13 +452,18 @@ fun QuickAddBottomSheet(
                         SelectedFoodPanel(
                             food = selected,
                             servings = state.servings,
-                            servingUnitAmount = state.servingUnitAmount
-                                ?: selected.servingSize,
+                            servingUnitAmount = state.servingUnitAmount ?: selected.servingSize,
                             gramsAmount = state.gramsAmount,
                             inputUnit = state.inputUnit,
                             inputAmount = state.inputAmount,
                             errorMessage = state.errorMessage,
-                            onBack = vm::clearSelection,
+                            onBack = {
+                                if (state.mode == QuickAddMode.EDIT) {
+                                    onDismiss()
+                                } else {
+                                    vm.clearSelection()
+                                }
+                            },
                             onServingsChanged = vm::onServingsChanged,
                             onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
                             onGramsChanged = vm::onGramsChanged,
@@ -366,11 +472,24 @@ fun QuickAddBottomSheet(
                                 amount?.let { vm.onInputAmountChanged(it) }
                             },
                             onPackage = vm::onPackageClicked,
-                            onEditFoodInEditor = { onOpenFoodEditor(selected.id) },
-                            primaryButtonLabel = "Log",
-                            isPrimaryEnabled = isLogEnabled,
+                            onEditFoodInEditor = {
+                                if (state.mode == QuickAddMode.CREATE) {
+                                    onOpenFoodEditor(selected.id)
+                                }
+                            },
+                            primaryButtonLabel = if (state.mode == QuickAddMode.EDIT) "Save" else "Log",
+                            isPrimaryEnabled = isPrimaryEnabled,
                             onPrimaryAction = { vm.save(onDone = onDismiss, logDate = logDate) },
                             extraContent = {
+                                if (state.isIdentityLocked) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "Food identity is locked for log edits.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
                                 if (selected.isRecipe) {
                                     Spacer(Modifier.height(16.dp))
                                     Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
@@ -381,7 +500,10 @@ fun QuickAddBottomSheet(
                                         onSelected = vm::onBatchSelected,
                                         onCreate = vm::openCreateBatchDialog
                                     )
-                                    if (isLoggingByGrams && state.selectedBatchId == null && state.errorMessage == null) {
+                                    if (isLoggingByGrams &&
+                                        state.selectedBatchId == null &&
+                                        state.errorMessage == null
+                                    ) {
                                         Spacer(Modifier.height(8.dp))
                                         Text(
                                             "Select or create a cooked batch to log by grams.",
