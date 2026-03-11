@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.daylog.model
 
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import java.time.Instant
 
 data class DayLogRow(
@@ -10,5 +11,6 @@ data class DayLogRow(
     val proteinG: Double?,
     val carbsG: Double?,
     val fatG: Double?,
-    val bannerFoodId: Long? = null
+    val bannerFoodId: Long? = null,
+    val mealSlot: MealSlot? = null,
 )

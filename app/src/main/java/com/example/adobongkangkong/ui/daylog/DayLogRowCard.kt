@@ -48,7 +48,7 @@ fun DayLogRowCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = row.itemName,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

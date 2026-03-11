@@ -25,6 +25,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.ui.daylog.model.DayLogRow
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import java.time.LocalDate
 
@@ -47,7 +49,9 @@ fun DayLogScreen(
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(date) { vm.load(date) }
+    LaunchedEffect(date) {
+        vm.load(date)
+    }
 
     if (showQuickAdd) {
         QuickAddBottomSheet(
@@ -58,6 +62,8 @@ fun DayLogScreen(
             logDate = date
         )
     }
+
+    val groupedEntries = buildDayLogSections(entries)
 
     Scaffold(
         topBar = {
@@ -90,15 +96,25 @@ fun DayLogScreen(
             totals?.let { DayTotalsCard(it) }
 
             LazyColumn {
-                items(
-                    items = entries,
-                    key = { it.logId }
-                ) { row ->
-                    DayLogRowCard(
-                        row = row,
-                        onDelete = { delete(row.logId) }
-                    )
-                    HorizontalDivider()
+                groupedEntries.forEach { section ->
+                    item(key = "slot_header_${section.key}") {
+                        Text(
+                            text = section.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+
+                    items(
+                        items = section.rows,
+                        key = { it.logId }
+                    ) { row ->
+                        DayLogRowCard(
+                            row = row,
+                            onDelete = { delete(row.logId) }
+                        )
+                        HorizontalDivider()
+                    }
                 }
 
                 if (ious.isNotEmpty()) {
@@ -124,4 +140,41 @@ fun DayLogScreen(
             }
         }
     }
+}
+
+private data class DayLogSection(
+    val key: String,
+    val title: String,
+    val rows: List<DayLogRow>,
+)
+
+private fun buildDayLogSections(
+    entries: List<DayLogRow>
+): List<DayLogSection> {
+    if (entries.isEmpty()) return emptyList()
+
+    val grouped = entries.groupBy { it.mealSlot }
+    val sections = mutableListOf<DayLogSection>()
+
+    MealSlot.entries.forEach { slot ->
+        val rows = grouped[slot].orEmpty()
+        if (rows.isNotEmpty()) {
+            sections += DayLogSection(
+                key = slot.name,
+                title = slot.display,
+                rows = rows
+            )
+        }
+    }
+
+    val unslotted = grouped[null].orEmpty()
+    if (unslotted.isNotEmpty()) {
+        sections += DayLogSection(
+            key = "UNSLOTTED",
+            title = "Unslotted",
+            rows = unslotted
+        )
+    }
+
+    return sections
 }

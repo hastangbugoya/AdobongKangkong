@@ -55,7 +55,8 @@ class ObserveDayLogRowsUseCase @Inject constructor(
                         proteinG = n[MacroKeys.PROTEIN],
                         carbsG = n[MacroKeys.CARBS],
                         fatG = n[MacroKeys.FAT],
-                        bannerFoodId = bannerFoodId
+                        bannerFoodId = bannerFoodId,
+                        mealSlot = log.mealSlot,
                     )
                 }
             }

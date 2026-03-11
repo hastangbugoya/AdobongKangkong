@@ -26,6 +26,7 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
         shape = MaterialTheme.shapes.medium
     ) {
         Column(Modifier.padding(14.dp)) {
+
             Text(
                 text = "Daily totals",
                 style = MaterialTheme.typography.titleLarge
@@ -35,20 +36,40 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Calories", style = MaterialTheme.typography.bodyLarge)
-                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.CALORIES_KCAL)]}kcal", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.CALORIES_KCAL)])} kcal",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Protein", style = MaterialTheme.typography.bodyLarge)
-                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.PROTEIN_G)]}g", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.PROTEIN_G)])} g",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Carbs", style = MaterialTheme.typography.bodyLarge)
-                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.CARBS_G)]}g", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.CARBS_G)])} g",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Fat", style = MaterialTheme.typography.bodyLarge)
-                Text("${totals.totalsByCode[NutrientKey(NutrientCodes.FAT_G)]}g", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.FAT_G)])} g",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
         }
     }
+}
+
+private fun format3(value: Double?): String {
+    val v = value ?: return "0"
+    return "%.3f".format(v)
 }
