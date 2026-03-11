@@ -8,21 +8,22 @@ import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedSeriesEndConditionType
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedFoodItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.AddPlannedRecipeItemUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ComputePlannedDayMacroTotalsUseCase
+import com.example.adobongkangkong.domain.planner.usecase.CreateIouUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealFromTemplateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealUseCase
-import com.example.adobongkangkong.domain.planner.usecase.ComputePlannedDayMacroTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedSeriesUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreateSeriesAndEnsureHorizonUseCase
-import com.example.adobongkangkong.domain.planner.usecase.CreateIouUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DeleteIouUseCase
 import com.example.adobongkangkong.domain.planner.usecase.DuplicatePlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.EnsurePlannerHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDayUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ObservePlannerSlotLoggedNamesUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PromoteMealToSeriesAndEnsureHorizonUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemoveEmptyPlannedMealUseCase
-import com.example.adobongkangkong.domain.planner.usecase.ResolvePlannedItemToQuickAddCandidateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RemovePlannedItemForUndoUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ResolvePlannedItemToQuickAddCandidateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.SavePlannedMealAsTemplateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.UpdateIouUseCase
@@ -68,6 +69,7 @@ class PlannerDayViewModel @Inject constructor(
     private val promoteMealToSeriesAndEnsureHorizon: PromoteMealToSeriesAndEnsureHorizonUseCase,
     private val logPlannedMeal: LogPlannedMealUseCase,
     private val resolvePlannedItemToQuickAddCandidate: ResolvePlannedItemToQuickAddCandidateUseCase,
+    private val observePlannerSlotLoggedNames: ObservePlannerSlotLoggedNamesUseCase,
 
     // NEW
     private val savePlannedMealAsTemplate: SavePlannedMealAsTemplateUseCase,
@@ -102,6 +104,7 @@ class PlannerDayViewModel @Inject constructor(
 
     private val dateFlow = MutableStateFlow(_state.value.date)
     private var observeJob: Job? = null
+    private var observeLoggedNamesJob: Job? = null
     private var searchJob: Job? = null
 
     // Single-level undo (minimal + functional)
@@ -116,16 +119,13 @@ class PlannerDayViewModel @Inject constructor(
     fun setDate(date: LocalDate) {
         if (_state.value.date == date) return
 
-        // Update UI immediately (date strip changes instantly)
         _state.update { it.copy(date = date, isLoading = true, errorMessage = null) }
 
-        // Trigger the observer to switch flows (no cancel/relaunch)
         dateFlow.value = date
         ensureHorizonFor(date)
     }
 
     private fun ensureHorizonFor(date: LocalDate) {
-        // Cancel previous horizon ensure if user is rapidly flipping dates.
         ensureJob?.cancel()
         ensureJob = viewModelScope.launch {
             try {
@@ -134,7 +134,6 @@ class PlannerDayViewModel @Inject constructor(
                     lastEnsuredEnd = lastEnsuredEnd
                 )
             } catch (t: Throwable) {
-                // Non-fatal: planner still works with existing occurrences.
                 Log.w("PlannerHorizon", "Failed ensuring planner horizon: ${t.message}", t)
             }
         }
@@ -159,7 +158,6 @@ class PlannerDayViewModel @Inject constructor(
                 openMealPlanner(slot = event.slot)
             }
 
-            // ✅ Close sheet immediately, then cleanup empty created meal (async) + log notice.
             PlannerDayEvent.DismissAddSheet -> {
                 dismissAddSheetWithCleanup()
             }
@@ -426,10 +424,6 @@ class PlannerDayViewModel @Inject constructor(
                 )
             }
 
-            // ------------------------------------------------------------
-            // IOUs
-            // ------------------------------------------------------------
-
             PlannerDayEvent.OpenCreateIou -> {
                 openIouEditorCreate()
             }
@@ -682,7 +676,6 @@ class PlannerDayViewModel @Inject constructor(
     private fun logMeal(mealId: Long) {
         if (mealId <= 0L) return
 
-        // Resolve slot from current state (no extra DB call)
         val day = _state.value.day
         val slot: MealSlot? = day?.mealsBySlot
             ?.values
@@ -864,10 +857,8 @@ class PlannerDayViewModel @Inject constructor(
     private fun dismissAddSheetWithCleanup() {
         val createdMealId = _state.value.addSheet?.createdMealId
 
-        // Close immediately (UI)
         _state.update { it.copy(addSheet = null) }
 
-        // Cleanup in background
         if (createdMealId != null && createdMealId > 0L) {
             viewModelScope.launch {
                 try {
@@ -1222,7 +1213,6 @@ class PlannerDayViewModel @Inject constructor(
                     }
                 }
                 .collectLatest { plannedDay ->
-                    // Compute macro totals for the loaded day (best-effort; never blocks planner rendering).
                     val meals = plannedDay.mealsBySlot.values.flatten()
                     val macros = try {
                         computeDayMacros(meals)
@@ -1245,6 +1235,22 @@ class PlannerDayViewModel @Inject constructor(
                     }
                 }
         }
+
+        observeLoggedNamesJob = viewModelScope.launch {
+            dateFlow
+                .flatMapLatest { d ->
+                    observePlannerSlotLoggedNames(d.toString())
+                }
+                .distinctUntilChanged()
+                .catch { t ->
+                    Log.e("Meow", "PlannerDay> observePlannerSlotLoggedNames failed", t)
+                    _state.update { it.copy(loggedNamesBySlot = emptyMap()) }
+                }
+                .collectLatest { loggedNamesBySlot ->
+                    _state.update { it.copy(loggedNamesBySlot = loggedNamesBySlot) }
+                }
+        }
+
         ensureHorizonFor(_state.value.date)
     }
 
@@ -1261,9 +1267,9 @@ class PlannerDayViewModel @Inject constructor(
                     endConditionType = PlannedSeriesEndConditionType.INDEFINITE,
                     endConditionValue = null,
                     slotRules = listOf(
-                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 1, slot = MealSlot.LUNCH),      // Mon
-                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 2, slot = MealSlot.DINNER),     // Tue
-                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 5, slot = MealSlot.BREAKFAST),  // Fri
+                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 1, slot = MealSlot.LUNCH),
+                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 2, slot = MealSlot.DINNER),
+                        CreatePlannedSeriesUseCase.SlotRuleInput(weekday = 5, slot = MealSlot.BREAKFAST),
                     ),
                     sourceMealId = 0L,
                     nameOverride = "test"

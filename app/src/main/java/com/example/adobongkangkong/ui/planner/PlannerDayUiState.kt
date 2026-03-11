@@ -1,9 +1,9 @@
 package com.example.adobongkangkong.ui.planner
 
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.planner.model.PlannedDay
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
-import com.example.adobongkangkong.domain.model.MacroTotals
 import java.time.LocalDate
 
 data class PlannerDayUiState(
@@ -25,6 +25,16 @@ data class PlannerDayUiState(
 
     /** Macro totals for the entire day (sum of all planned meals/items). */
     val dayMacroTotals: MacroTotals = MacroTotals(),
+
+    /**
+     * Day-log item names grouped by stamped meal slot for the currently selected date.
+     *
+     * Phase 1 banner use:
+     * - awareness only
+     * - no planner-item reconciliation yet
+     * - names only, no quantities
+     */
+    val loggedNamesBySlot: Map<MealSlot, List<String>> = emptyMap(),
 
     /** IOU editor dialog state (null when closed). */
     val iouEditor: IouEditorState? = null,
@@ -62,7 +72,6 @@ data class UndoUiState(
     val id: Long,
     val message: String
 )
-
 
 enum class RecurrenceFrequencyUi {
     DAILY,

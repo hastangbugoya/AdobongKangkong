@@ -3,16 +3,14 @@ package com.example.adobongkangkong.ui.planner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -20,9 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -30,23 +31,23 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,17 +65,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
-import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.round
-import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,11 +88,8 @@ fun PlannerDayScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // NEW: Slot header "+ Add" now opens a chooser (empty vs template).
-    // "From template" is intentionally DISABLED until PlannerDayEvent + navigation plumbing is added.
     var addOptionsSlot by remember { mutableStateOf<MealSlot?>(null) }
 
-    // Show Undo snackbar when requested
     val undo = s.undo
     LaunchedEffect(undo?.id) {
         val u = undo ?: return@LaunchedEffect
@@ -142,7 +140,6 @@ fun PlannerDayScreen(
                 )
             }
 
-            // Daily macro totals (best-effort; may be zero if data is missing)
             item {
                 val dayTotals = s.dayMacroTotals
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -176,13 +173,12 @@ fun PlannerDayScreen(
 
             MealSlot.entries.forEach { slot ->
                 val meals = s.mealsBySlot[slot].orEmpty()
+                val loggedNames = s.loggedNamesBySlot[slot].orEmpty()
 
-                // NOTE:
-                // - "+ Add" in the slot header now opens a chooser (empty vs template).
-                // - The "Add" button inside EmptySlotCard still opens the bottom sheet.
                 item {
                     SlotHeader(
                         slot = slot,
+                        loggedBannerText = buildLoggedBannerText(loggedNames),
                         onAdd = { addOptionsSlot = slot }
                     )
                 }
@@ -207,9 +203,9 @@ fun PlannerDayScreen(
                     }
                 }
             }
+
             item { Spacer(Modifier.height(24.dp)) }
 
-            // TEMP DEBUG: create a sample recurring series (remove later)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -225,7 +221,6 @@ fun PlannerDayScreen(
         }
     }
 
-    // NEW: Slot header "+ Add" chooser.
     val openSlot = addOptionsSlot
     if (openSlot != null) {
         ModalBottomSheet(
@@ -315,19 +310,49 @@ private fun DateStrip(
 @Composable
 private fun SlotHeader(
     slot: MealSlot,
+    loggedBannerText: String?,
     onAdd: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = slot.display,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f)
-        )
-        TextButton(onClick = onAdd) { Text("+ Add") }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = slot.display,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onAdd) { Text("+ Add") }
+        }
+
+        if (!loggedBannerText.isNullOrBlank()) {
+            Text(
+                text = loggedBannerText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
+}
+
+private fun buildLoggedBannerText(
+    loggedNames: List<String>
+): String? {
+    if (loggedNames.isEmpty()) return null
+
+    val visibleNames = loggedNames.take(3)
+    val remaining = (loggedNames.size - visibleNames.size).coerceAtLeast(0)
+
+    val suffix = if (remaining > 0) {
+        visibleNames.joinToString(", ") + " +$remaining"
+    } else {
+        visibleNames.joinToString(", ")
+    }
+
+    val itemWord = if (loggedNames.size == 1) "item" else "items"
+    return "${loggedNames.size} $itemWord logged: $suffix"
 }
 
 @Composable
@@ -613,8 +638,6 @@ private fun PlannedMealCard(
             .clickable { onOpenMeal(meal.id) }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-
-            // Header row: title + recurring badge + overflow actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -721,7 +744,8 @@ private fun PlannedMealCard(
                     }
                     if (remaining > 0) {
                         Text("+$remaining more", style = MaterialTheme.typography.bodySmall)
-                    }                }
+                    }
+                }
             }
         }
     }
@@ -837,7 +861,6 @@ private fun AddToPlanBottomSheet(
                 }
             }
 
-            // Step 1: Ensure meal container exists
             if (sheet.createdMealId == null) {
                 TextButton(
                     onClick = { onEvent(PlannerDayEvent.CreateMealIfNeeded) },
@@ -856,7 +879,6 @@ private fun AddToPlanBottomSheet(
                 return@ModalBottomSheet
             }
 
-            // Step 2: Add items
             when (sheet.addItemMode) {
                 AddItemMode.NONE -> {
                     Row(
@@ -909,7 +931,6 @@ private fun FoodAddSection(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Run when we enter FOOD mode (or re-enter it)
     LaunchedEffect(sheet.addItemMode) {
         if (sheet.addItemMode == AddItemMode.FOOD) {
             focusRequester.requestFocus()
@@ -923,7 +944,9 @@ private fun FoodAddSection(
         value = sheet.query,
         onValueChange = { onEvent(PlannerDayEvent.UpdateAddQuery(it)) },
         label = { Text("Search") },
-        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester),
         singleLine = true
     )
 
