@@ -70,6 +70,7 @@ import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -652,7 +653,7 @@ private fun PlannedMealCard(
                     Icon(
                         painter = painterResource(R.drawable.rotate_reverse),
                         contentDescription = "Recurring",
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier.padding(end = 4.dp).size(AppIconSize.CardAction)
                     )
                 }
 
@@ -660,7 +661,8 @@ private fun PlannedMealCard(
                     IconButton(onClick = { showActionsMenu = true }) {
                         Icon(
                             painter = painterResource(R.drawable.menu_dots_vertical),
-                            contentDescription = "Meal actions"
+                            contentDescription = "Meal actions",
+                            modifier = Modifier.size(AppIconSize.CardAction)
                         )
                     }
                     DropdownMenu(
@@ -770,13 +772,15 @@ private fun PlannedItemRow(
         IconButton(onClick = onLog) {
             Icon(
                 painter = painterResource(R.drawable.log_file),
-                contentDescription = "Log"
+                contentDescription = "Log",
+                modifier = Modifier.size(AppIconSize.CardAction)
             )
         }
         IconButton(onClick = onRemove) {
             Icon(
                 painter = painterResource(R.drawable.trash),
-                contentDescription = "Remove"
+                contentDescription = "Remove",
+                modifier = Modifier.size(AppIconSize.CardAction)
             )
         }
     }

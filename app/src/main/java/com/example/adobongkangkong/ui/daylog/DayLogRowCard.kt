@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,7 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
 import com.example.adobongkangkong.ui.format.toPrettyTime
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import kotlin.math.roundToInt
 
 @Composable
@@ -84,7 +86,8 @@ fun DayLogRowCard(
                 IconButton(onClick = onDelete) {
                     Icon(
                         painter = painterResource(R.drawable.trash),
-                        contentDescription = "Delete log"
+                        contentDescription = "Delete log",
+                        modifier = Modifier.size(AppIconSize.CardAction)
                     )
                 }
             }
