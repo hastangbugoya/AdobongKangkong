@@ -37,7 +37,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         FoodCategoryCrossRefEntity::class,
         RecipeCategoryCrossRefEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -260,6 +260,23 @@ abstract class NutriDatabase : RoomDatabase() {
 
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_recipe_category_cross_refs_categoryId ON recipe_category_cross_refs(categoryId)"
+                )
+            }
+        }
+
+        val MIGRATION_17_18: Migration = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE food_barcodes ADD COLUMN overrideServingsPerPackage REAL"
+                )
+                db.execSQL(
+                    "ALTER TABLE food_barcodes ADD COLUMN overrideHouseholdServingText TEXT"
+                )
+                db.execSQL(
+                    "ALTER TABLE food_barcodes ADD COLUMN overrideServingSize REAL"
+                )
+                db.execSQL(
+                    "ALTER TABLE food_barcodes ADD COLUMN overrideServingUnit TEXT"
                 )
             }
         }

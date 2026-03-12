@@ -174,6 +174,8 @@ object UsdaToCsvNutrientMap {
         // ------------------------------------------------------------
 
         "269" to "SUGARS_G",                  // Total sugars
+        "212" to "FRUCTOSE_G",
+        "210" to "SUCROSE_G",
         "291" to "FIBER_G",                   // Dietary fiber
 
 
@@ -184,6 +186,8 @@ object UsdaToCsvNutrientMap {
         "601" to "CHOLESTEROL_MG",
         "606" to "SATURATED_FAT_G",
         "605" to "TRANS_FAT_G",
+        "645" to "MONO_FAT_G",
+        "646" to "POLY_FAT_G",
 
 
         // ------------------------------------------------------------
@@ -215,13 +219,18 @@ object UsdaToCsvNutrientMap {
         "328" to "VITAMIN_D_MCG",
         "320" to "VITAMIN_A_MCG",
         "401" to "VITAMIN_C_MG",
+        "430" to "VITAMIN_K_MCG",
         "415" to "VITAMIN_B6_MG",
         "418" to "VITAMIN_B12_MCG",
+        "431" to "FOLIC_ACID_MCG",
+        "435" to "FOLATE_DFE_MCG",
+
         "323" to "VITAMIN_E_MG",
         "319" to "RETINOL_MCG",
         "405" to "RIBOFLAVIN_MG",
         "406" to "NIACIN_MG",
         "421" to "CHOLINE_MG",
+        "321" to "BETA_CAROTENE_MCG",
 
 
         // ------------------------------------------------------------
@@ -229,6 +238,15 @@ object UsdaToCsvNutrientMap {
         // ------------------------------------------------------------
 
         "539" to "ADDED_SUGARS_G",
+
+        // ------------------------------------------------------------
+        // Other
+        // ------------------------------------------------------------
+        "262" to "CAFFEINE_MG",
+        "263" to "THEOBROMINE_MG",
+        "221" to "ETHYL_ALCOHOL_G",
+        "255" to "WATER_G",
+        "338" to "LUTEIN_ZEAXANTHIN_MCG",
     )
 }
 

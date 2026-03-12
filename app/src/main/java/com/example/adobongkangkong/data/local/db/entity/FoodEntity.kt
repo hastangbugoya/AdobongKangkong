@@ -121,5 +121,5 @@ data class FoodEntity(
      */
     val usdaServingSize: Double? = null,
     val usdaServingUnit: ServingUnit? = null,
-    val usdaHouseholdServingText: String? = null
+    val usdaHouseholdServingText: String? = null,
 )
