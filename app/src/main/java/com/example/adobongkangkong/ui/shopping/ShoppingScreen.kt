@@ -44,6 +44,7 @@ import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 private enum class ShoppingTab { TOTALLED, NOT_TOTALLED }
 
@@ -60,6 +61,9 @@ fun ShoppingScreen(
 
     val state by vm.state.collectAsState()
     var tab by remember { mutableStateOf(ShoppingTab.TOTALLED) }
+    val startDateLabel = remember(startDate) {
+        startDate.format(DateTimeFormatter.ofPattern("EEE, MMM d, yyyy"))
+    }
 
     Scaffold(
         topBar = {
@@ -82,6 +86,14 @@ fun ShoppingScreen(
                 .fillMaxSize()
                 .padding(12.dp)
         ) {
+            Text(
+                text = "Needs as of $startDateLabel",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(8.dp))
+
             OutlinedTextField(
                 value = state.daysText,
                 onValueChange = vm::onDaysTextChanged,
