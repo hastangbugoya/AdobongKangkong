@@ -20,6 +20,7 @@ import kotlin.math.abs
 import java.util.Locale
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 /**
  * Shared, QuickAdd-canonical "selected food" input panel.
@@ -126,7 +127,8 @@ fun SelectedFoodPanel(
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.exchange),
-                    contentDescription = "Change serving unit"
+                    contentDescription = "Change serving unit",
+                    modifier = Modifier.size(AppIconSize.CardAction),
                 )
             }
         }
@@ -196,7 +198,8 @@ fun SelectedFoodPanel(
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.exchange),
-                        contentDescription = "Change serving unit"
+                        contentDescription = "Change serving unit",
+                        modifier = Modifier.size(AppIconSize.CardAction),
                     )
                 }
             }

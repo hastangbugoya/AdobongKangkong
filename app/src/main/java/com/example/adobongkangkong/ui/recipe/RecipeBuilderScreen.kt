@@ -83,6 +83,7 @@ import androidx.compose.ui.draw.clip
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import androidx.compose.material3.CircularProgressIndicator
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -461,7 +462,8 @@ fun RecipeBuilderScreen(
                                             Icon(
                                                 painter = painterResource(id = R.drawable.trash),
                                                 contentDescription = "Remove ingredient",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(AppIconSize.CardAction)
                                             )
                                         }
                                     }

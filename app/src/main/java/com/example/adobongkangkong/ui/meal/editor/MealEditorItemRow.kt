@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 //import androidx.compose.material.icons.Icons
 //import androidx.compose.material.icons.filled.ArrowDownward
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 @Composable
 fun MealEditorItemRow(
@@ -56,18 +58,30 @@ fun MealEditorItemRow(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onRemove) {
-                    Icon(painter = painterResource(R.drawable.trash), contentDescription = "Remove")
+                    Icon(
+                        painter = painterResource(R.drawable.trash),
+                        contentDescription = "Remove",
+                        modifier = Modifier.size(AppIconSize.CardAction),
+                        )
                 }
                 if (onMoveUp != null) {
                     IconButton(onClick = onMoveUp) {
-                        Icon(painter = painterResource(R.drawable.angle_double_small_down), contentDescription = "Move up")
+                        Icon(
+                            painter = painterResource(R.drawable.angle_double_small_down),
+                            contentDescription = "Move up",
+                            modifier = Modifier.size(AppIconSize.CardAction),
+                            )
                     }
                 } else {
                     Spacer(modifier = Modifier.width(12.dp))
                 }
                 if (onMoveDown != null) {
                     IconButton(onClick = onMoveDown) {
-                        Icon(painter = painterResource(R.drawable.angle_double_small_up), contentDescription = "Move down")
+                        Icon(
+                            painter = painterResource(R.drawable.angle_double_small_up),
+                            contentDescription = "Move down",
+                            modifier = Modifier.size(AppIconSize.CardAction),
+                            )
                     }
                 }
             }

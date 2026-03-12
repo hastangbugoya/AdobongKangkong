@@ -53,6 +53,7 @@ import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
 import com.example.adobongkangkong.ui.theme.LimitRed
 import java.time.Instant
@@ -448,7 +449,7 @@ private fun DashboardNutrientCardRow(
                 painter = painterResource(icon),
                 contentDescription = card.status.name,
                 tint = tint,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(AppIconSize.Inline),
             )
         }
 

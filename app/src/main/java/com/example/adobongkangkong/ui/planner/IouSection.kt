@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -24,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.planner.model.Iou
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 @Composable
 fun IouSection(
@@ -73,7 +75,8 @@ private fun IouRow(
         IconButton(onClick = { expanded = true }) {
             Icon(
                 painter = painterResource(R.drawable.menu_dots_vertical),
-                contentDescription = "IOU actions"
+                contentDescription = "IOU actions",
+                modifier = Modifier.size(AppIconSize.CardAction),
             )
         }
 

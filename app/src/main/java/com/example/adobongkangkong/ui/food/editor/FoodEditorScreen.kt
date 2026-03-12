@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -69,6 +70,7 @@ import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.common.sectionedByCategory
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 /**
  * FoodEditorScreen (stateless)
@@ -932,7 +934,7 @@ private fun NeedsFixBannerRow(
                 painter = painterResource(R.drawable.employee_handbook),
                 contentDescription = null,
                 tint = Color.Red,
-                modifier = androidx.compose.ui.Modifier.size(18.dp)
+                modifier = Modifier.size(AppIconSize.CardAction),
             )
             Spacer(androidx.compose.ui.Modifier.width(10.dp))
             Text(
@@ -1008,7 +1010,12 @@ private fun NutrientRowEditor(
             }
 
             IconButton(onClick = onRemove) {
-                Icon(painter = painterResource(R.drawable.trash), contentDescription = "Remove nutrient")
+                Icon(
+                    painter = painterResource(R.drawable.trash),
+                    contentDescription = "Remove nutrient",
+                    modifier = Modifier.size(AppIconSize.CardAction)
+                )
+
             }
         }
 
@@ -1074,7 +1081,11 @@ private fun NutrientSearchResultRow(
         }
 
         IconButton(onClick = { menuExpanded = true }) {
-            Icon(painter = painterResource(R.drawable.circle_ellipsis_vertical), contentDescription = "More")
+            Icon(
+                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                contentDescription = "More",
+                modifier = Modifier.size(AppIconSize.CardAction)
+            )
         }
 
         DropdownMenu(

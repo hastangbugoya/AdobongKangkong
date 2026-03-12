@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
 import com.example.adobongkangkong.ui.theme.LimitRed
 import java.time.LocalDate
@@ -97,7 +98,7 @@ fun CalendarDayCell(
                     Icon(
                         painter = dailyGoalIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(AppIconSize.CardAction),
                         tint = tint
                     )
                 } else {

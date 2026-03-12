@@ -132,14 +132,16 @@ fun CalendarWeeklyMacroGraphSection(
             }
 
             Spacer(Modifier.height(4.dp))
-
             Text(
-                text = "Preview only",
+                text = "Target calories: ${targetCalories ?: 0}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(Modifier.height(10.dp))
+
+            val plotHeight = 120.dp
+            val dayLabelBlockHeight = 26.dp // 6.dp spacer + 20.dp label box
 
             Box(
                 modifier = Modifier
@@ -147,19 +149,21 @@ fun CalendarWeeklyMacroGraphSection(
                     .height(176.dp),
             ) {
                 targetFraction?.let { fraction ->
-                    val lineHeight = 120.dp * fraction.coerceIn(0f, 1f)
+                    val targetOffsetFromBottom = plotHeight * fraction.coerceIn(0f, 1f)
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
+                            .height(plotHeight)
                             .align(Alignment.BottomCenter)
+                            .offset(y = -dayLabelBlockHeight)
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
                                 .align(Alignment.BottomCenter)
-                                .offset(y = -lineHeight)
+                                .offset(y = -targetOffsetFromBottom)
                                 .background(
                                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                                 )

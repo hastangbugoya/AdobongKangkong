@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.daylog.model.DayLogIouRow
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 @Composable
 fun DayLogIouRowCard(
@@ -61,7 +63,8 @@ fun DayLogIouRowCard(
             IconButton(onClick = onDelete) {
                 Icon(
                     painter = painterResource(R.drawable.trash),
-                    contentDescription = "Delete IOU"
+                    contentDescription = "Delete IOU",
+                    modifier = Modifier.size(AppIconSize.CardAction)
                 )
             }
         }

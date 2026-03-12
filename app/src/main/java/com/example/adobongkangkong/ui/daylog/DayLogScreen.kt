@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.daylog
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -98,20 +99,31 @@ fun DayLogScreen(
             )
         }
     ) { padding ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+
             totals?.let { DayTotalsCard(it) }
 
-            LazyColumn {
+            LazyColumn(
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = 4.dp,
+                    bottom = 16.dp
+                )
+            ) {
+
                 groupedEntries.forEach { section ->
+
                     item(key = "slot_header_${section.key}") {
                         Text(
                             text = section.title,
                             style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(vertical = 10.dp)
                         )
                     }
 
@@ -119,6 +131,7 @@ fun DayLogScreen(
                         items = section.rows,
                         key = { it.logId }
                     ) { row ->
+
                         DayLogRowCard(
                             row = row,
                             onClick = {
@@ -127,16 +140,18 @@ fun DayLogScreen(
                             },
                             onDelete = { delete(row.logId) }
                         )
+
                         HorizontalDivider()
                     }
                 }
 
                 if (ious.isNotEmpty()) {
+
                     item(key = "iou_header") {
                         Text(
                             text = "IOUs",
                             style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            modifier = Modifier.padding(vertical = 10.dp)
                         )
                     }
 
@@ -144,10 +159,12 @@ fun DayLogScreen(
                         items = ious,
                         key = { "iou_${it.iouId}" }
                     ) { row ->
+
                         DayLogIouRowCard(
                             row = row,
                             onDelete = { vm.deleteIou(row.iouId) }
                         )
+
                         HorizontalDivider()
                     }
                 }
@@ -165,13 +182,16 @@ private data class DayLogSection(
 private fun buildDayLogSections(
     entries: List<DayLogRow>
 ): List<DayLogSection> {
+
     if (entries.isEmpty()) return emptyList()
 
     val grouped = entries.groupBy { it.mealSlot }
     val sections = mutableListOf<DayLogSection>()
 
     MealSlot.entries.forEach { slot ->
+
         val rows = grouped[slot].orEmpty()
+
         if (rows.isNotEmpty()) {
             sections += DayLogSection(
                 key = slot.name,
@@ -182,6 +202,7 @@ private fun buildDayLogSections(
     }
 
     val unslotted = grouped[null].orEmpty()
+
     if (unslotted.isNotEmpty()) {
         sections += DayLogSection(
             key = "UNSLOTTED",

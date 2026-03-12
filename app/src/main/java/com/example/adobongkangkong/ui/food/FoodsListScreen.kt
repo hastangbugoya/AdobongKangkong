@@ -57,6 +57,7 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.generateBlurDerivative
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -236,7 +237,8 @@ private fun FoodsSortRow(
         IconButton(onClick = onToggleDirection) {
             Icon(
                 painter = painterResource(R.drawable.priority_arrows),
-                contentDescription = "Toggle sort direction"
+                contentDescription = "Toggle sort direction",
+                modifier = Modifier.size(AppIconSize.CardAction)
             )
         }
     }
@@ -364,7 +366,7 @@ private fun FoodRow(
                             if (row.isRecipe) R.drawable.recipe else R.drawable.salad
                         ),
                         contentDescription = if (row.isRecipe) "Recipe" else "Food",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(AppIconSize.CardAction),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
@@ -395,7 +397,7 @@ private fun NeedsFixBanner(
             painter = painterResource(R.drawable.triangle_warning),
             contentDescription = "Needs fix",
             tint = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(AppIconSize.CardAction)
         )
         Text(
             text = message,
@@ -425,7 +427,7 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
             Icon(
                 painter = painterResource(R.drawable.star),
                 contentDescription = "Favorite",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(AppIconSize.CardAction),
             )
         }
 
@@ -433,7 +435,7 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
             Icon(
                 painter = painterResource(R.drawable.social_network),
                 contentDescription = "Eat more",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(AppIconSize.CardAction),
             )
         }
 
@@ -441,7 +443,7 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
             Icon(
                 painter = painterResource(R.drawable.triangle_warning),
                 contentDescription = "Limit",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(AppIconSize.CardAction),
             )
         }
     }
