@@ -204,3 +204,40 @@ private fun ServingUnit.mlPerUnit(): Double = when (this) {
     )
 }
 
+fun ServingUnit.Companion.isAmbiguousForGrounding(unit: ServingUnit): Boolean {
+    return when (unit) {
+        ServingUnit.TSP_US,
+        ServingUnit.TBSP_US,
+        ServingUnit.FL_OZ_US,
+        ServingUnit.CUP_US,
+        ServingUnit.CUP_METRIC,
+        ServingUnit.CUP_JP,
+        ServingUnit.RCCUP,
+        ServingUnit.TSP,
+        ServingUnit.TBSP,
+        ServingUnit.CUP,
+        ServingUnit.CAN,
+        ServingUnit.BOTTLE,
+        ServingUnit.JAR -> true
+        else -> false
+    }
+}
+
+fun ServingUnit.isAmbiguousForGrounding(): Boolean {
+    return when (this) {
+        ServingUnit.TSP_US,
+        ServingUnit.TBSP_US,
+        ServingUnit.FL_OZ_US,
+        ServingUnit.CUP_US,
+        ServingUnit.CUP_METRIC,
+        ServingUnit.CUP_JP,
+        ServingUnit.RCCUP,
+        ServingUnit.TSP,
+        ServingUnit.TBSP,
+        ServingUnit.CUP,
+        ServingUnit.CAN,
+        ServingUnit.BOTTLE,
+        ServingUnit.JAR -> true
+        else -> false
+    }
+}

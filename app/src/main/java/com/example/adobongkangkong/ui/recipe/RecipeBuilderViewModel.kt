@@ -490,7 +490,8 @@ class RecipeBuilderViewModel @Inject constructor(
                                 aliases = nutrient.aliases,
                                 unit = nutrient.unit,
                                 category = nutrient.category,
-                                amount = formatTallyAmount(v)
+                                amount = formatTallyAmount(v),
+                                code = nutrient.code
                             )
                         )
                     }

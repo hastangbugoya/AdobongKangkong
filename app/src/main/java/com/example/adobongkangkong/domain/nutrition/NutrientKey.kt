@@ -156,7 +156,7 @@ value class NutrientKey(val value: String) {
         val FIBER_G = NutrientKey("FIBER_G")
 
         /** Total sugar in grams. */
-        val SUGAR_G = NutrientKey("SUGAR_G")
+        val SUGARS_G = NutrientKey("SUGARS_G")
 
         /** Sodium in milligrams. */
         val SODIUM_MG = NutrientKey("SODIUM_MG")

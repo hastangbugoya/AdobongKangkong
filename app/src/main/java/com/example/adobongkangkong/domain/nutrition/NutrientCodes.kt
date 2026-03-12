@@ -149,7 +149,7 @@ object NutrientCodes {
     const val FIBER_G = "FIBER_G"
 
     /** Total sugars in grams. */
-    const val SUGAR_G = "SUGAR_G"
+    const val SUGARS_G = "SUGARS_G"
 
     /** Sodium in milligrams. */
     const val SODIUM_MG = "SODIUM_MG"

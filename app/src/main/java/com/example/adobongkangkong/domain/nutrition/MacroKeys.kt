@@ -82,7 +82,7 @@ object MacroKeys {
     val FAT      = NutrientKey(NutrientCodes.FAT_G)
 
     // Optional extras
-    val SUGAR    = NutrientKey(NutrientCodes.SUGAR_G)
+    val SUGARS    = NutrientKey(NutrientCodes.SUGARS_G)
     val FIBER    = NutrientKey(NutrientCodes.FIBER_G)
     val SODIUM   = NutrientKey(NutrientCodes.SODIUM_MG)
 }

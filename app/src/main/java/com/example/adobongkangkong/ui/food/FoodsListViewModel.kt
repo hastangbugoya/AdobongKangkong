@@ -212,7 +212,7 @@ class FoodsListViewModel @Inject constructor(
                     protein = pick(NutrientKey.PROTEIN_G.value),
                     carbs = pick(NutrientKey.CARBS_G.value),
                     fat = pick(NutrientKey.FAT_G.value),
-                    sugar = pick(NutrientKey.SUGAR_G.value)
+                    sugar = pick(NutrientKey.SUGARS_G.value)
                 )
             }
 

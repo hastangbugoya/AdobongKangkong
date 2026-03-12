@@ -589,27 +589,33 @@ class ImportUsdaFoodFromSearchJsonUseCaseTest {
 
     @Test
     fun parser_reads_minimum_fields_required_for_import() {
-
         val json = """
-    {
-      "totalHits": 1,
-      "foods": [
         {
-          "fdcId": 999,
-          "description": "Parser Test Food",
-          "gtinUpc": "012345678901",
-          "brandOwner": "TestBrand",
-          "servingSize": 30.0,
-          "servingSizeUnit": "g",
-          "foodNutrients": [
+          "totalHits": 1,
+          "foods": [
             {
-              "nutrientNumber": "208",
-              "value": 120.0
+              "fdcId": 999,
+              "description": "Parser Test Food",
+              "gtinUpc": "012345678901",
+              "brandOwner": "TestBrand",
+              "brandName": null,
+              "publishedDate": "2024-01-01",
+              "modifiedDate": "2024-02-01",
+              "servingSize": 30.0,
+              "servingSizeUnit": "g",
+              "householdServingFullText": null,
+              "foodNutrients": [
+                {
+                  "nutrientId": 0,
+                  "nutrientNumber": "208",
+                  "value": 120.0,
+                  "unitName": null,
+                  "nutrientName": null
+                }
+              ]
             }
           ]
         }
-      ]
-    }
     """.trimIndent()
 
         val parsed = UsdaFoodsSearchParser.parse(json)

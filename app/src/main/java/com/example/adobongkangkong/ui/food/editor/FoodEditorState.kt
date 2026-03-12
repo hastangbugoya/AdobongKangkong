@@ -13,15 +13,13 @@ enum class GroundingMode {
 
 data class NutrientRowUi(
     val nutrientId: Long,
+    val code: String,
     val name: String,
     val aliases: List<String> = emptyList(),
     val unit: NutrientUnit,
     val category: NutrientCategory,
     val amount: String // keep as String for text field editing
 )
-
-
-
 
 data class FoodEditorState(
     val foodId: Long? = null,
@@ -146,9 +144,9 @@ data class FoodCategoryUi(
     val isSystem: Boolean = false,
 )
 
-
 data class NutrientSearchResultUi(
     val id: Long,
+    val code: String,
     val name: String,
     val unit: NutrientUnit,
     val category: NutrientCategory,

@@ -22,8 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -69,7 +69,6 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
-import com.example.adobongkangkong.ui.common.sectionedByCategory
 import com.example.adobongkangkong.ui.theme.AppIconSize
 
 /**
@@ -173,7 +172,12 @@ fun FoodEditorScreen(
             .toSet()
     }
 
-    // ---------------- Navigate-away warning (state-driven) ----------------
+    val (primaryNutrientRows, secondaryNutrientRows) = remember(state.nutrientRows) {
+        state.nutrientRows.partition { it.code in EditorDefaultNutrients.codes }
+    }
+
+    var showMoreNutrients by rememberSaveable { mutableStateOf(false) }
+
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -187,9 +191,6 @@ fun FoodEditorScreen(
 
     BackHandler { requestExit() }
 
-
-// ---------------- Barcode picker overlay ----------------
-// Show whenever we have candidates, regardless of "scanner open" flag.
     if (state.barcodePickItems.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = onCloseBarcodeScanner,
@@ -198,7 +199,7 @@ fun FoodEditorScreen(
                 LazyColumn {
                     items(state.barcodePickItems, key = { it.fdcId }) { item ->
                         Column(
-                            modifier = androidx.compose.ui.Modifier
+                            modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onPickBarcodeCandidate(item.fdcId) }
                                 .padding(vertical = 10.dp)
@@ -279,7 +280,6 @@ fun FoodEditorScreen(
         )
     }
 
-    // ---------------- Barcode fallback: USDA failed ----------------
     if (state.isBarcodeFallbackOpen) {
         val alreadyAssignedFoodId = state.barcodeAlreadyAssignedFoodId
         val conflict = alreadyAssignedFoodId != null
@@ -313,7 +313,7 @@ fun FoodEditorScreen(
                         onValueChange = onBarcodeFallbackCreateNameChange,
                         label = { Text("Food name") },
                         singleLine = true,
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         enabled = !conflict
                     )
                 }
@@ -342,7 +342,6 @@ fun FoodEditorScreen(
         )
     }
 
-    // ---------------- Barcode remap confirm ----------------
     val remap = state.barcodeRemapDialog
     if (remap != null) {
         val replaceLabel =
@@ -366,7 +365,6 @@ fun FoodEditorScreen(
         )
     }
 
-    // ---------------- Barcode collision resolution ----------------
     val collision = state.barcodeCollisionDialog
     if (collision != null) {
         AlertDialog(
@@ -407,8 +405,6 @@ fun FoodEditorScreen(
         )
     }
 
-    // ----------------------------------------------------------------------
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -441,7 +437,7 @@ fun FoodEditorScreen(
         }
     ) { padding ->
         BoxWithConstraints(
-            modifier = androidx.compose.ui.Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
@@ -449,7 +445,7 @@ fun FoodEditorScreen(
             val initialAmounts = remember { mutableStateMapOf<Long, String>() }
 
             LazyColumn(
-                modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -458,7 +454,6 @@ fun FoodEditorScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ✅ NEW: Needs-fix banner at the very top of scroll content
                 if (state.needsFix && !state.fixMessage.isNullOrBlank() && !state.fixBannerDismissed) {
                     item(key = "needs_fix_banner") {
                         NeedsFixBannerRow(
@@ -497,8 +492,8 @@ fun FoodEditorScreen(
                     }
 
                     val bmp = bannerBitmapState?.value
-                    androidx.compose.foundation.layout.Box(
-                        modifier = androidx.compose.ui.Modifier
+                    BoxWithConstraints(
+                        modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(3f / 1f)
                             .clipToBounds()
@@ -508,7 +503,7 @@ fun FoodEditorScreen(
                                 bitmap = bmp.asImageBitmap(),
                                 contentDescription = null,
                                 alignment = Alignment.Center,
-                                modifier = androidx.compose.ui.Modifier.matchParentSize(),
+                                modifier = Modifier.matchParentSize(),
                                 contentScale = ContentScale.FillWidth
                             )
                         } else {
@@ -516,7 +511,7 @@ fun FoodEditorScreen(
                                 painter = painterResource(R.drawable.foods_banner),
                                 contentDescription = null,
                                 alignment = Alignment.Center,
-                                modifier = androidx.compose.ui.Modifier.matchParentSize(),
+                                modifier = Modifier.matchParentSize(),
                                 contentScale = ContentScale.FillWidth
                             )
                         }
@@ -524,7 +519,7 @@ fun FoodEditorScreen(
                         if (canCaptureBanner) {
                             IconButton(
                                 onClick = { bannerCaptureController.open(bannerOwnerId!!) },
-                                modifier = androidx.compose.ui.Modifier
+                                modifier = Modifier
                                     .align(Alignment.BottomEnd)
                                     .padding(8.dp)
                             ) {
@@ -537,7 +532,7 @@ fun FoodEditorScreen(
 
                         if (hasStoredBanner && bmp == null) {
                             CircularProgressIndicator(
-                                modifier = androidx.compose.ui.Modifier
+                                modifier = Modifier
                                     .align(Alignment.BottomStart)
                                     .padding(10.dp)
                                     .size(50.dp),
@@ -547,12 +542,12 @@ fun FoodEditorScreen(
                     }
 
                     Column(
-                        modifier = androidx.compose.ui.Modifier
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
                         Row(
-                            modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.End
                         ) {
@@ -573,7 +568,7 @@ fun FoodEditorScreen(
                                 text = "Save first to enable banner image.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = androidx.compose.ui.Modifier.padding(top = 2.dp)
+                                modifier = Modifier.padding(top = 2.dp)
                             )
                         }
                     }
@@ -585,7 +580,7 @@ fun FoodEditorScreen(
                         onValueChange = onNameChange,
                         label = { Text("Food name") },
                         singleLine = true,
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
@@ -595,19 +590,19 @@ fun FoodEditorScreen(
                         onValueChange = onBrandChange,
                         label = { Text("Brand") },
                         singleLine = true,
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
                 item {
                     Row(
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedButton(onClick = onOpenBarcodeScanner) {
                             Text("Scan barcode")
                         }
-                        Spacer(androidx.compose.ui.Modifier.width(12.dp))
+                        Spacer(Modifier.width(12.dp))
                         if (state.scannedBarcode.isNotBlank()) {
                             Text(
                                 text = "Scanned: ${state.scannedBarcode}",
@@ -631,12 +626,12 @@ fun FoodEditorScreen(
                                     var confirmOpen by remember(code) { mutableStateOf(false) }
 
                                     Row(
-                                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                                        modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text = code,
-                                            modifier = androidx.compose.ui.Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f)
                                         )
 
                                         TextButton(onClick = { confirmOpen = true }) {
@@ -701,7 +696,7 @@ fun FoodEditorScreen(
                         } else {
                             state.categories.forEach { category ->
                                 Row(
-                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Checkbox(
@@ -710,14 +705,14 @@ fun FoodEditorScreen(
                                             onCategoryCheckedChange(category.id, checked)
                                         }
                                     )
-                                    Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                                    Spacer(Modifier.width(8.dp))
                                     Text(category.name)
                                 }
                             }
                         }
 
                         Row(
-                            modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
@@ -725,9 +720,9 @@ fun FoodEditorScreen(
                                 onValueChange = onNewCategoryNameChange,
                                 label = { Text("New category") },
                                 singleLine = true,
-                                modifier = androidx.compose.ui.Modifier.weight(1f)
+                                modifier = Modifier.weight(1f)
                             )
-                            Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                            Spacer(Modifier.width(8.dp))
                             Button(onClick = onCreateCategory) {
                                 Text("Add")
                             }
@@ -752,16 +747,14 @@ fun FoodEditorScreen(
                 item {
                     SectionHeader(
                         title = "Nutrients",
-                        subtitle = "Edit amounts (as entered) per serving unit."
+                        subtitle = "Edit common nutrients first. Expand to show the rest."
                     )
                 }
 
-                sectionedByCategory(
-                    items = state.nutrientRows,
-                    categoryOf = { it.category },
-                    keyOf = { index, row -> "${row.nutrientId}_$index" },
-                    header = { _ -> }
-                ) { _, row ->
+                items(
+                    items = primaryNutrientRows,
+                    key = { row -> row.nutrientId }
+                ) { row ->
                     val initial = initialAmounts.getOrPut(row.nutrientId) { row.amount }
                     val isChanged = row.amount != initial
 
@@ -777,56 +770,36 @@ fun FoodEditorScreen(
                     )
                 }
 
-                item { HorizontalDivider() }
-
-                item {
-                    SectionHeader(
-                        title = "Add nutrient",
-                        subtitle = "Search nutrients and add them to this food."
-                    )
-                }
-
-                item {
-                    OutlinedTextField(
-                        value = state.nutrientSearchQuery,
-                        onValueChange = onNutrientSearchQueryChange,
-                        label = { Text("Search nutrients") },
-                        singleLine = true,
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-                    )
-                }
-
-                if (state.nutrientSearchResults.isNotEmpty()) {
+                if (secondaryNutrientRows.isNotEmpty()) {
                     item {
-                        Text(
-                            text = "Results",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        TextButton(onClick = { showMoreNutrients = !showMoreNutrients }) {
+                            Text(if (showMoreNutrients) "Hide extra nutrients" else "Show more nutrients")
+                        }
                     }
+                }
 
+                if (showMoreNutrients) {
                     items(
-                        items = state.nutrientSearchResults,
-                        key = { it.id }
-                    ) { item ->
-                        val alreadyAdded = item.id in attachedNutrientIds
+                        items = secondaryNutrientRows,
+                        key = { row -> row.nutrientId }
+                    ) { row ->
+                        val initial = initialAmounts.getOrPut(row.nutrientId) { row.amount }
+                        val isChanged = row.amount != initial
 
-                        NutrientSearchResultRow(
-                            item = item,
-                            alreadyAdded = alreadyAdded,
-                            onAdd = { onAddNutrientFromSearch(item.id) },
-                            onManageAliases = { onOpenAliasSheet(item.id, item.name) }
-                        )
-                    }
-                } else if (state.nutrientSearchQuery.isNotBlank()) {
-                    item {
-                        Text(
-                            text = "No results.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        NutrientRowEditor(
+                            row = row,
+                            isChanged = isChanged,
+                            onAmountChange = { newValue -> onNutrientAmountChange(row.nutrientId, newValue) },
+                            onRemove = {
+                                initialAmounts.remove(row.nutrientId)
+                                onRemoveNutrient(row.nutrientId)
+                            },
+                            isTablet = isTablet
                         )
                     }
                 }
+
+                item { HorizontalDivider() }
 
                 if (!state.stableId.isNullOrBlank()) {
                     item {
@@ -866,7 +839,6 @@ fun FoodEditorScreen(
         }
     }
 
-    // ---------------- Exit dialog ----------------
     if (showExitDialog.value) {
         AlertDialog(
             onDismissRequest = { showExitDialog.value = false },
@@ -895,7 +867,6 @@ fun FoodEditorScreen(
         )
     }
 
-    // ---------------- Alias sheet ----------------
     if (aliasSheetNutrientName != null) {
         ManageNutrientAliasesBottomSheet(
             nutrientDisplayName = aliasSheetNutrientName,
@@ -908,11 +879,6 @@ fun FoodEditorScreen(
     }
 }
 
-/**
- * ✅ NEW: the non-blocking “Needs Fix” banner row.
- *
- * Placed at the top of the editor scroll content.
- */
 @Composable
 private fun NeedsFixBannerRow(
     message: String,
@@ -922,10 +888,10 @@ private fun NeedsFixBannerRow(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
         tonalElevation = 0.dp,
-        modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = androidx.compose.ui.Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -936,14 +902,14 @@ private fun NeedsFixBannerRow(
                 tint = Color.Red,
                 modifier = Modifier.size(AppIconSize.CardAction),
             )
-            Spacer(androidx.compose.ui.Modifier.width(10.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = androidx.compose.ui.Modifier.weight(1f)
+                modifier = Modifier.weight(1f)
             )
             if (onDismiss != null) {
-                Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onDismiss, contentPadding = PaddingValues(0.dp)) {
                     Text("Dismiss")
                 }
@@ -952,9 +918,6 @@ private fun NeedsFixBannerRow(
     }
 }
 
-/**
- * Simple section header used in the editor form.
- */
 @Composable
 private fun SectionHeader(
     title: String,
@@ -972,9 +935,6 @@ private fun SectionHeader(
     }
 }
 
-/**
- * Editable nutrient row.
- */
 @Composable
 private fun NutrientRowEditor(
     row: NutrientRowUi,
@@ -983,23 +943,40 @@ private fun NutrientRowEditor(
     onRemove: () -> Unit,
     isTablet: Boolean
 ) {
+    val supportAlias = remember(row.aliases, row.name) {
+        row.aliases.firstOrNull { alias ->
+            alias.isNotBlank() && !alias.equals(row.name, ignoreCase = true)
+        }
+    }
+
     Column(
-        modifier = androidx.compose.ui.Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
-            modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = row.name,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (!supportAlias.isNullOrBlank()) {
+                    Text(
+                        text = supportAlias,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
                 Text(
                     text = row.unit.labelForUi(),
                     style = MaterialTheme.typography.bodySmall,
@@ -1015,7 +992,6 @@ private fun NutrientRowEditor(
                     contentDescription = "Remove nutrient",
                     modifier = Modifier.size(AppIconSize.CardAction)
                 )
-
             }
         }
 
@@ -1033,14 +1009,11 @@ private fun NutrientRowEditor(
             },
             label = { Text("Amount") },
             singleLine = true,
-            modifier = if (isTablet) androidx.compose.ui.Modifier.fillMaxWidth(0.6f) else androidx.compose.ui.Modifier.fillMaxWidth()
+            modifier = if (isTablet) Modifier.fillMaxWidth(0.6f) else Modifier.fillMaxWidth()
         )
     }
 }
 
-/**
- * One row in the “Add nutrient” search results list.
- */
 @Composable
 private fun NutrientSearchResultRow(
     item: NutrientSearchResultUi,
@@ -1049,14 +1022,19 @@ private fun NutrientSearchResultRow(
     onManageAliases: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val supportAlias = remember(item.aliases, item.name) {
+        item.aliases.firstOrNull { alias ->
+            alias.isNotBlank() && !alias.equals(item.name, ignoreCase = true)
+        }
+    }
 
     Row(
-        modifier = androidx.compose.ui.Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = item.name,
                 style = MaterialTheme.typography.bodyLarge,
@@ -1065,6 +1043,14 @@ private fun NutrientSearchResultRow(
                 else
                     MaterialTheme.colorScheme.onSurface
             )
+
+            if (!supportAlias.isNullOrBlank()) {
+                Text(
+                    text = supportAlias,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Text(
                 text = "${item.unit.labelForUi()} • ${item.category.labelForUi()}",
@@ -1103,9 +1089,6 @@ private fun NutrientSearchResultRow(
     }
 }
 
-/**
- * Serving / measurement section.
- */
 @Composable
 private fun ServingSection(
     servingSize: String,
@@ -1131,12 +1114,12 @@ private fun ServingSection(
                     onValueChange = onServingSizeChange,
                     label = { Text("Serving size") },
                     singleLine = true,
-                    modifier = androidx.compose.ui.Modifier.weight(1f)
+                    modifier = Modifier.weight(1f)
                 )
                 ServingUnitDropdown(
                     value = servingUnit,
                     onValueChange = onServingUnitChange,
-                    modifier = androidx.compose.ui.Modifier.weight(1f),
+                    modifier = Modifier.weight(1f),
                     options = ServingUnit.values().toList()
                 )
             }
@@ -1146,12 +1129,12 @@ private fun ServingSection(
                 onValueChange = onServingSizeChange,
                 label = { Text("Serving size") },
                 singleLine = true,
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             )
             ServingUnitDropdown(
                 value = servingUnit,
                 onValueChange = onServingUnitChange,
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 options = ServingUnit.values().toList()
             )
         }
@@ -1187,7 +1170,7 @@ private fun ServingSection(
                 },
                 label = { Text("mL per serving") },
                 singleLine = true,
-                modifier = androidx.compose.ui.Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { focus ->
                         mlPerServingFocused = focus.isFocused
@@ -1204,7 +1187,7 @@ private fun ServingSection(
                     enabled = false,
                     label = { Text("mL per 1 ${servingUnit.display}") },
                     singleLine = true,
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         } else {
@@ -1225,7 +1208,6 @@ private fun ServingSection(
                 if (gramsPerServingText != next) gramsPerServingText = next
             }
 
-            // ✅ USER-EDITABLE FIELD (label-style)
             OutlinedTextField(
                 value = gramsPerServingText,
                 onValueChange = { newTotalText ->
@@ -1241,7 +1223,7 @@ private fun ServingSection(
                 },
                 label = { Text("Grams per serving") },
                 singleLine = true,
-                modifier = androidx.compose.ui.Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { focus ->
                         gramsPerServingFocused = focus.isFocused
@@ -1252,7 +1234,6 @@ private fun ServingSection(
                     }
             )
 
-            // ✅ SUPPORT STRING: grams per 1 unit
             if (gramsPerUnitD != null) {
                 OutlinedTextField(
                     value = gramsPerServingUnit,
@@ -1260,7 +1241,7 @@ private fun ServingSection(
                     enabled = false,
                     label = { Text("Grams per 1 ${servingUnit.display}") },
                     singleLine = true,
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
@@ -1270,7 +1251,7 @@ private fun ServingSection(
             onValueChange = onServingsPerPackageChange,
             label = { Text("Servings per package") },
             singleLine = true,
-            modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -1280,7 +1261,7 @@ private fun ServingSection(
 private fun ServingUnitDropdown(
     value: ServingUnit,
     onValueChange: (ServingUnit) -> Unit,
-    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+    modifier: Modifier = Modifier,
     options: List<ServingUnit>,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1297,7 +1278,7 @@ private fun ServingUnitDropdown(
             singleLine = true,
             label = { Text("Serving unit") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = androidx.compose.ui.Modifier
+            modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth(),
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
@@ -1330,7 +1311,7 @@ private fun FoodEditorBottomBar(
     bannerCaptureController: BannerCaptureController
 ) {
     Surface(tonalElevation = 3.dp) {
-        Column(modifier = androidx.compose.ui.Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
             if (!errorMessage.isNullOrBlank()) {
                 Text(
                     text = errorMessage,
@@ -1339,25 +1320,25 @@ private fun FoodEditorBottomBar(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(androidx.compose.ui.Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
             }
 
             Row(
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (showDelete) {
                     OutlinedButton(
                         onClick = onDelete,
                         enabled = !isSaving,
-                        modifier = androidx.compose.ui.Modifier.weight(1f)
+                        modifier = Modifier.weight(1f)
                     ) { Text("Delete") }
                 }
 
                 Button(
                     onClick = onSave,
                     enabled = !isSaving,
-                    modifier = androidx.compose.ui.Modifier.weight(1f)
+                    modifier = Modifier.weight(1f)
                 ) { Text(if (isSaving) "Saving…" else "Save") }
             }
         }

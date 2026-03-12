@@ -156,7 +156,7 @@ object NutrientCatalog {
         NutrientKey.CARBS_G.value to 1003L,
         NutrientKey.FAT_G.value to 1004L,
         NutrientKey.FIBER_G.value to 1005L,
-        NutrientKey.SUGAR_G.value to 1006L,
+        NutrientKey.SUGARS_G.value to 1006L,
         NutrientKey.SODIUM_MG.value to 1007L
     )
 

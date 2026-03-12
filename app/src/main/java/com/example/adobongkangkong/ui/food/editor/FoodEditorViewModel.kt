@@ -12,6 +12,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.isAmbiguousForGrounding
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.requiresGramsPerServing
@@ -23,6 +24,7 @@ import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
+import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
 import com.example.adobongkangkong.domain.usda.ResolveBarcodeWithUsdaUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
@@ -41,6 +43,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -62,6 +65,7 @@ class FoodEditorViewModel @Inject constructor(
     private val softDeleteFood: SoftDeleteFoodUseCase,
     private val hardDeleteFoodIfUnused: HardDeleteFoodIfUnusedUseCase,
     private val resolveBarcodeWithUsda: ResolveBarcodeWithUsdaUseCase,
+    private val nutrientRepo: NutrientRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -175,6 +179,48 @@ class FoodEditorViewModel @Inject constructor(
                 foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
             } else emptyList()
 
+            val loadedRows = rows.map { r ->
+                val displayAmount =
+                    when (r.basisType) {
+                        BasisType.PER_100G -> NutrientBasisScaler
+                            .canonicalToDisplayPerServing(
+                                storedAmount = r.amount,
+                                storedBasis = r.basisType,
+                                servingSize = servingSize,
+                                gramsPerServingUnit = gramsPerServingUnitEffectiveForDisplay
+                            ).amount
+
+                        BasisType.PER_100ML -> NutrientBasisScaler
+                            .canonicalToDisplayPerServingVolume(
+                                storedAmount = r.amount,
+                                storedBasis = r.basisType,
+                                servingSize = servingSize,
+                                mlPerServingUnit = mlPerServingUnitEffective(
+                                    servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
+                                    mlPerServingUnit = mlPerServingUnit
+                                )
+                            ).amount
+
+                        else -> r.amount
+                    }
+
+                NutrientRowUi(
+                    nutrientId = r.nutrient.id,
+                    code = r.nutrient.code,
+                    name = r.nutrient.displayName,
+                    aliases = r.nutrient.aliases,
+                    unit = r.nutrient.unit,
+                    category = r.nutrient.category,
+                    amount = displayAmount.toString()
+                )
+            }
+
+            val rowsWithDefaults = if (foodId == null) {
+                buildAllNutrientRowsForNewFood()
+            } else {
+                ensureDefaultNutrientRows(loadedRows)
+            }
+
             val next = current.copy(
                 hasLoaded = true,
                 foodId = foodId,
@@ -201,39 +247,7 @@ class FoodEditorViewModel @Inject constructor(
                     },
                 selectedCategoryIds = selectedCategoryIds,
                 newCategoryName = "",
-                nutrientRows = sortNutrientRows(rows.map { r ->
-                    val displayAmount =
-                        when (r.basisType) {
-                            BasisType.PER_100G -> NutrientBasisScaler
-                                .canonicalToDisplayPerServing(
-                                    storedAmount = r.amount,
-                                    storedBasis = r.basisType,
-                                    servingSize = servingSize,
-                                    gramsPerServingUnit = gramsPerServingUnitEffectiveForDisplay
-                                ).amount
-
-                            BasisType.PER_100ML -> NutrientBasisScaler
-                                .canonicalToDisplayPerServingVolume(
-                                    storedAmount = r.amount,
-                                    storedBasis = r.basisType,
-                                    servingSize = servingSize,
-                                    mlPerServingUnit = mlPerServingUnitEffective(
-                                        servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
-                                        mlPerServingUnit = mlPerServingUnit
-                                    )
-                                ).amount
-
-                            else -> r.amount
-                        }
-
-                    NutrientRowUi(
-                        nutrientId = r.nutrient.id,
-                        name = r.nutrient.displayName,
-                        unit = r.nutrient.unit,
-                        category = r.nutrient.category,
-                        amount = displayAmount.toString()
-                    )
-                }),
+                nutrientRows = sortNutrientRows(rowsWithDefaults),
                 favorite = flags?.favorite ?: false,
                 eatMore = flags?.eatMore ?: false,
                 limit = flags?.limit ?: false,
@@ -247,6 +261,47 @@ class FoodEditorViewModel @Inject constructor(
 
             _state.value = applyNeedsFix(next, current)
         }
+    }
+
+    private suspend fun buildAllNutrientRowsForNewFood(): List<NutrientRowUi> {
+        val nutrients = nutrientRepo.observeAllNutrients().first()
+
+        return nutrients.map { nutrient ->
+            NutrientRowUi(
+                nutrientId = nutrient.id,
+                code = nutrient.code,
+                name = nutrient.displayName,
+                aliases = nutrient.aliases,
+                unit = nutrient.unit,
+                category = nutrient.category,
+                amount = ""
+            )
+        }
+    }
+    private suspend fun ensureDefaultNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
+        val existingCodes = rows.map { it.code }.toSet()
+        val missingSpecs = EditorDefaultNutrients.defaults.filterNot { it.code in existingCodes }
+        if (missingSpecs.isEmpty()) return rows
+
+        val missingRows = missingSpecs.mapNotNull { spec ->
+            val matches = searchNutrients(spec.searchQuery, limit = 20).first()
+            val nutrient = matches.firstOrNull { it.code == spec.code }
+                ?: matches.firstOrNull { it.displayName.equals(spec.displayName, ignoreCase = true) }
+                ?: matches.firstOrNull()
+                ?: return@mapNotNull null
+
+            NutrientRowUi(
+                nutrientId = nutrient.id,
+                code = nutrient.code,
+                name = nutrient.displayName,
+                aliases = nutrient.aliases,
+                unit = nutrient.unit,
+                category = nutrient.category,
+                amount = ""
+            )
+        }
+
+        return rows + missingRows
     }
 
     fun dismissBarcodeCollision() {
@@ -282,7 +337,7 @@ class FoodEditorViewModel @Inject constructor(
 
         val dismissed =
             if (!needsFix) false
-            else if (computedMessage != prev.fixMessage) false // reset dismiss when message changes
+            else if (computedMessage != prev.fixMessage) false
             else next.fixBannerDismissed
 
         return next.copy(
@@ -293,7 +348,6 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     private fun computeFixMessage(s: FoodEditorState): String? {
-        // Prevent “blip” while initial load is still in-flight
         if (!s.hasLoaded) return null
 
         if (s.nutrientRows.isEmpty()) {
@@ -379,7 +433,6 @@ class FoodEditorViewModel @Inject constructor(
             it.copy(
                 hasUnsavedChanges = it.basisType != type || it.gramsPerServingUnit.isNotBlank() || it.mlPerServingUnit.isNotBlank(),
                 basisType = type,
-                // Invariant: only keep the bridge for the active basis
                 gramsPerServingUnit = if (type == BasisType.PER_100ML) "" else it.gramsPerServingUnit,
                 mlPerServingUnit = if (type == BasisType.PER_100G) "" else it.mlPerServingUnit,
             )
@@ -405,7 +458,6 @@ class FoodEditorViewModel @Inject constructor(
         val code = _state.value.scannedBarcode.trim()
         if (code.isBlank()) return
 
-        // Close the fallback dialog and route to picker
         update { it.copy(isBarcodeFallbackOpen = false) }
         assignBarcodeToExistingFlow.value = code
     }
@@ -420,7 +472,6 @@ class FoodEditorViewModel @Inject constructor(
             try {
                 update { it.copy(isSaving = true, errorMessage = null) }
 
-                // Minimal food: neutral serving, no nutrients
                 val stableId = UUID.randomUUID().toString()
                 val food = Food(
                     id = 0L,
@@ -436,11 +487,8 @@ class FoodEditorViewModel @Inject constructor(
                     isLowSodium = null
                 )
 
-                // NOTE: This path still persists immediately by design (minimal create).
-                // Keeping behavior unchanged per request (no extra changes).
                 val newFoodId = saveFoodWithNutrients(food, emptyList())
 
-                // Upsert mapping (may conflict → confirm first)
                 val existing = foodBarcodeRepo.getByBarcode(barcode)
                 if (existing != null && existing.foodId != newFoodId) {
                     update {
@@ -459,7 +507,6 @@ class FoodEditorViewModel @Inject constructor(
                     return@launch
                 }
 
-                // No conflict: write mapping immediately
                 foodBarcodeRepo.upsertAndTouch(
                     entity = FoodBarcodeEntity(
                         barcode = barcode,
@@ -473,7 +520,6 @@ class FoodEditorViewModel @Inject constructor(
                     nowEpochMs = now
                 )
 
-                // Clean UI + open editor for new food
                 update {
                     it.copy(
                         isBarcodeFallbackOpen = false,
@@ -504,7 +550,6 @@ class FoodEditorViewModel @Inject constructor(
             try {
                 foodBarcodeRepo.deleteByBarcode(code)
 
-                // Refresh assigned barcodes for this food
                 val refreshed = foodBarcodeRepo
                     .getAllBarcodesForFood(foodId)
                     .map { it.barcode }
@@ -525,7 +570,6 @@ class FoodEditorViewModel @Inject constructor(
         val barcode = pendingRemapBarcode
         val toFoodId = pendingRemapTargetFoodId
 
-        // Clear dialog state regardless
         update { it.copy(barcodeRemapDialog = null) }
         pendingRemapBarcode = null
         pendingRemapTargetFoodId = null
@@ -581,7 +625,6 @@ class FoodEditorViewModel @Inject constructor(
         update { s ->
             val next = s.copy(groundingMode = v)
 
-            // Convenience: if LIQUID + known volume unit, prefill ml-per-1-unit using pure volume conversion.
             if (v == GroundingMode.LIQUID && next.mlPerServingUnit.isBlank()) {
                 val auto = next.servingUnit.toMilliliters(1.0)
                 if (auto != null && auto > 0.0) {
@@ -596,10 +639,8 @@ class FoodEditorViewModel @Inject constructor(
         val totalMl = totalMlText.toDoubleOrNull()
         val servingSize = s.servingSize.toDoubleOrNull()
 
-        // Always mark unsaved if user typed something
         val base = s.copy(hasUnsavedChanges = true)
 
-        // If we cannot compute yet (partial input, blank, etc.), just keep state
         if (totalMl == null || totalMl <= 0.0 || servingSize == null || servingSize <= 0.0) {
             return@update base
         }
@@ -691,28 +732,24 @@ class FoodEditorViewModel @Inject constructor(
             if (s.nutrientRows.any { it.nutrientId == n.id }) s
             else s.copy(
                 hasUnsavedChanges = true,
-                nutrientRows = sortNutrientRows((s.nutrientRows + NutrientRowUi(
-                    nutrientId = n.id,
-                    name = n.name,
-                    unit = n.unit,
-                    category = n.category,
-                    amount = ""
-                )))
+                nutrientRows = sortNutrientRows(
+                    s.nutrientRows + NutrientRowUi(
+                        nutrientId = n.id,
+                        code = n.code,
+                        name = n.name,
+                        aliases = n.aliases,
+                        unit = n.unit,
+                        category = n.category,
+                        amount = ""
+                    )
+                )
             )
         }
     }
 
     private fun sortNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
-        fun macroRank(name: String): Int = when (name.trim().lowercase()) {
-            "calories" -> 0
-            "carbohydrates" -> 2
-            "protein" -> 1
-            "fat" -> 3
-            else -> Int.MAX_VALUE
-        }
-
         return rows.sortedWith(
-            compareBy<NutrientRowUi> { macroRank(it.name) }
+            compareBy<NutrientRowUi> { EditorDefaultNutrients.rankFor(it.code) }
                 .thenBy { it.category.sortOrder }
                 .thenBy { it.name.lowercase() }
         )
@@ -728,7 +765,7 @@ class FoodEditorViewModel @Inject constructor(
 
         val unit = s.servingUnit
         val needsBasis =
-            (isAmbiguousForGrounding(unit)) &&
+            (unit.isAmbiguousForGrounding()) &&
                     s.basisType == null
 
         if (needsBasis) {
@@ -758,7 +795,7 @@ class FoodEditorViewModel @Inject constructor(
             }?.takeIf { it > 0.0 }
 
         val needsGroundingPrompt =
-            isAmbiguousForGrounding(s.servingUnit) &&
+            s.servingUnit.isAmbiguousForGrounding() &&
                     gramsPerServingUnitFinal == null &&
                     mlPerServingUnitFinal == null
 
@@ -823,10 +860,11 @@ class FoodEditorViewModel @Inject constructor(
             FoodNutrientRow(
                 nutrient = Nutrient(
                     id = ui.nutrientId,
-                    code = "",
+                    code = ui.code,
                     displayName = ui.name,
                     unit = ui.unit,
-                    category = ui.category
+                    category = ui.category,
+                    aliases = ui.aliases
                 ),
                 amount = amountToStore,
                 basisType = defaultBasisType,
@@ -981,28 +1019,7 @@ class FoodEditorViewModel @Inject constructor(
         return "%,.2f".format(this).replace(",", "")
     }
 
-    private fun isAmbiguousForGrounding(unit: ServingUnit): Boolean {
-        return when (unit) {
-            ServingUnit.TSP_US,
-            ServingUnit.TBSP_US,
-            ServingUnit.FL_OZ_US,
-            ServingUnit.CUP_US,
-            ServingUnit.CUP_METRIC,
-            ServingUnit.CUP_JP,
-            ServingUnit.RCCUP,
-            ServingUnit.TSP,
-            ServingUnit.TBSP,
-            ServingUnit.CUP,
-            ServingUnit.CAN,
-            ServingUnit.BOTTLE,
-            ServingUnit.JAR -> true
-            else -> false
-        }
-    }
-
     private fun isVolumeGrounded(servingUnit: ServingUnit, mlPerServingUnit: Double?): Boolean {
-        // Do NOT treat “cup/tbsp/fl oz” as volume-grounded by default.
-        // Those units are ambiguous for user-entered foods; only ml/L or an explicit ml bridge is volume grounding.
         return mlPerServingUnit != null || servingUnit == ServingUnit.ML || servingUnit == ServingUnit.L
     }
 
@@ -1014,7 +1031,6 @@ class FoodEditorViewModel @Inject constructor(
         }?.takeIf { it > 0.0 }
     }
 
-    // Barcode flow
     fun openBarcodeScanner() = update { it.copy(isBarcodeScannerOpen = true, errorMessage = null) }
 
     fun closeBarcodeScanner() = update {
@@ -1029,7 +1045,6 @@ class FoodEditorViewModel @Inject constructor(
         val cleaned = barcode.trim()
         if (cleaned.isBlank()) return
 
-        // NEW LOGS (requested)
         Log.d("Meow", "FoodEditor> onBarcodeScanned raw='$barcode' cleaned='$cleaned'")
         Log.d("Meow", "FoodEditor> barcode lookup START barcode='$cleaned'")
 
@@ -1039,14 +1054,12 @@ class FoodEditorViewModel @Inject constructor(
             val now = System.currentTimeMillis()
             val existing = foodBarcodeRepo.getByBarcode(cleaned)
 
-            // NEW LOGS (requested)
             Log.d(
                 "Meow",
                 "FoodEditor> barcode lookup RESULT barcode='$cleaned' " +
                         "existing=${existing != null} source=${existing?.source} foodId=${existing?.foodId} usdaFdcId=${existing?.usdaFdcId}"
             )
 
-            // ✅ Fast-path: existing USDA mapping → open immediately, skip USDA search/network
             if (existing != null && existing.source == BarcodeMappingSource.USDA) {
                 foodBarcodeRepo.touchLastSeen(cleaned, now)
 
@@ -1067,9 +1080,6 @@ class FoodEditorViewModel @Inject constructor(
                 return@launch
             }
 
-            // For USER_ASSIGNED mappings, we still perform USDA search so we can present
-            // a meaningful collision prompt (with incoming candidate context) when picked.
-
             Log.d("Meow", "FoodEditor> USDA search START barcode='$cleaned'")
             when (val r = searchUsdaByBarcode(cleaned)) {
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Success -> {
@@ -1087,18 +1097,12 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeCollisionDialog = null
                         )
                     }
-
-                    // IMPORTANT FIX:
-                    // Do NOT auto-pick/import when candidates.size == 1.
-                    // This prevents "Cancel" leaving an imported USDA food in the DB.
                 }
 
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Blocked -> {
                     Log.d("Meow", "FoodEditor> USDA search BLOCKED barcode='$cleaned' reason='${r.reason}'")
-                    // No results: open fallback. If user-assigned mapping exists, tell them it's mapped.
                     val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
-                        "Barcode already assigned to a manual food (foodId=${existing.foodId}). " +
-                                "You can open it to manage/unassign, or assign this barcode elsewhere."
+                        "Barcode already assigned to a manual food (foodId=${existing.foodId}). You can open it to manage/unassign, or assign this barcode elsewhere."
                     } else r.reason
 
                     update {
@@ -1118,8 +1122,7 @@ class FoodEditorViewModel @Inject constructor(
                 is SearchUsdaFoodsByBarcodeUseCase.Result.Failed -> {
                     Log.d("Meow", "FoodEditor> USDA search FAILED barcode='$cleaned' message='${r.message}'")
                     val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
-                        "Barcode already assigned to a manual food (foodId=${existing.foodId}). " +
-                                "USDA lookup failed: ${r.message}"
+                        "Barcode already assigned to a manual food (foodId=${existing.foodId}). USDA lookup failed: ${r.message}"
                     } else r.message
 
                     update {
@@ -1151,7 +1154,6 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
-        // ✅ Build incoming meta from the candidate list (Option A)
         val picked = state.value.barcodePickItems.firstOrNull { it.fdcId == fdcId }
         if (picked == null) {
             update { it.copy(errorMessage = "Selected candidate not found.") }
@@ -1185,7 +1187,6 @@ class FoodEditorViewModel @Inject constructor(
                         is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
                             val now = System.currentTimeMillis()
 
-                            // ✅ Write mapping as USDA (single source of truth)
                             foodBarcodeRepo.upsertAndTouch(
                                 entity = FoodBarcodeEntity(
                                     barcode = barcode,
@@ -1237,12 +1238,8 @@ class FoodEditorViewModel @Inject constructor(
                 is ResolveBarcodeWithUsdaUseCase.Result.NeedsCollisionPrompt -> {
                     update {
                         it.copy(
-                            // Keep JSON so Remap can proceed without re-search later
                             pendingUsdaSearchJson = it.pendingUsdaSearchJson,
-
-                            // Optional: clear picker under dialog to reduce clutter
                             barcodePickItems = emptyList(),
-
                             barcodeCollisionDialog = BarcodeCollisionDialogState(
                                 barcode = decision.barcode,
                                 existingFoodId = decision.existingFoodId,
@@ -1281,7 +1278,6 @@ class FoodEditorViewModel @Inject constructor(
 
             val existing = foodBarcodeRepo.getByBarcode(code)
             if (existing != null && existing.foodId != foodId) {
-                // Conflict → use your existing remap confirmation flow
                 pendingRemapBarcode = code
                 pendingRemapTargetFoodId = foodId
                 update {
@@ -1297,7 +1293,6 @@ class FoodEditorViewModel @Inject constructor(
                 return@launch
             }
 
-            // No conflict → write mapping
             foodBarcodeRepo.upsertAndTouch(
                 entity = FoodBarcodeEntity(
                     barcode = code,
@@ -1311,7 +1306,6 @@ class FoodEditorViewModel @Inject constructor(
                 nowEpochMs = now
             )
 
-            // Refresh list shown in UI
             val refreshed = foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
             update { it.copy(assignedBarcodes = refreshed, scannedBarcode = code) }
         }
@@ -1325,6 +1319,7 @@ class FoodEditorViewModel @Inject constructor(
                         nutrientSearchResults = results.map { n ->
                             NutrientSearchResultUi(
                                 id = n.id,
+                                code = n.code,
                                 name = n.displayName,
                                 unit = n.unit,
                                 category = n.category,
@@ -1354,7 +1349,6 @@ class FoodEditorViewModel @Inject constructor(
 
                     val barcode = barcodeFromSaved.ifBlank { state.value.scannedBarcode.trim() }
 
-                    // Always clear one-shot values
                     savedState["barcode_assign_foodId"] = null
                     savedState["barcode_assign_barcode"] = null
 
