@@ -49,7 +49,7 @@ fun CalendarScreen(
     val dayIconStatusByDate by vm.dayIconStatusByDate.collectAsState()
     val graphWeekStart by vm.graphWeekStart.collectAsState()
     val graphBars by vm.graphBars.collectAsState()
-    val targetCalories by vm.graphTargetCalories.collectAsState()
+    val caloriesReference by vm.graphCaloriesReference.collectAsState()
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -113,7 +113,7 @@ fun CalendarScreen(
                     onNextWeek = vm::goNextGraphWeek,
                     onGoToCurrent = vm::goToCurrentGraphWeek,
                     modifier = Modifier.padding(horizontal = 12.dp),
-                    targetCalories = targetCalories,
+                    caloriesReference = caloriesReference,
                 )
             }
 

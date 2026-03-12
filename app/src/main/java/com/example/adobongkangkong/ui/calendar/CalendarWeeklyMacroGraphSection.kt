@@ -85,15 +85,16 @@ fun CalendarWeeklyMacroGraphSection(
     onNextWeek: () -> Unit,
     onGoToCurrent: () -> Unit,
     modifier: Modifier = Modifier,
-    targetCalories: Int?,
+    caloriesReference: CalendarCaloriesReferenceUi?,
 ) {
     var popupBar by remember { mutableStateOf<CalendarWeeklyMacroDayUi?>(null) }
 
     val weekEnd = weekStart.plusDays(6)
     val weekLabel = "${weekStart.format(MM_DD)} to ${weekEnd.format(MM_DD)}"
+    val referenceCalories = caloriesReference?.calories
     val maxBarCalories = bars.maxOfOrNull { it.totalCalories.roundToInt() } ?: 0
-    val graphMaxCalories = max(max(maxBarCalories, targetCalories ?: 0), 1)
-    val targetFraction = targetCalories?.toFloat()?.div(graphMaxCalories.toFloat())
+    val graphMaxCalories = max(max(maxBarCalories, referenceCalories ?: 0), 1)
+    val targetFraction = referenceCalories?.toFloat()?.div(graphMaxCalories.toFloat())
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -132,11 +133,13 @@ fun CalendarWeeklyMacroGraphSection(
             }
 
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Target calories: ${targetCalories ?: 0}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            caloriesReference?.let {
+                Text(
+                    text = "${it.label}: ${it.calories}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Spacer(Modifier.height(10.dp))
 
@@ -523,6 +526,24 @@ private fun GraphLegendItem(
     }
 }
 
+enum class CalendarCaloriesReferenceKind {
+    MINIMUM,
+    TARGET,
+    MAXIMUM
+}
+
+data class CalendarCaloriesReferenceUi(
+    val kind: CalendarCaloriesReferenceKind,
+    val calories: Int,
+) {
+    val label: String
+        get() = when (kind) {
+            CalendarCaloriesReferenceKind.MINIMUM -> "Minimum calories"
+            CalendarCaloriesReferenceKind.TARGET -> "Target calories"
+            CalendarCaloriesReferenceKind.MAXIMUM -> "Maximum calories"
+        }
+}
+
 data class CalendarWeeklyMacroDayUi(
     val date: LocalDate,
     val totalCalories: Double,
@@ -532,6 +553,9 @@ data class CalendarWeeklyMacroDayUi(
     val proteinStatus: TargetStatus,
     val carbsStatus: TargetStatus,
     val fatStatus: TargetStatus,
+    val caloriesMinKcal: Double? = null,
+    val caloriesTargetKcal: Double? = null,
+    val caloriesMaxKcal: Double? = null,
     val proteinMinG: Double?,
     val proteinTargetG: Double?,
     val proteinMaxG: Double?,

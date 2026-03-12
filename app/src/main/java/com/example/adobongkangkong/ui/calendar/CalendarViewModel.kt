@@ -9,11 +9,18 @@ import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
-import com.example.adobongkangkong.domain.trend.model.TargetStatus
-import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
 import com.example.adobongkangkong.domain.repository.IouRepository
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutrientStatusesUseCase
+import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
+import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,13 +34,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.YearMonth
-import java.time.ZoneId
-import java.time.temporal.TemporalAdjusters
-import javax.inject.Inject
-import kotlin.math.roundToInt
 
 /**
  * Status used by the Calendar month grid to render a tiny icon per day.
@@ -73,7 +73,6 @@ class CalendarViewModel @Inject constructor(
     private val _debugTotals = MutableStateFlow<List<PlannedFoodTotalNeed>>(emptyList())
     val debugTotals: StateFlow<List<PlannedFoodTotalNeed>> = _debugTotals
     //DEBUG
-
 
     /**
      * Keep this hot so UI can query quickly (dots/markers).
@@ -120,6 +119,7 @@ class CalendarViewModel @Inject constructor(
                         iouRepository.observeForDate(date.toString())
                     ) { totals, statuses, ious ->
                         val map = totals.totalsByCode
+                        val caloriesStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.CALORIES.value }
                         val proteinStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.PROTEIN.value }
                         val carbsStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.CARBS.value }
                         val fatStatus = statuses.firstOrNull { it.nutrientCode == MacroKeys.FAT.value }
@@ -130,6 +130,10 @@ class CalendarViewModel @Inject constructor(
                             proteinG = map[MacroKeys.PROTEIN] ?: 0.0,
                             carbsG = map[MacroKeys.CARBS] ?: 0.0,
                             fatG = map[MacroKeys.FAT] ?: 0.0,
+
+                            caloriesMinKcal = caloriesStatus?.min,
+                            caloriesTargetKcal = caloriesStatus?.target,
+                            caloriesMaxKcal = caloriesStatus?.max,
 
                             proteinMinG = proteinStatus?.min,
                             proteinTargetG = proteinStatus?.target,
@@ -161,14 +165,30 @@ class CalendarViewModel @Inject constructor(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val graphTargetCalories: StateFlow<Int?> =
+    val graphCaloriesReference: StateFlow<CalendarCaloriesReferenceUi?> =
         _graphWeekStart
             .flatMapLatest { weekStart ->
                 observeDailyNutrientStatuses(date = weekStart, zoneId = zoneId)
                     .map { statuses ->
-                        statuses.firstOrNull { it.nutrientCode == MacroKeys.CALORIES.value }
-                            ?.target
-                            ?.roundToInt()
+                        val calories = statuses.firstOrNull { it.nutrientCode == MacroKeys.CALORIES.value }
+                        when {
+                            calories?.target != null -> CalendarCaloriesReferenceUi(
+                                kind = CalendarCaloriesReferenceKind.TARGET,
+                                calories = calories.target.roundToInt()
+                            )
+
+                            calories?.min != null -> CalendarCaloriesReferenceUi(
+                                kind = CalendarCaloriesReferenceKind.MINIMUM,
+                                calories = calories.min.roundToInt()
+                            )
+
+                            calories?.max != null -> CalendarCaloriesReferenceUi(
+                                kind = CalendarCaloriesReferenceKind.MAXIMUM,
+                                calories = calories.max.roundToInt()
+                            )
+
+                            else -> null
+                        }
                     }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -213,7 +233,7 @@ class CalendarViewModel @Inject constructor(
                 .take(1)
 
                 .collect { list ->
-                    Log.d("PlannerNeeds","NOT TOTALLED>")
+                    Log.d("PlannerNeeds", "NOT TOTALLED>")
                     list.forEach {
                         Log.d(
                             "PlannerNeeds",
@@ -231,7 +251,7 @@ class CalendarViewModel @Inject constructor(
             )
                 .take(1)
                 .collect { list ->
-                    Log.d("PlannerNeeds","TOTALLED>")
+                    Log.d("PlannerNeeds", "TOTALLED>")
                     list.forEach {
                         Log.d(
                             "PlannerNeeds",
