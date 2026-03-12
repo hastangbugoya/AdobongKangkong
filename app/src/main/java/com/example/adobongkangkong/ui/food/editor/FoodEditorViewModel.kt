@@ -215,11 +215,13 @@ class FoodEditorViewModel @Inject constructor(
                 )
             }
 
-            val rowsWithDefaults = if (foodId == null) {
-                buildAllNutrientRowsForNewFood()
-            } else {
-                ensureDefaultNutrientRows(loadedRows)
-            }
+            val editorRows = buildEditorRowsForAllNutrients(loadedRows)
+
+//            val rowsWithDefaults = if (foodId == null) {
+//                buildAllNutrientRowsForNewFood()
+//            } else {
+//                ensureDefaultNutrientRows(loadedRows)
+//            }
 
             val next = current.copy(
                 hasLoaded = true,
@@ -247,7 +249,7 @@ class FoodEditorViewModel @Inject constructor(
                     },
                 selectedCategoryIds = selectedCategoryIds,
                 newCategoryName = "",
-                nutrientRows = sortNutrientRows(rowsWithDefaults),
+                nutrientRows = sortNutrientRows(editorRows),
                 favorite = flags?.favorite ?: false,
                 eatMore = flags?.eatMore ?: false,
                 limit = flags?.limit ?: false,
@@ -263,10 +265,17 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    private suspend fun buildAllNutrientRowsForNewFood(): List<NutrientRowUi> {
-        val nutrients = nutrientRepo.observeAllNutrients().first()
+    private suspend fun buildEditorRowsForAllNutrients(
+        savedRows: List<NutrientRowUi>
+    ): List<NutrientRowUi> {
+        val allNutrients = nutrientRepo.observeAllNutrients().first()
 
-        return nutrients.map { nutrient ->
+        val savedByNutrientId = savedRows.associateBy { it.nutrientId }
+        val savedByCode = savedRows.associateBy { it.code }
+
+        return allNutrients.map { nutrient ->
+            val saved = savedByNutrientId[nutrient.id] ?: savedByCode[nutrient.code]
+
             NutrientRowUi(
                 nutrientId = nutrient.id,
                 code = nutrient.code,
@@ -274,10 +283,26 @@ class FoodEditorViewModel @Inject constructor(
                 aliases = nutrient.aliases,
                 unit = nutrient.unit,
                 category = nutrient.category,
-                amount = ""
+                amount = saved?.amount ?: ""
             )
         }
     }
+
+//    private suspend fun buildAllNutrientRowsForNewFood(): List<NutrientRowUi> {
+//        val nutrients = nutrientRepo.observeAllNutrients().first()
+//
+//        return nutrients.map { nutrient ->
+//            NutrientRowUi(
+//                nutrientId = nutrient.id,
+//                code = nutrient.code,
+//                name = nutrient.displayName,
+//                aliases = nutrient.aliases,
+//                unit = nutrient.unit,
+//                category = nutrient.category,
+//                amount = ""
+//            )
+//        }
+//    }
     private suspend fun ensureDefaultNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
         val existingCodes = rows.map { it.code }.toSet()
         val missingSpecs = EditorDefaultNutrients.defaults.filterNot { it.code in existingCodes }
