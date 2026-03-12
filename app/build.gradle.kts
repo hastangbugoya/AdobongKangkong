@@ -49,6 +49,10 @@ android {
     }
 }
 
+tasks.withType<Test>().configureEach {
+    maxParallelForks = Runtime.getRuntime().availableProcessors() / 2
+}
+
 kotlin {
     jvmToolchain(17)
 }
@@ -129,3 +133,4 @@ dependencies {
     implementation("androidx.hilt:hilt-work:1.2.0")
     kapt("androidx.hilt:hilt-compiler:1.2.0")
 }
+

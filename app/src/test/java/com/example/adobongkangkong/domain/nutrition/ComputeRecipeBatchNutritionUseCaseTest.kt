@@ -299,4 +299,67 @@ class ComputeRecipeBatchNutritionUseCaseTest {
             )
         }
     }
+
+    @Test
+    fun invariant_totals_equals_per_cooked_gram_times_total_yield_grams() = runBlocking {
+        val totalYieldGrams: Double = 500.0
+
+        val recipeRepo = FakeRecipeRepository(
+            header = RecipeHeader(
+                recipeId = 10L,
+                foodId = 100L,
+                servingsYield = 5.0,
+                totalYieldGrams = totalYieldGrams
+            ),
+            ingredients = listOf(
+                RecipeIngredientLine(
+                    ingredientFoodId = 1L,
+                    ingredientServings = 2.0
+                ),
+                RecipeIngredientLine(
+                    ingredientFoodId = 2L,
+                    ingredientServings = 3.0
+                )
+            )
+        )
+
+        val snapshotRepo = FakeFoodSnapshotRepo(
+            mapOf(
+                1L to snapshotGrams(
+                    foodId = 1L,
+                    gramsPerServingUnit = 40.0,
+                    nutrientsPerGram = nutrientsOf(
+                        NutrientKey.PROTEIN_G to 0.2,
+                        NutrientKey.CALORIES_KCAL to 1.5
+                    )
+                ),
+                2L to snapshotGrams(
+                    foodId = 2L,
+                    gramsPerServingUnit = 20.0,
+                    nutrientsPerGram = nutrientsOf(
+                        NutrientKey.PROTEIN_G to 0.1,
+                        NutrientKey.CALORIES_KCAL to 2.0
+                    )
+                )
+            )
+        )
+
+        val useCase = ComputeRecipeBatchNutritionUseCase(recipeRepo, snapshotRepo)
+
+        val result = useCase.execute(100L)
+
+        val totals = result.totals
+        val perCookedGram = assertNotNull(result.perCookedGram)
+
+        val reconstructedTotals = perCookedGram.scaledBy(totalYieldGrams)
+
+        for (key in totals.keys()) {
+            assertEquals(
+                totals[key],
+                reconstructedTotals[key],
+                1e-9,
+                "Invariant failed for nutrient $key"
+            )
+        }
+    }
 }

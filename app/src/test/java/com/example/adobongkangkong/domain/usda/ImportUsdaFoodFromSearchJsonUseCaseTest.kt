@@ -484,4 +484,149 @@ class ImportUsdaFoodFromSearchJsonUseCaseTest {
         }
         """.trimIndent()
     }
+
+    @Test
+    fun volume_grounded_food_canonicalizes_to_per100ml_and_roundtrip_holds() {
+
+        val json = foodsSearchJson(
+            fdcId = 444L,
+            description = "test liquid",
+            gtinUpc = null,
+            brandOwner = null,
+            brandName = null,
+            servingSize = 240.0,
+            servingSizeUnit = "ml",
+            householdServingFullText = null,
+            nutrients = listOf(
+                nutrient(number = "208", value = 120.0) // kcal
+            )
+        )
+
+        val item = UsdaFoodsSearchParser.parse(json).foods.first()
+
+        val rawUnit = ServingUnit.fromUsda(item.servingSizeUnit)!!
+        val rawSize = item.servingSize ?: 1.0
+
+        val food = Food(
+            id = 0L,
+            name = "Liquid",
+            servingSize = rawSize,
+            servingUnit = rawUnit,
+            servingsPerPackage = null,
+            gramsPerServingUnit = null,
+            mlPerServingUnit = null,
+            stableId = "test",
+            brand = null,
+            isRecipe = false,
+            isLowSodium = null,
+            usdaFdcId = item.fdcId,
+            usdaGtinUpc = null,
+            usdaPublishedDate = null,
+            usdaModifiedDate = null
+        )
+
+        val mlPerServing = computeMlPerServing(food)!!
+        assertNearlyEquals(240.0, mlPerServing)
+
+        val nutrientCatalog = fakeNutrientCatalog()
+
+        val servingRows = item.foodNutrients.mapNotNull { n ->
+            val csvCode = UsdaToCsvNutrientMap.byUsdaNumber[n.nutrientNumber ?: return@mapNotNull null]
+                ?: return@mapNotNull null
+            val nutrient = nutrientCatalog[csvCode] ?: return@mapNotNull null
+            val amt = n.value ?: return@mapNotNull null
+            FoodNutrientRow(nutrient, amt, BasisType.USDA_REPORTED_SERVING, null)
+        }
+
+        val canonical = canonicalizeRows(food, servingRows)
+
+        val calories = canonical.first()
+
+        assertEquals(BasisType.PER_100ML, calories.basisType)
+
+        val perMl = calories.amount / 100.0
+        val roundTrip = perMl * mlPerServing
+
+        assertNearlyEquals(servingRows.first().amount, roundTrip)
+    }
+
+    @Test
+    fun duplicate_nutrients_are_deduped() {
+
+        val nutrient = Nutrient(
+            id = 1L,
+            code = NutrientCodes.CALORIES_KCAL,
+            displayName = "Calories"
+        )
+
+        val food = Food(
+            id = 0L,
+            name = "Test Food",
+            servingSize = 1.0,
+            servingUnit = ServingUnit.G,
+            servingsPerPackage = null,
+            gramsPerServingUnit = null,
+            mlPerServingUnit = null,
+            stableId = "test",
+            brand = null,
+            isRecipe = false,
+            isLowSodium = null,
+            usdaFdcId = null,
+            usdaGtinUpc = null,
+            usdaPublishedDate = null,
+            usdaModifiedDate = null
+        )
+
+        val rows = listOf(
+            FoodNutrientRow(nutrient, 10.0, BasisType.USDA_REPORTED_SERVING, null),
+            FoodNutrientRow(nutrient, 12.0, BasisType.USDA_REPORTED_SERVING, null)
+        )
+
+        val canonical = canonicalizeRows(food, rows)
+
+        assertEquals(1, canonical.size)
+    }
+
+    @Test
+    fun parser_reads_minimum_fields_required_for_import() {
+
+        val json = """
+    {
+      "totalHits": 1,
+      "foods": [
+        {
+          "fdcId": 999,
+          "description": "Parser Test Food",
+          "gtinUpc": "012345678901",
+          "brandOwner": "TestBrand",
+          "servingSize": 30.0,
+          "servingSizeUnit": "g",
+          "foodNutrients": [
+            {
+              "nutrientNumber": "208",
+              "value": 120.0
+            }
+          ]
+        }
+      ]
+    }
+    """.trimIndent()
+
+        val parsed = UsdaFoodsSearchParser.parse(json)
+
+        assertEquals(1, parsed.foods.size)
+
+        val food = parsed.foods.first()
+
+        assertEquals(999L, food.fdcId)
+        assertEquals("Parser Test Food", food.description)
+        assertEquals("012345678901", food.gtinUpc)
+        assertEquals(30.0, food.servingSize)
+        assertEquals("g", food.servingSizeUnit)
+
+        val nutrient = food.foodNutrients.first()
+
+        assertEquals("208", nutrient.nutrientNumber)
+        assertEquals(120.0, nutrient.value)
+    }
 }
