@@ -446,6 +446,233 @@ class NutrientBasisScalerTest {
         // 19.1667 * 30 / 100 = 5.75 kcal per 1 fl oz
         assertEquals(5.75, toDisplay.amount, 1e-9)
     }
+
+    @Test
+    fun per100g_zero_serving_size_should_not_scale_to_display() {
+        val result = NutrientBasisScaler.canonicalToDisplayPerServing(
+            storedAmount = 10.0,
+            storedBasis = BasisType.PER_100G,
+            servingSize = 0.0,
+            gramsPerServingUnit = 30.0
+        )
+
+        assertFalse(result.didScale)
+        assertEquals(10.0, result.amount, 0.0)
+    }
+
+    @Test
+    fun per100g_negative_serving_size_should_not_scale_to_display() {
+        val result = NutrientBasisScaler.canonicalToDisplayPerServing(
+            storedAmount = 10.0,
+            storedBasis = BasisType.PER_100G,
+            servingSize = -1.0,
+            gramsPerServingUnit = 30.0
+        )
+
+        assertFalse(result.didScale)
+        assertEquals(10.0, result.amount, 0.0)
+    }
+
+    @Test
+    fun per100g_zero_serving_size_should_not_scale_to_canonical() {
+        val result = NutrientBasisScaler.displayPerServingToCanonical(
+            uiPerServingAmount = 3.0,
+            canonicalBasis = BasisType.PER_100G,
+            servingSize = 0.0,
+            gramsPerServingUnit = 30.0
+        )
+
+        assertFalse(result.didScale)
+        assertEquals(3.0, result.amount, 0.0)
+    }
+
+    @Test
+    fun per100g_zero_grams_per_serving_should_not_scale() {
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServing(
+            storedAmount = 10.0,
+            storedBasis = BasisType.PER_100G,
+            servingSize = 1.0,
+            gramsPerServingUnit = 0.0
+        )
+
+        assertFalse(toDisplay.didScale)
+        assertEquals(10.0, toDisplay.amount, 0.0)
+    }
+
+    @Test
+    fun per100g_negative_grams_per_serving_should_not_scale() {
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonical(
+            uiPerServingAmount = 3.0,
+            canonicalBasis = BasisType.PER_100G,
+            servingSize = 1.0,
+            gramsPerServingUnit = -30.0
+        )
+
+        assertFalse(toCanonical.didScale)
+        assertEquals(3.0, toCanonical.amount, 0.0)
+    }
+
+    @Test
+    fun mass_path_should_not_scale_per100ml_basis() {
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServing(
+            storedAmount = 12.5,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            gramsPerServingUnit = 100.0
+        )
+
+        assertFalse(toDisplay.didScale)
+        assertEquals(12.5, toDisplay.amount, 0.0)
+    }
+
+    @Test
+    fun display_to_canonical_mass_path_should_not_scale_per100ml_basis() {
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonical(
+            uiPerServingAmount = 30.0,
+            canonicalBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            gramsPerServingUnit = 100.0
+        )
+
+        assertFalse(toCanonical.didScale)
+        assertEquals(30.0, toCanonical.amount, 0.0)
+    }
+
+    @Test
+    fun per100ml_zero_serving_size_should_not_scale_to_display() {
+        val result = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = 8.0,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = 0.0,
+            mlPerServingUnit = 240.0
+        )
+
+        assertFalse(result.didScale)
+        assertEquals(8.0, result.amount, 0.0)
+    }
+
+    @Test
+    fun per100ml_negative_serving_size_should_not_scale_to_canonical() {
+        val result = NutrientBasisScaler.displayPerServingToCanonicalVolume(
+            uiPerServingAmount = 30.0,
+            canonicalBasis = BasisType.PER_100ML,
+            servingSize = -1.0,
+            mlPerServingUnit = 240.0
+        )
+
+        assertFalse(result.didScale)
+        assertEquals(30.0, result.amount, 0.0)
+    }
+
+    @Test
+    fun per100ml_zero_ml_per_serving_should_not_scale() {
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = 8.0,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            mlPerServingUnit = 0.0
+        )
+
+        assertFalse(toDisplay.didScale)
+        assertEquals(8.0, toDisplay.amount, 0.0)
+    }
+
+    @Test
+    fun per100ml_negative_ml_per_serving_should_not_scale() {
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonicalVolume(
+            uiPerServingAmount = 30.0,
+            canonicalBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            mlPerServingUnit = -240.0
+        )
+
+        assertFalse(toCanonical.didScale)
+        assertEquals(30.0, toCanonical.amount, 0.0)
+    }
+
+    @Test
+    fun volume_path_should_not_scale_per100g_basis() {
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = 10.0,
+            storedBasis = BasisType.PER_100G,
+            servingSize = 1.0,
+            mlPerServingUnit = 240.0
+        )
+
+        assertFalse(toDisplay.didScale)
+        assertEquals(10.0, toDisplay.amount, 0.0)
+    }
+
+    @Test
+    fun display_to_canonical_volume_path_should_not_scale_per100g_basis() {
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonicalVolume(
+            uiPerServingAmount = 3.0,
+            canonicalBasis = BasisType.PER_100G,
+            servingSize = 1.0,
+            mlPerServingUnit = 240.0
+        )
+
+        assertFalse(toCanonical.didScale)
+        assertEquals(3.0, toCanonical.amount, 0.0)
+    }
+
+    @Test
+    fun tiny_value_round_trip_per100g_remains_stable() {
+        val original = 0.0001
+
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonical(
+            uiPerServingAmount = original,
+            canonicalBasis = BasisType.PER_100G,
+            servingSize = 1.0,
+            gramsPerServingUnit = 250.0
+        )
+
+        assertTrue(toCanonical.didScale)
+
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServing(
+            storedAmount = toCanonical.amount,
+            storedBasis = BasisType.PER_100G,
+            servingSize = 1.0,
+            gramsPerServingUnit = 250.0
+        )
+
+        assertTrue(toDisplay.didScale)
+        assertEquals(original, toDisplay.amount, 1e-12)
+    }
+
+    @Test
+    fun tiny_value_round_trip_per100ml_remains_stable() {
+        val original = 0.0001
+
+        val toCanonical = NutrientBasisScaler.displayPerServingToCanonicalVolume(
+            uiPerServingAmount = original,
+            canonicalBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            mlPerServingUnit = 240.0
+        )
+
+        assertTrue(toCanonical.didScale)
+
+        val toDisplay = NutrientBasisScaler.canonicalToDisplayPerServingVolume(
+            storedAmount = toCanonical.amount,
+            storedBasis = BasisType.PER_100ML,
+            servingSize = 1.0,
+            mlPerServingUnit = 240.0
+        )
+
+        assertTrue(toDisplay.didScale)
+        assertEquals(original, toDisplay.amount, 1e-12)
+    }
+
+    @Test
+    fun almost_equal_returns_true_within_epsilon() {
+        assertTrue(NutrientBasisScaler.almostEqual(1.0, 1.0 + 1e-10))
+    }
+
+    @Test
+    fun almost_equal_returns_false_outside_epsilon() {
+        assertFalse(NutrientBasisScaler.almostEqual(1.0, 1.0 + 1e-6))
+    }
 }
 
 /**
