@@ -9,6 +9,7 @@ import com.example.adobongkangkong.data.repository.FoodNutritionSnapshotReposito
 import com.example.adobongkangkong.data.repository.FoodRepositoryImpl
 import com.example.adobongkangkong.data.repository.LogRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientAliasRepositoryImpl
+import com.example.adobongkangkong.data.repository.NutrientCatalogBootstrapRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.PlannedSeriesItemRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
@@ -24,6 +25,7 @@ import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotReposi
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
+import com.example.adobongkangkong.domain.repository.NutrientCatalogBootstrapRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.repository.PlannedSeriesRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
@@ -150,4 +152,9 @@ abstract class RepositoryModule {
     abstract fun bindPlannedSeriesItemRepository(
         impl: PlannedSeriesItemRepositoryImpl
     ): com.example.adobongkangkong.domain.repository.PlannedSeriesItemRepository
+
+    @Binds
+    abstract fun bindNutrientCatalogBootstrapRepository(
+        impl: NutrientCatalogBootstrapRepositoryImpl
+    ): NutrientCatalogBootstrapRepository
 }

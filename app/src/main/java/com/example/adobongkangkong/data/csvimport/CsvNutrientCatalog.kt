@@ -30,8 +30,8 @@ object CsvNutrientCatalog {
         Def("prot", NutrientCodes.PROTEIN_G, "Protein", "g", NutrientCategory.MACRO.dbValue),
         Def("fat(g)", NutrientCodes.FAT_G, "Fat", "g", NutrientCategory.FAT.dbValue),
         // Fats
-        Def("sat_fat", "SATURATED_FAT_G", "Saturated Fat", "g", NutrientCategory.FAT.dbValue),
-        Def("trans_fat", "TRANS_FAT_G", "Trans Fat", "g", NutrientCategory.FAT.dbValue),
+        Def("sat_fat", "SATURATED_FAT_G", "Saturated Fat", "g", NutrientCategory.FATTY_ACID.dbValue),
+        Def("trans_fat", "TRANS_FAT_G", "Trans Fat", "g", NutrientCategory.FATTY_ACID.dbValue),
         // Carb breakdown
         Def("sug", "SUGARS_G", "Sugars", "g", NutrientCategory.SUGAR.dbValue),
         Def("added_sug", "ADDED_SUGARS_G", "Added Sugars", "g", NutrientCategory.SUGAR.dbValue),

@@ -85,4 +85,8 @@ object DatabaseModule {
     @Provides
     fun provideFoodCategoryDao(db: NutriDatabase): FoodCategoryDao =
         db.foodCategoryDao()
+
+    @Provides
+    fun provideNutrientCatalogDao(db: NutriDatabase): NutrientCatalogDao =
+        db.nutrientCatalogDao()
 }

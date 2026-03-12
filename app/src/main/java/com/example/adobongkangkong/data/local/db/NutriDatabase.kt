@@ -69,6 +69,8 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun iouDao(): IouDao
     abstract fun foodCategoryDao(): FoodCategoryDao
 
+    abstract fun nutrientCatalogDao(): NutrientCatalogDao
+
     companion object {
 
         val MIGRATION_3_4: Migration = object : Migration(3, 4) {

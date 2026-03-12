@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.prefs.FirstRunPrefs
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.usecase.EnsureNutrientCatalogSeededUseCase
 import com.example.adobongkangkong.domain.usecase.ImportFoodsCsvUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +16,8 @@ import javax.inject.Inject
 class StartupViewModel @Inject constructor(
     private val prefs: FirstRunPrefs,
     private val foodRepository: FoodRepository,
-    private val importFoodsCsv: ImportFoodsCsvUseCase
+    private val importFoodsCsv: ImportFoodsCsvUseCase,
+    private val ensureNutrientCatalogSeeded: EnsureNutrientCatalogSeededUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(StartupUiState())
@@ -29,6 +31,7 @@ class StartupViewModel @Inject constructor(
                     message = "Preparing database…"
                 )
 
+                ensureNutrientCatalogSeeded()
                 val hasFoods = !foodRepository.isFoodsEmpty()
 
                 if (!hasFoods) {
