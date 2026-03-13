@@ -79,6 +79,12 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  * Design rules:
  * - **No ViewModel access**: all state is provided via [state] and all actions are delegated via callbacks.
  * - **All modal UI lives here** (dialogs / sheets) so it remains driven by [state] and local UI flags.
+ *
+ * Merge wiring:
+ * - Food merge remains a route/viewmodel concern.
+ * - This screen only exposes an optional [onMergeFood] callback when editing an existing food.
+ * - The actual picker/navigation flow is owned by the caller so the screen stays stateless.
+ * - Merge is intentionally placed near the bottom of the scrollable content, not in the persistent bottom bar.
  */
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,6 +125,7 @@ fun FoodEditorScreen(
     onSave: () -> Unit,
     onDeleteFood: (() -> Unit)? = null,
     onHardDeleteFood: (() -> Unit)? = null,
+    onMergeFood: (() -> Unit)? = null,
 
     // Alias sheet
     aliasSheetNutrientName: String?,
@@ -825,6 +832,36 @@ fun FoodEditorScreen(
                     }
                 }
 
+                if (state.foodId != null && onMergeFood != null) {
+                    item {
+                        HorizontalDivider()
+                    }
+
+                    item {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Advanced",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+
+                            Text(
+                                text = "Merge this food into another existing food. This keeps history but retires this food.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedButton(
+                                onClick = onMergeFood,
+                                enabled = !state.isSaving
+                            ) {
+                                Text("Merge into another food")
+                            }
+                        }
+                    }
+                }
+
                 Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : ${state}")
 
                 item {
@@ -1301,6 +1338,13 @@ private fun ServingUnitDropdown(
     }
 }
 
+/**
+ * Bottom action bar for the food editor.
+ *
+ * Merge support:
+ * - Merge is intentionally not surfaced here.
+ * - Rare or destructive advanced actions belong in the scrollable content area instead of the persistent bottom bar.
+ */
 @Composable
 private fun FoodEditorBottomBar(
     isSaving: Boolean,

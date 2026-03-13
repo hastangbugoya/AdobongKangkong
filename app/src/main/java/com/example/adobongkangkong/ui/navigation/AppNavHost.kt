@@ -33,6 +33,9 @@ import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
 import java.time.LocalDate
 
 private const val KEY_FOOD_PICK_FOOD_ID = "food_pick_food_id"
+private const val KEY_FOOD_PICK_MODE = "food_pick_mode"
+private const val FOOD_PICK_MODE_MERGE = "merge"
+private const val KEY_MERGE_PICK_CANONICAL_FOOD_ID = "merge_pick_canonical_food_id"
 
 private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
 private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
@@ -218,9 +221,16 @@ fun AppNavHost(
                 onCreateFood = { navController.navigate(NavRoutes.Foods.new(prefillName = null)) },
                 onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
                 onPickFood = { foodId ->
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set(KEY_FOOD_PICK_FOOD_ID, foodId)
+                    val previousEntry = navController.previousBackStackEntry
+                    val pickMode = previousEntry?.savedStateHandle?.get<String>(KEY_FOOD_PICK_MODE)
+
+                    if (pickMode == FOOD_PICK_MODE_MERGE) {
+                        previousEntry.savedStateHandle[KEY_MERGE_PICK_CANONICAL_FOOD_ID] = foodId
+                        previousEntry.savedStateHandle[KEY_FOOD_PICK_MODE] = null
+                    } else {
+                        previousEntry?.savedStateHandle?.set(KEY_FOOD_PICK_FOOD_ID, foodId)
+                    }
+
                     navController.popBackStack()
                 }
             )
@@ -265,16 +275,31 @@ fun AppNavHost(
         ) { entry ->
             val foodId = entry.arguments!!.getLong("foodId")
             val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
-            Log.d("Meow", "NAV -> Foods.edit destination. foodId=$foodId initialBarcode=$initialBarcode route=${entry.destination.route}")
+            Log.d(
+                "Meow",
+                "NAV -> Foods.edit destination. foodId=$foodId initialBarcode=$initialBarcode route=${entry.destination.route}"
+            )
+
+            val pickedMergeFoodId by entry.savedStateHandle
+                .getStateFlow<Long?>(KEY_MERGE_PICK_CANONICAL_FOOD_ID, null)
+                .collectAsState()
 
             FoodEditorRoute(
                 foodId = foodId,
                 initialName = null,
                 initialBarcode = initialBarcode,
+                mergePickedFoodId = pickedMergeFoodId,
                 onBack = { navController.popBackStack() },
                 onDone = { closeFoodEditor() },
                 onAssignBarcodeToExisting = { barcode ->
                     navController.navigate(NavRoutes.Foods.pickBarcode(barcode))
+                },
+                onOpenMergeFoodPicker = {
+                    entry.savedStateHandle[KEY_FOOD_PICK_MODE] = FOOD_PICK_MODE_MERGE
+                    navController.navigate(NavRoutes.Foods.pickFood)
+                },
+                onMergePickedConsumed = {
+                    entry.savedStateHandle[KEY_MERGE_PICK_CANONICAL_FOOD_ID] = null
                 },
                 bannerCaptureController = bannerCaptureController,
                 bannerRefreshTick = bannerRefreshTick,

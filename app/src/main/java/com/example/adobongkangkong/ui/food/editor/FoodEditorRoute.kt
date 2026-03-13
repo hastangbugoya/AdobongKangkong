@@ -22,15 +22,19 @@ fun FoodEditorRoute(
     initialName: String?,
     initialBarcode: String? = null,
     bannerRefreshTick: Int,
+    mergePickedFoodId: Long? = null,
     onBack: () -> Unit,
     onDone: () -> Unit,
     onAssignBarcodeToExisting: (String) -> Unit = {},
+    onOpenMergeFoodPicker: (Long) -> Unit = {},
+    onMergePickedConsumed: () -> Unit = {},
     viewModel: FoodEditorViewModel = hiltViewModel(),
     bannerCaptureController: BannerCaptureController,
     onOpenFoodEditor: (Long) -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
     val didDelete by viewModel.didDelete.collectAsState()
+    val didMerge by viewModel.didMerge.collectAsState()
     val assignExistingBarcode by viewModel.assignBarcodeToExistingBarcode.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -41,9 +45,9 @@ fun FoodEditorRoute(
     val aliasMessage by viewModel.aliasSheetMessage.collectAsState()
     val aliases by viewModel.selectedAliases.collectAsState()
 
-// FoodEditorRoute.kt (inside FoodEditorRoute composable)
+    // FoodEditorRoute.kt (inside FoodEditorRoute composable)
 
-// Load + initialBarcode sequencing (single source of truth)
+    // Load + initialBarcode sequencing (single source of truth)
     val didApplyInitialBarcode = androidx.compose.runtime.remember(foodId, initialName, initialBarcode) {
         mutableStateOf(false)
     }
@@ -75,6 +79,10 @@ fun FoodEditorRoute(
         if (didDelete) onBack()
     }
 
+    LaunchedEffect(didMerge) {
+        if (didMerge) onBack()
+    }
+
     LaunchedEffect(assignExistingBarcode) {
         val code = assignExistingBarcode?.trim().orEmpty()
         if (code.isNotBlank()) {
@@ -82,6 +90,7 @@ fun FoodEditorRoute(
             viewModel.consumeAssignBarcodeToExistingRequest()
         }
     }
+
     FoodEditorScreen(
         state = state,
         onBack = onBack,
@@ -105,6 +114,10 @@ fun FoodEditorRoute(
 
         onDeleteFood = { viewModel.deleteFood() },
         onHardDeleteFood = { viewModel.hardDeleteFoodPermanently() },
+        onMergeFood = {
+            val currentFoodId = state.foodId ?: return@FoodEditorScreen
+            onOpenMergeFoodPicker(currentFoodId)
+        },
 
         onCategoryCheckedChange = viewModel::onCategoryCheckedChange,
         onNewCategoryNameChange = viewModel::onNewCategoryNameChange,
@@ -142,13 +155,13 @@ fun FoodEditorRoute(
         onBarcodeFallbackCreateNameChange = viewModel::onBarcodeFallbackCreateNameChange,
         onBarcodeFallbackCreateMinimal = viewModel::barcodeFallbackCreateMinimalFood,
         onConfirmBarcodeRemap = viewModel::onConfirmBarcodeRemap,
-        onBarcodeFallbackOpenAssignedFood = { foodId ->
+        onBarcodeFallbackOpenAssignedFood = { targetFoodId ->
             viewModel.dismissBarcodeFallback()
-            onOpenFoodEditor(foodId)
+            onOpenFoodEditor(targetFoodId)
         },
-        onOpenFoodEditor = { foodId ->
+        onOpenFoodEditor = { targetFoodId ->
             viewModel.dismissBarcodeFallback()
-            onOpenFoodEditor(foodId)
+            onOpenFoodEditor(targetFoodId)
         },
         onDismissBarcodeCollision = viewModel::dismissBarcodeCollision,
         onOpenExistingFromCollision = viewModel::openExistingFromCollision,
@@ -162,6 +175,17 @@ fun FoodEditorRoute(
         },
         onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner
     )
+
+//    LaunchedEffect(onMergePicked) {
+//        // Route-level merge completion bridge.
+//        // AppNavHost should deliver the picked canonical food id through this callback.
+//    }
+
+    LaunchedEffect(mergePickedFoodId) {
+        val canonicalFoodId = mergePickedFoodId ?: return@LaunchedEffect
+        viewModel.mergeIntoFood(canonicalFoodId)
+        onMergePickedConsumed()
+    }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 

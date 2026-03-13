@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
+import com.example.adobongkangkong.domain.food.usecase.MergeFoodsUseCase
 import com.example.adobongkangkong.domain.model.AliasAddResult
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
@@ -50,6 +51,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+private const val KEY_BARCODE_ASSIGN_FOOD_ID = "barcode_assign_foodId"
+private const val KEY_BARCODE_ASSIGN_BARCODE = "barcode_assign_barcode"
+private const val KEY_MERGE_PICK_CANONICAL_FOOD_ID = "merge_pick_canonical_food_id"
+
 @HiltViewModel
 class FoodEditorViewModel @Inject constructor(
     private val getData: GetFoodEditorDataUseCase,
@@ -66,6 +71,7 @@ class FoodEditorViewModel @Inject constructor(
     private val hardDeleteFoodIfUnused: HardDeleteFoodIfUnusedUseCase,
     private val resolveBarcodeWithUsda: ResolveBarcodeWithUsdaUseCase,
     private val nutrientRepo: NutrientRepository,
+    private val mergeFoodsUseCase: MergeFoodsUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -89,6 +95,9 @@ class FoodEditorViewModel @Inject constructor(
 
     private val didDeleteFlow = MutableStateFlow(false)
     val didDelete: StateFlow<Boolean> = didDeleteFlow
+
+    private val didMergeFlow = MutableStateFlow(false)
+    val didMerge: StateFlow<Boolean> = didMergeFlow
 
     private val aliasSheetNutrientIdFlow = MutableStateFlow<Long?>(null)
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
@@ -217,12 +226,6 @@ class FoodEditorViewModel @Inject constructor(
 
             val editorRows = buildEditorRowsForAllNutrients(loadedRows)
 
-//            val rowsWithDefaults = if (foodId == null) {
-//                buildAllNutrientRowsForNewFood()
-//            } else {
-//                ensureDefaultNutrientRows(loadedRows)
-//            }
-
             val next = current.copy(
                 hasLoaded = true,
                 foodId = foodId,
@@ -288,21 +291,41 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-//    private suspend fun buildAllNutrientRowsForNewFood(): List<NutrientRowUi> {
-//        val nutrients = nutrientRepo.observeAllNutrients().first()
-//
-//        return nutrients.map { nutrient ->
-//            NutrientRowUi(
-//                nutrientId = nutrient.id,
-//                code = nutrient.code,
-//                name = nutrient.displayName,
-//                aliases = nutrient.aliases,
-//                unit = nutrient.unit,
-//                category = nutrient.category,
-//                amount = ""
-//            )
-//        }
-//    }
+    /**
+     * Merges the currently edited food into another canonical food selected by the user.
+     *
+     * Merge direction:
+     * - current edited food = override/source food
+     * - selected target food = canonical/surviving food
+     *
+     * Rules:
+     * - self-merge is ignored
+     * - historical logs are intentionally left unchanged
+     * - on success, the source food is marked merged + soft-deleted by [MergeFoodsUseCase]
+     */
+    fun mergeIntoFood(canonicalFoodId: Long, onDone: (() -> Unit)? = null) {
+        val overrideFoodId = _state.value.foodId ?: return
+        if (overrideFoodId == canonicalFoodId) return
+
+        viewModelScope.launch {
+            try {
+                update { it.copy(isSaving = true, errorMessage = null) }
+
+                mergeFoodsUseCase(
+                    overrideFoodId = overrideFoodId,
+                    canonicalFoodId = canonicalFoodId
+                )
+
+                didMergeFlow.value = true
+                onDone?.invoke()
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to merge food.") }
+            } finally {
+                update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
     private suspend fun ensureDefaultNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
         val existingCodes = rows.map { it.code }.toSet()
         val missingSpecs = EditorDefaultNutrients.defaults.filterNot { it.code in existingCodes }
@@ -1357,7 +1380,7 @@ class FoodEditorViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            savedState.getStateFlow<Any?>("barcode_assign_foodId", null)
+            savedState.getStateFlow<Any?>(KEY_BARCODE_ASSIGN_FOOD_ID, null)
                 .collect { raw ->
                     val pickedFoodId: Long = when (raw) {
                         is Long -> raw
@@ -1368,14 +1391,14 @@ class FoodEditorViewModel @Inject constructor(
 
                     Log.d("Meow", "BarcodeAssign> pickedFoodId=$pickedFoodId (raw=$raw)")
 
-                    val barcodeFromSaved = savedState.get<String>("barcode_assign_barcode")
+                    val barcodeFromSaved = savedState.get<String>(KEY_BARCODE_ASSIGN_BARCODE)
                         ?.trim()
                         .orEmpty()
 
                     val barcode = barcodeFromSaved.ifBlank { state.value.scannedBarcode.trim() }
 
-                    savedState["barcode_assign_foodId"] = null
-                    savedState["barcode_assign_barcode"] = null
+                    savedState[KEY_BARCODE_ASSIGN_FOOD_ID] = null
+                    savedState[KEY_BARCODE_ASSIGN_BARCODE] = null
 
                     if (barcode.isBlank()) {
                         update { it.copy(errorMessage = "Missing barcode to assign.") }
@@ -1412,6 +1435,22 @@ class FoodEditorViewModel @Inject constructor(
                     }
 
                     load(foodId = pickedFoodId, initialName = null, true)
+                }
+        }
+
+        viewModelScope.launch {
+            savedState.getStateFlow<Long?>(KEY_MERGE_PICK_CANONICAL_FOOD_ID, null)
+                .collect { canonicalFoodId ->
+                    val pickedId = canonicalFoodId ?: return@collect
+                    savedState[KEY_MERGE_PICK_CANONICAL_FOOD_ID] = null
+
+                    val overrideFoodId = _state.value.foodId ?: return@collect
+                    if (overrideFoodId == pickedId) {
+                        update { it.copy(errorMessage = "Cannot merge a food into itself.") }
+                        return@collect
+                    }
+
+                    mergeIntoFood(canonicalFoodId = pickedId)
                 }
         }
     }
