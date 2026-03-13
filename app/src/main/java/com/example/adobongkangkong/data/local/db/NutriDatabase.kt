@@ -278,6 +278,17 @@ abstract class NutriDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE food_barcodes ADD COLUMN overrideServingUnit TEXT"
                 )
+
+                db.execSQL(
+                    "ALTER TABLE foods ADD COLUMN mergedIntoFoodId INTEGER"
+                )
+                db.execSQL(
+                    "ALTER TABLE foods ADD COLUMN mergedAtEpochMs INTEGER"
+                )
+
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_foods_mergedIntoFoodId ON foods(mergedIntoFoodId)"
+                )
             }
         }
     }

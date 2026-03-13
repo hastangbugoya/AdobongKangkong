@@ -40,4 +40,16 @@ interface FoodBarcodeDao {
 
     @Query("SELECT * FROM food_barcodes WHERE foodId = :foodId")
     suspend fun getAllForFood(foodId: Long): List<FoodBarcodeEntity>
+
+    @Query(
+        """
+        UPDATE food_barcodes
+        SET foodId = :toFoodId
+        WHERE foodId = :fromFoodId
+        """
+    )
+    suspend fun reassignAllToFood(
+        fromFoodId: Long,
+        toFoodId: Long
+    )
 }

@@ -24,5 +24,19 @@ data class Food(
     val usdaFdcId: Long? = null,
     val usdaGtinUpc: String? = null,
     val usdaPublishedDate: String? = null,  // ISO yyyy-MM-dd (primary version gate)
-    val usdaModifiedDate: String? = null    // ISO yyyy-MM-dd (secondary info)
+    val usdaModifiedDate: String? = null,   // ISO yyyy-MM-dd (secondary info)
+
+    /**
+     * USDA-reported serving preserved for traceability even if user edits the food later.
+     */
+    val usdaServingSize: Double? = null,
+    val usdaServingUnit: ServingUnit? = null,
+    val householdServingText: String? = null,
+
+
+
+    val mergedIntoFoodId: Long? = null,
+    val mergedAtEpochMs: Long? = null,
+    val isDeleted: Boolean = false,
+    val deletedAtEpochMs: Long? = null,
 )

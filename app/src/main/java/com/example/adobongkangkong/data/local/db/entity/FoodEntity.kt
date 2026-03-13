@@ -16,6 +16,7 @@ import java.util.UUID
         // USDA traceability lookups (safe even if null)
         Index(value = ["usdaGtinUpc"]),
         Index(value = ["usdaFdcId"], unique = true),
+        Index(value = ["mergedIntoFoodId"]),
     ]
 )
 data class FoodEntity(
@@ -122,4 +123,7 @@ data class FoodEntity(
     val usdaServingSize: Double? = null,
     val usdaServingUnit: ServingUnit? = null,
     val usdaHouseholdServingText: String? = null,
+
+    val mergedIntoFoodId: Long? = null,
+    val mergedAtEpochMs: Long? = null
 )

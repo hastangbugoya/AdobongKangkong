@@ -19,6 +19,13 @@ internal fun Food.toEntity() = FoodEntity(
     usdaGtinUpc = usdaGtinUpc,
     usdaPublishedDate = usdaPublishedDate,
     usdaModifiedDate = usdaModifiedDate,
+    mergedIntoFoodId = mergedIntoFoodId,
+    mergedAtEpochMs = mergedAtEpochMs,
+    householdServingText = householdServingText,
+    isDeleted = isDeleted,
+    deletedAtEpochMs = deletedAtEpochMs,
+    usdaServingSize = usdaServingSize,
+    usdaServingUnit = usdaServingUnit,
 )
 
 internal fun FoodEntity.toDomain() = Food(
@@ -37,4 +44,11 @@ internal fun FoodEntity.toDomain() = Food(
     usdaGtinUpc = usdaGtinUpc,
     usdaPublishedDate = usdaPublishedDate,
     usdaModifiedDate = usdaModifiedDate,
+    mergedIntoFoodId = mergedIntoFoodId,
+    mergedAtEpochMs = mergedAtEpochMs,
+    householdServingText = householdServingText,
+    isDeleted = isDeleted,
+    deletedAtEpochMs = deletedAtEpochMs,
+    usdaServingSize = usdaServingSize,
+    usdaServingUnit = usdaServingUnit,
 )
