@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,9 +29,11 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -120,21 +124,18 @@ fun DashboardScreen(
         initialDate?.let { vm.setDate(it) }
     }
 
-    // One-shot navigation request (e.g., "needs grams-per-serving" -> edit food)
     LaunchedEffect(state.navigateToEditFoodId) {
         val id = state.navigateToEditFoodId ?: return@LaunchedEffect
         onEditFood(id)
         vm.onEditFoodNavigationHandled()
     }
 
-    // Snackbar messages from VM
     LaunchedEffect(snackbarMsg) {
         val msg = snackbarMsg ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
         vm.snackbarShown()
     }
 
-    // Blocking sheet (shown when CreateLogEntryUseCase.Result.Blocked)
     state.blockingSheet?.let { sheetModel ->
         ModalBottomSheet(
             onDismissRequest = { vm.dismissBlockingSheet() },
@@ -147,7 +148,6 @@ fun DashboardScreen(
         }
     }
 
-    // Dev transfer sheet (long-press title)
     val devSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     if (showDevTransferSheet) {
         ModalBottomSheet(
@@ -182,7 +182,6 @@ fun DashboardScreen(
         }
     }
 
-    // Dashboard settings sheet (gear icon)
     val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     if (state.settingsSheetOpen) {
         ModalBottomSheet(
@@ -226,7 +225,7 @@ fun DashboardScreen(
         QuickAddBottomSheet(
             onDismiss = { showQuickAdd = false },
             onCreateFood = onCreateFood,
-            onCreateFoodWithBarcode = onCreateFoodWithBarcode, // ✅ FIX: wire this through
+            onCreateFoodWithBarcode = onCreateFoodWithBarcode,
             onOpenFoodEditor = { foodId ->
                 onEditFood(foodId)
             },
@@ -258,8 +257,17 @@ fun DashboardScreen(
                     }
                 }
             )
+        },
+        bottomBar = {
+            DashboardBottomActionBar(
+                onOpenFoods = onOpenFoods,
+                onQuickAdd = { showQuickAdd = true },
+                onOpenCalendar = onOpenCalendar
+            )
         }
     ) { padding ->
+        val showTopNavButtons = false
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -268,18 +276,20 @@ fun DashboardScreen(
                 start = 16.dp,
                 end = 16.dp,
                 top = 16.dp,
-                bottom = 24.dp
+                bottom = 32.dp
             ),
         ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    TextButton(onClick = onCreateRecipe) { Text("Recipes") }
-                    TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
-                    TextButton(onClick = onOpenFoods) { Text("Foods") }
-                    TextButton(onClick = onOpenCalendar) { Text("Calendar") }
+            if (showTopNavButtons) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        TextButton(onClick = onCreateRecipe) { Text("Recipes") }
+                        TextButton(onClick = { onCreateFood("") }) { Text("New Food") }
+                        TextButton(onClick = onOpenFoods) { Text("Foods") }
+                        TextButton(onClick = onOpenCalendar) { Text("Calendar") }
+                    }
                 }
             }
 
@@ -369,6 +379,70 @@ fun DashboardScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DashboardBottomActionBar(
+    onOpenFoods: () -> Unit,
+    onQuickAdd: () -> Unit,
+    onOpenCalendar: () -> Unit,
+) {
+    Surface(tonalElevation = 3.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onOpenFoods,
+                modifier = Modifier.weight(1f))
+            {
+                Icon(
+                    painter = painterResource(R.drawable.audit),
+                    contentDescription = "Back"
+                )
+            }
+//            OutlinedButton(
+//                onClick = onOpenFoods,
+//                modifier = Modifier.weight(1f)
+//            ) {
+//                Text("Foods")
+//            }
+            IconButton(
+                onClick = onQuickAdd,
+                modifier = Modifier.weight(1f))
+            {
+                Icon(
+                    painter = painterResource(R.drawable.add),
+                    contentDescription = "Back"
+                )
+            }
+//            Button(
+//                onClick = onQuickAdd,
+//                modifier = Modifier.weight(1f)
+//            ) {
+//                Text("Log")
+//            }
+            IconButton(
+                onClick = onOpenCalendar,
+                modifier = Modifier.weight(1f))
+            {
+                Icon(
+                    painter = painterResource(R.drawable.tasks),
+                    contentDescription = "Back"
+                )
+            }
+//            OutlinedButton(
+//                onClick = onOpenCalendar,
+//                modifier = Modifier.weight(1f)
+//            ) {
+//                Text("Calendar")
+//            }
         }
     }
 }
@@ -504,7 +578,6 @@ private fun DashboardNutrientCard.toDisplay(
     val min = minPerDay
     val max = maxPerDay
 
-    // Priority: target > min > max (matches your UX expectation)
     return when {
         target != null && target > 0.0 -> {
             val p = (consumed / target).coerceIn(0.0, 1.0).toFloat()

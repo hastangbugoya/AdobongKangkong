@@ -191,6 +191,8 @@ fun FoodEditorScreen(
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val multiplePackages = state.assignedBarcodes.size > 1
+
     fun requestExit() {
         if (state.hasUnsavedChanges && !state.isSaving) {
             showExitDialog.value = true
@@ -716,7 +718,8 @@ fun FoodEditorScreen(
                                             }
 
                                             TextButton(
-                                                onClick = { onOpenBarcodePackageEditor(barcodeRow.barcode) }
+                                                onClick = { onOpenBarcodePackageEditor(barcodeRow.barcode) },
+                                                enabled = multiplePackages
                                             ) {
                                                 Text("Edit package")
                                             }
