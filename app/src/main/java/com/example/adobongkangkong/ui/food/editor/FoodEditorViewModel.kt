@@ -83,8 +83,15 @@ class FoodEditorViewModel @Inject constructor(
     private val assignBarcodeToExistingFlow = MutableStateFlow<String?>(null)
     val assignBarcodeToExistingBarcode: StateFlow<String?> = assignBarcodeToExistingFlow
 
+    private val openFoodEditorRequestFlow = MutableStateFlow<Long?>(null)
+    val openFoodEditorRequest: StateFlow<Long?> = openFoodEditorRequestFlow
+
     fun consumeAssignBarcodeToExistingRequest() {
         assignBarcodeToExistingFlow.value = null
+    }
+
+    fun consumeOpenFoodEditorRequest() {
+        openFoodEditorRequestFlow.value = null
     }
 
     @OptIn(FlowPreview::class)
@@ -130,12 +137,8 @@ class FoodEditorViewModel @Inject constructor(
         Log.d("Meow", "foodId: $foodId initialName: $initialName force: $force")
         val current = _state.value
 
-        // ✅ honor force
         if (!force) {
-            // Don't allow "new food" route to overwrite an editor already showing an existing food.
             if (foodId == null && current.foodId != null) return
-
-            // If we’re already showing this same existing food, no-op.
             if (current.foodId == foodId && (foodId != null)) return
         }
 
@@ -157,7 +160,6 @@ class FoodEditorViewModel @Inject constructor(
                     ?: UUID.randomUUID().toString()
 
             val servingSize = food?.servingSize ?: 1.0
-
             val servingUnit = food?.servingUnit ?: ServingUnit.SERVING
             val gramsPerServingUnit = food?.gramsPerServingUnit
             val mlPerServingUnit = food?.mlPerServingUnit
@@ -174,7 +176,6 @@ class FoodEditorViewModel @Inject constructor(
                         rows.any { it.basisType == BasisType.PER_100ML } -> BasisType.PER_100ML
                         rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
                         else -> {
-                            // No nutrient basis to infer from; fall back to bridges / serving unit.
                             when {
                                 (food?.mlPerServingUnit != null) -> BasisType.PER_100ML
                                 (food?.gramsPerServingUnit != null) -> BasisType.PER_100G
@@ -185,8 +186,10 @@ class FoodEditorViewModel @Inject constructor(
                     }
 
             val assignedBarcodes = if (foodId != null) {
-                foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
-            } else emptyList()
+                buildAssignedBarcodeUiList(foodId)
+            } else {
+                emptyList()
+            }
 
             val loadedRows = rows.map { r ->
                 val displayAmount =
@@ -261,7 +264,8 @@ class FoodEditorViewModel @Inject constructor(
                 hasUnsavedChanges = false,
                 assignedBarcodes = assignedBarcodes,
                 barcodeActionMessage = null,
-                scannedBarcode = if (foodId == null) current.scannedBarcode else ""
+                barcodePackageEditor = null,
+                scannedBarcode = if (foodId == null) current.scannedBarcode else current.scannedBarcode
             )
 
             _state.value = applyNeedsFix(next, current)
@@ -324,32 +328,6 @@ class FoodEditorViewModel @Inject constructor(
                 update { it.copy(isSaving = false) }
             }
         }
-    }
-
-    private suspend fun ensureDefaultNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
-        val existingCodes = rows.map { it.code }.toSet()
-        val missingSpecs = EditorDefaultNutrients.defaults.filterNot { it.code in existingCodes }
-        if (missingSpecs.isEmpty()) return rows
-
-        val missingRows = missingSpecs.mapNotNull { spec ->
-            val matches = searchNutrients(spec.searchQuery, limit = 20).first()
-            val nutrient = matches.firstOrNull { it.code == spec.code }
-                ?: matches.firstOrNull { it.displayName.equals(spec.displayName, ignoreCase = true) }
-                ?: matches.firstOrNull()
-                ?: return@mapNotNull null
-
-            NutrientRowUi(
-                nutrientId = nutrient.id,
-                code = nutrient.code,
-                name = nutrient.displayName,
-                aliases = nutrient.aliases,
-                unit = nutrient.unit,
-                category = nutrient.category,
-                amount = ""
-            )
-        }
-
-        return rows + missingRows
     }
 
     fun dismissBarcodeCollision() {
@@ -555,18 +533,22 @@ class FoodEditorViewModel @Inject constructor(
                     return@launch
                 }
 
+                val createdRow = FoodBarcodeEntity(
+                    barcode = barcode,
+                    foodId = newFoodId,
+                    source = BarcodeMappingSource.USER_ASSIGNED,
+                    usdaFdcId = null,
+                    usdaPublishedDateIso = null,
+                    assignedAtEpochMs = now,
+                    lastSeenAtEpochMs = now
+                )
+
                 foodBarcodeRepo.upsertAndTouch(
-                    entity = FoodBarcodeEntity(
-                        barcode = barcode,
-                        foodId = newFoodId,
-                        source = BarcodeMappingSource.USER_ASSIGNED,
-                        usdaFdcId = null,
-                        usdaPublishedDateIso = null,
-                        assignedAtEpochMs = now,
-                        lastSeenAtEpochMs = now
-                    ),
+                    entity = createdRow,
                     nowEpochMs = now
                 )
+
+                val refreshed = buildAssignedBarcodeUiList(newFoodId)
 
                 update {
                     it.copy(
@@ -576,11 +558,15 @@ class FoodEditorViewModel @Inject constructor(
                         pendingUsdaSearchJson = null,
                         barcodePickItems = emptyList(),
                         errorMessage = null,
-                        isBarcodeScannerOpen = false
+                        isBarcodeScannerOpen = false,
+                        assignedBarcodes = refreshed,
+                        barcodePackageEditor = toBarcodePackageEditorState(createdRow),
+                        scannedBarcode = barcode
                     )
                 }
 
-                load(foodId = newFoodId, initialName = null)
+                load(foodId = newFoodId, initialName = null, force = true)
+                openBarcodePackageEditor(barcode)
             } catch (t: Throwable) {
                 update { it.copy(errorMessage = t.message ?: "Failed to create food.") }
             } finally {
@@ -598,13 +584,12 @@ class FoodEditorViewModel @Inject constructor(
             try {
                 foodBarcodeRepo.deleteByBarcode(code)
 
-                val refreshed = foodBarcodeRepo
-                    .getAllBarcodesForFood(foodId)
-                    .map { it.barcode }
+                val refreshed = buildAssignedBarcodeUiList(foodId)
 
                 update {
                     it.copy(
                         assignedBarcodes = refreshed,
+                        barcodePackageEditor = if (it.barcodePackageEditor?.barcode == code) null else it.barcodePackageEditor,
                         scannedBarcode = if (it.scannedBarcode == code) "" else it.scannedBarcode
                     )
                 }
@@ -665,7 +650,6 @@ class FoodEditorViewModel @Inject constructor(
     fun onServingSizeChange(v: String) = update { it.copy(servingSize = v, hasUnsavedChanges = true) }
     fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v, hasUnsavedChanges = true) }
     fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServingUnit = v, hasUnsavedChanges = true) }
-
     fun onMlPerServingChange(v: String) = update { it.copy(mlPerServingUnit = v, hasUnsavedChanges = true) }
     fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v, hasUnsavedChanges = true) }
 
@@ -813,7 +797,7 @@ class FoodEditorViewModel @Inject constructor(
 
         val unit = s.servingUnit
         val needsBasis =
-            (unit.isAmbiguousForGrounding()) &&
+            unit.isAmbiguousForGrounding() &&
                     s.basisType == null
 
         if (needsBasis) {
@@ -1001,6 +985,7 @@ class FoodEditorViewModel @Inject constructor(
                     aliasSheetMessageFlow.value = null
                     update { it.copy(hasUnsavedChanges = true) }
                 }
+
                 AliasAddResult.IgnoredEmpty -> aliasSheetMessageFlow.value = "Alias is empty."
                 AliasAddResult.IgnoredDuplicate -> aliasSheetMessageFlow.value = "Alias already exists."
             }
@@ -1053,6 +1038,133 @@ class FoodEditorViewModel @Inject constructor(
                 update { it.copy(errorMessage = t.message ?: "Failed to delete food permanently.") }
             } finally {
                 update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    fun openBarcodePackageEditor(barcode: String) {
+        val code = barcode.trim()
+        if (code.isBlank()) return
+
+        viewModelScope.launch {
+            val entity = foodBarcodeRepo.getByBarcode(code) ?: run {
+                update { it.copy(errorMessage = "Barcode not found.") }
+                return@launch
+            }
+
+            val currentFoodId = _state.value.foodId
+            if (currentFoodId == null || entity.foodId != currentFoodId) {
+                update {
+                    it.copy(
+                        barcodePackageEditor = null,
+                        errorMessage = "Barcode is assigned to another food."
+                    )
+                }
+                openFoodEditorRequestFlow.value = entity.foodId
+                return@launch
+            }
+
+            update {
+                it.copy(
+                    barcodePackageEditor = toBarcodePackageEditorState(entity),
+                    errorMessage = null,
+                    barcodeActionMessage = null
+                )
+            }
+        }
+    }
+
+    fun dismissBarcodePackageEditor() {
+        update { it.copy(barcodePackageEditor = null) }
+    }
+
+    fun onBarcodePackageOverrideServingsPerPackageChange(v: String) {
+        update { s ->
+            val editor = s.barcodePackageEditor ?: return@update s
+            s.copy(barcodePackageEditor = editor.copy(overrideServingsPerPackage = v))
+        }
+    }
+
+    fun onBarcodePackageOverrideHouseholdServingTextChange(v: String) {
+        update { s ->
+            val editor = s.barcodePackageEditor ?: return@update s
+            s.copy(barcodePackageEditor = editor.copy(overrideHouseholdServingText = v))
+        }
+    }
+
+    fun onBarcodePackageOverrideServingSizeChange(v: String) {
+        update { s ->
+            val editor = s.barcodePackageEditor ?: return@update s
+            s.copy(barcodePackageEditor = editor.copy(overrideServingSize = v))
+        }
+    }
+
+    fun onBarcodePackageOverrideServingUnitChange(v: ServingUnit?) {
+        update { s ->
+            val editor = s.barcodePackageEditor ?: return@update s
+            s.copy(barcodePackageEditor = editor.copy(overrideServingUnit = v))
+        }
+    }
+
+    fun saveBarcodePackageOverrides() {
+        val editor = _state.value.barcodePackageEditor ?: return
+        val currentFoodId = _state.value.foodId ?: return
+
+        fun parseNullablePositiveDouble(text: String): Double? {
+            val trimmed = text.trim()
+            if (trimmed.isEmpty()) return null
+            return trimmed.toDoubleOrNull()?.takeIf { it > 0.0 }
+        }
+
+        val overrideServingsPerPackage = parseNullablePositiveDouble(editor.overrideServingsPerPackage)
+        val overrideServingSize = parseNullablePositiveDouble(editor.overrideServingSize)
+        val overrideHouseholdServingText = editor.overrideHouseholdServingText.trim().ifBlank { null }
+
+        if (editor.overrideServingsPerPackage.trim().isNotBlank() && overrideServingsPerPackage == null) {
+            update { it.copy(errorMessage = "Override servings per package must be a positive number.") }
+            return
+        }
+
+        if (editor.overrideServingSize.trim().isNotBlank() && overrideServingSize == null) {
+            update { it.copy(errorMessage = "Override serving size must be a positive number.") }
+            return
+        }
+
+        viewModelScope.launch {
+            val existing = foodBarcodeRepo.getByBarcode(editor.barcode) ?: run {
+                update { it.copy(errorMessage = "Barcode not found.", barcodePackageEditor = null) }
+                return@launch
+            }
+
+            if (existing.foodId != currentFoodId) {
+                update {
+                    it.copy(
+                        barcodePackageEditor = null,
+                        errorMessage = "Barcode is assigned to another food."
+                    )
+                }
+                openFoodEditorRequestFlow.value = existing.foodId
+                return@launch
+            }
+
+            foodBarcodeRepo.upsert(
+                existing.copy(
+                    overrideServingsPerPackage = overrideServingsPerPackage,
+                    overrideHouseholdServingText = overrideHouseholdServingText,
+                    overrideServingSize = overrideServingSize,
+                    overrideServingUnit = editor.overrideServingUnit
+                )
+            )
+
+            val refreshed = buildAssignedBarcodeUiList(currentFoodId)
+
+            update {
+                it.copy(
+                    assignedBarcodes = refreshed,
+                    barcodePackageEditor = null,
+                    errorMessage = null,
+                    barcodeActionMessage = "Package overrides saved for ${editor.barcode}."
+                )
             }
         }
     }
@@ -1151,7 +1263,9 @@ class FoodEditorViewModel @Inject constructor(
                     Log.d("Meow", "FoodEditor> USDA search BLOCKED barcode='$cleaned' reason='${r.reason}'")
                     val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
                         "Barcode already assigned to a manual food (foodId=${existing.foodId}). You can open it to manage/unassign, or assign this barcode elsewhere."
-                    } else r.reason
+                    } else {
+                        r.reason
+                    }
 
                     update {
                         it.copy(
@@ -1171,7 +1285,9 @@ class FoodEditorViewModel @Inject constructor(
                     Log.d("Meow", "FoodEditor> USDA search FAILED barcode='$cleaned' message='${r.message}'")
                     val msg = if (existing != null && existing.source == BarcodeMappingSource.USER_ASSIGNED) {
                         "Barcode already assigned to a manual food (foodId=${existing.foodId}). USDA lookup failed: ${r.message}"
-                    } else r.message
+                    } else {
+                        r.message
+                    }
 
                     update {
                         it.copy(
@@ -1323,26 +1439,28 @@ class FoodEditorViewModel @Inject constructor(
 
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-
             val existing = foodBarcodeRepo.getByBarcode(code)
+
             if (existing != null && existing.foodId != foodId) {
-                pendingRemapBarcode = code
-                pendingRemapTargetFoodId = foodId
                 update {
                     it.copy(
-                        barcodeRemapDialog = BarcodeRemapDialogState(
-                            barcode = code,
-                            fromFoodId = existing.foodId,
-                            toFoodId = foodId,
-                            fromSource = existing.source
-                        )
+                        barcodePackageEditor = null,
+                        pendingUsdaSearchJson = null,
+                        barcodePickItems = emptyList(),
+                        isBarcodeScannerOpen = false,
+                        barcodeActionMessage = "Barcode $code is already assigned to another food. Opening that food so you can decide what to do next.",
+                        errorMessage = null
                     )
                 }
+                openFoodEditorRequestFlow.value = existing.foodId
                 return@launch
             }
 
-            foodBarcodeRepo.upsertAndTouch(
-                entity = FoodBarcodeEntity(
+            val rowToEdit = if (existing != null) {
+                foodBarcodeRepo.touchLastSeen(code, now)
+                existing
+            } else {
+                val created = FoodBarcodeEntity(
                     barcode = code,
                     foodId = foodId,
                     source = BarcodeMappingSource.USER_ASSIGNED,
@@ -1350,13 +1468,51 @@ class FoodEditorViewModel @Inject constructor(
                     usdaPublishedDateIso = null,
                     assignedAtEpochMs = now,
                     lastSeenAtEpochMs = now
-                ),
-                nowEpochMs = now
-            )
+                )
+                foodBarcodeRepo.upsertAndTouch(created, now)
+                created
+            }
 
-            val refreshed = foodBarcodeRepo.getAllBarcodesForFood(foodId).map { it.barcode }
-            update { it.copy(assignedBarcodes = refreshed, scannedBarcode = code) }
+            val refreshed = buildAssignedBarcodeUiList(foodId)
+
+            update {
+                it.copy(
+                    assignedBarcodes = refreshed,
+                    scannedBarcode = code,
+                    barcodePackageEditor = toBarcodePackageEditorState(rowToEdit),
+                    barcodeActionMessage = null,
+                    errorMessage = null,
+                    isBarcodeScannerOpen = false
+                )
+            }
         }
+    }
+
+    private suspend fun buildAssignedBarcodeUiList(foodId: Long): List<AssignedBarcodeUi> {
+        return foodBarcodeRepo.getAllBarcodesForFood(foodId)
+            .sortedBy { it.barcode }
+            .map(::toAssignedBarcodeUi)
+    }
+
+    private fun toAssignedBarcodeUi(entity: FoodBarcodeEntity): AssignedBarcodeUi {
+        return AssignedBarcodeUi(
+            barcode = entity.barcode,
+            source = entity.source,
+            overrideServingsPerPackage = entity.overrideServingsPerPackage,
+            overrideHouseholdServingText = entity.overrideHouseholdServingText,
+            overrideServingSize = entity.overrideServingSize,
+            overrideServingUnit = entity.overrideServingUnit
+        )
+    }
+
+    private fun toBarcodePackageEditorState(entity: FoodBarcodeEntity): BarcodePackageEditorState {
+        return BarcodePackageEditorState(
+            barcode = entity.barcode,
+            overrideServingsPerPackage = entity.overrideServingsPerPackage?.toString().orEmpty(),
+            overrideHouseholdServingText = entity.overrideHouseholdServingText.orEmpty(),
+            overrideServingSize = entity.overrideServingSize?.toString().orEmpty(),
+            overrideServingUnit = entity.overrideServingUnit
+        )
     }
 
     init {
@@ -1407,20 +1563,22 @@ class FoodEditorViewModel @Inject constructor(
 
                     val now = System.currentTimeMillis()
 
+                    val createdRow = FoodBarcodeEntity(
+                        barcode = barcode,
+                        foodId = pickedFoodId,
+                        source = BarcodeMappingSource.USER_ASSIGNED,
+                        usdaFdcId = null,
+                        usdaPublishedDateIso = null,
+                        assignedAtEpochMs = now,
+                        lastSeenAtEpochMs = now
+                    )
+
                     foodBarcodeRepo.upsertAndTouch(
-                        entity = FoodBarcodeEntity(
-                            barcode = barcode,
-                            foodId = pickedFoodId,
-                            source = BarcodeMappingSource.USER_ASSIGNED,
-                            usdaFdcId = null,
-                            usdaPublishedDateIso = null,
-                            assignedAtEpochMs = now,
-                            lastSeenAtEpochMs = now
-                        ),
+                        entity = createdRow,
                         nowEpochMs = now
                     )
 
-                    val refreshed = foodBarcodeRepo.getAllBarcodesForFood(pickedFoodId).map { it.barcode }
+                    val refreshed = buildAssignedBarcodeUiList(pickedFoodId)
 
                     update {
                         it.copy(
@@ -1430,11 +1588,13 @@ class FoodEditorViewModel @Inject constructor(
                             errorMessage = null,
                             isBarcodeScannerOpen = false,
                             isBarcodeFallbackOpen = false,
-                            assignedBarcodes = refreshed
+                            assignedBarcodes = refreshed,
+                            barcodePackageEditor = toBarcodePackageEditorState(createdRow)
                         )
                     }
 
                     load(foodId = pickedFoodId, initialName = null, true)
+                    openBarcodePackageEditor(barcode)
                 }
         }
 

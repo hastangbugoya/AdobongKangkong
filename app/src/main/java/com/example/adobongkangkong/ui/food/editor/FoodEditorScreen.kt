@@ -170,15 +170,18 @@ fun FoodEditorScreen(
 
     onResolveBarcodeCollision: (BarcodeCollisionAction) -> Unit,
 
-    // ✅ NEW: optional dismiss action for the needs-fix banner
+    // Package override editor
+    onOpenBarcodePackageEditor: (String) -> Unit,
+    onDismissBarcodePackageEditor: () -> Unit,
+    onBarcodePackageOverrideServingsPerPackageChange: (String) -> Unit,
+    onBarcodePackageOverrideHouseholdServingTextChange: (String) -> Unit,
+    onBarcodePackageOverrideServingSizeChange: (String) -> Unit,
+    onBarcodePackageOverrideServingUnitChange: (ServingUnit?) -> Unit,
+    onSaveBarcodePackageOverrides: () -> Unit,
+
+    // Optional dismiss action for needs-fix banner
     onDismissNeedsFixBanner: (() -> Unit)? = null,
 ) {
-    val attachedNutrientIds = remember(state.nutrientRows) {
-        state.nutrientRows
-            .map { it.nutrientId }
-            .toSet()
-    }
-
     val (primaryNutrientRows, secondaryNutrientRows) = remember(state.nutrientRows) {
         state.nutrientRows.partition { it.code in EditorDefaultNutrients.codes }
     }
@@ -412,6 +415,61 @@ fun FoodEditorScreen(
         )
     }
 
+    val packageEditor = state.barcodePackageEditor
+    if (packageEditor != null) {
+        AlertDialog(
+            onDismissRequest = onDismissBarcodePackageEditor,
+            title = { Text("Edit package") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Barcode: ${packageEditor.barcode}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = packageEditor.overrideServingsPerPackage,
+                        onValueChange = onBarcodePackageOverrideServingsPerPackageChange,
+                        label = { Text("Override servings per package") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = packageEditor.overrideHouseholdServingText,
+                        onValueChange = onBarcodePackageOverrideHouseholdServingTextChange,
+                        label = { Text("Override household serving text") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = packageEditor.overrideServingSize,
+                        onValueChange = onBarcodePackageOverrideServingSizeChange,
+                        label = { Text("Override serving size") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    NullableServingUnitDropdown(
+                        value = packageEditor.overrideServingUnit,
+                        onValueChange = onBarcodePackageOverrideServingUnitChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        options = ServingUnit.values().toList()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = onSaveBarcodePackageOverrides) {
+                    Text("Save package")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissBarcodePackageEditor) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -435,7 +493,7 @@ fun FoodEditorScreen(
         bottomBar = {
             FoodEditorBottomBar(
                 isSaving = state.isSaving,
-                errorMessage = state.errorMessage,
+                errorMessage = state.errorMessage ?: state.barcodeActionMessage,
                 showDelete = (onDeleteFood != null && state.foodId != null),
                 onDelete = { showDeleteDialog = true },
                 onSave = onSave,
@@ -481,7 +539,9 @@ fun FoodEditorScreen(
                             com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
                                 .bannerJpegFile(bannerOwnerId)
                         }
-                    } else null
+                    } else {
+                        null
+                    }
 
                     val hasStoredBanner = bannerFile?.exists() == true
 
@@ -629,41 +689,64 @@ fun FoodEditorScreen(
                             if (state.assignedBarcodes.isEmpty()) {
                                 Text("None", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             } else {
-                                state.assignedBarcodes.forEach { code ->
-                                    var confirmOpen by remember(code) { mutableStateOf(false) }
+                                state.assignedBarcodes.forEach { barcodeRow ->
+                                    var confirmUnassign by remember(barcodeRow.barcode) { mutableStateOf(false) }
 
-                                    Row(
+                                    Column(
                                         modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Text(
-                                            text = code,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(text = barcodeRow.barcode)
 
-                                        TextButton(onClick = { confirmOpen = true }) {
-                                            Text("Unassign")
+                                                val packageSummary = barcodeOverrideSummary(barcodeRow)
+                                                if (packageSummary.isNotBlank()) {
+                                                    Text(
+                                                        text = packageSummary,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+
+                                            TextButton(
+                                                onClick = { onOpenBarcodePackageEditor(barcodeRow.barcode) }
+                                            ) {
+                                                Text("Edit package")
+                                            }
+
+                                            TextButton(onClick = { confirmUnassign = true }) {
+                                                Text("Unassign")
+                                            }
+                                        }
+
+                                        if (confirmUnassign) {
+                                            AlertDialog(
+                                                onDismissRequest = { confirmUnassign = false },
+                                                title = { Text("Unassign barcode?") },
+                                                text = { Text("Remove barcode ${barcodeRow.barcode} from this food?") },
+                                                confirmButton = {
+                                                    TextButton(
+                                                        onClick = {
+                                                            confirmUnassign = false
+                                                            onUnassignBarcode(barcodeRow.barcode)
+                                                        }
+                                                    ) { Text("Unassign") }
+                                                },
+                                                dismissButton = {
+                                                    TextButton(onClick = { confirmUnassign = false }) { Text("Cancel") }
+                                                }
+                                            )
                                         }
                                     }
 
-                                    if (confirmOpen) {
-                                        AlertDialog(
-                                            onDismissRequest = { confirmOpen = false },
-                                            title = { Text("Unassign barcode?") },
-                                            text = { Text("Remove barcode $code from this food?") },
-                                            confirmButton = {
-                                                TextButton(
-                                                    onClick = {
-                                                        confirmOpen = false
-                                                        onUnassignBarcode(code)
-                                                    }
-                                                ) { Text("Unassign") }
-                                            },
-                                            dismissButton = {
-                                                TextButton(onClick = { confirmOpen = false }) { Text("Cancel") }
-                                            }
-                                        )
-                                    }
+                                    HorizontalDivider()
                                 }
                             }
                         }
@@ -862,7 +945,7 @@ fun FoodEditorScreen(
                     }
                 }
 
-                Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : ${state}")
+                Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : $state")
 
                 item {
                     Text("State", style = MaterialTheme.typography.bodyMedium)
@@ -1228,7 +1311,6 @@ private fun ServingSection(
                 )
             }
         } else {
-
             val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
             val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
 
@@ -1265,8 +1347,7 @@ private fun ServingSection(
                     .onFocusChanged { focus ->
                         gramsPerServingFocused = focus.isFocused
                         if (!focus.isFocused) {
-                            gramsPerServingText =
-                                gramsPerServingComputed?.toString().orEmpty()
+                            gramsPerServingText = gramsPerServingComputed?.toString().orEmpty()
                         }
                     }
             )
@@ -1338,6 +1419,59 @@ private fun ServingUnitDropdown(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NullableServingUnitDropdown(
+    value: ServingUnit?,
+    onValueChange: (ServingUnit?) -> Unit,
+    modifier: Modifier = Modifier,
+    options: List<ServingUnit>,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = value?.display ?: "Use food default",
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Override serving unit") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Use food default") },
+                onClick = {
+                    expanded = false
+                    onValueChange(null)
+                }
+            )
+
+            options.forEach { unit ->
+                DropdownMenuItem(
+                    text = { Text(unit.display) },
+                    onClick = {
+                        expanded = false
+                        onValueChange(unit)
+                    }
+                )
+            }
+        }
+    }
+}
+
 /**
  * Bottom action bar for the food editor.
  *
@@ -1387,6 +1521,42 @@ private fun FoodEditorBottomBar(
             }
         }
     }
+}
+
+private fun barcodeOverrideSummary(row: AssignedBarcodeUi): String {
+    val parts = mutableListOf<String>()
+
+    row.overrideServingsPerPackage?.let {
+        parts += "Servings/pkg: $it"
+    }
+    row.overrideHouseholdServingText
+        ?.takeIf { it.isNotBlank() }
+        ?.let {
+            parts += it
+        }
+
+    val sizePart = when {
+        row.overrideServingSize != null && row.overrideServingUnit != null ->
+            "Serving: ${row.overrideServingSize} ${row.overrideServingUnit.display}"
+        row.overrideServingSize != null ->
+            "Serving size: ${row.overrideServingSize}"
+        row.overrideServingUnit != null ->
+            "Serving unit: ${row.overrideServingUnit.display}"
+        else -> null
+    }
+
+    if (!sizePart.isNullOrBlank()) {
+        parts += sizePart
+    }
+
+    if (parts.isEmpty()) {
+        parts += when (row.source) {
+            BarcodeMappingSource.USDA -> "USDA barcode"
+            BarcodeMappingSource.USER_ASSIGNED -> "User-assigned barcode"
+        }
+    }
+
+    return parts.joinToString(" • ")
 }
 
 private fun NutrientCategory.labelForUi(): String =

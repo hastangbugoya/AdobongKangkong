@@ -36,6 +36,7 @@ fun FoodEditorRoute(
     val didDelete by viewModel.didDelete.collectAsState()
     val didMerge by viewModel.didMerge.collectAsState()
     val assignExistingBarcode by viewModel.assignBarcodeToExistingBarcode.collectAsState()
+    val openFoodEditorRequest by viewModel.openFoodEditorRequest.collectAsState()
 
     LaunchedEffect(Unit) {
         Log.d("Meow", "FOOD_EDITOR_ROUTE vm=${System.identityHashCode(viewModel)}")
@@ -44,8 +45,6 @@ fun FoodEditorRoute(
     val aliasName by viewModel.aliasSheetNutrientName.collectAsState()
     val aliasMessage by viewModel.aliasSheetMessage.collectAsState()
     val aliases by viewModel.selectedAliases.collectAsState()
-
-    // FoodEditorRoute.kt (inside FoodEditorRoute composable)
 
     // Load + initialBarcode sequencing (single source of truth)
     val didApplyInitialBarcode = androidx.compose.runtime.remember(foodId, initialName, initialBarcode) {
@@ -66,7 +65,7 @@ fun FoodEditorRoute(
             // New food: treat as scan (USDA flow)
             viewModel.onBarcodeScanned(code)
         } else {
-            // Edit existing: wait until VM state reflects this foodId, then assign
+            // Edit existing: wait until VM state reflects this foodId, then attach/open package editor flow
             snapshotFlow { state.foodId }
                 .filter { it == foodId }
                 .first()
@@ -89,6 +88,12 @@ fun FoodEditorRoute(
             onAssignBarcodeToExisting(code)
             viewModel.consumeAssignBarcodeToExistingRequest()
         }
+    }
+
+    LaunchedEffect(openFoodEditorRequest) {
+        val targetFoodId = openFoodEditorRequest ?: return@LaunchedEffect
+        onOpenFoodEditor(targetFoodId)
+        viewModel.consumeOpenFoodEditorRequest()
     }
 
     FoodEditorScreen(
@@ -145,24 +150,30 @@ fun FoodEditorRoute(
         onBarcodeScanned = viewModel::onBarcodeScanned,
         onPickBarcodeCandidate = viewModel::onPickBarcodeCandidate,
         onUnassignBarcode = viewModel::unassignBarcode,
+
         onPickBasisType = viewModel::onPickBasisType,
         onDismissGroundingDialog = viewModel::closeGroundingDialog,
+
         mlPerServingUnit = state.mlPerServingUnit,
         onMlPerServingChange = viewModel::onMlPerServingChange,
         basisType = state.basisType,
+
         onDismissBarcodeFallback = viewModel::dismissBarcodeFallback,
         onBarcodeFallbackAssignExisting = viewModel::barcodeFallbackAssignExisting,
         onBarcodeFallbackCreateNameChange = viewModel::onBarcodeFallbackCreateNameChange,
         onBarcodeFallbackCreateMinimal = viewModel::barcodeFallbackCreateMinimalFood,
         onConfirmBarcodeRemap = viewModel::onConfirmBarcodeRemap,
+
         onBarcodeFallbackOpenAssignedFood = { targetFoodId ->
             viewModel.dismissBarcodeFallback()
             onOpenFoodEditor(targetFoodId)
         },
+
         onOpenFoodEditor = { targetFoodId ->
             viewModel.dismissBarcodeFallback()
             onOpenFoodEditor(targetFoodId)
         },
+
         onDismissBarcodeCollision = viewModel::dismissBarcodeCollision,
         onOpenExistingFromCollision = viewModel::openExistingFromCollision,
         onRemapFromCollisionProceedImport = viewModel::remapFromCollisionProceedImport,
@@ -173,13 +184,17 @@ fun FoodEditorRoute(
                 BarcodeCollisionAction.Replace -> viewModel.remapFromCollisionProceedImport()
             }
         },
+
+        onOpenBarcodePackageEditor = viewModel::openBarcodePackageEditor,
+        onDismissBarcodePackageEditor = viewModel::dismissBarcodePackageEditor,
+        onBarcodePackageOverrideServingsPerPackageChange = viewModel::onBarcodePackageOverrideServingsPerPackageChange,
+        onBarcodePackageOverrideHouseholdServingTextChange = viewModel::onBarcodePackageOverrideHouseholdServingTextChange,
+        onBarcodePackageOverrideServingSizeChange = viewModel::onBarcodePackageOverrideServingSizeChange,
+        onBarcodePackageOverrideServingUnitChange = viewModel::onBarcodePackageOverrideServingUnitChange,
+        onSaveBarcodePackageOverrides = viewModel::saveBarcodePackageOverrides,
+
         onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner
     )
-
-//    LaunchedEffect(onMergePicked) {
-//        // Route-level merge completion bridge.
-//        // AppNavHost should deliver the picked canonical food id through this callback.
-//    }
 
     LaunchedEffect(mergePickedFoodId) {
         val canonicalFoodId = mergePickedFoodId ?: return@LaunchedEffect
@@ -210,5 +225,21 @@ fun FoodEditorRoute(
  * Purpose:
  * - Route-level wrapper:
  *   - owns FoodEditorViewModel via hiltViewModel()
- *   - loads the food/editor data based on
+ *   - loads the food/editor data based on route args
+ *   - owns navigation side-effects (done/back/open-other-food/merge picker bridge)
+ *
+ * Important architecture rule:
+ * - FoodEditorScreen stays stateless and navigation-agnostic.
+ * - FoodEditorViewModel decides intent.
+ * - FoodEditorRoute performs navigation.
+ *
+ * Barcode override flow:
+ * - Editing existing food + scan barcode:
+ *   - new barcode -> attach to current food -> open package override editor
+ *   - same-food barcode -> open package override editor
+ *   - different-food barcode -> route opens that already-assigned food
+ *
+ * Merge wiring:
+ * - Keep merge completion bridge at route level.
+ * - Do not duplicate merge-result handling in both route and VM.
  */

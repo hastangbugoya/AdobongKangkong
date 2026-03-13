@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.food.editor
 
+import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
@@ -19,6 +20,23 @@ data class NutrientRowUi(
     val unit: NutrientUnit,
     val category: NutrientCategory,
     val amount: String // keep as String for text field editing
+)
+
+data class AssignedBarcodeUi(
+    val barcode: String,
+    val source: BarcodeMappingSource,
+    val overrideServingsPerPackage: Double? = null,
+    val overrideHouseholdServingText: String? = null,
+    val overrideServingSize: Double? = null,
+    val overrideServingUnit: ServingUnit? = null,
+)
+
+data class BarcodePackageEditorState(
+    val barcode: String,
+    val overrideServingsPerPackage: String = "",
+    val overrideHouseholdServingText: String = "",
+    val overrideServingSize: String = "",
+    val overrideServingUnit: ServingUnit? = null,
 )
 
 data class FoodEditorState(
@@ -71,22 +89,25 @@ data class FoodEditorState(
     val barcodeFallbackMessage: String? = null,
     val barcodeFallbackCreateName: String = "",
     val barcodeAlreadyAssignedFoodId: Long? = null,
+
     // Barcode remap confirm (when barcode already mapped to another food)
     val barcodeRemapDialog: BarcodeRemapDialogState? = null,
 
-    // ✅ NEW: barcode collision prompt (Remap / Open Existing / Cancel)
+    // Barcode collision prompt (USDA import collision flow)
     val barcodeCollisionDialog: BarcodeCollisionDialogState? = null,
 
     // Barcode mappings for this food (persisted)
-    val assignedBarcodes: List<String> = emptyList(),
+    val assignedBarcodes: List<AssignedBarcodeUi> = emptyList(),
     val barcodeActionMessage: String? = null,
+    val barcodePackageEditor: BarcodePackageEditorState? = null,
 
     val hasLoaded: Boolean = false,
-    // ✅ NEW: non-blocking “Needs Fix” banner state (computed by ViewModel)
+
+    // Non-blocking “Needs Fix” banner state (computed by ViewModel)
     val needsFix: Boolean = false,
     val fixMessage: String? = null,
 
-    // ✅ Optional dismiss: hides banner until message changes (or becomes null)
+    // Optional dismiss: hides banner until message changes (or becomes null)
     val fixBannerDismissed: Boolean = false,
 ) {
     /**
