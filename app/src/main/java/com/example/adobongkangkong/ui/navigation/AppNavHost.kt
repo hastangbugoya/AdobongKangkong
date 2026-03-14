@@ -106,7 +106,7 @@ fun AppNavHost(
         ) { entry ->
             val dateIso = entry.arguments?.getString("date").orEmpty()
             val initialDate = dateIso.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it) }
-
+            val showBackButton = navController.previousBackStackEntry != null
             DashboardScreen(
                 initialDate = initialDate,
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
@@ -121,6 +121,8 @@ fun AppNavHost(
                 onCreateFoodWithBarcode = { barcode ->
                     navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
                 },
+                showBackButton = showBackButton,
+                onBack = { navController.popBackStack() },
             )
         }
 

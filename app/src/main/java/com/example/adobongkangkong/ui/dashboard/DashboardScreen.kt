@@ -47,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.modifier.modifierLocalConsumer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +83,8 @@ fun DashboardScreen(
     initialDate: LocalDate? = null,
     onOpenBackup: () -> Unit,
     onCreateFoodWithBarcode: (String) -> Unit,
+    showBackButton: Boolean = false,
+    onBack: () -> Unit = {},
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -237,6 +240,16 @@ fun DashboardScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (showBackButton) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                painter = painterResource(R.drawable.angle_circle_left),
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
+                },
                 title = {
                     Text(
                         text = "Adobong Kangkong",
@@ -394,7 +407,7 @@ private fun DashboardBottomActionBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -404,45 +417,27 @@ private fun DashboardBottomActionBar(
             {
                 Icon(
                     painter = painterResource(R.drawable.audit),
-                    contentDescription = "Back"
+                    contentDescription = "Open Foods",
                 )
             }
-//            OutlinedButton(
-//                onClick = onOpenFoods,
-//                modifier = Modifier.weight(1f)
-//            ) {
-//                Text("Foods")
-//            }
             IconButton(
                 onClick = onQuickAdd,
                 modifier = Modifier.weight(1f))
             {
                 Icon(
                     painter = painterResource(R.drawable.add),
-                    contentDescription = "Back"
+                    contentDescription = "Quick Log",
                 )
             }
-//            Button(
-//                onClick = onQuickAdd,
-//                modifier = Modifier.weight(1f)
-//            ) {
-//                Text("Log")
-//            }
             IconButton(
                 onClick = onOpenCalendar,
                 modifier = Modifier.weight(1f))
             {
                 Icon(
                     painter = painterResource(R.drawable.tasks),
-                    contentDescription = "Back"
+                    contentDescription = "Open Calendar",
                 )
             }
-//            OutlinedButton(
-//                onClick = onOpenCalendar,
-//                modifier = Modifier.weight(1f)
-//            ) {
-//                Text("Calendar")
-//            }
         }
     }
 }
