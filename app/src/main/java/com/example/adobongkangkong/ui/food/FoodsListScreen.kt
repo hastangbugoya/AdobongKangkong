@@ -3,9 +3,9 @@ package com.example.adobongkangkong.ui.food
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,10 +39,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -76,11 +74,17 @@ fun FoodsListScreen(
      * Recipe rows return their recipe foodId through the same callback because recipes are foods in this app.
      */
     onPickFood: ((Long) -> Unit)? = null,
+    initialFavoritesOnly: Boolean = false,
     vm: FoodsListViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
     val query by vm.query.collectAsState()
+    val favoritesOnly by vm.favoritesOnly.collectAsState()
+
+    LaunchedEffect(initialFavoritesOnly) {
+        vm.setFavoritesOnly(initialFavoritesOnly)
+    }
 
     Scaffold(
         topBar = {
@@ -145,6 +149,11 @@ fun FoodsListScreen(
                     onClick = { vm.onFilterChange(FoodsFilter.RECIPES_ONLY) },
                     label = { Text("Recipes") }
                 )
+                FilterChip(
+                    selected = favoritesOnly,
+                    onClick = { vm.onFavoritesOnlyChange(!favoritesOnly) },
+                    label = { Text("Favorites") }
+                )
             }
 
             Spacer(Modifier.height(8.dp))
@@ -205,7 +214,7 @@ fun FoodsListScreen(
         }
     }
 
-    LaunchedEffect(state.sort.key, state.sort.direction) {
+    LaunchedEffect(state.sort.key, state.sort.direction, favoritesOnly) {
         listState.scrollToItem(0)
     }
 }
@@ -216,7 +225,7 @@ private fun FoodsSortRow(
     onSortKey: (FoodSortKey) -> Unit,
     onToggleDirection: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded = remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -228,7 +237,7 @@ private fun FoodsSortRow(
             modifier = Modifier.padding(end = 8.dp)
         )
 
-        TextButton(onClick = { expanded = true }) {
+        TextButton(onClick = { expanded.value = true }) {
             Text("${sort.key.label} • ${sort.direction.label}")
         }
 
@@ -243,13 +252,13 @@ private fun FoodsSortRow(
         }
     }
 
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+    DropdownMenu(expanded = expanded.value, onDismissRequest = { expanded.value = false }) {
         FoodSortKey.entries.forEach { key ->
             DropdownMenuItem(
                 text = { Text(key.label) },
                 onClick = {
                     onSortKey(key)
-                    expanded = false
+                    expanded.value = false
                 }
             )
         }

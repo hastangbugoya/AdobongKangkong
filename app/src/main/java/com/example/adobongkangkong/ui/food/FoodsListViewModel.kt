@@ -93,8 +93,10 @@ class FoodsListViewModel @Inject constructor(
     private val filterFlow = MutableStateFlow(FoodsFilter.ALL)
     private val selectedCategoryIdFlow = MutableStateFlow<Long?>(null)
     private val sortFlow = MutableStateFlow(FoodSortState())
+    private val favoritesOnlyFlow = MutableStateFlow(false)
 
     val query: StateFlow<String> = queryFlow
+    val favoritesOnly: StateFlow<Boolean> = favoritesOnlyFlow
 
     private val resultsFlow: Flow<List<Food>> =
         queryFlow
@@ -140,19 +142,32 @@ class FoodsListViewModel @Inject constructor(
             .map { list -> list.associateBy { it.foodId } }
             .distinctUntilChanged()
 
-    /** Apply All/Foods/Recipes filter + single category filter to raw search results. */
+    /** Apply All/Foods/Recipes filter + single category filter + favorites filter to raw search results. */
     private val filteredFoodsFlow: Flow<List<Food>> =
-        combine(filterFlow, resultsFlow, selectedCategoryFoodIdsFlow) { filter, foods, selectedCategoryFoodIds ->
+        combine(
+            filterFlow,
+            resultsFlow,
+            selectedCategoryFoodIdsFlow,
+            favoritesOnlyFlow,
+            flagsByFoodIdFlow
+        ) { filter, foods, selectedCategoryFoodIds, favoritesOnly, flagsByFoodId ->
             val typeFiltered = when (filter) {
                 FoodsFilter.ALL -> foods
                 FoodsFilter.FOODS_ONLY -> foods.filter { !it.isRecipe }
                 FoodsFilter.RECIPES_ONLY -> foods.filter { it.isRecipe }
             }
 
-            if (selectedCategoryFoodIds == null) {
-                typeFiltered
+            val categoryFiltered =
+                if (selectedCategoryFoodIds == null) {
+                    typeFiltered
+                } else {
+                    typeFiltered.filter { it.id in selectedCategoryFoodIds }
+                }
+
+            if (favoritesOnly) {
+                categoryFiltered.filter { flagsByFoodId[it.id]?.favorite == true }
             } else {
-                typeFiltered.filter { it.id in selectedCategoryFoodIds }
+                categoryFiltered
             }
         }
 
@@ -393,6 +408,14 @@ class FoodsListViewModel @Inject constructor(
         selectedCategoryIdFlow.value = categoryId
     }
 
+    fun setFavoritesOnly(enabled: Boolean) {
+        favoritesOnlyFlow.value = enabled
+    }
+
+    fun onFavoritesOnlyChange(enabled: Boolean) {
+        favoritesOnlyFlow.value = enabled
+    }
+
     fun onSortKeyChange(key: FoodSortKey) {
         sortFlow.value = sortFlow.value.copy(key = key)
     }
@@ -552,8 +575,8 @@ class FoodsListViewModel @Inject constructor(
             val aNull = a == null
             val bNull = b == null
             if (aNull && bNull) return 0
-            if (aNull) return 1   // always bottom
-            if (bNull) return -1  // always bottom
+            if (aNull) return 1
+            if (bNull) return -1
 
             val cmp = a!!.compareTo(b!!)
             return if (dir == SortDirection.ASC) cmp else -cmp

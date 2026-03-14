@@ -92,9 +92,11 @@ fun QuickAddBottomSheet(
     onCreateFood: (String) -> Unit,
     onCreateFoodWithBarcode: (String) -> Unit = {},
     onOpenFoodEditor: (foodId: Long) -> Unit = {},
+    onOpenFavorites: () -> Unit = {},
     logDate: LocalDate,
     initialPlannedItemCandidate: QuickAddPlannedItemCandidate? = null,
     editingLogId: Long? = null,
+    pickedFoodId: Long? = null,
     vm: QuickAddViewModel = hiltViewModel()
 ) {
     val focus = LocalFocusManager.current
@@ -114,6 +116,13 @@ fun QuickAddBottomSheet(
             editingLogId != null -> vm.startEdit(editingLogId)
             initialPlannedItemCandidate != null -> vm.onPlannedItemSelected(initialPlannedItemCandidate)
             else -> vm.startCreate()
+        }
+    }
+
+    LaunchedEffect(pickedFoodId) {
+        pickedFoodId?.let {
+            vm.onPickedFoodId(it)
+            sheetState.show()
         }
     }
 
@@ -274,6 +283,16 @@ fun QuickAddBottomSheet(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("IOU")
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    focus.clearFocus()
+                                    onOpenFavorites()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Favorites")
                             }
 
                             TextButton(

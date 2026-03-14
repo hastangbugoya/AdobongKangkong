@@ -883,9 +883,38 @@ class QuickAddViewModel @Inject constructor(
         queryFlow.value = q
     }
 
+    fun onPickedFoodId(foodId: Long) {
+        if (modeFlow.value == QuickAddMode.EDIT && isIdentityLockedFlow.value) return
+
+        viewModelScope.launch {
+            val food = foodRepository.getById(foodId)
+            if (food == null) {
+                errorFlow.value = "Picked food not found."
+                return@launch
+            }
+
+            applySelectedFood(
+                food = food,
+                selectedBatchIdOverride = null
+            )
+        }
+    }
+
     fun onFoodSelected(food: Food) {
         if (modeFlow.value == QuickAddMode.EDIT && isIdentityLockedFlow.value) return
 
+        viewModelScope.launch {
+            applySelectedFood(
+                food = food,
+                selectedBatchIdOverride = null
+            )
+        }
+    }
+
+    private suspend fun applySelectedFood(
+        food: Food,
+        selectedBatchIdOverride: Long?
+    ) {
         selectedFoodFlow.value = food
         servingsFlow.value = 1.0
         inputModeFlow.value = InputMode.SERVINGS
@@ -906,15 +935,13 @@ class QuickAddViewModel @Inject constructor(
             }
 
         inputAmountFlow.value = food.servingSize.coerceAtLeast(0.0)
-
         errorFlow.value = null
+        mealSlotFlow.value = null
 
-        viewModelScope.launch {
-            applyRecipeContextForFood(
-                food = food,
-                selectedBatchIdOverride = null
-            )
-        }
+        applyRecipeContextForFood(
+            food = food,
+            selectedBatchIdOverride = selectedBatchIdOverride
+        )
     }
 
     private suspend fun applyRecipeContextForFood(
@@ -1052,23 +1079,6 @@ class QuickAddViewModel @Inject constructor(
                 return@launch
             }
 
-            selectedFoodFlow.value = food
-            servingsFlow.value = 1.0
-            inputModeFlow.value = InputMode.SERVINGS
-
-            inputUnitFlow.value =
-                if (food.servingUnit == ServingUnit.SERVING ||
-                    food.servingUnit.asG != null ||
-                    food.servingUnit.asMl != null
-                ) {
-                    food.servingUnit
-                } else {
-                    ServingUnit.G
-                }
-
-            inputAmountFlow.value = food.servingSize.coerceAtLeast(0.0)
-            errorFlow.value = null
-
             val batchOverride =
                 if (candidate.type == QuickAddPlannedItemCandidate.Type.RECIPE_BATCH) {
                     candidate.batchId
@@ -1076,7 +1086,7 @@ class QuickAddViewModel @Inject constructor(
                     null
                 }
 
-            applyRecipeContextForFood(
+            applySelectedFood(
                 food = food,
                 selectedBatchIdOverride = batchOverride
             )

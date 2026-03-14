@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,7 +28,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -44,11 +42,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.modifier.modifierLocalConsumer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,19 +80,21 @@ fun DashboardScreen(
     initialDate: LocalDate? = null,
     onOpenBackup: () -> Unit,
     onCreateFoodWithBarcode: (String) -> Unit,
+    onOpenQuickAddFavorites: () -> Unit = {},
+    pickedQuickAddFoodId: Long? = null,
+    onPickedQuickAddFoodConsumed: () -> Unit = {},
     showBackButton: Boolean = false,
     onBack: () -> Unit = {},
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
 
-    var showQuickAdd by remember { mutableStateOf(false) }
+    var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarMsg by vm.snackbar.collectAsState()
 
-    val context = LocalContext.current
     var showDevTransferSheet by remember { mutableStateOf(false) }
 
     val targetDraft by vm.targetDraft.collectAsState()
@@ -137,6 +136,12 @@ fun DashboardScreen(
         val msg = snackbarMsg ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
         vm.snackbarShown()
+    }
+
+    LaunchedEffect(pickedQuickAddFoodId) {
+        if (pickedQuickAddFoodId != null) {
+            showQuickAdd = true
+        }
     }
 
     state.blockingSheet?.let { sheetModel ->
@@ -232,8 +237,18 @@ fun DashboardScreen(
             onOpenFoodEditor = { foodId ->
                 onEditFood(foodId)
             },
-            logDate = state.date
+            onOpenFavorites = {
+                onOpenQuickAddFavorites()
+            },
+            logDate = state.date,
+            pickedFoodId = pickedQuickAddFoodId
         )
+
+        LaunchedEffect(pickedQuickAddFoodId, showQuickAdd) {
+            if (showQuickAdd && pickedQuickAddFoodId != null) {
+                onPickedQuickAddFoodConsumed()
+            }
+        }
     }
 
     Scaffold(

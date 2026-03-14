@@ -37,6 +37,9 @@ private const val KEY_FOOD_PICK_MODE = "food_pick_mode"
 private const val FOOD_PICK_MODE_MERGE = "merge"
 private const val KEY_MERGE_PICK_CANONICAL_FOOD_ID = "merge_pick_canonical_food_id"
 
+private const val KEY_FOOD_PICK_INITIAL_FILTER = "food_pick_initial_filter"
+private const val FOOD_PICK_INITIAL_FILTER_FAVORITES = "favorites"
+
 private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
 private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
 
@@ -107,6 +110,11 @@ fun AppNavHost(
             val dateIso = entry.arguments?.getString("date").orEmpty()
             val initialDate = dateIso.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it) }
             val showBackButton = navController.previousBackStackEntry != null
+
+            val pickedQuickAddFoodId by entry.savedStateHandle
+                .getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
+                .collectAsState()
+
             DashboardScreen(
                 initialDate = initialDate,
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
@@ -120,6 +128,14 @@ fun AppNavHost(
                 onOpenBackup = { navController.navigate("backup") },
                 onCreateFoodWithBarcode = { barcode ->
                     navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                },
+                onOpenQuickAddFavorites = {
+                    entry.savedStateHandle[KEY_FOOD_PICK_INITIAL_FILTER] = FOOD_PICK_INITIAL_FILTER_FAVORITES
+                    navController.navigate(NavRoutes.Foods.pickFood)
+                },
+                pickedQuickAddFoodId = pickedQuickAddFoodId,
+                onPickedQuickAddFoodConsumed = {
+                    entry.savedStateHandle[KEY_FOOD_PICK_FOOD_ID] = null
                 },
                 showBackButton = showBackButton,
                 onBack = { navController.popBackStack() },
@@ -182,6 +198,10 @@ fun AppNavHost(
             val dateIso = entry.arguments!!.getString("date")!!
             val date = runCatching { LocalDate.parse(dateIso) }.getOrElse { LocalDate.now() }
 
+            val pickedFoodId by entry.savedStateHandle
+                .getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
+                .collectAsState()
+
             QuickAddBottomSheet(
                 onDismiss = { navController.popBackStack() },
                 onCreateFood = { prefillName ->
@@ -193,7 +213,12 @@ fun AppNavHost(
                 onOpenFoodEditor = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
                 },
-                logDate = date
+                onOpenFavorites = {
+                    entry.savedStateHandle[KEY_FOOD_PICK_INITIAL_FILTER] = FOOD_PICK_INITIAL_FILTER_FAVORITES
+                    navController.navigate(NavRoutes.Foods.pickFood)
+                },
+                logDate = date,
+                pickedFoodId = pickedFoodId
             )
         }
 
@@ -216,6 +241,11 @@ fun AppNavHost(
         }
 
         composable(route = NavRoutes.Foods.pickFood) {
+            val previousEntry = navController.previousBackStackEntry
+            val initialFilter = previousEntry
+                ?.savedStateHandle
+                ?.get<String>(KEY_FOOD_PICK_INITIAL_FILTER)
+
             FoodsListScreen(
                 onBack = { navController.popBackStack() },
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
@@ -223,7 +253,6 @@ fun AppNavHost(
                 onCreateFood = { navController.navigate(NavRoutes.Foods.new(prefillName = null)) },
                 onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
                 onPickFood = { foodId ->
-                    val previousEntry = navController.previousBackStackEntry
                     val pickMode = previousEntry?.savedStateHandle?.get<String>(KEY_FOOD_PICK_MODE)
 
                     if (pickMode == FOOD_PICK_MODE_MERGE) {
@@ -233,8 +262,10 @@ fun AppNavHost(
                         previousEntry?.savedStateHandle?.set(KEY_FOOD_PICK_FOOD_ID, foodId)
                     }
 
+                    previousEntry?.savedStateHandle?.set(KEY_FOOD_PICK_INITIAL_FILTER, null)
                     navController.popBackStack()
-                }
+                },
+                initialFavoritesOnly = initialFilter == FOOD_PICK_INITIAL_FILTER_FAVORITES
             )
         }
 
