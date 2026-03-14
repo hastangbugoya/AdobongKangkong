@@ -98,10 +98,10 @@ fun DayLogRowCard(
                     IconButton(
                         onClick = { isMenuExpanded = true }
                     ) {
-                        Text(
-                            text = "⋮",
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.size(AppIconSize.CardAction)
+                        Icon(
+                            painter = painterResource(R.drawable.menu_dots_vertical),
+                            contentDescription = "Open Calendar",
+                            modifier = Modifier.size(AppIconSize.Inline)
                         )
                     }
 
