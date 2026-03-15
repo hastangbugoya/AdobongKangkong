@@ -299,7 +299,7 @@ fun QuickAddBottomSheet(
                                 onClick = { vm.openTodayPlanPicker() },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("From today's plan")
+                                Text("Today Plan")
                             }
                         }
 

@@ -196,7 +196,7 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
     private val foods: FoodRepository,
     private val foodNutrients: FoodNutrientRepository,
     private val nutrients: NutrientRepository
-) {
+){
     suspend operator fun invoke(searchJson: String, selectedFdcId: Long? = null): Result {
         val parsed = UsdaFoodsSearchParser.parse(searchJson)
 

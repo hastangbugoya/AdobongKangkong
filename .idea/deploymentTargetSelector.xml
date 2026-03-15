@@ -13,11 +13,16 @@
         </DropdownSelection>
         <DialogSelection />
       </SelectionState>
-      <SelectionState runConfigName="MergeFoodsUseCaseInstrumentedTest">
+      <SelectionState runConfigName="AppBackupUseCaseInstrumentedTest">
         <option name="selectionMode" value="DROPDOWN" />
-      </SelectionState>
-      <SelectionState runConfigName="mergeFoods_basicMerge_copiesMissingNutrients_movesBarcodes_and_marksOverrideMerged()">
-        <option name="selectionMode" value="DROPDOWN" />
+        <DropdownSelection timestamp="2026-03-15T21:07:38.406703300Z">
+          <Target type="DEFAULT_BOOT">
+            <handle>
+              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\jjrza\.android\avd\Pixel_6_Pro_API_34.avd" />
+            </handle>
+          </Target>
+        </DropdownSelection>
+        <DialogSelection />
       </SelectionState>
     </selectionStates>
   </component>
