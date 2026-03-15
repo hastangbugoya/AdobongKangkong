@@ -369,43 +369,34 @@ fun DashboardScreen(
             }
 
             item {
+                val itemCount = state.todayItems.size
+                val summaryText = if (itemCount == 0) {
+                    "No items logged today"
+                } else {
+                    "$itemCount items logged today"
+                }
+
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Logged Today",
+                        text = summaryText,
                         style = MaterialTheme.typography.titleMedium
                     )
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    IconButton(
+                        onClick = { onOpenDayLog(state.date) }
                     ) {
-                        Text(
-                            text = "Add",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { showQuickAdd = true }
+                        Icon(
+                            painter = painterResource(R.drawable.overview),
+                            contentDescription = "Open day log"
                         )
-
-                        TextButton(
-                            onClick = { onOpenDayLog(state.date) }
-                        ) {
-                            Text("View (${state.todayItems.size})")
-                        }
                     }
                 }
-            }
-
-            item {
-                Text(
-                    text = if (state.todayItems.isEmpty()) "Nothing logged yet."
-                    else "${state.todayItems.size} item(s) logged today.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
