@@ -56,7 +56,7 @@ class SearchUsdaFoodsByKeywordsUseCase @Inject constructor(
 
     suspend operator fun invoke(
         query: String,
-        pageSize: Int = 20,
+        pageSize: Int = 30,
         pageNumber: Int = 1
     ): Result {
 
