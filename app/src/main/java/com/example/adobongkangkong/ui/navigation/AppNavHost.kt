@@ -30,6 +30,7 @@ import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
+import com.example.adobongkangkong.ui.usda.UsdaSearchScreen
 import java.time.LocalDate
 
 private const val KEY_FOOD_PICK_FOOD_ID = "food_pick_food_id"
@@ -412,6 +413,12 @@ fun AppNavHost(
 
         composable(route = NavRoutes.Debug.meowLogs) {
             MeowLogScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(route = NavRoutes.Usda.search) {
+            UsdaSearchScreen(
                 onBack = { navController.popBackStack() }
             )
         }

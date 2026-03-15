@@ -85,6 +85,10 @@ object NavRoutes {
         const val meowLogs: String = "debug/meowLogs"
     }
 
+    object Usda {
+        const val search: String = "usda/search"
+    }
+
     object Planner {
         private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
         private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
