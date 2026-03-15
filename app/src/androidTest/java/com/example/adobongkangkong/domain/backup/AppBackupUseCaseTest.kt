@@ -56,13 +56,66 @@ import java.util.zip.ZipOutputStream
  */
 @RunWith(AndroidJUnit4::class)
 class AppBackupUseCaseInstrumentedTest {
-
+    /*******************************************************************************************
+     *
+     * ⚠⚠⚠  WARNING — DEVICE-MODIFYING INSTRUMENTED TEST  ⚠⚠⚠
+     *
+     * This test runs as an Android INSTRUMENTED TEST (`androidTest`).
+     *
+     * Running instrumented tests may cause Android Studio / Gradle to:
+     *
+     *   • REINSTALL the application package
+     *   • WIPE the application's data directory
+     *   • REMOVE the currently installed app instance on the device
+     *
+     * This behavior is part of the Android test deployment process and NOT caused by
+     * AppBackupUseCase itself.
+     *
+     * DO NOT run this test on a device containing important app data.
+     *
+     * Recommended environments:
+     *
+     *   ✔ Android emulator
+     *   ✔ Dedicated test device
+     *   ✔ Temporary debug install
+     *
+     * Avoid running on:
+     *
+     *   ✘ Your primary personal phone with real data
+     *
+     * -----------------------------------------------------------------------------------------
+     * Safe workflow:
+     *
+     *   1. Run normal JVM unit tests with:
+     *        ./gradlew test
+     *
+     *   2. Run instrumented backup tests ONLY when needed with:
+     *        ./gradlew connectedAndroidTest
+     *
+     * -----------------------------------------------------------------------------------------
+     *
+     * If you accidentally triggered this test:
+     *
+     *   • reinstall the app from Android Studio
+     *   • restore your in-app backup if needed
+     *
+     *******************************************************************************************/
     private lateinit var appContext: Context
     private lateinit var testRootDir: File
     private lateinit var testContext: BackupTestContext
     private lateinit var useCase: AppBackupUseCase
 
     private var db: NutriDatabase? = null
+
+    @Before
+    fun refuseRealDevice() {
+        val fp = android.os.Build.FINGERPRINT.lowercase()
+        check(
+            "generic" in fp || "emulator" in fp || "sdk_gphone" in fp
+        ) {
+            "Refusing to run AppBackupUseCaseInstrumentedTest on a physical device."
+        }
+    }
 
     @Before
     fun setup() {
