@@ -431,7 +431,7 @@ private fun DashboardBottomActionBar(
                 modifier = Modifier.weight(1f))
             {
                 Icon(
-                    painter = painterResource(R.drawable.audit),
+                    painter = painterResource(R.drawable.list),
                     contentDescription = "Open Foods",
                 )
             }

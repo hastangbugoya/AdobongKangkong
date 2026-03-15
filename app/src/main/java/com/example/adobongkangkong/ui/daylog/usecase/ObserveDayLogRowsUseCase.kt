@@ -5,9 +5,11 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 
 /**
  * Observes Day Log rows for a single ISO day (yyyy-MM-dd).
@@ -15,6 +17,11 @@ import javax.inject.Inject
  * IMPORTANT:
  * - This use case is day-based and MUST be driven by `logDateIso`.
  * - It must NOT use timestamp bounds for day membership.
+ *
+ * Performance note:
+ * - This use case enriches observed log rows with banner ids using additional DAO lookups.
+ * - That enrichment must stay off the main thread to avoid jank / blank-screen stalls when
+ *   opening Day Log.
  */
 class ObserveDayLogRowsUseCase @Inject constructor(
     private val logRepository: LogRepository,
@@ -60,5 +67,6 @@ class ObserveDayLogRowsUseCase @Inject constructor(
                     )
                 }
             }
+            .flowOn(Dispatchers.IO)
     }
 }
