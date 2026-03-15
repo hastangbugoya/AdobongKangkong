@@ -237,6 +237,9 @@ fun AppNavHost(
                 },
                 onCreateRecipe = {
                     navController.navigate(NavRoutes.Recipes.route)
+                },
+                onHeaderLongPress = {
+                    navController.navigate(NavRoutes.Usda.search)
                 }
             )
         }
@@ -253,6 +256,9 @@ fun AppNavHost(
                 onEditRecipe = { recipeId -> navController.navigate(NavRoutes.Recipes.builder(editFoodId = recipeId)) },
                 onCreateFood = { navController.navigate(NavRoutes.Foods.new(prefillName = null)) },
                 onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
+                onHeaderLongPress = {
+                    navController.navigate(NavRoutes.Usda.search)
+                },
                 onPickFood = { foodId ->
                     val pickMode = previousEntry?.savedStateHandle?.get<String>(KEY_FOOD_PICK_MODE)
 
@@ -292,7 +298,10 @@ fun AppNavHost(
                 },
                 onEditRecipe = { },
                 onCreateFood = { },
-                onCreateRecipe = { }
+                onCreateRecipe = { },
+                onHeaderLongPress = {
+                    navController.navigate(NavRoutes.Usda.search)
+                }
             )
         }
 

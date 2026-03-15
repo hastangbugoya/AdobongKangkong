@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +68,7 @@ fun FoodsListScreen(
     onEditRecipe: (Long) -> Unit,
     onCreateFood: () -> Unit,
     onCreateRecipe: () -> Unit,
+    onHeaderLongPress: () -> Unit = {},
     /**
      * Optional picker-mode callback.
      *
@@ -89,7 +91,15 @@ fun FoodsListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Foods") },
+                title = {
+                    Text(
+                        text = "Foods",
+                        modifier = Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = onHeaderLongPress
+                        )
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

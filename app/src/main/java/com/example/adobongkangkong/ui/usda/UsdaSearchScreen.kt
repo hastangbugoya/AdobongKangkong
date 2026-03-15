@@ -172,7 +172,6 @@ fun UsdaSearchScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 CircularProgressIndicator()
-                                Spacer(Modifier.height(0.dp))
                             }
                         }
                     }
@@ -212,11 +211,37 @@ private fun UsdaSearchResultRow(
                 )
             }
 
-            if (item.servingText.isNotBlank()) {
+            val servingAndPackage = buildList {
+                item.householdServingFullText
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { add(it) }
+
+                item.packageWeight
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { add(it) }
+            }.joinToString(" • ")
+
+            if (servingAndPackage.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = servingAndPackage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (item.servingText.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = item.servingText,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item.dataType?.takeIf { it.isNotBlank() }?.let { dataType ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = dataType,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -236,4 +261,3 @@ private fun UsdaSearchResultRow(
         }
     }
 }
-

@@ -228,11 +228,39 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             .orEmpty()
             .ifBlank { "Unnamed USDA Food" }
 
-        val rawServingUnit: ServingUnit =
-            ServingUnit.fromUsda(item.servingSizeUnit)
-                ?: return Result.Blocked("Unsupported USDA servingSizeUnit='${item.servingSizeUnit}'")
+        val isGenericUsdaItem = item.gtinUpc.isNullOrBlank() &&
+                item.brandName.isNullOrBlank() &&
+                item.brandOwner.isNullOrBlank()
 
-        val rawServingSize: Double = item.servingSize ?: 1.0
+        val resolvedServing: Pair<Double, ServingUnit> = run {
+            val parsedUnit = ServingUnit.fromUsda(item.servingSizeUnit)
+
+            if (parsedUnit != null) {
+                parsedUnit to parsedUnit // placeholder shape not used
+            }
+
+            when {
+                parsedUnit != null -> {
+                    val rawServingSize = item.servingSize ?: 1.0
+                    rawServingSize to parsedUnit
+                }
+
+                isGenericUsdaItem -> {
+                    Log.w(
+                        "USDA_IMPORT",
+                        "Missing USDA servingSizeUnit for generic item fdcId=${item.fdcId}; defaulting to 100 g."
+                    )
+                    100.0 to ServingUnit.G
+                }
+
+                else -> {
+                    return Result.Blocked("Unsupported USDA servingSizeUnit='${item.servingSizeUnit}'")
+                }
+            }
+        }
+
+        val rawServingSize: Double = resolvedServing.first
+        val rawServingUnit: ServingUnit = resolvedServing.second
 
         val household = parseHouseholdServing(item.householdServingFullText)
 
@@ -483,6 +511,8 @@ fun String.toTitleCase(): String =
  * - Keep grounding decision order: mass grounding takes precedence over volume grounding.
  * - Keep revive-on-import logic (unique usdaFdcId constraint safety).
  * - Keep groupBy(nutrient.id).firstOrNull() de-dupe behavior unless you also update DB constraints and readers.
+ * - Generic USDA items with missing servingSizeUnit may default to 100 g mass-grounded import.
+ *   This is intentional to avoid blocking Foundation/generic foods that are effectively reported on a 100 g basis.
  *
  * Architectural boundaries
  * - This use case is a domain/persistence orchestration boundary:

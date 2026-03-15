@@ -81,16 +81,21 @@ class SearchUsdaFoodsByKeywordsUseCase @Inject constructor(
         }
 
         val candidates = foods.map {
+            val householdServingFullText = it.householdServingFullText?.trim().orEmpty()
+            val fallbackServingText = run {
+                val ss = it.servingSize
+                val u = it.servingSizeUnit
+                if (ss != null && !u.isNullOrBlank()) "$ss $u" else ""
+            }
+
             PickItem(
                 fdcId = it.fdcId,
                 description = it.description?.trim().orEmpty(),
                 brand = (it.brandName ?: it.brandOwner)?.trim().orEmpty(),
-                servingText = it.householdServingFullText?.trim()
-                    ?: run {
-                        val ss = it.servingSize
-                        val u = it.servingSizeUnit
-                        if (ss != null && !u.isNullOrBlank()) "$ss $u" else ""
-                    },
+                servingText = householdServingFullText.ifBlank { fallbackServingText },
+                householdServingFullText = householdServingFullText.ifBlank { null },
+                packageWeight = it.packageWeight?.trim().takeIf { s -> !s.isNullOrBlank() },
+                dataType = it.dataType?.trim().takeIf { s -> !s.isNullOrBlank() },
                 gtinUpc = it.gtinUpc?.trim().orEmpty(),
                 publishedDateIso = it.publishedDate?.trim().takeIf { s -> !s.isNullOrBlank() },
                 modifiedDateIso = it.modifiedDate?.trim().takeIf { s -> !s.isNullOrBlank() },
@@ -112,12 +117,21 @@ class SearchUsdaFoodsByKeywordsUseCase @Inject constructor(
 
     /**
      * Lightweight USDA candidate item for UI display.
+     *
+     * Display notes:
+     * - `servingText` is the primary short serving display.
+     * - `householdServingFullText` preserves the fuller USDA household wording when available.
+     * - `packageWeight` is display-only and helps distinguish packaging variants.
+     * - `dataType` is useful for debugging / advanced test UI (e.g. Branded vs Foundation).
      */
     data class PickItem(
         val fdcId: Long,
         val description: String,
         val brand: String,
         val servingText: String,
+        val householdServingFullText: String?,
+        val packageWeight: String?,
+        val dataType: String?,
         val gtinUpc: String,
         val publishedDateIso: String?,
         val modifiedDateIso: String?
