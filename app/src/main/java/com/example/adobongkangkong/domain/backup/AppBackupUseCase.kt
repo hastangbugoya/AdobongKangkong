@@ -27,6 +27,11 @@ import javax.inject.Inject
  * CRITICAL:
  * - Restore must be performed when the Room DB is CLOSED.
  * - After restore, restart the app process so Room reopens the restored DB cleanly.
+ *
+ * Testability note:
+ * - The Hilt constructor remains production-only and requires only Context.
+ * - A secondary constructor exists for tests so backup I/O can be redirected to isolated paths
+ *   without changing production DI wiring.
  */
 class AppBackupUseCase @Inject constructor(
     @ApplicationContext private val context: Context
@@ -41,6 +46,23 @@ class AppBackupUseCase @Inject constructor(
 
         // Authoritative media we include
         private const val FOOD_IMAGES_DIR = "food_images"
+    }
+
+    private var databasePathProvider: (Context, String) -> File = { ctx, dbName ->
+        ctx.getDatabasePath(dbName)
+    }
+
+    private var filesDirProvider: (Context) -> File = { ctx ->
+        ctx.filesDir
+    }
+
+    internal constructor(
+        context: Context,
+        databasePathProvider: (Context, String) -> File,
+        filesDirProvider: (Context) -> File
+    ) : this(context) {
+        this.databasePathProvider = databasePathProvider
+        this.filesDirProvider = filesDirProvider
     }
 
     /**
@@ -58,7 +80,7 @@ class AppBackupUseCase @Inject constructor(
 
         val resolver = context.contentResolver
         val dbFiles = getDbFiles()
-        val bannerRoot = File(context.filesDir, FOOD_IMAGES_DIR)
+        val bannerRoot = File(filesDirProvider(context), FOOD_IMAGES_DIR)
 
         resolver.openOutputStream(outputUri)?.use { os ->
             ZipOutputStream(os.buffered()).use { zip ->
@@ -112,9 +134,9 @@ class AppBackupUseCase @Inject constructor(
 
         val resolver = context.contentResolver
 
-        val db = context.getDatabasePath(DB_NAME)
+        val db = databasePathProvider(context, DB_NAME)
         val dbDir = db.parentFile ?: error("Database parent directory missing for $DB_NAME")
-        val filesDir = context.filesDir
+        val filesDir = filesDirProvider(context)
 
         resolver.openInputStream(inputUri)?.use { ins ->
             ZipInputStream(ins.buffered()).use { zip ->
@@ -160,7 +182,7 @@ class AppBackupUseCase @Inject constructor(
     )
 
     private fun getDbFiles(): DbFiles {
-        val db = context.getDatabasePath(DB_NAME)
+        val db = databasePathProvider(context, DB_NAME)
         val wal = File(db.parentFile, DB_NAME + "-wal").takeIf { it.exists() && it.isFile }
         val shm = File(db.parentFile, DB_NAME + "-shm").takeIf { it.exists() && it.isFile }
         return DbFiles(db = db, wal = wal, shm = shm)

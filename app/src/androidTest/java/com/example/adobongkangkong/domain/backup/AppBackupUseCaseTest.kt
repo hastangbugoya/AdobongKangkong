@@ -108,12 +108,28 @@ class AppBackupUseCaseInstrumentedTest {
     private var db: NutriDatabase? = null
 
     @Before
-    fun refuseRealDevice() {
-        val fp = android.os.Build.FINGERPRINT.lowercase()
-        check(
-            "generic" in fp || "emulator" in fp || "sdk_gphone" in fp
-        ) {
-            "Refusing to run AppBackupUseCaseInstrumentedTest on a physical device."
+    fun refusePhysicalDevice() {
+        val fingerprint = android.os.Build.FINGERPRINT.lowercase()
+        val model = android.os.Build.MODEL.lowercase()
+        val product = android.os.Build.PRODUCT.lowercase()
+        val manufacturer = android.os.Build.MANUFACTURER.lowercase()
+
+        val isEmulator =
+            "generic" in fingerprint ||
+                    "emulator" in fingerprint ||
+                    "sdk_gphone" in product ||
+                    "sdk" == product ||
+                    "emulator" in model ||
+                    "android sdk built for x86" in model ||
+                    "genymotion" in manufacturer
+
+        check(isEmulator) {
+            """
+        REFUSING TO RUN AppBackupUseCaseInstrumentedTest ON A PHYSICAL DEVICE.
+
+        This is an androidTest and Android deployment may uninstall or wipe the target app.
+        Run this test only on an emulator or dedicated throwaway test device.
+        """.trimIndent()
         }
     }
 
