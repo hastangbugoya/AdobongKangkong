@@ -80,11 +80,30 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  * - **No ViewModel access**: all state is provided via [state] and all actions are delegated via callbacks.
  * - **All modal UI lives here** (dialogs / sheets) so it remains driven by [state] and local UI flags.
  *
+ * Nutrient editor contract:
+ * - Nutrient input fields shown by this screen are **per current serving UI values**.
+ * - They are not raw canonical PER_100G / PER_100ML values.
+ * - Canonical storage remains a viewmodel/domain concern and must not leak into labels that look like editable UI semantics.
+ * - The current serving definition comes from:
+ *   - serving size + serving unit
+ *   - and, when needed, grams/mL backing shown in the Serving section
+ *
+ * USDA interpretation prompt:
+ * - When [state.pendingUsdaInterpretationPrompt] is non-null, the app does not yet assume whether
+ *   the chosen USDA nutrient values should be treated as per-100 or per-serving.
+ * - This screen shows the raw macro preview and lets the user choose the interpretation.
+ *
  * Merge wiring:
  * - Food merge remains a route/viewmodel concern.
  * - This screen only exposes an optional [onMergeFood] callback when editing an existing food.
  * - The actual picker/navigation flow is owned by the caller so the screen stays stateless.
  * - Merge is intentionally placed near the bottom of the scrollable content, not in the persistent bottom bar.
+ *
+ * USDA backfill wiring:
+ * - Barcode/package adoption remains separate from nutrient backfill.
+ * - When [state.pendingUsdaBackfillPrompt] is non-null, this screen offers a follow-up prompt:
+ *   "Fill missing nutrients from USDA?"
+ * - The screen does not decide nutrient logic; it only delegates confirmation/cancel actions.
  */
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,6 +197,15 @@ fun FoodEditorScreen(
     onBarcodePackageOverrideServingSizeChange: (String) -> Unit,
     onBarcodePackageOverrideServingUnitChange: (ServingUnit?) -> Unit,
     onSaveBarcodePackageOverrides: () -> Unit,
+
+    // USDA interpretation prompt
+    onConfirmUsdaInterpretationPrompt: (UsdaNutrientInterpretationChoice) -> Unit,
+    onDismissUsdaInterpretationPrompt: () -> Unit,
+
+    // USDA backfill prompt/result
+    onConfirmUsdaBackfillPrompt: () -> Unit,
+    onDismissUsdaBackfillPrompt: () -> Unit,
+    onDismissUsdaBackfillMessage: () -> Unit,
 
     // Optional dismiss action for needs-fix banner
     onDismissNeedsFixBanner: (() -> Unit)? = null,
@@ -472,6 +500,158 @@ fun FoodEditorScreen(
         )
     }
 
+    val pendingInterpretationPrompt = state.pendingUsdaInterpretationPrompt
+    if (pendingInterpretationPrompt != null) {
+        AlertDialog(
+            onDismissRequest = onDismissUsdaInterpretationPrompt,
+            title = { Text("How should USDA nutrients be interpreted?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "The USDA item was imported, but the nutrient values may represent either per 100 or per serving."
+                    )
+
+                    Text(
+                        "USDA item: ${pendingInterpretationPrompt.candidateLabel}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    pendingInterpretationPrompt.servingText
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { servingText ->
+                            Text(
+                                "USDA serving text: $servingText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                    HorizontalDivider()
+
+                    Text("Raw USDA macro preview:")
+
+                    Text(
+                        text = buildString {
+                            append("Calories: ")
+                            append(pendingInterpretationPrompt.calories?.toUiNumber() ?: "—")
+                            append(" • Carbs: ")
+                            append(pendingInterpretationPrompt.carbs?.toUiNumber() ?: "—")
+                            append(" g")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Text(
+                        text = buildString {
+                            append("Protein: ")
+                            append(pendingInterpretationPrompt.protein?.toUiNumber() ?: "—")
+                            append(" g • Fat: ")
+                            append(pendingInterpretationPrompt.fat?.toUiNumber() ?: "—")
+                            append(" g")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    HorizontalDivider()
+
+                    Text(
+                        "Choose how the app should treat these USDA nutrient values for this food."
+                    )
+                }
+            },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            onConfirmUsdaInterpretationPrompt(
+                                UsdaNutrientInterpretationChoice.PER_100
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Treat USDA nutrients as per 100")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onConfirmUsdaInterpretationPrompt(
+                                UsdaNutrientInterpretationChoice.PER_SERVING
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Treat USDA nutrients as per serving")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUsdaInterpretationPrompt) {
+                    Text("Decide later")
+                }
+            }
+        )
+    }
+
+    val pendingBackfillPrompt = state.pendingUsdaBackfillPrompt
+    if (pendingBackfillPrompt != null) {
+        AlertDialog(
+            onDismissRequest = onDismissUsdaBackfillPrompt,
+            title = { Text("Fill missing nutrients from USDA?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Barcode/package was adopted into this food."
+                    )
+                    Text(
+                        "USDA item: ${pendingBackfillPrompt.candidateLabel}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Only missing nutrients will be added. Existing nutrient values on this food will be kept."
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmUsdaBackfillPrompt) {
+                    Text("Fill missing")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUsdaBackfillPrompt) {
+                    Text("Not now")
+                }
+            }
+        )
+    }
+
+    val backfillMessage = state.usdaBackfillMessage
+    if (backfillMessage != null) {
+        AlertDialog(
+            onDismissRequest = onDismissUsdaBackfillMessage,
+            title = { Text("USDA nutrient backfill") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(backfillMessage.message)
+                    Text(
+                        "Added: ${backfillMessage.insertedCount} • Already present: ${backfillMessage.skippedExistingCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismissUsdaBackfillMessage) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {}
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -664,30 +844,17 @@ fun FoodEditorScreen(
                 }
 
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(onClick = onOpenBarcodeScanner) {
-                            Text("Scan barcode")
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        if (state.scannedBarcode.isNotBlank()) {
-                            Text(
-                                text = "Scanned: ${state.scannedBarcode}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    val isExistingFood = state.foodId != null
+                    val addBarcodeLabel = when {
+                        !isExistingFood -> "Scan barcode"
+                        state.assignedBarcodes.isEmpty() -> "Add barcode"
+                        else -> "Add another barcode"
                     }
-                }
 
-                item {
-                    if (state.foodId != null) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Assigned barcodes", style = MaterialTheme.typography.titleMedium)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Barcodes", style = MaterialTheme.typography.titleMedium)
 
+                        if (isExistingFood) {
                             if (state.assignedBarcodes.isEmpty()) {
                                 Text("None", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             } else {
@@ -752,6 +919,29 @@ fun FoodEditorScreen(
                                     HorizontalDivider()
                                 }
                             }
+                        } else {
+                            Text(
+                                text = "Scan a barcode to search USDA or start barcode-based import.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = onOpenBarcodeScanner,
+                            enabled = !state.isSaving
+                        ) {
+                            Text(addBarcodeLabel)
+                        }
+
+                        if (state.scannedBarcode.isNotBlank()) {
+                            Text(
+                                text = "Scanned: ${state.scannedBarcode}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
@@ -840,7 +1030,21 @@ fun FoodEditorScreen(
                 item {
                     SectionHeader(
                         title = "Nutrients",
-                        subtitle = "Edit common nutrients first. Expand to show the rest."
+                        subtitle = "Amounts below are per current serving, not raw PER 100g / PER 100mL values."
+                    )
+                }
+
+                item {
+                    Text(
+                        text = nutrientEditorContextText(
+                            servingSize = state.servingSize,
+                            servingUnit = state.servingUnit,
+                            gramsPerServingUnit = state.gramsPerServingUnit,
+                            mlPerServingUnit = state.mlPerServingUnit,
+                            basisType = state.basisType
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -1124,13 +1328,13 @@ private fun NutrientRowEditor(
             supportingText = {
                 if (isChanged) {
                     Text(
-                        text = "Value edited",
+                        text = "Per-serving value edited",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             },
-            label = { Text("Amount") },
+            label = { Text("Amount per serving") },
             singleLine = true,
             modifier = if (isTablet) Modifier.fillMaxWidth(0.6f) else Modifier.fillMaxWidth()
         )
@@ -1313,6 +1517,18 @@ private fun ServingSection(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            Text(
+                text = nutrientEditorContextText(
+                    servingSize = servingSize,
+                    servingUnit = servingUnit,
+                    gramsPerServingUnit = gramsPerServingUnit,
+                    mlPerServingUnit = mlPerServingUnit,
+                    basisType = basisType
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         } else {
             val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
             val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
@@ -1365,6 +1581,18 @@ private fun ServingSection(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            Text(
+                text = nutrientEditorContextText(
+                    servingSize = servingSize,
+                    servingUnit = servingUnit,
+                    gramsPerServingUnit = gramsPerServingUnit,
+                    mlPerServingUnit = mlPerServingUnit,
+                    basisType = basisType
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         OutlinedTextField(
@@ -1529,28 +1757,24 @@ private fun FoodEditorBottomBar(
 private fun barcodeOverrideSummary(row: AssignedBarcodeUi): String {
     val parts = mutableListOf<String>()
 
-    row.overrideServingsPerPackage?.let {
-        parts += "Servings/pkg: $it"
+    row.overrideServingSize?.let { size ->
+        val servingText = row.overrideServingUnit?.let { unit ->
+            "Serving: $size ${unit.display}"
+        } ?: "Serving size: $size"
+        parts += servingText
+    } ?: row.overrideServingUnit?.let { unit ->
+        parts += "Serving unit: ${unit.display}"
     }
+
+    row.overrideServingsPerPackage?.let {
+        parts += "$it per package"
+    }
+
     row.overrideHouseholdServingText
         ?.takeIf { it.isNotBlank() }
         ?.let {
             parts += it
         }
-
-    val sizePart = when {
-        row.overrideServingSize != null && row.overrideServingUnit != null ->
-            "Serving: ${row.overrideServingSize} ${row.overrideServingUnit.display}"
-        row.overrideServingSize != null ->
-            "Serving size: ${row.overrideServingSize}"
-        row.overrideServingUnit != null ->
-            "Serving unit: ${row.overrideServingUnit.display}"
-        else -> null
-    }
-
-    if (!sizePart.isNullOrBlank()) {
-        parts += sizePart
-    }
 
     if (parts.isEmpty()) {
         parts += when (row.source) {
@@ -1562,7 +1786,71 @@ private fun barcodeOverrideSummary(row: AssignedBarcodeUi): String {
     return parts.joinToString(" • ")
 }
 
+private fun nutrientEditorContextText(
+    servingSize: String,
+    servingUnit: ServingUnit,
+    gramsPerServingUnit: String,
+    mlPerServingUnit: String,
+    basisType: BasisType?
+): String {
+    val sizeText = servingSize.trim().ifBlank { "1" }
+    val gramsPerUnit = gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+    val mlPerUnit = mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+    val sizeValue = servingSize.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+
+    val amountPart = when {
+        basisType == BasisType.PER_100ML && sizeValue != null && mlPerUnit != null ->
+            "Current serving = $sizeText ${servingUnit.display} (${sizeValue * mlPerUnit} mL)."
+        basisType == BasisType.PER_100G && sizeValue != null && gramsPerUnit != null ->
+            "Current serving = $sizeText ${servingUnit.display} (${sizeValue * gramsPerUnit} g)."
+        basisType == BasisType.PER_100ML ->
+            "Current serving = $sizeText ${servingUnit.display}."
+        basisType == BasisType.PER_100G ->
+            "Current serving = $sizeText ${servingUnit.display}."
+        else ->
+            "Current serving = $sizeText ${servingUnit.display}."
+    }
+
+    val basisPart = when (basisType) {
+        BasisType.PER_100G -> " Storage stays canonical PER 100g."
+        BasisType.PER_100ML -> " Storage stays canonical PER 100mL."
+        BasisType.USDA_REPORTED_SERVING -> " Storage stays per serving."
+        null -> ""
+    }
+
+    return "Nutrient amounts you edit below are per current serving.$amountPart$basisPart"
+}
+
+private fun Double.toUiNumber(): String {
+    val whole = toLong().toDouble()
+    return if (this == whole) whole.toLong().toString() else toString()
+}
+
 private fun NutrientCategory.labelForUi(): String =
     name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
 private fun NutrientUnit.labelForUi(): String = name.lowercase()
+
+/**
+ * FUTURE-YOU / FUTURE-AI NOTE
+ *
+ * Food editor nutrient semantics in this screen are intentionally explicit:
+ * - Editable nutrient fields are labeled as per-serving UI values.
+ * - This screen should not visually imply that editable nutrient fields are raw PER_100G / PER_100ML values.
+ * - Canonical storage basis remains internal and is only surfaced here as explanatory text.
+ *
+ * USDA interpretation prompt rule:
+ * - When USDA nutrient semantics are unclear, this screen must ask the user how to interpret them.
+ * - The prompt shows raw USDA macro preview values only.
+ * - The screen does not apply conversions; it only routes the user's choice.
+ *
+ * Why this matters:
+ * - USDA-imported foods are often stored canonically as PER_100G / PER_100ML.
+ * - Some branded USDA search results look like label-serving values instead.
+ * - Without a user choice, canonical-looking numbers can be misread or mis-imported.
+ *
+ * Screen rule:
+ * - Always make it obvious that nutrient inputs are tied to the current serving definition shown above.
+ * - Do not add grams↔mL conversions here.
+ * - Do not move canonical scaling math into this file.
+ */

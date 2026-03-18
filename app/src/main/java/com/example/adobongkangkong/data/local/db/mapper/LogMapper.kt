@@ -22,20 +22,20 @@ internal fun TodayLogRow.toDomain(converters: DbTypeConverters): TodayLogItem {
     )
 }
 
-internal fun LogEntry.toEntity(converters: DbTypeConverters): LogEntryEntity =
-    LogEntryEntity(
-        id = id,
-        timestamp = timestamp,
-        itemName = itemName,
-        foodStableId = foodStableId,
-        amount = amount,
-        unit = unit,
-        nutrientsJson = converters.nutrientMapToJson(nutrients),
-        recipeBatchId = recipeBatchId,
-        gramsPerServingCooked = gramsPerServingCooked,
-        mealSlot = mealSlot,
-        logDateIso = logDateIso,
-    )
+//internal fun LogEntry.toEntity(converters: DbTypeConverters): LogEntryEntity =
+//    LogEntryEntity(
+//        id = id,
+//        timestamp = timestamp,
+//        itemName = itemName,
+//        foodStableId = foodStableId,
+//        amount = amount,
+//        unit = unit,
+//        nutrientsJson = converters.nutrientMapToJson(nutrients),
+//        recipeBatchId = recipeBatchId,
+//        gramsPerServingCooked = gramsPerServingCooked,
+//        mealSlot = mealSlot,
+//        logDateIso = logDateIso,
+//    )
 
 internal fun LogEntryEntity.toDomain(converters: DbTypeConverters): LogEntry =
     LogEntry(

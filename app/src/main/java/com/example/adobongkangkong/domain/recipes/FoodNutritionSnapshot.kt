@@ -3,13 +3,34 @@ package com.example.adobongkangkong.domain.recipes
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 
 /**
- * Minimal nutrition view of a food needed to compute recipes.
+ * Immutable, canonical nutrition snapshot for a food.
  *
- * Domain convention:
- * - nutrientsPerGram: nutrient amounts for 1 gram of the food
- * - gramsPerServingUnit: grams in one serving (required because ingredients are in servings)
+ * Purpose
+ * - Provide the minimal normalized nutrition data needed by logging, recipe math,
+ *   previews, and other scaling flows.
  *
- * Import is lax: either may be null, and the calculator will warn + treat missing as zero.
+ * Canonical conventions
+ * - Mass-grounded foods:
+ *   - nutrientsPerGram expresses nutrient amounts for 1 gram of the food.
+ * - Volume-grounded foods:
+ *   - nutrientsPerMilliliter expresses nutrient amounts for 1 mL of the food.
+ *
+ * Bridges
+ * - gramsPerServingUnit:
+ *   grams in ONE servingUnit (not grams per serving unless servingSize == 1).
+ * - mlPerServingUnit:
+ *   milliliters in ONE servingUnit (not mL per serving unless servingSize == 1).
+ *
+ * Important invariants
+ * - Never convert grams <-> mL here.
+ * - Never guess density here.
+ * - Snapshot scaling must use the matching density map only:
+ *   - mass -> nutrientsPerGram
+ *   - volume -> nutrientsPerMilliliter
+ *
+ * Import is intentionally lax
+ * - Either or both density maps may be null.
+ * - Callers decide whether missing nutrition is blocking.
  */
 data class FoodNutritionSnapshot(
     val foodId: Long,
@@ -27,37 +48,18 @@ fun FoodNutritionSnapshot.nutrientsForGrams(grams: Double): NutrientMap =
 fun FoodNutritionSnapshot.nutrientsForMilliliters(milliliters: Double): NutrientMap =
     (nutrientsPerMilliliter ?: NutrientMap.EMPTY).scaledBy(milliliters)
 
-
-
-/** 2026-2-6 4:11pm
- * Minimal nutrition view of a food needed to compute recipes and list sorting.
+/**
+ * FUTURE-YOU / FUTURE-AI NOTES
  *
- * Canonical conventions:
- * - Mass-grounded foods:
- *     - nutrientsPerGram expresses nutrient amounts for 1 gram of the food.
- * - Volume-grounded foods:
- *     - nutrientsPerMilliliter expresses nutrient amounts for 1 mL of the food.
+ * - Keep this file small and boring.
+ * - This is a snapshot container, not a conversion engine.
+ * - Do not add grams<->mL conversion helpers here.
+ * - Do not reintroduce old per100g/per100ml fields here.
+ *   The normalized convention in this project is:
+ *   - nutrientsPerGram
+ *   - nutrientsPerMilliliter
  *
- * Bridges:
- * - gramsPerServingUnit: grams in one servingUnit (when ingredients are in servings)
- * - mlPerServingUnit: milliliters in one servingUnit (when ingredients are in servings)
- *
- * Import is intentionally lax:
- * - Either density map may be null (caller decides warnings).
- *
- * FUTURE-YOU NOTE (2026-02-06):
- * - Never convert grams <-> mL here (no density guessing).
- */
-
-/** 2026-2-6 12:00pm
- * Immutable, canonical nutrition snapshot for a food.
- *
- * Exactly ONE of the following must be non-null:
- * - per100g  (mass-grounded foods)
- * - per100ml (volume-grounded foods)
- *
- * FUTURE-YOU NOTE (2026-02-06):
- * - Never allow both bases to be non-null.
- * - Never convert grams <-> mL without an explicit density field.
- * - USDA_REPORTED_SERVING must be resolved BEFORE creating a snapshot.
+ * 2026-03 lock-in:
+ * - gramsPerServingUnit and mlPerServingUnit mean "per 1 servingUnit".
+ * - They do NOT mean "per full serving" unless servingSize == 1.
  */

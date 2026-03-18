@@ -26,6 +26,7 @@ internal fun Food.toEntity() = FoodEntity(
     deletedAtEpochMs = deletedAtEpochMs,
     usdaServingSize = usdaServingSize,
     usdaServingUnit = usdaServingUnit,
+    mergeChildCount = mergeChildCount
 )
 
 internal fun FoodEntity.toDomain() = Food(
@@ -51,4 +52,5 @@ internal fun FoodEntity.toDomain() = Food(
     deletedAtEpochMs = deletedAtEpochMs,
     usdaServingSize = usdaServingSize,
     usdaServingUnit = usdaServingUnit,
+    mergeChildCount = mergeChildCount
 )

@@ -29,16 +29,38 @@ interface FoodBarcodeDao {
     @Query("SELECT COUNT(*) FROM food_barcodes WHERE foodId = :foodId")
     suspend fun countForFood(foodId: Long): Int
 
-    // Convenience: when a user assigns a barcode and you want to ensure uniqueness.
+    /**
+     * Convenience: write the row while also ensuring the freshest observed timestamp is stored.
+     *
+     * Current behavior:
+     * - Upserts a single active barcode row.
+     * - Does not yet implement tombstoning/history.
+     *
+     * Future tombstone support:
+     * - When barcode reassignment becomes tombstone-based, this helper should remain the single
+     *   place where active barcode write semantics are centralized.
+     */
     @Transaction
     suspend fun upsertAndTouch(entity: FoodBarcodeEntity, nowEpochMs: Long) {
         upsert(entity.copy(lastSeenAtEpochMs = nowEpochMs))
     }
 
-    @Query("SELECT * FROM food_barcodes WHERE source = :source")
+    @Query(
+        """
+        SELECT * FROM food_barcodes
+        WHERE source = :source
+        ORDER BY barcode ASC
+        """
+    )
     suspend fun getAllBySource(source: BarcodeMappingSource): List<FoodBarcodeEntity>
 
-    @Query("SELECT * FROM food_barcodes WHERE foodId = :foodId")
+    @Query(
+        """
+        SELECT * FROM food_barcodes
+        WHERE foodId = :foodId
+        ORDER BY barcode ASC
+        """
+    )
     suspend fun getAllForFood(foodId: Long): List<FoodBarcodeEntity>
 
     @Query(

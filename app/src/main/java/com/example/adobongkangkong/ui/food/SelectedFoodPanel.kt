@@ -1,26 +1,55 @@
 package com.example.adobongkangkong.ui.food
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
-import kotlin.math.max
-import kotlin.math.abs
-import java.util.Locale
-import com.example.adobongkangkong.R
+import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.ui.theme.AppIconSize
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Shared, QuickAdd-canonical "selected food" input panel.
@@ -31,11 +60,20 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  * ## UX contract (must remain identical across callers)
  * - Selected food header + Change
  * - Servings row with +/- (canonical)
- * - Amount in food.servingUnit (number field)
- * - Grams field + unit button opens UnitToGramsDialog
+ * - Amount in food.servingUnit (number field) when it adds distinct value
+ * - Grams field + unit button opens UnitToGramsDialog when grams logging is available
  * - If missing grams-per-serving (and unit isn't grams), show blocking card with “Edit food”
  * - Package chips (½ package, 1 package) if servingsPerPackage exists
  * - Primary action button label is provided by caller (e.g., "Log" vs "Add ingredient")
+ *
+ * Quantity presentation rules:
+ * - If the serving unit is already mass-based (e.g. G / OZ), do not also show a separate
+ *   "Amount (UNIT)" field because it is redundant with grams.
+ * - If the serving unit is non-mass, the serving-unit amount field remains available.
+ *
+ * Callback rules:
+ * - A direct edit in a visible field should emit one primary semantic callback.
+ * - Unit/amount dialog apply paths still use the generic unit + amount callbacks.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,18 +99,20 @@ fun SelectedFoodPanel(
     modifier: Modifier = Modifier,
     extraContent: @Composable ColumnScope.() -> Unit = {}
 ) {
+    val servingUnitIsMass = food.servingUnit.isMassUnit()
+    val canLogGrams = food.gramsPerServingUnitResolved() != null
+    val showServingUnitAmountField = !servingUnitIsMass
+    val showGramsField = canLogGrams
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(food.name, style = MaterialTheme.typography.titleMedium)
 
-                val gramsPerServing: Double? = run {
-                        food.gramsPerServingResolved()
-                }
+                val gramsPerServing: Double? = food.gramsPerServingResolved()
 
                 Text(
                     "${food.servingSize.clean()} ${food.servingUnit.display}" +
@@ -83,9 +123,8 @@ fun SelectedFoodPanel(
             TextButton(onClick = onBack) { Text("Change") }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.size(12.dp))
 
-        // Servings input (canonical)
         AmountRow(
             label = "Servings",
             value = servings,
@@ -94,84 +133,73 @@ fun SelectedFoodPanel(
             onPlus = { onServingsChanged(servings + 0.5) }
         )
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.size(10.dp))
 
-        // Amount in the food's own serving unit.
-        // Amount in the food's own serving unit.
-        // Add a unit button (like the grams row) that opens a volume-input dialog for convertible volume units.
-        val canOpenServingVolumeDialog = food.servingUnit.isVolumeUnit() && (food.gramsPerServingUnitResolved() != null)
-        var isServingUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
+        if (showServingUnitAmountField) {
+            val canOpenServingVolumeDialog =
+                food.servingUnit.isVolumeUnit() && (food.gramsPerServingUnitResolved() != null)
+            var isServingUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.weight(1f)) {
-                NumberField(
-                    label = "Amount (${food.servingUnit})",
-                    value = servingUnitAmount,
-                    onValue = { amt ->
-                        onServingUnitAmountChanged(amt)
-                        // Clear "entered as" once user provides a valid canonical amount.
-                        onInputUnitChanged(food.servingUnit)
-                        onInputAmountChanged(amt)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.weight(1f)) {
+                    NumberField(
+                        label = "Amount (${food.servingUnit.display})",
+                        value = servingUnitAmount,
+                        onValue = onServingUnitAmountChanged
+                    )
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = { isServingUnitDialogOpen = true },
+                    enabled = canOpenServingVolumeDialog
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.exchange),
+                        contentDescription = "Change serving unit",
+                        modifier = Modifier.size(AppIconSize.CardAction),
+                    )
+                }
+            }
+
+            val showEnteredAsVolume = inputAmount != null &&
+                    inputAmount > 0.0 &&
+                    inputUnit.isVolumeUnit() &&
+                    !inputUnit.isMassUnit() &&
+                    inputUnit != food.servingUnit
+
+            if (showEnteredAsVolume) {
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    text = "Entered as ${inputAmount.cleanDynamic()} ${inputUnit.display}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isServingUnitDialogOpen) {
+                UnitToServingUnitDialog(
+                    food = food,
+                    initialUnit = inputUnit,
+                    initialAmount = inputAmount,
+                    onDismiss = { isServingUnitDialogOpen = false },
+                    onApply = { unit, amount ->
+                        onInputUnitChanged(unit)
+                        onInputAmountChanged(amount)
+                        isServingUnitDialogOpen = false
                     }
                 )
             }
 
-            Spacer(Modifier.width(8.dp))
-
-            IconButton(
-                onClick = { isServingUnitDialogOpen = true },
-                enabled = canOpenServingVolumeDialog
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.exchange),
-                    contentDescription = "Change serving unit",
-                    modifier = Modifier.size(AppIconSize.CardAction),
-                )
-            }
+            Spacer(Modifier.size(10.dp))
         }
 
-
-        val showEnteredAsVolume = inputAmount != null &&
-                inputAmount > 0.0 &&
-                inputUnit.isVolumeUnit() &&
-                !inputUnit.isMassUnit() &&
-                inputUnit != food.servingUnit
-
-        if (showEnteredAsVolume) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Entered as ${inputAmount.cleanDynamic()} ${inputUnit.display}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (isServingUnitDialogOpen) {
-            UnitToServingUnitDialog(
-                food = food,
-                initialUnit = inputUnit,
-                initialAmount = inputAmount,
-                onDismiss = { isServingUnitDialogOpen = false },
-                onApply = { unit, amount ->
-                    // Keep the process identical to the grams unit flow:
-                    // we store the user's entered (unit, amount) in inputUnit/inputAmount,
-                    // and let the ViewModel derive servings/grams/canonical amounts from it.
-                    onInputUnitChanged(unit)
-                    onInputAmountChanged(amount)
-                    isServingUnitDialogOpen = false
-                }
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // Grams input if available
-        val canLogGrams = food.gramsPerServingUnitResolved() != null
-        val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
-        if (canLogGrams) {
+        if (showGramsField) {
+            val gramsDefault = servings * (food.gramsPerServingResolved() ?: 0.0)
             var isUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 
             Row(
@@ -182,12 +210,7 @@ fun SelectedFoodPanel(
                     NumberField(
                         label = "Grams (g)",
                         value = gramsAmount ?: gramsDefault,
-                        onValue = { grams ->
-                            onGramsChanged(grams)
-                            // When user types canonical grams, clear the 'entered as' hint by setting input to (g, grams).
-                            onInputUnitChanged(ServingUnit.G)
-                            onInputAmountChanged(grams)
-                        }
+                        onValue = onGramsChanged
                     )
                 }
 
@@ -198,7 +221,7 @@ fun SelectedFoodPanel(
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.exchange),
-                        contentDescription = "Change serving unit",
+                        contentDescription = "Change gram input unit",
                         modifier = Modifier.size(AppIconSize.CardAction),
                     )
                 }
@@ -224,8 +247,8 @@ fun SelectedFoodPanel(
                 inputUnit.isMassUnit() &&
                 inputUnit != ServingUnit.G
 
-        if (showEnteredAsMass) {
-            Spacer(Modifier.height(4.dp))
+        if (showEnteredAsMass && showGramsField) {
+            Spacer(Modifier.size(4.dp))
             Text(
                 text = "Entered as ${inputAmount.cleanDynamic()} ${inputUnit.display}",
                 style = MaterialTheme.typography.bodySmall,
@@ -233,10 +256,11 @@ fun SelectedFoodPanel(
             )
         }
 
-        // If the unit is not grams and we don't have grams-per-serving, offer a shortcut to the editor.
-        val needsGramsPerServing = (food.servingUnit != ServingUnit.G) && (food.gramsPerServingUnitResolved() == null)
+        val needsGramsPerServing =
+            (food.servingUnit != ServingUnit.G) && (food.gramsPerServingUnitResolved() == null)
+
         if (needsGramsPerServing) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.size(8.dp))
             Surface(
                 tonalElevation = 1.dp,
                 shape = MaterialTheme.shapes.medium,
@@ -267,9 +291,8 @@ fun SelectedFoodPanel(
             }
         }
 
-        // Package buttons
         if (food.servingsPerPackage != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.size(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = { onPackage(0.5) },
@@ -280,14 +303,13 @@ fun SelectedFoodPanel(
                     label = { Text("1 package") }
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.size(12.dp))
         }
 
-        // Optional caller-specific content (e.g., recipe cooked batch selector in QuickAdd)
         extraContent()
 
         errorMessage?.let { msg ->
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.size(8.dp))
             Text(
                 msg,
                 color = MaterialTheme.colorScheme.error,
@@ -334,18 +356,38 @@ private fun NumberField(
     value: Double,
     onValue: (Double) -> Unit
 ) {
-    var text by remember(value) { mutableStateOf(value.clean()) }
+    var text by rememberSaveable(label) { mutableStateOf(value.clean()) }
+    var isFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value, isFocused) {
+        if (!isFocused) {
+            text = value.clean()
+        }
+    }
 
     OutlinedTextField(
         value = text,
-        onValueChange = {
-            text = it
-            it.toDoubleOrNull()?.let(onValue)
+        onValueChange = { newText ->
+            text = newText
+            newText.toDoubleOrNull()?.let(onValue)
         },
         label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focusState ->
+                val nowFocused = focusState.isFocused
+                if (isFocused && !nowFocused) {
+                    val parsed = text.toDoubleOrNull()
+                    text = if (parsed != null) {
+                        parsed.clean()
+                    } else {
+                        value.clean()
+                    }
+                }
+                isFocused = nowFocused
+            }
     )
 }
 
@@ -405,14 +447,14 @@ private fun UnitToGramsDialog(
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.size(12.dp))
 
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
                     label = { Text("Amount (${selectedUnit.display})") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -440,7 +482,6 @@ private fun UnitToServingUnitDialog(
 ) {
     val unitOptions = remember(food) { buildQuickAddServingVolumeUnits(food) }
 
-
     if (unitOptions.isEmpty()) {
         onDismiss()
         return
@@ -454,7 +495,9 @@ private fun UnitToServingUnitDialog(
     var amountText by remember { mutableStateOf(initialAmount?.toString().orEmpty()) }
 
     LaunchedEffect(unitOptions) {
-        selectedUnit = if (selectedUnit in unitOptions) selectedUnit else food.servingUnit.coerceToAvailable(unitOptions)
+        selectedUnit =
+            if (selectedUnit in unitOptions) selectedUnit
+            else food.servingUnit.coerceToAvailable(unitOptions)
     }
 
     val parsedAmount: Double? = amountText.toDoubleOrNull()
@@ -494,14 +537,14 @@ private fun UnitToServingUnitDialog(
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.size(12.dp))
 
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
                     label = { Text("Amount (${selectedUnit.display})") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -518,7 +561,6 @@ private fun UnitToServingUnitDialog(
     )
 }
 
-
 private fun buildQuickAddMassInputUnits(): List<ServingUnit> = listOf(
     ServingUnit.G,
     ServingUnit.OZ,
@@ -527,7 +569,6 @@ private fun buildQuickAddMassInputUnits(): List<ServingUnit> = listOf(
 )
 
 private fun buildQuickAddServingVolumeUnits(food: Food): List<ServingUnit> {
-    // Only show the ladder when the food's serving unit is a volume unit; otherwise return empty.
     if (!food.servingUnit.isVolumeUnit()) return emptyList()
 
     val ladder = listOf(
@@ -539,7 +580,6 @@ private fun buildQuickAddServingVolumeUnits(food: Food): List<ServingUnit> {
         ServingUnit.TBSP_US,
         ServingUnit.TSP_US
     )
-    // Keep only units that are actually convertible with existing rules.
     return ladder.filter { it.isVolumeUnit() }
 }
 
@@ -551,13 +591,13 @@ private fun buildQuickAddInputUnits(food: Food): List<ServingUnit> {
         ServingUnit.KG
     )
 
-    val canVolumeInput = food.gramsPerServingUnitResolved() != null && food.servingUnit.isVolumeUnitForDensity()
+    val canVolumeInput =
+        food.gramsPerServingUnitResolved() != null && food.servingUnit.isVolumeUnitForDensity()
     if (!canVolumeInput) return massUnits
 
     val volumeUnits = listOf(
         ServingUnit.ML,
         ServingUnit.L,
-
         ServingUnit.TSP_US,
         ServingUnit.TBSP_US,
         ServingUnit.FL_OZ_US,
@@ -565,11 +605,9 @@ private fun buildQuickAddInputUnits(food: Food): List<ServingUnit> {
         ServingUnit.PINT_US,
         ServingUnit.QUART_US,
         ServingUnit.GALLON_US,
-
         ServingUnit.CUP_METRIC,
         ServingUnit.CUP_JP,
         ServingUnit.RCCUP,
-
         ServingUnit.FL_OZ_IMP,
         ServingUnit.PINT_IMP,
         ServingUnit.QUART_IMP,
@@ -582,7 +620,6 @@ private fun buildQuickAddInputUnits(food: Food): List<ServingUnit> {
 private fun ServingUnit.isVolumeUnitForDensity(): Boolean = when (this) {
     ServingUnit.ML,
     ServingUnit.L,
-
     ServingUnit.TSP_US,
     ServingUnit.TBSP_US,
     ServingUnit.FL_OZ_US,
@@ -590,17 +627,13 @@ private fun ServingUnit.isVolumeUnitForDensity(): Boolean = when (this) {
     ServingUnit.PINT_US,
     ServingUnit.QUART_US,
     ServingUnit.GALLON_US,
-
     ServingUnit.CUP_METRIC,
     ServingUnit.CUP_JP,
     ServingUnit.RCCUP,
-
     ServingUnit.FL_OZ_IMP,
     ServingUnit.PINT_IMP,
     ServingUnit.QUART_IMP,
     ServingUnit.GALLON_IMP,
-
-        // Legacy aliases treated as US volume (but not offered in picker)
     ServingUnit.TSP,
     ServingUnit.TBSP,
     ServingUnit.CUP,
@@ -621,7 +654,6 @@ private fun Double.cleanDynamic(): String {
     val v = this
     val absV = abs(v)
 
-    // Default: 2 decimals. For very small values, show enough decimals to include at least one non-zero digit.
     val decimals = if (absV == 0.0) {
         2
     } else if (absV >= 0.01) {

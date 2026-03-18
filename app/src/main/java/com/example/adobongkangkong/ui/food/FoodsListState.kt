@@ -64,6 +64,7 @@ data class FoodsListRowUiModel(
     val caloriesPerServingText: String, // must always be visible
     val extraMetricText: String?, // shown only when sorting by macro (not calories)
     val isRecipe: Boolean,
+    val isMergeFallback: Boolean,
     val goalFlags: FoodGoalFlagsEntity?,
     val fixMessage: String? = null,
 )

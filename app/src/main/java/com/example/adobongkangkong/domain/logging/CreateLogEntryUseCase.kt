@@ -10,7 +10,6 @@ import com.example.adobongkangkong.domain.model.gPerUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ComputeRecipeBatchNutritionUseCase
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.toRecipe
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
@@ -98,28 +97,17 @@ class CreateLogEntryUseCase @Inject constructor(
         val food = foodRepository.getById(foodId)
             ?: return Result.Error("Food not found")
 
-        // Interpret gramsPerServingUnit consistently as "grams per 1 servingUnit".
-        // Therefore grams-per-1-serving = servingSize * gramsPerServingUnit.
-        val gramsPerServing: Double? = run {
-            // If override is provided, it is interpreted as grams-per-1-serving.
-            overrideGramsPerServingUnit?.takeIf { it > 0.0 }?.let { return@run it }
+        val gramsPerServing: Double? = computeGramsPerServing(
+            food = food,
+            overrideGramsPerServing = overrideGramsPerServingUnit
+        )
 
-            // If servingUnit itself is mass, servingSize is already the mass per serving.
-            runCatching { food.servingUnit.gPerUnit() }.getOrNull()?.let { gPerUnit ->
-                val size = food.servingSize
-                if (size > 0.0) return@run size * gPerUnit
-            }
-
-            // Otherwise gramsPerServingUnit is grams per 1 servingUnit (e.g. g per TBSP).
-            val gPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 } ?: return@run null
-            val size = food.servingSize
-            if (size > 0.0) size * gPerUnit else null
-        }
+        val mlPerServing: Double? = computeMlPerServing(food)
 
         when (val check = checkFoodUsable.execute(
             servingUnit = food.servingUnit,
             gramsPerServingUnit = gramsPerServing,
-            mlPerServingUnit = food.mlPerServingUnit,
+            mlPerServingUnit = mlPerServing,
             amountInput = amountInput,
             context = UsageContext.LOGGING
         )) {
@@ -134,7 +122,7 @@ class CreateLogEntryUseCase @Inject constructor(
             val grams = when (amountInput) {
                 is AmountInput.ByGrams -> amountInput.grams
                 is AmountInput.ByServings -> {
-                    val resolvedGramsPerServing = food.gramsPerServingResolved()
+                    val resolvedGramsPerServing = gramsPerServing
                         ?: return Result.Blocked("Set grams-per-serving before logging by servings.")
                     amountInput.servings * resolvedGramsPerServing
                 }
@@ -149,18 +137,6 @@ class CreateLogEntryUseCase @Inject constructor(
         } ?: snapshot.nutrientsPerMilliliter?.let { perMl ->
             val ml = when (amountInput) {
                 is AmountInput.ByServings -> {
-                    val mlPerServing: Double? = run {
-                        food.mlPerServingUnit?.takeIf { it > 0.0 }?.let { mlPerUnit ->
-                            if (food.servingSize > 0.0) return@run food.servingSize * mlPerUnit
-                        }
-
-                        if (food.servingUnit.isVolumeUnit()) {
-                            return@run food.servingUnit.toMilliliters(food.servingSize)
-                        }
-
-                        null
-                    }
-
                     val resolvedMlPerServing = mlPerServing ?: return Result.Error(
                         "Food is volume-based but missing mL-per-serving (cannot scale)."
                     )
@@ -174,7 +150,7 @@ class CreateLogEntryUseCase @Inject constructor(
 
             Log.d(
                 "Meow",
-                "CreateLogEntryUseCase> scaleByMl ml=$ml mlPerServingUnit=${food.mlPerServingUnit} amountInput=$amountInput"
+                "CreateLogEntryUseCase> scaleByMl ml=$ml mlPerServing=$mlPerServing amountInput=$amountInput"
             )
 
             perMl.scaledBy(ml)
@@ -185,6 +161,7 @@ class CreateLogEntryUseCase @Inject constructor(
             "CreateLogEntryUseCase> Snapshot debug foodId=${food.id} " +
                     "serving=${food.servingSize} ${food.servingUnit} " +
                     "gramsPerServing=$gramsPerServing " +
+                    "mlPerServing=$mlPerServing " +
                     "food.gpsu=${food.gramsPerServingUnit} food.mlpsu=${food.mlPerServingUnit} " +
                     "snapshot.hasNutrientsPerGram=${snapshot.nutrientsPerGram != null} " +
                     "snapshot.hasNutrientsPerMilliliter=${snapshot.nutrientsPerMilliliter != null}"
@@ -205,6 +182,46 @@ class CreateLogEntryUseCase @Inject constructor(
 
         val id = logRepository.insert(entry)
         return Result.Success(id = id)
+    }
+
+    private fun computeGramsPerServing(
+        food: com.example.adobongkangkong.domain.model.Food,
+        overrideGramsPerServing: Double? = null
+    ): Double? {
+        overrideGramsPerServing?.takeIf { it > 0.0 }?.let { return it }
+
+        val gramsPerUnitFromUnit = runCatching { food.servingUnit.gPerUnit() }.getOrNull()
+        if (gramsPerUnitFromUnit != null && gramsPerUnitFromUnit > 0.0) {
+            val size = food.servingSize
+            if (size > 0.0) return size * gramsPerUnitFromUnit
+        }
+
+        val gramsPerUnitFromBridge = food.gramsPerServingUnit?.takeIf { it > 0.0 } ?: return null
+        val size = food.servingSize
+        if (size <= 0.0) return null
+
+        return size * gramsPerUnitFromBridge
+    }
+
+    private fun computeMlPerServing(
+        food: com.example.adobongkangkong.domain.model.Food
+    ): Double? {
+        val mlPerUnitFromUnit = if (food.servingUnit.isVolumeUnit()) {
+            food.servingUnit.toMilliliters(1.0)
+        } else {
+            null
+        }
+
+        if (mlPerUnitFromUnit != null && mlPerUnitFromUnit > 0.0) {
+            val size = food.servingSize
+            if (size > 0.0) return size * mlPerUnitFromUnit
+        }
+
+        val mlPerUnitFromBridge = food.mlPerServingUnit?.takeIf { it > 0.0 } ?: return null
+        val size = food.servingSize
+        if (size <= 0.0) return null
+
+        return size * mlPerUnitFromBridge
     }
 
     private suspend fun logRecipe(
@@ -231,8 +248,6 @@ class CreateLogEntryUseCase @Inject constructor(
             null
         }
 
-        // No batch => recipe-estimate logging using persisted recipe definition.
-        // Batch present => apply cooked-yield / servings-yield context from that exact batch.
         val effectiveDraft = if (batch != null) {
             baseDraft.copy(
                 totalYieldGrams = batch.cookedYieldGrams,

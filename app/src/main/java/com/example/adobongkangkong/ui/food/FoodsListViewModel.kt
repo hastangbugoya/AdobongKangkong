@@ -48,6 +48,7 @@ import kotlin.math.roundToInt
  *   - per-serving kcal display
  *   - optional extra macro metric (per 100g or per 100mL)
  *   - fix banner message (single-source-of-truth validation)
+ *   - merge fallback/canonical indicator flag
  *
  * Correctness rules:
  * - Validation uses the domain single source of truth:
@@ -204,11 +205,9 @@ class FoodsListViewModel @Inject constructor(
             for ((foodId, snapshot) in snapshotsById) {
 
                 val (basis, per100) = when {
-                    // Mass-grounded snapshot
                     snapshot.nutrientsPerGram != null ->
                         BasisType.PER_100G to snapshot.nutrientsForGrams(100.0)
 
-                    // Volume-grounded snapshot
                     snapshot.nutrientsPerMilliliter != null ->
                         BasisType.PER_100ML to snapshot.nutrientsForMilliliters(100.0)
 
@@ -313,6 +312,8 @@ class FoodsListViewModel @Inject constructor(
                             }
                         }
 
+                    val isMergeFallback = food.mergeChildCount > 0
+
                     if (food.isRecipe) {
                         val kcalText =
                             when (val r = computeRecipeKcalForFoodId(food.id)) {
@@ -329,6 +330,7 @@ class FoodsListViewModel @Inject constructor(
                                 caloriesPerServingText = kcalText,
                                 extraMetricText = null,
                                 isRecipe = true,
+                                isMergeFallback = isMergeFallback,
                                 goalFlags = flagsById[food.id],
                                 fixMessage = null
                             )
@@ -372,6 +374,7 @@ class FoodsListViewModel @Inject constructor(
                             caloriesPerServingText = kcalPerServingText,
                             extraMetricText = extraMetricText,
                             isRecipe = false,
+                            isMergeFallback = isMergeFallback,
                             goalFlags = flagsById[food.id],
                             fixMessage = fixMessageForFood
                         )
@@ -435,8 +438,6 @@ class FoodsListViewModel @Inject constructor(
         basis: BasisType?,
         kcalPer100: Double?
     ): String {
-
-        // NOTE: recipes render calories differently (batch/per serving).
         if (food.isRecipe) {
             val servingKcal: Int? = when (basis) {
                 BasisType.PER_100G -> {
@@ -496,7 +497,6 @@ class FoodsListViewModel @Inject constructor(
                     val kcal = (kcalPer100 * grams / 100.0).roundToInt()
                     "$kcal kcal/$label"
                 } else {
-                    // Fallback: try canonical scaler (keeps math out of UI)
                     val result = NutrientBasisScaler.canonicalToDisplayPerServing(
                         storedAmount = kcalPer100,
                         storedBasis = BasisType.PER_100G,
@@ -613,7 +613,6 @@ class FoodsListViewModel @Inject constructor(
                     val (ab, av) = metric(a)
                     val (bb, bv) = metric(b)
 
-                    // Never directly compare grams vs mL values; group by basis first.
                     val basisCmp = basisRank(ab).compareTo(basisRank(bb))
                     if (basisCmp != 0) basisCmp
                     else {
@@ -657,6 +656,12 @@ private data class TripleB(
  *   - Mass foods: PER_100G (snapshot.nutrientsForGrams(100.0))
  *   - Volume foods: PER_100ML (snapshot.nutrientsForMilliliters(100.0))
  * - Never compare grams vs mL numbers directly. No density guessing.
+ *
+ * Merge fallback indicator
+ * - Row UI uses isMergeFallback = (food.mergeChildCount > 0).
+ * - Do not revert this to mergedIntoFoodId == null.
+ * - mergedIntoFoodId == null only means the row itself is not merged into another row;
+ *   it does NOT mean the row is a canonical merge target.
  *
  * Logging-by-mL reminder (planned future work)
  * - This screen currently validates list rows assuming AmountInput.ByServings(1.0).

@@ -37,7 +37,7 @@ import com.example.adobongkangkong.data.local.db.dao.*
         FoodCategoryCrossRefEntity::class,
         RecipeCategoryCrossRefEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -291,5 +291,52 @@ abstract class NutriDatabase : RoomDatabase() {
                 )
             }
         }
+
+        /**
+         * v19
+         * - Add mergeChildCount to foods
+         *
+         * Why:
+         * - lets UI cheaply identify canonical merge targets using mergeChildCount > 0
+         * - preserves useful merge cardinality for future badges/debugging
+         * - avoids repeated "who merged into me?" read queries for simple list indicators
+         */
+        val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE foods ADD COLUMN mergeChildCount INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
     }
 }
+
+/**
+ * =============================================================================
+ * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
+ * =============================================================================
+ *
+ * Merge child count migration intent
+ * - v19 adds foods.mergeChildCount as operational state.
+ * - Initial migration value is 0 for all rows.
+ * - Existing historical merged relationships are not backfilled here.
+ *
+ * Why no backfill in MIGRATION_18_19
+ * - Keep the migration narrow and low-risk.
+ * - Existing UI behavior only needs correct values going forward for newly merged foods.
+ * - If a later requirement demands historical backfill, do it explicitly in a dedicated migration
+ *   or one-time repair routine, not silently here.
+ *
+ * Important guardrail
+ * - Do not remove MIGRATION_18_19 from DatabaseModule wiring.
+ * - Do not silently change the semantics of mergeChildCount without updating merge logic and UI.
+ *
+ * Future plans — do not remove
+ * - Optional future one-time repair:
+ *     UPDATE canonical foods based on COUNT(children grouped by mergedIntoFoodId)
+ * - Optional future integrity test:
+ *     verify mergeChildCount remains consistent after merge operations and restore/import flows
+ *
+ * IMPORTANT TO FUTURE AI:
+ * - Do NOT delete these future plans during cleanup or refactors.
+ */

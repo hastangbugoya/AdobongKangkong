@@ -62,6 +62,15 @@ import kotlinx.coroutines.launch
  * - When current nutrition differs materially from the stored snapshot, the user must choose:
  *   - use current nutrition, or
  *   - keep original nutrition and scale the stored snapshot.
+ *
+ * Quantity model:
+ * - inputMode is the active quantity driver.
+ * - SERVINGS   -> servingsFlow is authoritative.
+ * - GRAMS      -> inputAmountFlow is authoritative grams; servings are derived for display.
+ * - SERVING_UNIT -> inputAmountFlow is authoritative in inputUnitFlow; servings are derived for display.
+ *
+ * Derived values (gramsAmount / servingUnitAmount / servingsEquivalent) are computed in state mapping
+ * and should not be treated as separate sources of truth.
  */
 @HiltViewModel
 class QuickAddViewModel @Inject constructor(
@@ -94,11 +103,12 @@ class QuickAddViewModel @Inject constructor(
     private val editingLogIdFlow = MutableStateFlow<Long?>(null)
     private val isIdentityLockedFlow = MutableStateFlow(false)
 
-    // canonical amount
+    // Canonical servings source ONLY when inputMode == SERVINGS.
     private val servingsFlow = MutableStateFlow(1.0)
     private val inputModeFlow = MutableStateFlow(InputMode.SERVINGS)
 
-    // user input (Amount + Unit) used by QuickAdd
+    // Authoritative amount ONLY when inputMode == GRAMS or SERVING_UNIT.
+    // In SERVINGS mode, these may be kept in sync for UI convenience, but are not authoritative.
     private val inputUnitFlow = MutableStateFlow(ServingUnit.G)
     private val inputAmountFlow = MutableStateFlow<Double?>(null)
 
@@ -328,7 +338,6 @@ class QuickAddViewModel @Inject constructor(
             mealSlot = pending.mealSlot,
             decision = UpdateLogEntryUseCase.NutritionDecision.USE_CURRENT,
             onDone = onDone,
-//            logDate = logDate
         )
     }
 
@@ -342,7 +351,6 @@ class QuickAddViewModel @Inject constructor(
             mealSlot = pending.mealSlot,
             decision = UpdateLogEntryUseCase.NutritionDecision.KEEP_ORIGINAL,
             onDone = onDone,
-//            logDate = logDate
         )
     }
 
@@ -813,7 +821,8 @@ class QuickAddViewModel @Inject constructor(
                 val servingsEquivalent: Double? = core.selected?.let { food ->
                     when (core.inputMode) {
                         InputMode.SERVINGS -> core.servings
-                        else -> {
+                        InputMode.GRAMS,
+                        InputMode.SERVING_UNIT -> {
                             val grams = gramsAmount ?: return@let null
                             val gPerServing = gramsPerServingResolved(food) ?: return@let null
                             if (gPerServing <= 0.0) return@let null
@@ -822,9 +831,18 @@ class QuickAddViewModel @Inject constructor(
                     }
                 }
 
+                val displayServings = servingsEquivalent ?: core.servings
+
                 val servingUnitAmount: Double? = core.selected?.let { food ->
-                    val s = servingsEquivalent ?: return@let null
-                    s * food.servingSize
+                    when {
+                        core.inputMode == InputMode.SERVING_UNIT && core.inputUnit == food.servingUnit -> {
+                            core.inputAmount
+                        }
+
+                        else -> {
+                            displayServings * food.servingSize
+                        }
+                    }
                 }
 
                 QuickAddState(
@@ -834,7 +852,7 @@ class QuickAddViewModel @Inject constructor(
                     editingLogId = core.editingLogId,
                     isIdentityLocked = core.isIdentityLocked,
                     selectedFood = core.selected,
-                    servings = core.servings,
+                    servings = displayServings,
                     servingsEquivalent = servingsEquivalent,
                     inputUnit = core.inputUnit,
                     inputAmount = core.inputAmount,
@@ -934,6 +952,7 @@ class QuickAddViewModel @Inject constructor(
                 ServingUnit.G
             }
 
+        // Kept in sync for UI convenience in SERVINGS mode; not authoritative there.
         inputAmountFlow.value = food.servingSize.coerceAtLeast(0.0)
         errorFlow.value = null
         mealSlotFlow.value = null
@@ -999,45 +1018,18 @@ class QuickAddViewModel @Inject constructor(
         inputModeFlow.value = mode
     }
 
+    /**
+     * Unit selection no longer auto-converts and rewrites amount state.
+     * It only changes the current alternate-input unit.
+     *
+     * Authoritative quantity should be changed by:
+     * - onServingsChanged
+     * - onGramsChanged
+     * - onServingUnitAmountChanged
+     * - onInputAmountChanged (dialog / generic alternate-unit apply path)
+     */
     fun onInputUnitChanged(unit: ServingUnit) {
         inputUnitFlow.value = unit
-
-        val food = selectedFoodFlow.value ?: return
-        val currentGrams = computeGramsAmount(
-            food = food,
-            servings = servingsFlow.value,
-            inputMode = inputModeFlow.value,
-            inputUnit = inputUnitFlow.value,
-            inputAmount = inputAmountFlow.value
-        )
-
-        if (currentGrams != null) {
-            unit.asG?.let { gPerUnit ->
-                if (gPerUnit > 0.0) {
-                    inputAmountFlow.value = currentGrams / gPerUnit
-                    inputModeFlow.value = InputMode.GRAMS
-                    return
-                }
-            }
-
-            unit.asMl?.let { inputMlPerUnit ->
-                val grams = currentGrams
-                val foodMlPerUnit = food.servingUnit.asMl
-                val gPerUnit = food.gramsPerServingUnitResolved()
-                if (foodMlPerUnit != null &&
-                    gPerUnit != null &&
-                    gPerUnit > 0.0
-                ) {
-                    val density = gPerUnit / foodMlPerUnit
-                    if (density > 0.0) {
-                        val ml = grams / density
-                        inputAmountFlow.value = ml / inputMlPerUnit
-                        inputModeFlow.value = InputMode.SERVING_UNIT
-                        return
-                    }
-                }
-            }
-        }
     }
 
     fun openTodayPlanPicker() {
@@ -1100,28 +1092,29 @@ class QuickAddViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Generic alternate-unit apply path used by dialogs.
+     * This does not back-write servingsFlow; servings are derived in state mapping.
+     */
     fun onInputAmountChanged(amount: Double) {
         val food = selectedFoodFlow.value ?: return
         val unit = inputUnitFlow.value
         val a = amount.coerceAtLeast(0.0)
+
         inputAmountFlow.value = a
 
-        val grams = computeGramsFromAmountAndUnit(food, a, unit)
-
-        if (grams != null) {
-            val gPerServing = gramsPerServingResolved(food)
-            if (gPerServing != null && gPerServing > 0.0) {
-                servingsFlow.value = (grams / gPerServing).coerceAtLeast(0.0)
-            }
-            inputModeFlow.value = if (unit.asG != null) InputMode.GRAMS else InputMode.SERVING_UNIT
-        } else {
-            if (unit == food.servingUnit && food.servingSize > 0.0) {
-                servingsFlow.value = (a / food.servingSize).coerceAtLeast(0.0)
-                inputModeFlow.value = InputMode.SERVING_UNIT
-            }
+        inputModeFlow.value = when {
+            unit.asG != null -> InputMode.GRAMS
+            unit == food.servingUnit -> InputMode.SERVING_UNIT
+            unit.asMl != null -> InputMode.SERVING_UNIT
+            else -> InputMode.SERVING_UNIT
         }
     }
 
+    /**
+     * Servings becomes the active driver.
+     * Keep input unit/amount synced for UI convenience, but the authoritative source is servingsFlow.
+     */
     fun onServingsChanged(servings: Double) {
         val s = servings.coerceAtLeast(0.0)
         servingsFlow.value = s
@@ -1133,30 +1126,36 @@ class QuickAddViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Food-serving-unit amount becomes the active driver.
+     * Do not delegate to onInputAmountChanged(); set the driver explicitly.
+     */
     fun onServingUnitAmountChanged(amount: Double) {
         val food = selectedFoodFlow.value ?: return
+        val a = amount.coerceAtLeast(0.0)
+
         inputUnitFlow.value = food.servingUnit
-        onInputAmountChanged(amount)
+        inputAmountFlow.value = a
+        inputModeFlow.value = InputMode.SERVING_UNIT
     }
 
+    /**
+     * Grams becomes the active driver.
+     * Do not back-write servingsFlow here; servings are derived in state mapping.
+     */
     fun onGramsChanged(grams: Double) {
-        val food = selectedFoodFlow.value ?: return
         val gramsClamped = grams.coerceAtLeast(0.0)
 
         inputUnitFlow.value = ServingUnit.G
         inputAmountFlow.value = gramsClamped
         inputModeFlow.value = InputMode.GRAMS
-
-        val gPerServing = gramsPerServingResolved(food)
-        if (gPerServing != null && gPerServing > 0.0) {
-            servingsFlow.value = (gramsClamped / gPerServing).coerceAtLeast(0.0)
-        }
     }
 
     fun onPackageClicked(multiplier: Double = 1.0) {
         val food = selectedFoodFlow.value ?: return
         val spp = food.servingsPerPackage ?: return
         val s = (spp * multiplier).coerceAtLeast(0.0)
+
         servingsFlow.value = s
         inputModeFlow.value = InputMode.SERVINGS
 
@@ -1468,7 +1467,6 @@ class QuickAddViewModel @Inject constructor(
                 mealSlot = mealSlot,
                 decision = null,
                 onDone = onDone,
-//                logDate = logDate
             )
             return
         }
@@ -1608,7 +1606,6 @@ class QuickAddViewModel @Inject constructor(
         mealSlot: MealSlot?,
         decision: UpdateLogEntryUseCase.NutritionDecision?,
         onDone: () -> Unit,
-//        logDate: LocalDate
     ) {
         viewModelScope.launch {
             isSavingFlow.value = true

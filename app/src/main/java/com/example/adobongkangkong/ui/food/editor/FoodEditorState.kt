@@ -12,6 +12,11 @@ enum class GroundingMode {
     LIQUID
 }
 
+enum class UsdaNutrientInterpretationChoice {
+    PER_100,
+    PER_SERVING
+}
+
 data class NutrientRowUi(
     val nutrientId: Long,
     val code: String,
@@ -37,6 +42,66 @@ data class BarcodePackageEditorState(
     val overrideHouseholdServingText: String = "",
     val overrideServingSize: String = "",
     val overrideServingUnit: ServingUnit? = null,
+)
+
+/**
+ * Pending USDA nutrient backfill prompt state after a barcode/package has been adopted into
+ * the current existing food.
+ *
+ * Purpose
+ * - Preserve the exact USDA candidate context that was just adopted so the ViewModel can offer:
+ *   "Fill missing nutrients from USDA?"
+ * - Keep nutrient backfill separate from package adoption.
+ *
+ * Important rules
+ * - This is UI orchestration state only.
+ * - This does not mean backfill has happened yet.
+ * - The current Food remains canonical; USDA is only a donor candidate for nutrient rows.
+ */
+data class PendingUsdaBackfillPromptState(
+    val barcode: String,
+    val selectedFdcId: Long,
+    val candidateLabel: String,
+)
+
+/**
+ * Prompt shown immediately after USDA import/adoption when the app cannot safely know whether
+ * the USDA nutrient values should be treated as per-serving values or as per-100 values.
+ *
+ * Purpose
+ * - Let the user decide interpretation instead of hard-forcing one rule when USDA payload semantics
+ *   are unclear for the chosen item.
+ * - Provide a lightweight preview (main macros + serving text) so the user can make the decision
+ *   in context.
+ *
+ * Important rules
+ * - This is orchestration/UI state only.
+ * - No conversion has been applied yet for this decision until the user confirms.
+ * - The numbers shown here are raw USDA values exactly as parsed from the chosen item.
+ */
+data class PendingUsdaInterpretationPromptState(
+    val foodId: Long,
+    val selectedFdcId: Long,
+    val candidateLabel: String,
+    val servingText: String?,
+    val calories: Double?,
+    val carbs: Double?,
+    val protein: Double?,
+    val fat: Double?,
+)
+
+/**
+ * Lightweight UI feedback for a completed USDA nutrient backfill attempt.
+ *
+ * Purpose
+ * - Surface a user-readable summary after BackfillUsdaNutrientsIntoFoodUseCase finishes.
+ * - Keep result messaging separate from generic errorMessage because a blocked backfill is not
+ *   necessarily the same as a fatal editor error.
+ */
+data class UsdaBackfillMessageState(
+    val message: String,
+    val insertedCount: Int,
+    val skippedExistingCount: Int,
 )
 
 data class FoodEditorState(
@@ -77,6 +142,13 @@ data class FoodEditorState(
     val isBarcodeScannerOpen: Boolean = false,
     val pendingUsdaSearchJson: String? = null,
     val barcodePickItems: List<com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase.PickItem> = emptyList(),
+
+    // Post-import/adoption USDA interpretation choice when nutrient semantics are unclear
+    val pendingUsdaInterpretationPrompt: PendingUsdaInterpretationPromptState? = null,
+
+    // Post-adoption USDA nutrient enrichment prompt/result
+    val pendingUsdaBackfillPrompt: PendingUsdaBackfillPromptState? = null,
+    val usdaBackfillMessage: UsdaBackfillMessageState? = null,
 
     // Solid-vs-liquid grounding prompt (UI-only)
     val isGroundingDialogOpen: Boolean = false,

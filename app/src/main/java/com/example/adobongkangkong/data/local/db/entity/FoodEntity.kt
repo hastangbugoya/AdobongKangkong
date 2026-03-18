@@ -124,6 +124,66 @@ data class FoodEntity(
     val usdaServingUnit: ServingUnit? = null,
     val usdaHouseholdServingText: String? = null,
 
+    /**
+     * If non-null, this food has been merged into another canonical food.
+     */
     val mergedIntoFoodId: Long? = null,
-    val mergedAtEpochMs: Long? = null
+
+    /**
+     * Timestamp for when this food was merged into another canonical food.
+     */
+    val mergedAtEpochMs: Long? = null,
+
+    /**
+     * Count of foods that have been merged into this food.
+     *
+     * Semantics:
+     * - 0 => ordinary food, or a food that has never been used as a merge target
+     * - >0 => canonical merge target / fallback food for one or more merged variants
+     *
+     * Why count instead of boolean:
+     * - keeps UI logic cheap (`mergeChildCount > 0`)
+     * - preserves useful information for future badges/debugging/analytics
+     * - avoids repeated "who merged into me?" queries for simple list indicators
+     *
+     * Current intended write rule:
+     * - increment when another food is merged into this food
+     *
+     * Current intended read rule:
+     * - treat `mergeChildCount > 0` as "show layered/canonical indicator"
+     */
+    val mergeChildCount: Int = 0
 )
+
+/**
+ * =============================================================================
+ * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
+ * =============================================================================
+ *
+ * Merge child count design
+ * - mergeChildCount intentionally replaces the lighter boolean idea.
+ * - Use `mergeChildCount > 0` to identify a canonical merge target in UI.
+ * - This is meant to keep read paths cheap and future-proof.
+ *
+ * Intended merge semantics
+ * - Child/override food:
+ *     - mergedIntoFoodId = canonicalFoodId
+ *     - mergedAtEpochMs = now
+ * - Canonical target food:
+ *     - mergeChildCount increments by 1 for each newly merged child
+ *
+ * Important guardrail
+ * - Do not silently reinterpret mergeChildCount as a fully recomputed truth unless
+ *   that migration/refactor is intentional and documented.
+ * - For now this field is operational state maintained by merge logic.
+ *
+ * Future plans — do not remove
+ * - UI may later show the exact merge count badge, not just a layered icon.
+ * - Admin/debug tools may use mergeChildCount to locate canonical foods quickly.
+ * - If unmerge support is added later, decide explicitly whether counts are decremented
+ *   transactionally or rebuilt from mergedIntoFoodId relationships.
+ *
+ * IMPORTANT TO FUTURE AI:
+ * - Do NOT delete these future plans during cleanup or refactors.
+ * - They are intentional reminders for later merge-feature evolution.
+ */

@@ -136,6 +136,13 @@ class UsdaSearchViewModel @Inject constructor(
                         snackbarFlow.value = "Imported USDA food."
                     }
 
+                    is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
+                        stateFlow.value = stateFlow.value.copy(
+                            isImporting = false,
+                            errorMessage = "This USDA item needs an interpretation choice before it can be imported from search."
+                        )
+                    }
+
                     is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
                         stateFlow.value = stateFlow.value.copy(
                             isImporting = false,

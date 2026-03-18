@@ -13,6 +13,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.fromUsda
 import com.example.adobongkangkong.domain.model.isAmbiguousForGrounding
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
@@ -26,6 +27,9 @@ import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.domain.usda.AdoptUsdaBarcodePackageIntoFoodUseCase
+import com.example.adobongkangkong.domain.usda.AssignBarcodeToFoodUseCase
+import com.example.adobongkangkong.domain.usda.BackfillUsdaNutrientsIntoFoodUseCase
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
 import com.example.adobongkangkong.domain.usda.ResolveBarcodeWithUsdaUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
@@ -67,6 +71,9 @@ class FoodEditorViewModel @Inject constructor(
     private val searchUsdaByBarcode: SearchUsdaFoodsByBarcodeUseCase,
     private val importUsdaFromSearchJson: ImportUsdaFoodFromSearchJsonUseCase,
     private val foodBarcodeRepo: FoodBarcodeRepository,
+    private val assignBarcodeToFood: AssignBarcodeToFoodUseCase,
+    private val adoptUsdaBarcodePackageIntoFood: AdoptUsdaBarcodePackageIntoFoodUseCase,
+    private val backfillUsdaNutrientsIntoFood: BackfillUsdaNutrientsIntoFoodUseCase,
     private val softDeleteFood: SoftDeleteFoodUseCase,
     private val hardDeleteFoodIfUnused: HardDeleteFoodIfUnusedUseCase,
     private val resolveBarcodeWithUsda: ResolveBarcodeWithUsdaUseCase,
@@ -110,7 +117,6 @@ class FoodEditorViewModel @Inject constructor(
     private val aliasSheetNutrientNameFlow = MutableStateFlow<String?>(null)
     val aliasSheetNutrientName: StateFlow<String?> = aliasSheetNutrientNameFlow
 
-    // Pending remap when we require user confirmation
     private var pendingRemapBarcode: String? = null
     private var pendingRemapTargetFoodId: Long? = null
 
@@ -165,9 +171,31 @@ class FoodEditorViewModel @Inject constructor(
             val mlPerServingUnit = food?.mlPerServingUnit
 
             val gramsPerServingUnitEffectiveForDisplay: Double? =
-                when (servingUnit) {
-                    ServingUnit.G -> 1.0
-                    else -> gramsPerServingUnit
+                gramsPerServingUnitEffective(
+                    servingUnit = servingUnit,
+                    gramsPerServingUnit = gramsPerServingUnit
+                )
+
+            val mlPerServingUnitEffectiveForDisplay: Double? =
+                mlPerServingUnitEffective(
+                    servingUnit = servingUnit,
+                    mlPerServingUnit = mlPerServingUnit
+                )
+
+            val gramsPerServingEffectiveForDisplay: Double? =
+                when {
+                    servingUnit.isMassUnit() -> servingSize.takeIf { it > 0.0 }
+                    gramsPerServingUnitEffectiveForDisplay != null ->
+                        (servingSize * gramsPerServingUnitEffectiveForDisplay).takeIf { it > 0.0 }
+                    else -> null
+                }
+
+            val mlPerServingEffectiveForDisplay: Double? =
+                when {
+                    servingUnit.isVolumeUnit() -> servingSize.takeIf { it > 0.0 }
+                    mlPerServingUnitEffectiveForDisplay != null ->
+                        (servingSize * mlPerServingUnitEffectiveForDisplay).takeIf { it > 0.0 }
+                    else -> null
                 }
 
             val inferredBasisType: BasisType? =
@@ -177,10 +205,9 @@ class FoodEditorViewModel @Inject constructor(
                         rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
                         else -> {
                             when {
-                                (food?.mlPerServingUnit != null) -> BasisType.PER_100ML
-                                (food?.gramsPerServingUnit != null) -> BasisType.PER_100G
-                                (food?.servingUnit ?: ServingUnit.SERVING).toMilliliters(1.0) != null -> BasisType.PER_100ML
-                                else -> BasisType.PER_100G
+                                mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
+                                gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
+                                else -> BasisType.USDA_REPORTED_SERVING
                             }
                         }
                     }
@@ -190,7 +217,15 @@ class FoodEditorViewModel @Inject constructor(
             } else {
                 emptyList()
             }
-
+            Log.d(
+                "FoodEditorDebug",
+                "load foodId=$foodId servingSize=$servingSize servingUnit=$servingUnit " +
+                        "gramsPerServingUnit=$gramsPerServingUnit mlPerServingUnit=$mlPerServingUnit " +
+                        "gramsPerServingUnitEffectiveForDisplay=$gramsPerServingUnitEffectiveForDisplay " +
+                        "mlPerServingUnitEffectiveForDisplay=$mlPerServingUnitEffectiveForDisplay " +
+                        "gramsPerServingEffectiveForDisplay=$gramsPerServingEffectiveForDisplay " +
+                        "mlPerServingEffectiveForDisplay=$mlPerServingEffectiveForDisplay"
+            )
             val loadedRows = rows.map { r ->
                 val displayAmount =
                     when (r.basisType) {
@@ -198,24 +233,24 @@ class FoodEditorViewModel @Inject constructor(
                             .canonicalToDisplayPerServing(
                                 storedAmount = r.amount,
                                 storedBasis = r.basisType,
-                                servingSize = servingSize,
-                                gramsPerServingUnit = gramsPerServingUnitEffectiveForDisplay
+                                servingSize = 1.0,
+                                gramsPerServingUnit = gramsPerServingEffectiveForDisplay
                             ).amount
 
                         BasisType.PER_100ML -> NutrientBasisScaler
                             .canonicalToDisplayPerServingVolume(
                                 storedAmount = r.amount,
                                 storedBasis = r.basisType,
-                                servingSize = servingSize,
-                                mlPerServingUnit = mlPerServingUnitEffective(
-                                    servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
-                                    mlPerServingUnit = mlPerServingUnit
-                                )
+                                servingSize = 1.0,
+                                mlPerServingUnit = mlPerServingEffectiveForDisplay
                             ).amount
 
-                        else -> r.amount
+                        BasisType.USDA_REPORTED_SERVING -> r.amount
                     }
-
+                Log.d(
+                    "FoodEditorDebug",
+                    "nutrient=${r.nutrient.code} basis=${r.basisType} stored=${r.amount} display=$displayAmount"
+                )
                 NutrientRowUi(
                     nutrientId = r.nutrient.id,
                     code = r.nutrient.code,
@@ -263,9 +298,9 @@ class FoodEditorViewModel @Inject constructor(
                 errorMessage = null,
                 hasUnsavedChanges = false,
                 assignedBarcodes = assignedBarcodes,
-                barcodeActionMessage = null,
+                barcodeActionMessage = current.barcodeActionMessage,
                 barcodePackageEditor = null,
-                scannedBarcode = if (foodId == null) current.scannedBarcode else current.scannedBarcode
+                scannedBarcode = current.scannedBarcode
             )
 
             _state.value = applyNeedsFix(next, current)
@@ -295,18 +330,6 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Merges the currently edited food into another canonical food selected by the user.
-     *
-     * Merge direction:
-     * - current edited food = override/source food
-     * - selected target food = canonical/surviving food
-     *
-     * Rules:
-     * - self-merge is ignored
-     * - historical logs are intentionally left unchanged
-     * - on success, the source food is marked merged + soft-deleted by [MergeFoodsUseCase]
-     */
     fun mergeIntoFood(canonicalFoodId: Long, onDone: (() -> Unit)? = null) {
         val overrideFoodId = _state.value.foodId ?: return
         if (overrideFoodId == canonicalFoodId) return
@@ -336,6 +359,202 @@ class FoodEditorViewModel @Inject constructor(
 
     fun dismissNeedsFixBanner() {
         update { it.copy(fixBannerDismissed = true) }
+    }
+
+    fun dismissUsdaInterpretationPrompt() {
+        update {
+            it.copy(
+                pendingUsdaInterpretationPrompt = null,
+                pendingUsdaSearchJson = null,
+                barcodePickItems = emptyList()
+            )
+        }
+    }
+
+    fun confirmUsdaInterpretationPrompt(choice: UsdaNutrientInterpretationChoice) {
+        val s = _state.value
+        val prompt = s.pendingUsdaInterpretationPrompt ?: return
+        val json = s.pendingUsdaSearchJson ?: run {
+            update {
+                it.copy(
+                    pendingUsdaInterpretationPrompt = null,
+                    errorMessage = "Missing pending USDA JSON for interpretation."
+                )
+            }
+            return
+        }
+
+        val barcode = s.scannedBarcode.trim()
+        if (barcode.isBlank()) {
+            update {
+                it.copy(
+                    errorMessage = "Missing scanned barcode."
+                )
+            }
+            return
+        }
+
+        val forcedInterpretation = when (choice) {
+            UsdaNutrientInterpretationChoice.PER_100 ->
+                ImportUsdaFoodFromSearchJsonUseCase.InterpretationChoice.PER_100_STYLE
+
+            UsdaNutrientInterpretationChoice.PER_SERVING ->
+                ImportUsdaFoodFromSearchJsonUseCase.InterpretationChoice.PER_SERVING_STYLE
+        }
+
+        viewModelScope.launch {
+            when (
+                val result = importUsdaFromSearchJson(
+                    searchJson = json,
+                    selectedFdcId = prompt.selectedFdcId,
+                    forcedInterpretation = forcedInterpretation
+                )
+            ) {
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+                    val now = System.currentTimeMillis()
+
+                    foodBarcodeRepo.upsertAndTouch(
+                        entity = FoodBarcodeEntity(
+                            barcode = barcode,
+                            foodId = result.foodId,
+                            source = BarcodeMappingSource.USDA,
+                            usdaFdcId = result.fdcId,
+                            usdaPublishedDateIso = result.publishedDateIso,
+                            assignedAtEpochMs = now,
+                            lastSeenAtEpochMs = now
+                        ),
+                        nowEpochMs = now
+                    )
+
+                    update {
+                        it.copy(
+                            isBarcodeScannerOpen = false,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            barcodeCollisionDialog = null,
+                            errorMessage = null,
+                            pendingUsdaBackfillPrompt = null,
+                            pendingUsdaInterpretationPrompt = null
+                        )
+                    }
+
+                    load(foodId = result.foodId, initialName = null, force = true)
+                }
+
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
+                    update {
+                        it.copy(
+                            pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(
+                                foodId = result.foodId,
+                                selectedFdcId = result.fdcId,
+                                candidateLabel = result.candidateLabel,
+                                servingText = result.servingText,
+                                calories = result.calories,
+                                carbs = result.carbs,
+                                protein = result.protein,
+                                fat = result.fat
+                            ),
+                            errorMessage = null
+                        )
+                    }
+                }
+
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
+                    update { it.copy(errorMessage = result.reason) }
+                }
+            }
+        }
+    }
+
+    fun dismissUsdaBackfillPrompt() {
+        update {
+            it.copy(
+                pendingUsdaBackfillPrompt = null,
+                pendingUsdaSearchJson = null
+            )
+        }
+    }
+
+    fun dismissUsdaBackfillMessage() {
+        update { it.copy(usdaBackfillMessage = null) }
+    }
+
+    fun confirmUsdaBackfillPrompt() {
+        val s = _state.value
+        val foodId = s.foodId ?: run {
+            update {
+                it.copy(
+                    pendingUsdaBackfillPrompt = null,
+                    pendingUsdaSearchJson = null,
+                    errorMessage = "Food must be loaded before USDA nutrient backfill."
+                )
+            }
+            return
+        }
+        val prompt = s.pendingUsdaBackfillPrompt ?: return
+        val json = s.pendingUsdaSearchJson ?: run {
+            update {
+                it.copy(
+                    pendingUsdaBackfillPrompt = null,
+                    errorMessage = "Missing pending USDA JSON for nutrient backfill."
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            when (
+                val result = backfillUsdaNutrientsIntoFood(
+                    targetFoodId = foodId,
+                    searchJson = json,
+                    selectedFdcId = prompt.selectedFdcId
+                )
+            ) {
+                is BackfillUsdaNutrientsIntoFoodUseCase.Result.Success -> {
+                    val message = when {
+                        result.insertedCount > 0 ->
+                            "Filled missing nutrients from USDA for ${prompt.candidateLabel}."
+                        else ->
+                            "No new USDA nutrients were added. Existing nutrients were already present."
+                    }
+
+                    update {
+                        it.copy(
+                            pendingUsdaBackfillPrompt = null,
+                            pendingUsdaSearchJson = null,
+                            errorMessage = null,
+                            usdaBackfillMessage = UsdaBackfillMessageState(
+                                message = message,
+                                insertedCount = result.insertedCount,
+                                skippedExistingCount = result.skippedExistingCount
+                            ),
+                            barcodeActionMessage = if (result.insertedCount > 0) {
+                                "USDA package adopted and missing nutrients filled."
+                            } else {
+                                "USDA package adopted. No missing nutrients were added."
+                            }
+                        )
+                    }
+
+                    load(foodId = foodId, initialName = null, force = true)
+                }
+
+                is BackfillUsdaNutrientsIntoFoodUseCase.Result.Blocked -> {
+                    update {
+                        it.copy(
+                            pendingUsdaBackfillPrompt = null,
+                            pendingUsdaSearchJson = null,
+                            usdaBackfillMessage = UsdaBackfillMessageState(
+                                message = result.reason,
+                                insertedCount = 0,
+                                skippedExistingCount = 0
+                            ),
+                            errorMessage = null
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun openExistingFromCollision() {
@@ -432,11 +651,47 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeCollisionDialog = null,
                             pendingUsdaSearchJson = null,
                             barcodePickItems = emptyList(),
-                            errorMessage = null
+                            errorMessage = null,
+                            pendingUsdaInterpretationPrompt = null
                         )
                     }
 
                     load(foodId = r.foodId, initialName = null, force = true)
+                }
+
+                is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
+                    val now = System.currentTimeMillis()
+
+                    foodBarcodeRepo.upsertAndTouch(
+                        entity = FoodBarcodeEntity(
+                            barcode = dialog.barcode,
+                            foodId = r.foodId,
+                            source = BarcodeMappingSource.USDA,
+                            usdaFdcId = r.fdcId,
+                            usdaPublishedDateIso = r.publishedDateIso ?: dialog.incomingPublishedDateIso,
+                            assignedAtEpochMs = now,
+                            lastSeenAtEpochMs = now
+                        ),
+                        nowEpochMs = now
+                    )
+
+                    update {
+                        it.copy(
+                            barcodeCollisionDialog = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null,
+                            pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(
+                                foodId = r.foodId,
+                                selectedFdcId = r.fdcId,
+                                candidateLabel = r.candidateLabel,
+                                servingText = r.servingText,
+                                calories = r.calories,
+                                carbs = r.carbs,
+                                protein = r.protein,
+                                fat = r.fat
+                            )
+                        )
+                    }
                 }
 
                 is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
@@ -813,17 +1068,22 @@ class FoodEditorViewModel @Inject constructor(
         val mlPerServingUnitInput = parseDoubleOrNull(s.mlPerServingUnit)
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
+        val hasDeterministicMassUnit = s.servingUnit.isMassUnit()
+        val hasDeterministicVolumeUnit = s.servingUnit.toMilliliters(1.0) != null
+
         val gramsPerServingUnitFinal: Double? =
             when {
+                hasDeterministicMassUnit -> null
                 gramsPerServingUnitInput != null && gramsPerServingUnitInput > 0.0 -> gramsPerServingUnitInput
-                s.servingUnit.isMassUnit() && s.servingUnit != ServingUnit.G -> s.servingUnit.toGrams(1.0)
                 else -> null
             }?.takeIf { it > 0.0 }
 
         val mlPerServingUnitFinal: Double? =
             when {
+                hasDeterministicMassUnit -> null
+                hasDeterministicVolumeUnit -> null
                 mlPerServingUnitInput != null && mlPerServingUnitInput > 0.0 -> mlPerServingUnitInput
-                else -> s.servingUnit.toMilliliters(1.0)
+                else -> null
             }?.takeIf { it > 0.0 }
 
         val needsGroundingPrompt =
@@ -844,26 +1104,24 @@ class FoodEditorViewModel @Inject constructor(
 
         val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
-        val defaultBasisType =
-            if (isVolumeGrounded(s.servingUnit, finalMlBridge)) {
-                BasisType.PER_100ML
-            } else if (s.servingUnit == ServingUnit.G || finalGramsBridge != null) {
-                BasisType.PER_100G
-            } else {
-                BasisType.USDA_REPORTED_SERVING
-            }
-
         val gramsPerServingUnitEffective =
-            when (s.servingUnit) {
-                ServingUnit.G -> 1.0
-                else -> finalGramsBridge
-            }?.takeIf { it > 0.0 }
+            gramsPerServingUnitEffective(
+                servingUnit = s.servingUnit,
+                gramsPerServingUnit = finalGramsBridge
+            )
 
         val mlPerServingUnitEffective =
             mlPerServingUnitEffective(
                 servingUnit = s.servingUnit,
                 mlPerServingUnit = finalMlBridge
             )
+
+        val defaultBasisType =
+            when {
+                mlPerServingUnitEffective != null -> BasisType.PER_100ML
+                gramsPerServingUnitEffective != null -> BasisType.PER_100G
+                else -> BasisType.USDA_REPORTED_SERVING
+            }
 
         val rows = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
@@ -886,7 +1144,7 @@ class FoodEditorViewModel @Inject constructor(
                         mlPerServingUnitEffective
                     ).amount
 
-                    else -> uiPerServingAmount
+                    BasisType.USDA_REPORTED_SERVING -> uiPerServingAmount
                 }
 
             FoodNutrientRow(
@@ -903,7 +1161,7 @@ class FoodEditorViewModel @Inject constructor(
                 basisGrams = when (defaultBasisType) {
                     BasisType.PER_100G -> 100.0
                     BasisType.PER_100ML -> 100.0
-                    else -> null
+                    BasisType.USDA_REPORTED_SERVING -> null
                 }
             )
         }
@@ -1180,10 +1438,23 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     private fun isVolumeGrounded(servingUnit: ServingUnit, mlPerServingUnit: Double?): Boolean {
-        return mlPerServingUnit != null || servingUnit == ServingUnit.ML || servingUnit == ServingUnit.L
+        return mlPerServingUnitEffective(servingUnit, mlPerServingUnit) != null
     }
 
-    private fun mlPerServingUnitEffective(servingUnit: ServingUnit, mlPerServingUnit: Double?): Double? {
+    private fun gramsPerServingUnitEffective(
+        servingUnit: ServingUnit,
+        gramsPerServingUnit: Double?
+    ): Double? {
+        return when {
+            servingUnit.isMassUnit() -> servingUnit.toGrams(1.0)
+            else -> gramsPerServingUnit
+        }?.takeIf { it > 0.0 }
+    }
+
+    private fun mlPerServingUnitEffective(
+        servingUnit: ServingUnit,
+        mlPerServingUnit: Double?
+    ): Double? {
         return when (servingUnit) {
             ServingUnit.ML -> 1.0
             ServingUnit.L -> 1000.0
@@ -1191,13 +1462,25 @@ class FoodEditorViewModel @Inject constructor(
         }?.takeIf { it > 0.0 }
     }
 
-    fun openBarcodeScanner() = update { it.copy(isBarcodeScannerOpen = true, errorMessage = null) }
+    fun openBarcodeScanner() = update {
+        it.copy(
+            isBarcodeScannerOpen = true,
+            errorMessage = null,
+            barcodeActionMessage = null,
+            pendingUsdaSearchJson = null,
+            barcodePickItems = emptyList(),
+            pendingUsdaBackfillPrompt = null,
+            pendingUsdaInterpretationPrompt = null,
+            usdaBackfillMessage = null
+        )
+    }
 
     fun closeBarcodeScanner() = update {
         it.copy(
             isBarcodeScannerOpen = false,
             pendingUsdaSearchJson = null,
-            barcodePickItems = emptyList()
+            barcodePickItems = emptyList(),
+            pendingUsdaInterpretationPrompt = null
         )
     }
 
@@ -1232,7 +1515,9 @@ class FoodEditorViewModel @Inject constructor(
                         barcodeFallbackMessage = null,
                         barcodeCollisionDialog = null,
                         errorMessage = null,
-                        isBarcodeScannerOpen = false
+                        isBarcodeScannerOpen = false,
+                        pendingUsdaBackfillPrompt = null,
+                        pendingUsdaInterpretationPrompt = null
                     )
                 }
 
@@ -1254,7 +1539,9 @@ class FoodEditorViewModel @Inject constructor(
                             barcodePickItems = r.candidates,
                             isBarcodeScannerOpen = false,
                             errorMessage = null,
-                            barcodeCollisionDialog = null
+                            barcodeCollisionDialog = null,
+                            pendingUsdaBackfillPrompt = null,
+                            pendingUsdaInterpretationPrompt = null
                         )
                     }
                 }
@@ -1276,7 +1563,8 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeAlreadyAssignedFoodId = existing?.foodId,
                             pendingUsdaSearchJson = null,
                             barcodePickItems = emptyList(),
-                            errorMessage = null
+                            errorMessage = null,
+                            pendingUsdaInterpretationPrompt = null
                         )
                     }
                 }
@@ -1298,7 +1586,8 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeAlreadyAssignedFoodId = existing?.foodId,
                             pendingUsdaSearchJson = null,
                             barcodePickItems = emptyList(),
-                            errorMessage = null
+                            errorMessage = null,
+                            pendingUsdaInterpretationPrompt = null
                         )
                     }
                 }
@@ -1347,38 +1636,187 @@ class FoodEditorViewModel @Inject constructor(
         viewModelScope.launch {
             when (val decision = resolveBarcodeWithUsda.resolveCandidateChosen(barcode, incoming)) {
                 is ResolveBarcodeWithUsdaUseCase.Result.ProceedToImport -> {
-                    when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
-                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
-                            val now = System.currentTimeMillis()
+                    val currentFoodId = _state.value.foodId
 
-                            foodBarcodeRepo.upsertAndTouch(
-                                entity = FoodBarcodeEntity(
-                                    barcode = barcode,
-                                    foodId = r.foodId,
-                                    source = BarcodeMappingSource.USDA,
-                                    usdaFdcId = r.fdcId,
-                                    usdaPublishedDateIso = r.publishedDateIso ?: picked.publishedDateIso,
-                                    assignedAtEpochMs = now,
-                                    lastSeenAtEpochMs = now
-                                ),
-                                nowEpochMs = now
-                            )
+                    if (currentFoodId != null) {
+                        val parsedServingUnit = picked.servingSizeUnit
+                            ?.let { rawUnit: String -> ServingUnit.fromUsda(rawUnit) }
 
-                            update {
-                                it.copy(
-                                    isBarcodeScannerOpen = false,
-                                    pendingUsdaSearchJson = null,
-                                    barcodePickItems = emptyList(),
-                                    barcodeCollisionDialog = null,
-                                    errorMessage = null
+                        when (
+                            val adoptResult = adoptUsdaBarcodePackageIntoFood(
+                                rawBarcode = barcode,
+                                targetFoodId = currentFoodId,
+                                usda = AdoptUsdaBarcodePackageIntoFoodUseCase.UsdaPackageSeed(
+                                    fdcId = picked.fdcId,
+                                    publishedDateIso = picked.publishedDateIso,
+                                    modifiedDateIso = picked.modifiedDateIso,
+                                    householdServingText = picked.servingText.ifBlank { null },
+                                    overrideServingSize = picked.servingSize?.takeIf { it > 0.0 },
+                                    overrideServingUnit = parsedServingUnit,
+                                    overrideServingsPerPackage = null
                                 )
+                            )
+                        ) {
+                            is AdoptUsdaBarcodePackageIntoFoodUseCase.Result.AdoptedNew -> {
+                                val entity = foodBarcodeRepo.getByBarcode(adoptResult.barcode) ?: run {
+                                    update { it.copy(errorMessage = "USDA barcode adopted but could not be reloaded.") }
+                                    return@launch
+                                }
+
+                                val refreshed = buildAssignedBarcodeUiList(currentFoodId)
+
+                                update {
+                                    it.copy(
+                                        assignedBarcodes = refreshed,
+                                        scannedBarcode = adoptResult.barcode,
+                                        barcodePackageEditor = toBarcodePackageEditorState(entity),
+                                        barcodeActionMessage = "USDA package adopted into this food. Review package details below.",
+                                        errorMessage = null,
+                                        isBarcodeScannerOpen = false,
+                                        pendingUsdaSearchJson = json,
+                                        barcodePickItems = emptyList(),
+                                        barcodeCollisionDialog = null,
+                                        pendingUsdaBackfillPrompt = PendingUsdaBackfillPromptState(
+                                            barcode = adoptResult.barcode,
+                                            selectedFdcId = picked.fdcId,
+                                            candidateLabel = candidateLabel(picked)
+                                        ),
+                                        usdaBackfillMessage = null,
+                                        pendingUsdaInterpretationPrompt = null
+                                    )
+                                }
                             }
 
-                            load(foodId = r.foodId, initialName = null, force = true)
-                        }
+                            is AdoptUsdaBarcodePackageIntoFoodUseCase.Result.AlreadyOnSameFood -> {
+                                val entity = foodBarcodeRepo.getByBarcode(adoptResult.barcode) ?: run {
+                                    update { it.copy(errorMessage = "USDA barcode exists but could not be reloaded.") }
+                                    return@launch
+                                }
 
-                        is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
-                            update { it.copy(errorMessage = r.reason) }
+                                val refreshed = buildAssignedBarcodeUiList(currentFoodId)
+
+                                update {
+                                    it.copy(
+                                        assignedBarcodes = refreshed,
+                                        scannedBarcode = adoptResult.barcode,
+                                        barcodePackageEditor = toBarcodePackageEditorState(entity),
+                                        barcodeActionMessage = "USDA package was refreshed on this food. Review package details below.",
+                                        errorMessage = null,
+                                        isBarcodeScannerOpen = false,
+                                        pendingUsdaSearchJson = json,
+                                        barcodePickItems = emptyList(),
+                                        barcodeCollisionDialog = null,
+                                        pendingUsdaBackfillPrompt = PendingUsdaBackfillPromptState(
+                                            barcode = adoptResult.barcode,
+                                            selectedFdcId = picked.fdcId,
+                                            candidateLabel = candidateLabel(picked)
+                                        ),
+                                        usdaBackfillMessage = null,
+                                        pendingUsdaInterpretationPrompt = null
+                                    )
+                                }
+                            }
+
+                            is AdoptUsdaBarcodePackageIntoFoodUseCase.Result.AssignedToOtherFood -> {
+                                update {
+                                    it.copy(
+                                        pendingUsdaSearchJson = null,
+                                        barcodePickItems = emptyList(),
+                                        barcodePackageEditor = null,
+                                        scannedBarcode = adoptResult.barcode,
+                                        barcodeActionMessage = "Barcode ${adoptResult.barcode} is already assigned to another food. Opening that food so you can decide what to do next.",
+                                        errorMessage = null,
+                                        isBarcodeScannerOpen = false,
+                                        barcodeCollisionDialog = null,
+                                        pendingUsdaBackfillPrompt = null,
+                                        pendingUsdaInterpretationPrompt = null
+                                    )
+                                }
+                                openFoodEditorRequestFlow.value = adoptResult.existingFoodId
+                            }
+
+                            is AdoptUsdaBarcodePackageIntoFoodUseCase.Result.Blocked -> {
+                                update {
+                                    it.copy(
+                                        errorMessage = adoptResult.reason,
+                                        isBarcodeScannerOpen = false
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        when (val r = importUsdaFromSearchJson(json, selectedFdcId = fdcId)) {
+                            is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+                                val now = System.currentTimeMillis()
+
+                                foodBarcodeRepo.upsertAndTouch(
+                                    entity = FoodBarcodeEntity(
+                                        barcode = barcode,
+                                        foodId = r.foodId,
+                                        source = BarcodeMappingSource.USDA,
+                                        usdaFdcId = r.fdcId,
+                                        usdaPublishedDateIso = r.publishedDateIso ?: picked.publishedDateIso,
+                                        assignedAtEpochMs = now,
+                                        lastSeenAtEpochMs = now
+                                    ),
+                                    nowEpochMs = now
+                                )
+
+                                update {
+                                    it.copy(
+                                        isBarcodeScannerOpen = false,
+                                        pendingUsdaSearchJson = null,
+                                        barcodePickItems = emptyList(),
+                                        barcodeCollisionDialog = null,
+                                        errorMessage = null,
+                                        pendingUsdaBackfillPrompt = null,
+                                        pendingUsdaInterpretationPrompt = null
+                                    )
+                                }
+
+                                load(foodId = r.foodId, initialName = null, force = true)
+                            }
+
+                            is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
+                                val now = System.currentTimeMillis()
+
+                                foodBarcodeRepo.upsertAndTouch(
+                                    entity = FoodBarcodeEntity(
+                                        barcode = barcode,
+                                        foodId = r.foodId,
+                                        source = BarcodeMappingSource.USDA,
+                                        usdaFdcId = r.fdcId,
+                                        usdaPublishedDateIso = r.publishedDateIso ?: picked.publishedDateIso,
+                                        assignedAtEpochMs = now,
+                                        lastSeenAtEpochMs = now
+                                    ),
+                                    nowEpochMs = now
+                                )
+
+                                update {
+                                    it.copy(
+                                        isBarcodeScannerOpen = false,
+                                        barcodePickItems = emptyList(),
+                                        barcodeCollisionDialog = null,
+                                        errorMessage = null,
+                                        pendingUsdaBackfillPrompt = null,
+                                        pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(
+                                            foodId = r.foodId,
+                                            selectedFdcId = r.fdcId,
+                                            candidateLabel = r.candidateLabel,
+                                            servingText = r.servingText,
+                                            calories = r.calories,
+                                            carbs = r.carbs,
+                                            protein = r.protein,
+                                            fat = r.fat
+                                        )
+                                    )
+                                }
+                            }
+
+                            is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
+                                update { it.copy(errorMessage = r.reason) }
+                            }
                         }
                     }
                 }
@@ -1392,7 +1830,9 @@ class FoodEditorViewModel @Inject constructor(
                             pendingUsdaSearchJson = null,
                             barcodePickItems = emptyList(),
                             barcodeCollisionDialog = null,
-                            errorMessage = null
+                            errorMessage = null,
+                            pendingUsdaBackfillPrompt = null,
+                            pendingUsdaInterpretationPrompt = null
                         )
                     }
 
@@ -1413,7 +1853,9 @@ class FoodEditorViewModel @Inject constructor(
                                 incomingLabel = candidateLabel(picked),
                                 reason = decision.reason,
                             ),
-                            errorMessage = null
+                            errorMessage = null,
+                            pendingUsdaBackfillPrompt = null,
+                            pendingUsdaInterpretationPrompt = null
                         )
                     }
                 }
@@ -1433,57 +1875,79 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     fun assignBarcodeToCurrentFood(barcode: String) {
-        val foodId = _state.value.foodId ?: return
+        val currentFoodId = _state.value.foodId ?: return
         val code = barcode.trim()
         if (code.isBlank()) return
 
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val existing = foodBarcodeRepo.getByBarcode(code)
+            when (val result = assignBarcodeToFood(rawBarcode = code, foodId = currentFoodId)) {
+                is AssignBarcodeToFoodUseCase.Result.AssignedNew -> {
+                    val entity = foodBarcodeRepo.getByBarcode(result.barcode) ?: run {
+                        update { it.copy(errorMessage = "Barcode was assigned but could not be reloaded.") }
+                        return@launch
+                    }
 
-            if (existing != null && existing.foodId != foodId) {
-                update {
-                    it.copy(
-                        barcodePackageEditor = null,
-                        pendingUsdaSearchJson = null,
-                        barcodePickItems = emptyList(),
-                        isBarcodeScannerOpen = false,
-                        barcodeActionMessage = "Barcode $code is already assigned to another food. Opening that food so you can decide what to do next.",
-                        errorMessage = null
-                    )
+                    val refreshed = buildAssignedBarcodeUiList(currentFoodId)
+
+                    update {
+                        it.copy(
+                            assignedBarcodes = refreshed,
+                            scannedBarcode = result.barcode,
+                            barcodePackageEditor = toBarcodePackageEditorState(entity),
+                            barcodeActionMessage = "Barcode added to this food. Review package details if needed.",
+                            errorMessage = null,
+                            isBarcodeScannerOpen = false,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList()
+                        )
+                    }
                 }
-                openFoodEditorRequestFlow.value = existing.foodId
-                return@launch
-            }
 
-            val rowToEdit = if (existing != null) {
-                foodBarcodeRepo.touchLastSeen(code, now)
-                existing
-            } else {
-                val created = FoodBarcodeEntity(
-                    barcode = code,
-                    foodId = foodId,
-                    source = BarcodeMappingSource.USER_ASSIGNED,
-                    usdaFdcId = null,
-                    usdaPublishedDateIso = null,
-                    assignedAtEpochMs = now,
-                    lastSeenAtEpochMs = now
-                )
-                foodBarcodeRepo.upsertAndTouch(created, now)
-                created
-            }
+                is AssignBarcodeToFoodUseCase.Result.AlreadyAssignedToSameFood -> {
+                    val entity = foodBarcodeRepo.getByBarcode(result.barcode) ?: run {
+                        update { it.copy(errorMessage = "Barcode exists but could not be reloaded.") }
+                        return@launch
+                    }
 
-            val refreshed = buildAssignedBarcodeUiList(foodId)
+                    val refreshed = buildAssignedBarcodeUiList(currentFoodId)
 
-            update {
-                it.copy(
-                    assignedBarcodes = refreshed,
-                    scannedBarcode = code,
-                    barcodePackageEditor = toBarcodePackageEditorState(rowToEdit),
-                    barcodeActionMessage = null,
-                    errorMessage = null,
-                    isBarcodeScannerOpen = false
-                )
+                    update {
+                        it.copy(
+                            assignedBarcodes = refreshed,
+                            scannedBarcode = result.barcode,
+                            barcodePackageEditor = toBarcodePackageEditorState(entity),
+                            barcodeActionMessage = "Barcode already assigned to this food. Review package details below.",
+                            errorMessage = null,
+                            isBarcodeScannerOpen = false,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList()
+                        )
+                    }
+                }
+
+                is AssignBarcodeToFoodUseCase.Result.AssignedToOtherFood -> {
+                    update {
+                        it.copy(
+                            barcodePackageEditor = null,
+                            pendingUsdaSearchJson = null,
+                            barcodePickItems = emptyList(),
+                            isBarcodeScannerOpen = false,
+                            scannedBarcode = result.barcode,
+                            barcodeActionMessage = "Barcode ${result.barcode} is already assigned to another food. Opening that food so you can decide what to do next.",
+                            errorMessage = null
+                        )
+                    }
+                    openFoodEditorRequestFlow.value = result.existingFoodId
+                }
+
+                is AssignBarcodeToFoodUseCase.Result.Blocked -> {
+                    update {
+                        it.copy(
+                            isBarcodeScannerOpen = false,
+                            errorMessage = result.reason
+                        )
+                    }
+                }
             }
         }
     }
@@ -1491,7 +1955,7 @@ class FoodEditorViewModel @Inject constructor(
     private suspend fun buildAssignedBarcodeUiList(foodId: Long): List<AssignedBarcodeUi> {
         return foodBarcodeRepo.getAllBarcodesForFood(foodId)
             .sortedBy { it.barcode }
-            .map(::toAssignedBarcodeUi)
+            .map { entity: FoodBarcodeEntity -> toAssignedBarcodeUi(entity) }
     }
 
     private fun toAssignedBarcodeUi(entity: FoodBarcodeEntity): AssignedBarcodeUi {
@@ -1561,40 +2025,46 @@ class FoodEditorViewModel @Inject constructor(
                         return@collect
                     }
 
-                    val now = System.currentTimeMillis()
+                    when (val result = assignBarcodeToFood(rawBarcode = barcode, foodId = pickedFoodId)) {
+                        is AssignBarcodeToFoodUseCase.Result.AssignedNew,
+                        is AssignBarcodeToFoodUseCase.Result.AlreadyAssignedToSameFood -> {
+                            val entity = foodBarcodeRepo.getByBarcode(barcode) ?: run {
+                                update { it.copy(errorMessage = "Barcode could not be reloaded after assignment.") }
+                                return@collect
+                            }
 
-                    val createdRow = FoodBarcodeEntity(
-                        barcode = barcode,
-                        foodId = pickedFoodId,
-                        source = BarcodeMappingSource.USER_ASSIGNED,
-                        usdaFdcId = null,
-                        usdaPublishedDateIso = null,
-                        assignedAtEpochMs = now,
-                        lastSeenAtEpochMs = now
-                    )
+                            val refreshed = buildAssignedBarcodeUiList(pickedFoodId)
 
-                    foodBarcodeRepo.upsertAndTouch(
-                        entity = createdRow,
-                        nowEpochMs = now
-                    )
+                            update {
+                                it.copy(
+                                    scannedBarcode = barcode,
+                                    pendingUsdaSearchJson = null,
+                                    barcodePickItems = emptyList(),
+                                    errorMessage = null,
+                                    isBarcodeScannerOpen = false,
+                                    isBarcodeFallbackOpen = false,
+                                    assignedBarcodes = refreshed,
+                                    barcodePackageEditor = toBarcodePackageEditorState(entity)
+                                )
+                            }
 
-                    val refreshed = buildAssignedBarcodeUiList(pickedFoodId)
+                            load(foodId = pickedFoodId, initialName = null, force = true)
+                            openBarcodePackageEditor(barcode)
+                        }
 
-                    update {
-                        it.copy(
-                            scannedBarcode = barcode,
-                            pendingUsdaSearchJson = null,
-                            barcodePickItems = emptyList(),
-                            errorMessage = null,
-                            isBarcodeScannerOpen = false,
-                            isBarcodeFallbackOpen = false,
-                            assignedBarcodes = refreshed,
-                            barcodePackageEditor = toBarcodePackageEditorState(createdRow)
-                        )
+                        is AssignBarcodeToFoodUseCase.Result.AssignedToOtherFood -> {
+                            update {
+                                it.copy(
+                                    errorMessage = "Barcode ${result.barcode} is already assigned to another food."
+                                )
+                            }
+                            openFoodEditorRequestFlow.value = result.existingFoodId
+                        }
+
+                        is AssignBarcodeToFoodUseCase.Result.Blocked -> {
+                            update { it.copy(errorMessage = result.reason) }
+                        }
                     }
-
-                    load(foodId = pickedFoodId, initialName = null, true)
-                    openBarcodePackageEditor(barcode)
                 }
         }
 
@@ -1621,6 +2091,10 @@ class FoodEditorViewModel @Inject constructor(
  *
  * - Editor nutrient inputs are PER-SERVING UI values.
  * - Canonical math must stay out of UI: VM converts per-serving -> PER_100G or PER_100ML.
+ * - Load-time display conversion must treat deterministic mass/volume serving units as already grounded:
+ *   - 50 g serving => use 50 g for display scaling
+ *   - 250 mL serving => use 250 mL for display scaling
+ *   - only ambiguous/container-ish units should rely on gramsPerServingUnit / mlPerServingUnit bridges.
  * - Ambiguous volume units (cup/tbsp/fl oz/can/bottle) must prompt SOLID vs LIQUID
  *   instead of assuming PER_100ML.
  * - Never guess density. Never grams↔mL conversions.

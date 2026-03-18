@@ -37,6 +37,7 @@ import javax.inject.Inject
  * - barcode rows that used to point to the override food now point to the canonical food
  * - missing nutrients from the override food are copied into the canonical food
  * - the override food is preserved as a historical row, but marked merged + soft-deleted
+ * - the canonical food increments `mergeChildCount` by 1
  * - historical logs are intentionally left untouched
  *
  * ## Why logs are not rewritten
@@ -59,12 +60,14 @@ import javax.inject.Inject
  * - food validation
  * - nutrient copy
  * - barcode reassignment
+ * - canonical mergeChildCount increment
  * - override-food merged/deleted state update
  *
  * This is important because a partial merge would be dangerous. For example:
  * - moving barcodes without marking the old food merged
  * - copying nutrients but failing barcode reassignment
  * - marking the old food deleted before reassignment succeeds
+ * - incrementing canonical mergeChildCount without completing the merge
  *
  * ## Merge rules enforced here
  * - `overrideFoodId` must be a valid positive id
@@ -120,6 +123,16 @@ import javax.inject.Inject
  * - `mergedAtEpochMs = now`
  *
  * This preserves traceability and prevents the app from losing history about what happened.
+ *
+ * ## Canonical merge-count policy
+ * The canonical food increments `mergeChildCount` by 1 for each newly merged child.
+ *
+ * Current design choice:
+ * - this use case increments the count operationally
+ * - it does not attempt to recompute counts from historical state on each merge
+ * - it does not decrement counts because unmerge support does not exist here
+ *
+ * This keeps the merge path simple and cheap for future UI indicators.
  *
  * ## Scope boundaries of this use case
  * This use case intentionally does **not**:
@@ -208,6 +221,12 @@ class MergeFoodsUseCase @Inject constructor(
             val now = System.currentTimeMillis()
 
             foodRepository.upsert(
+                canonicalFood.copy(
+                    mergeChildCount = canonicalFood.mergeChildCount + 1
+                )
+            )
+
+            foodRepository.upsert(
                 overrideFood.copy(
                     isDeleted = true,
                     deletedAtEpochMs = now,
@@ -281,3 +300,31 @@ class MergeFoodsUseCase @Inject constructor(
         }
     }
 }
+
+/**
+ * =============================================================================
+ * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
+ * =============================================================================
+ *
+ * mergeChildCount behavior
+ * - This use case is the primary operational writer for foods.mergeChildCount.
+ * - On each successful merge:
+ *     canonical.mergeChildCount += 1
+ *
+ * Why this is operational state instead of live recomputation
+ * - UI only needs a cheap and stable "is canonical merge target?" signal.
+ * - Counting children from the foods table on every list load is unnecessary overhead
+ *   for the current requirement.
+ *
+ * Important guardrail
+ * - Do not decrement mergeChildCount here unless explicit unmerge support is designed.
+ * - Do not move the increment outside the transaction.
+ *
+ * Future plans — do not remove
+ * - Add regression coverage asserting canonical mergeChildCount increments correctly.
+ * - If a future repair tool is added, it may recalculate mergeChildCount from mergedIntoFoodId.
+ * - If unmerge support is added later, count semantics must be revisited explicitly.
+ *
+ * IMPORTANT TO FUTURE AI:
+ * - Do NOT delete these future plans during cleanup or refactors.
+ */

@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
@@ -46,26 +47,21 @@ fun FoodEditorRoute(
     val aliasMessage by viewModel.aliasSheetMessage.collectAsState()
     val aliases by viewModel.selectedAliases.collectAsState()
 
-    // Load + initialBarcode sequencing (single source of truth)
-    val didApplyInitialBarcode = androidx.compose.runtime.remember(foodId, initialName, initialBarcode) {
+    val didApplyInitialBarcode = remember(foodId, initialName, initialBarcode) {
         mutableStateOf(false)
     }
 
     LaunchedEffect(foodId, initialName, initialBarcode) {
-        // 1) Always load editor data for this route args
         viewModel.load(foodId = foodId, initialName = initialName, force = true)
 
-        // 2) Apply initialBarcode once (only if provided)
         val code = initialBarcode?.trim().orEmpty()
         if (code.isBlank()) return@LaunchedEffect
         if (didApplyInitialBarcode.value) return@LaunchedEffect
         didApplyInitialBarcode.value = true
 
         if (foodId == null) {
-            // New food: treat as scan (USDA flow)
             viewModel.onBarcodeScanned(code)
         } else {
-            // Edit existing: wait until VM state reflects this foodId, then attach/open package editor flow
             snapshotFlow { state.foodId }
                 .filter { it == foodId }
                 .first()
@@ -193,6 +189,13 @@ fun FoodEditorRoute(
         onBarcodePackageOverrideServingUnitChange = viewModel::onBarcodePackageOverrideServingUnitChange,
         onSaveBarcodePackageOverrides = viewModel::saveBarcodePackageOverrides,
 
+        onConfirmUsdaInterpretationPrompt = viewModel::confirmUsdaInterpretationPrompt,
+        onDismissUsdaInterpretationPrompt = viewModel::dismissUsdaInterpretationPrompt,
+
+        onConfirmUsdaBackfillPrompt = viewModel::confirmUsdaBackfillPrompt,
+        onDismissUsdaBackfillPrompt = viewModel::dismissUsdaBackfillPrompt,
+        onDismissUsdaBackfillMessage = viewModel::dismissUsdaBackfillMessage,
+
         onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner
     )
 
@@ -212,7 +215,14 @@ fun FoodEditorRoute(
             BarcodeScannerSheet(
                 onClose = viewModel::closeBarcodeScanner,
                 onBarcode = { code ->
-                    viewModel.onBarcodeScanned(code)
+                    val cleaned = code.trim()
+                    if (cleaned.isBlank()) return@BarcodeScannerSheet
+
+                    if (state.foodId != null) {
+                        viewModel.assignBarcodeToCurrentFood(cleaned)
+                    } else {
+                        viewModel.onBarcodeScanned(cleaned)
+                    }
                 }
             )
         }
@@ -238,6 +248,18 @@ fun FoodEditorRoute(
  *   - new barcode -> attach to current food -> open package override editor
  *   - same-food barcode -> open package override editor
  *   - different-food barcode -> route opens that already-assigned food
+ *
+ * USDA interpretation flow:
+ * - After a USDA food is imported and the nutrient semantics are ambiguous,
+ *   the ViewModel may expose pendingUsdaInterpretationPrompt.
+ * - Route only forwards confirm/dismiss callbacks between screen and ViewModel.
+ * - Do not move USDA interpretation business logic into this route.
+ *
+ * USDA nutrient backfill flow:
+ * - After USDA package adoption into an existing food, the ViewModel may expose
+ *   pendingUsdaBackfillPrompt.
+ * - Route simply forwards prompt/result callbacks between screen and ViewModel.
+ * - Do not move nutrient backfill business logic into this route.
  *
  * Merge wiring:
  * - Keep merge completion bridge at route level.

@@ -20,7 +20,8 @@ import com.example.adobongkangkong.domain.model.ServingUnit
  * To get grams per serving, use [gramsPerServingResolved].
  *
  * Resolution rules:
- * • ServingUnit.G → returns servingSize
+ * • ServingUnit.G → returns 1.0
+ * • Other deterministic mass units → returns that unit's grams value
  * • ServingUnit.ML → returns gramsPerServingUnit bridge if present
  * • All other units → returns gramsPerServingUnit bridge
  *
@@ -34,13 +35,13 @@ import com.example.adobongkangkong.domain.model.ServingUnit
  * • Pure domain helper (no DB/UI)
  */
 fun Food.gramsPerServingUnitResolved(): Double? {
-    return when (servingUnit) {
-        ServingUnit.G -> servingSize
-        ServingUnit.ML -> gramsPerServingUnit
+    return when {
+        servingUnit == ServingUnit.G -> 1.0
+        servingUnit.asG != null -> servingUnit.asG
+        servingUnit == ServingUnit.ML -> gramsPerServingUnit
         else -> gramsPerServingUnit
-    }
+    }?.takeIf { it > 0.0 }
 }
-
 
 /**
  * Returns **grams per ONE serving**.
@@ -79,7 +80,6 @@ fun Food.gramsPerServingResolved(): Double? {
     return gramsPerUnit * servingSize
 }
 
-
 /**
  * FUTURE-MAINTENANCE NOTES
  *
@@ -97,8 +97,12 @@ fun Food.gramsPerServingResolved(): Double? {
  * gramsPerServingUnit = 18.5
  *
  * Results:
- * • per unit   = 18.5 g
+ * • per unit    = 18.5 g
  * • per serving = 37 g
+ *
+ * Important:
+ * • For ServingUnit.G, per-unit grams must be 1.0, not servingSize.
+ * • Otherwise servingSize gets multiplied twice.
  *
  * Do NOT:
  * • merge functions

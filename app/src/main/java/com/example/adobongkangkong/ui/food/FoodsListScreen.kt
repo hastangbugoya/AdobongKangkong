@@ -324,12 +324,27 @@ private fun FoodRow(
 
         ListItem(
             headlineContent = {
-                Text(
-                    text = row.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = row.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    if (row.isMergeFallback) {
+                        Icon(
+                            painter = painterResource(R.drawable.layers),
+                            contentDescription = "Default merge fallback food",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             },
             supportingContent = {
                 Column(modifier = Modifier.fillMaxWidth()) {

@@ -34,7 +34,7 @@ class GramsPerServingResolvedTest {
     // --------------------------------------------------
 
     @Test
-    fun grams_unit_returns_serving_size() {
+    fun grams_unit_returns_one_gram_per_unit() {
         val food = food(
             servingSize = 30.0,
             unit = ServingUnit.G
@@ -42,7 +42,7 @@ class GramsPerServingResolvedTest {
 
         val result = food.gramsPerServingUnitResolved()
 
-        assertEquals(30.0, result)
+        assertEquals(1.0, result)
     }
 
     @Test
@@ -154,7 +154,7 @@ class GramsPerServingResolvedTest {
     }
 
     @Test
-    fun grams_unit_double_multiplies_serving_size() {
+    fun grams_unit_returns_serving_size_in_grams() {
         val food = food(
             servingSize = 30.0,
             unit = ServingUnit.G
@@ -162,9 +162,7 @@ class GramsPerServingResolvedTest {
 
         val result = food.gramsPerServingResolved()
 
-        // gramsPerUnitResolved = 30
-        // gramsPerServingResolved = 30 * 30
-        assertEquals(900.0, result)
+        assertEquals(30.0, result)
     }
 
     @Test

@@ -33,10 +33,10 @@ data class Food(
     val usdaServingUnit: ServingUnit? = null,
     val householdServingText: String? = null,
 
-
-
     val mergedIntoFoodId: Long? = null,
     val mergedAtEpochMs: Long? = null,
     val isDeleted: Boolean = false,
     val deletedAtEpochMs: Long? = null,
+
+    val mergeChildCount: Int = 0
 )

@@ -300,33 +300,26 @@ private fun WeeklyMacroBar(
                     val proteinWeight = bar.proteinFraction.coerceAtLeast(0f)
                     val carbsWeight = bar.carbsFraction.coerceAtLeast(0f)
                     val fatWeight = bar.fatFraction.coerceAtLeast(0f)
-                    val weightSum = proteinWeight + carbsWeight + fatWeight
 
-                    if (weightSum > 0f) {
+                    val segments = buildList {
+                        if (proteinWeight > 0f) add(proteinWeight to ProteinColor)
+                        if (carbsWeight > 0f) add(carbsWeight to CarbsColor)
+                        if (fatWeight > 0f) add(fatWeight to FatColor)
+                    }
+
+                    if (segments.isNotEmpty()) {
                         Column(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.Bottom
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(proteinWeight)
-                                    .background(ProteinColor)
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(carbsWeight)
-                                    .background(CarbsColor)
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(fatWeight)
-                                    .background(FatColor)
-                            )
+                            segments.forEach { (weight, color) ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(weight)
+                                        .background(color)
+                                )
+                            }
                         }
                     }
                 }

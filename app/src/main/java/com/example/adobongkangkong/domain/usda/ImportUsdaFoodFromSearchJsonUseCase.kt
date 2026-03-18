@@ -46,34 +46,33 @@ import javax.inject.Inject
  * Map USDA nutrients → internal nutrient catalog
  *        │
  *        ▼
- * Canonicalize nutrient basis
- *   ├─ mass-grounded → PER_100G
- *   ├─ volume-grounded → PER_100ML
- *   └─ otherwise → USDA_REPORTED_SERVING
+ * Decide whether interpretation is safe or user-confirmation is required
+ *   ├─ safe → canonicalize/persist immediately
+ *   └─ ambiguous → persist Food shell only, return preview so UI can ask user
  *        │
  *        ▼
  * DB transaction
  *   ├─ FoodRepository.upsert()
- *   └─ FoodNutrientRepository.replaceForFood()
+ *   └─ FoodNutrientRepository.replaceForFood() only after interpretation is known
  *        │
  *        ▼
- * RETURN foodId + USDA metadata
+ * RETURN foodId + USDA metadata (or pending interpretation preview)
  *
  * ============================================================
  *
  * Purpose
- * - Convert USDA search response JSON into a fully usable FoodEntity and nutrient snapshot.
- * - Normalize nutrients into a canonical storage basis for safe scaling and recipe math.
- * - Establish serving bridges (gramsPerServingUnit or mlPerServingUnit) when USDA provides safe grounding.
+ * - Convert USDA search response JSON into a usable Food draft plus nutrient snapshot.
+ * - Normalize nutrients into a canonical storage basis only when interpretation is safe.
+ * - When USDA payload semantics are ambiguous, stop and require explicit user confirmation.
  *
  * Rationale (why this use case exists)
- * - USDA responses provide nutrients relative to a serving size, which may not be safely scalable.
- * - The app requires a canonical, normalized basis (PER_100G or PER_100ML) for:
- *   - recipe math
- *   - logging
- *   - planner projections
- *   - nutrient scaling
- * - This use case performs that normalization while preserving original serving semantics for UI.
+ * - Some USDA/branded search results expose a serving size while nutrient numbers may behave more
+ *   like label-style per-100 values.
+ * - In those cases the app must not silently force PER_100G / PER_100ML.
+ * - This use case now supports a two-step flow:
+ *   1) import/adopt enough Food data to continue
+ *   2) ask user how to interpret nutrients
+ *   3) only then persist nutrient rows
  *
  * Core invariants enforced here
  *
@@ -83,11 +82,11 @@ import javax.inject.Inject
  *
  * Mass grounding rule
  * - If USDA serving unit is mass-based OR grams bridge exists:
- *     canonical basis = PER_100G
+ *     mass grounding is available
  *
  * Volume grounding rule
  * - If USDA serving unit is volume-based OR mL bridge exists:
- *     canonical basis = PER_100ML
+ *     volume grounding is available
  *
  * Raw fallback rule
  * - If neither mass nor volume grounding exists:
@@ -97,6 +96,11 @@ import javax.inject.Inject
  * - NEVER infer grams from mL.
  * - NEVER infer mL from grams.
  * - NEVER guess density.
+ *
+ * User-confirmation rule
+ * - If the USDA payload appears ambiguous for a grounded item and no explicit interpretation was
+ *   provided, persist the Food shell only and return a prompt payload.
+ * - Do NOT persist nutrient rows until interpretation is explicit.
  *
  * Revive-on-import behavior
  * - If a food with same usdaFdcId already exists:
@@ -128,7 +132,7 @@ import javax.inject.Inject
  * mathematical truth:
  *     1 can = 473 mL
  *
- * Import steps
+ * Interpretation flow
  *
  * Step 1 — Parse USDA JSON
  * Uses UsdaFoodsSearchParser.
@@ -149,12 +153,13 @@ import javax.inject.Inject
  * Step 5 — Map USDA nutrients
  * USDA nutrientNumber → CSV code → internal nutrient.
  *
- * Step 6 — Canonicalize nutrient basis
- * Convert serving-based nutrients into PER_100G or PER_100ML when grounded.
+ * Step 6 — Decide interpretation handling
+ * - safe immediate canonicalization
+ * - or pending user choice
  *
  * Step 7 — Transactional persistence
  * Upsert FoodEntity.
- * Replace nutrient rows atomically.
+ * Persist nutrient rows only when interpretation is final.
  *
  * Parameters
  * - searchJson:
@@ -163,41 +168,32 @@ import javax.inject.Inject
  * - selectedFdcId:
  *   Optional specific USDA food to import.
  *
+ * - forcedInterpretation:
+ *   Optional explicit interpretation chosen by the user for an otherwise ambiguous item.
+ *
  * Return
  * - Success:
- *   Food successfully imported or revived.
+ *   Food imported and nutrient interpretation finalized.
+ *
+ * - NeedsInterpretationChoice:
+ *   Food shell persisted, but nutrient rows were intentionally not finalized yet.
  *
  * - Blocked:
  *   Unsupported serving unit
  *   USDA parsing/select failure
- *
- * Edge cases handled
- * - branded foods with custom serving units
- * - household serving text overriding display unit
- * - existing USDA foods being re-imported safely
- * - partial nutrient catalogs
- *
- * Pitfalls / gotchas
- * - householdServingFullText overrides display unit but NOT underlying truth.
- * - mlPerServingUnit and gramsPerServingUnit bridges are critical for canonicalization.
- *
- * Architectural rules
- * - Must never write duplicate nutrient rows.
- * - Must always use DB transaction.
- *
- * Logging model compatibility
- * - Imported foods become valid inputs for:
- *     snapshot logging
- *     planner
- *     recipes
+ *   Invalid forced interpretation for available grounding
  */
 class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
     private val db: NutriDatabase,
     private val foods: FoodRepository,
     private val foodNutrients: FoodNutrientRepository,
     private val nutrients: NutrientRepository
-){
-    suspend operator fun invoke(searchJson: String, selectedFdcId: Long? = null): Result {
+) {
+    suspend operator fun invoke(
+        searchJson: String,
+        selectedFdcId: Long? = null,
+        forcedInterpretation: InterpretationChoice? = null
+    ): Result {
         val parsed = UsdaFoodsSearchParser.parse(searchJson)
 
         val item = when (selectedFdcId) {
@@ -269,21 +265,42 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         val finalServingSize: Double = household?.size ?: rawServingSize
         val finalServingUnit: ServingUnit = household?.unit ?: rawServingUnit
 
-        Log.d("USDA_IMPORT", "household=$household rawServingSize=$rawServingSize rawServingUnit=$rawServingUnit")
+        Log.d(
+            "USDA_IMPORT",
+            "household=$household rawServingSize=$rawServingSize rawServingUnit=$rawServingUnit"
+        )
 
-        val gramsPerServingUnit: Double? = computeGramsBridgePer1Unit(
+        val rawGramsBridgePerUnit: Double? = computeGramsBridgePer1Unit(
             householdSize = household?.size,
             displayUnit = finalServingUnit,
             rawSize = rawServingSize,
             rawUnit = rawServingUnit
         )
 
-        val mlPerServingUnit: Double? = computeMlBridgePer1Unit(
+        val rawMlBridgePerUnit: Double? = computeMlBridgePer1Unit(
             householdSize = household?.size,
             displayUnit = finalServingUnit,
             rawSize = rawServingSize,
             rawUnit = rawServingUnit
         )
+
+        // Deterministic-unit normalization:
+        // - mass units already know grams per 1 unit via ServingUnit.asG
+        // - volume units already know mL per 1 unit via ServingUnit.asMl
+        // Therefore we must not persist redundant bridges for those cases.
+        val gramsPerServingUnit: Double? =
+            if (finalServingUnit.isMassUnit()) {
+                null
+            } else {
+                rawGramsBridgePerUnit?.takeIf { it > 0.0 }
+            }
+
+        val mlPerServingUnit: Double? =
+            if (finalServingUnit.isVolumeUnit()) {
+                null
+            } else {
+                rawMlBridgePerUnit?.takeIf { it > 0.0 }
+            }
 
         val food = Food(
             id = revivedId,
@@ -318,42 +335,72 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             )
         }
 
-        // Canonicalize to ONE basis list (no duplicates per nutrientId)
-        val canonicalRows: List<FoodNutrientRow> = when {
-            // Mass-grounded: PER_100G (grams only)
-            isMassGrounded(food) -> {
-                val gramsPerServing = computeGramsPerServing(food) ?: return Result.Blocked(
-                    "USDA import: failed to compute grams-per-serving for mass-grounded food."
-                )
-                val factor = 100.0 / gramsPerServing
-                servingRows.map { r ->
-                    r.copy(
-                        basisType = BasisType.PER_100G,
-                        amount = r.amount * factor,
-                        basisGrams = 100.0,
-                    )
-                }
+        val requiresInterpretationPrompt = shouldRequireInterpretationPrompt(
+            itemFdcId = item.fdcId,
+            food = food,
+            rawServingSize = rawServingSize,
+            rawServingUnit = rawServingUnit,
+            servingRows = servingRows,
+            isGenericUsdaItem = isGenericUsdaItem
+        )
+
+        if (requiresInterpretationPrompt && forcedInterpretation == null) {
+            val foodId = db.withTransaction {
+                foods.upsert(food)
             }
 
-            // Volume-grounded: PER_100ML (mL only)
-            isVolumeGrounded(food) -> {
-                val mlPerServing = computeMlPerServing(food) ?: return Result.Blocked(
-                    "USDA import: failed to compute ml-per-serving for volume-grounded food."
-                )
-                val factor = 100.0 / mlPerServing
-                servingRows.map { r ->
-                    r.copy(
-                        basisType = BasisType.PER_100ML,
-                        amount = r.amount * factor,
-                        basisGrams = null
-                    )
-                }
-            }
-
-            else -> servingRows
+            return Result.NeedsInterpretationChoice(
+                foodId = foodId,
+                fdcId = item.fdcId,
+                gtinUpc = item.gtinUpc?.trim()?.takeIf { it.isNotBlank() },
+                publishedDateIso = item.publishedDate?.trim()?.takeIf { it.isNotBlank() },
+                modifiedDateIso = item.modifiedDate?.trim()?.takeIf { it.isNotBlank() },
+                candidateLabel = buildCandidateLabel(
+                    description = normalizedName,
+                    brand = brand
+                ),
+                servingText = buildServingPreviewText(
+                    displayServingSize = finalServingSize,
+                    displayServingUnit = finalServingUnit,
+                    rawServingSize = rawServingSize,
+                    rawServingUnit = rawServingUnit,
+                    householdServingText = item.householdServingFullText
+                ),
+                calories = amountForAnyCode(servingRows, "CALORIES_KCAL"),
+                carbs = amountForAnyCode(servingRows, "CARBS_G"),
+                protein = amountForAnyCode(servingRows, "PROTEIN_G"),
+                fat = amountForAnyCode(servingRows, "FAT_G")
+            )
         }
-            .groupBy { it.nutrient.id }
-            .mapNotNull { (_, group) -> group.firstOrNull() }
+
+        val canonicalRows: List<FoodNutrientRow> = when {
+            forcedInterpretation == InterpretationChoice.PER_SERVING_STYLE -> {
+                dedupeRows(servingRows)
+            }
+
+            forcedInterpretation == InterpretationChoice.PER_100_STYLE -> {
+                relabelAsPer100WithoutScaling(food, servingRows)
+                    ?: return Result.Blocked(
+                        "USDA import: cannot use per-100 interpretation because this food is not safely mass- or volume-grounded."
+                    )
+            }
+
+            isMassGrounded(food) -> {
+                canonicalizeAsPer100(food, servingRows)
+                    ?: return Result.Blocked(
+                        "USDA import: failed to compute grams-per-serving for mass-grounded food."
+                    )
+            }
+
+            isVolumeGrounded(food) -> {
+                canonicalizeAsPer100(food, servingRows)
+                    ?: return Result.Blocked(
+                        "USDA import: failed to compute ml-per-serving for volume-grounded food."
+                    )
+            }
+
+            else -> dedupeRows(servingRows)
+        }
 
         val foodId = db.withTransaction {
             val id = foods.upsert(food)
@@ -368,6 +415,187 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             publishedDateIso = item.publishedDate?.trim()?.takeIf { it.isNotBlank() },
             modifiedDateIso = item.modifiedDate?.trim()?.takeIf { it.isNotBlank() }
         )
+    }
+
+    private fun buildCandidateLabel(
+        description: String,
+        brand: String?
+    ): String {
+        val safeName = description.trim()
+        val safeBrand = brand?.trim().orEmpty()
+
+        return when {
+            safeName.isBlank() && safeBrand.isBlank() -> "USDA item"
+            safeBrand.isBlank() -> safeName
+            safeName.isBlank() -> safeBrand
+            else -> "$safeName ($safeBrand)"
+        }
+    }
+
+    private fun buildServingPreviewText(
+        displayServingSize: Double,
+        displayServingUnit: ServingUnit,
+        rawServingSize: Double,
+        rawServingUnit: ServingUnit,
+        householdServingText: String?
+    ): String? {
+        val household = householdServingText?.trim().takeIf { !it.isNullOrBlank() }
+        if (household != null) return household
+
+        val display = "${trimTrailingZero(displayServingSize)} ${displayServingUnit.name}"
+        val raw = "${trimTrailingZero(rawServingSize)} ${rawServingUnit.name}"
+
+        return if (display == raw) display else "$display (USDA raw: $raw)"
+    }
+
+    private fun trimTrailingZero(value: Double): String {
+        return if (value % 1.0 == 0.0) {
+            value.toLong().toString()
+        } else {
+            value.toString()
+        }
+    }
+
+    private fun amountForAnyCode(rows: List<FoodNutrientRow>, vararg codes: String): Double? {
+        if (rows.isEmpty()) return null
+        return rows.firstOrNull { row ->
+            codes.any { code -> row.nutrient.code.equals(code, ignoreCase = true) }
+        }?.amount
+    }
+
+    private fun dedupeRows(rows: List<FoodNutrientRow>): List<FoodNutrientRow> {
+        return rows
+            .groupBy { it.nutrient.id }
+            .mapNotNull { (_, group) -> group.firstOrNull() }
+    }
+
+    private fun canonicalizeAsPer100(
+        food: Food,
+        servingRows: List<FoodNutrientRow>
+    ): List<FoodNutrientRow>? {
+        val canonicalRows: List<FoodNutrientRow> = when {
+            isMassGrounded(food) -> {
+                val gramsPerServing = computeGramsPerServing(food) ?: return null
+                val factor = 100.0 / gramsPerServing
+                servingRows.map { r ->
+                    r.copy(
+                        basisType = BasisType.PER_100G,
+                        amount = r.amount * factor,
+                        basisGrams = 100.0,
+                    )
+                }
+            }
+
+            isVolumeGrounded(food) -> {
+                val mlPerServing = computeMlPerServing(food) ?: return null
+                val factor = 100.0 / mlPerServing
+                servingRows.map { r ->
+                    r.copy(
+                        basisType = BasisType.PER_100ML,
+                        amount = r.amount * factor,
+                        basisGrams = null
+                    )
+                }
+            }
+
+            else -> return null
+        }
+
+        return dedupeRows(canonicalRows)
+    }
+
+    private fun relabelAsPer100WithoutScaling(
+        food: Food,
+        servingRows: List<FoodNutrientRow>
+    ): List<FoodNutrientRow>? {
+        val canonicalRows: List<FoodNutrientRow> = when {
+            isMassGrounded(food) -> {
+                servingRows.map { r ->
+                    r.copy(
+                        basisType = BasisType.PER_100G,
+                        amount = r.amount,
+                        basisGrams = 100.0
+                    )
+                }
+            }
+
+            isVolumeGrounded(food) -> {
+                servingRows.map { r ->
+                    r.copy(
+                        basisType = BasisType.PER_100ML,
+                        amount = r.amount,
+                        basisGrams = null
+                    )
+                }
+            }
+
+            else -> return null
+        }
+
+        return dedupeRows(canonicalRows)
+    }
+
+    private fun shouldRequireInterpretationPrompt(
+        itemFdcId: Long,
+        food: Food,
+        rawServingSize: Double,
+        rawServingUnit: ServingUnit,
+        servingRows: List<FoodNutrientRow>,
+        isGenericUsdaItem: Boolean
+    ): Boolean {
+        if (servingRows.isEmpty()) return false
+        if (!isMassGrounded(food) && !isVolumeGrounded(food)) return false
+
+        // Generic/foundation-ish items are usually safer to canonicalize directly, especially when
+        // USDA is effectively already giving us standard-basis data.
+        if (isGenericUsdaItem) return false
+
+        val servingLooksAlreadyPer100 = when {
+            rawUnitLooksPer100Mass(rawServingUnit, rawServingSize) -> true
+            rawUnitLooksPer100Volume(rawServingUnit, rawServingSize) -> true
+            else -> false
+        }
+
+        if (servingLooksAlreadyPer100) return false
+
+        // Strong ambiguity signal for mass-grounded foods:
+        // if macro grams exceed serving mass, the USDA values cannot literally be per-serving.
+        val gramsPerServing = computeGramsPerServing(food)
+        val macroGramTotal = listOfNotNull(
+            amountForAnyCode(servingRows, "CARBS_G"),
+            amountForAnyCode(servingRows, "PROTEIN_G"),
+            amountForAnyCode(servingRows, "FAT_G")
+        ).sum()
+
+        val impossibleAsPerServingForMass = gramsPerServing != null &&
+                gramsPerServing > 0.0 &&
+                macroGramTotal > (gramsPerServing + 0.5)
+
+        if (impossibleAsPerServingForMass) {
+            Log.w(
+                "USDA_IMPORT",
+                "Ambiguous USDA nutrient interpretation detected for fdcId=$itemFdcId: " +
+                        "macroGramTotal=$macroGramTotal gramsPerServing=$gramsPerServing"
+            )
+            return true
+        }
+
+        // Conservative branded-item rule:
+        // if a branded item is grounded and USDA's raw serving is not a clean 100 g / 100 mL basis,
+        // we should not silently force per-serving vs per-100 interpretation.
+        return true
+    }
+
+    private fun rawUnitLooksPer100Mass(rawUnit: ServingUnit, rawServingSize: Double): Boolean {
+        if (!rawUnit.isMassUnit()) return false
+        val grams = rawUnit.toGrams(rawServingSize) ?: return false
+        return kotlin.math.abs(grams - 100.0) < 0.001
+    }
+
+    private fun rawUnitLooksPer100Volume(rawUnit: ServingUnit, rawServingSize: Double): Boolean {
+        if (!rawUnit.isVolumeUnit()) return false
+        val ml = rawUnit.toMilliliters(rawServingSize) ?: return false
+        return kotlin.math.abs(ml - 100.0) < 0.001
     }
 
     private fun isMassGrounded(food: Food): Boolean {
@@ -443,12 +671,12 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         if (householdSize == null) return null
         if (!rawUnit.isMassUnit()) return null
 
-        // If the display unit itself is a mass unit, we can rely on deterministic conversion; no bridge needed.
+        // If the display unit itself is a mass unit, deterministic conversion is enough; no bridge needed.
         if (displayUnit.isMassUnit()) return null
 
         val gramsTotal = rawUnit.toGrams(rawSize)?.takeIf { it > 0.0 } ?: return null
 
-        // Bridge must be per 1 display-unit (since we persist servingSize=1 when household is parseable).
+        // Bridge must be per 1 display-unit.
         return (gramsTotal / householdSize).takeIf { it > 0.0 }
     }
 
@@ -461,10 +689,18 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         if (householdSize == null) return null
         if (!rawUnit.isVolumeUnit()) return null
 
+        // If the display unit itself is a volume unit, deterministic conversion is enough; no bridge needed.
+        if (displayUnit.isVolumeUnit()) return null
+
         val mlTotal = rawUnit.toMilliliters(rawSize)?.takeIf { it > 0.0 } ?: return null
 
-        // Bridge must be per 1 display-unit (since we persist servingSize=1 when household is parseable).
+        // Bridge must be per 1 display-unit.
         return (mlTotal / householdSize).takeIf { it > 0.0 }
+    }
+
+    enum class InterpretationChoice {
+        PER_100_STYLE,
+        PER_SERVING_STYLE
     }
 
     sealed class Result {
@@ -474,6 +710,20 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             val gtinUpc: String?,
             val publishedDateIso: String?,
             val modifiedDateIso: String?
+        ) : Result()
+
+        data class NeedsInterpretationChoice(
+            val foodId: Long,
+            val fdcId: Long,
+            val gtinUpc: String?,
+            val publishedDateIso: String?,
+            val modifiedDateIso: String?,
+            val candidateLabel: String,
+            val servingText: String?,
+            val calories: Double?,
+            val carbs: Double?,
+            val protein: Double?,
+            val fat: Double?,
         ) : Result()
 
         data class Blocked(val reason: String) : Result()
@@ -499,13 +749,31 @@ fun String.toTitleCase(): String =
  *
  * Invariants (must never change)
  * - Exactly ONE nutrient row per (foodId, nutrientId) is persisted.
- * - Canonical basis:
- *   - PER_100G when mass-grounded
- *   - PER_100ML when volume-grounded
- *   - USDA_REPORTED_SERVING otherwise
+ * - Canonical basis after interpretation is finalized:
+ *   - PER_100G when user/safe logic resolves to per-100 and food is mass-grounded
+ *   - PER_100ML when user/safe logic resolves to per-100 and food is volume-grounded
+ *   - USDA_REPORTED_SERVING when user chooses per-serving or when no grounding exists
  * - Never infer density; never convert grams <-> mL.
  * - Preserve stableId on revive to avoid breaking log references.
  * - All writes must occur inside a single DB transaction.
+ * - Deterministic serving units must not persist redundant bridges:
+ *   - mass units -> gramsPerServingUnit = null
+ *   - volume units -> mlPerServingUnit = null
+ *
+ * Critical behavior added for ambiguous USDA items
+ * - This use case may now stop after persisting the Food shell and return
+ *   Result.NeedsInterpretationChoice.
+ * - In that result path, nutrient rows are intentionally NOT persisted yet.
+ * - Caller must ask user whether USDA numbers should be interpreted as:
+ *   - per-100 style
+ *   - per-serving style
+ * - Caller can then invoke this use case again with forcedInterpretation to finalize rows.
+ *
+ * Interpretation semantics
+ * - PER_SERVING_STYLE means the USDA raw numbers are treated as per-serving values and may be
+ *   canonicalized to per-100 only when the importer itself chooses that path safely.
+ * - PER_100_STYLE means the USDA raw numbers are already per-100-style values.
+ *   In that path, this use case must relabel basis to PER_100G / PER_100ML without rescaling the amounts.
  *
  * Do not refactor notes
  * - Keep grounding decision order: mass grounding takes precedence over volume grounding.
@@ -518,6 +786,7 @@ fun String.toTitleCase(): String =
  * - This use case is a domain/persistence orchestration boundary:
  *   - parsing + mapping is domain logic
  *   - writes happen through repositories inside a transaction
+ * - InterpretationChoice is defined here intentionally so domain does not depend on UI-layer enums.
  *
  * Migration notes (KMP / time APIs)
  * - This file currently depends on android.util.Log; replace with injected logger for KMP.

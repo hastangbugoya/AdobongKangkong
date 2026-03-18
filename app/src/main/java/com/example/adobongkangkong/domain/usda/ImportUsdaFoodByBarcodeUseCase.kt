@@ -3,8 +3,8 @@ package com.example.adobongkangkong.domain.usda
 import android.util.Log
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.usda.UsdaFoodsSearchParser
-import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.data.usda.UsdaFoodsSearchService
+import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import javax.inject.Inject
 
 /**
@@ -129,7 +129,7 @@ import javax.inject.Inject
  *   Either imported now or reused from existing mapping.
  *
  * - [Result.Blocked]
- *   USDA returned no foods or unsupported data.
+ *   USDA returned no foods or unsupported data, or the import path requires user confirmation.
  *
  * - [Result.Failed]
  *   Network, parsing, or unexpected system failure.
@@ -138,6 +138,7 @@ import javax.inject.Inject
  * - USDA may return multiple foods; first result is treated as primary candidate.
  * - USDA may omit publishedDate; treated as non-newer.
  * - USER_ASSIGNED mappings do not prevent USDA import.
+ * - Ambiguous USDA nutrient interpretation is blocked here because this use case has no UI prompt step.
  *
  * Pitfalls / gotchas
  * - This use case does NOT directly write DB rows.
@@ -225,6 +226,11 @@ class ImportUsdaFoodByBarcodeUseCase @Inject constructor(
                     modifiedDateIso = r.modifiedDateIso
                 )
 
+            is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice ->
+                Result.Blocked(
+                    "USDA import requires user interpretation confirmation before nutrients can be finalized."
+                )
+
             is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked ->
                 Result.Blocked(r.reason)
         }
@@ -237,7 +243,7 @@ class ImportUsdaFoodByBarcodeUseCase @Inject constructor(
      * - Food exists locally and is safe to use for logging.
      *
      * Blocked
-     * - USDA returned no usable result.
+     * - USDA returned no usable result, or the import requires a UI confirmation step.
      *
      * Failed
      * - System or network failure occurred.
@@ -271,7 +277,8 @@ class ImportUsdaFoodByBarcodeUseCase @Inject constructor(
         ) : Result()
 
         /**
-         * USDA did not provide a usable food.
+         * USDA did not provide a usable food, or the flow requires an explicit user choice that
+         * this use case cannot perform on its own.
          */
         data class Blocked(val reason: String) : Result()
 
@@ -341,6 +348,13 @@ class ImportUsdaFoodByBarcodeUseCase @Inject constructor(
  * stable identity
  * no duplicate imports
  * version consistency
+ *
+ * USDA interpretation note
+ *
+ * - ImportUsdaFoodFromSearchJsonUseCase may now return NeedsInterpretationChoice for ambiguous
+ *   USDA payloads.
+ * - This barcode-only orchestration use case has no UI prompt step, so it treats that outcome as
+ *   Blocked rather than silently forcing an interpretation.
  *
  * Migration notes
  *

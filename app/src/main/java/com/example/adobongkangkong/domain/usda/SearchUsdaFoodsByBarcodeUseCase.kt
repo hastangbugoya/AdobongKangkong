@@ -126,17 +126,17 @@ class SearchUsdaFoodsByBarcodeUseCase @Inject constructor(
                 brand = (it.brandName ?: it.brandOwner)?.trim().orEmpty(),
                 servingText = it.householdServingFullText?.trim()
                     ?: run {
-                        // Fallback when household serving text is missing.
-                        // Keep it simple and avoid unit conversions here.
                         val ss = it.servingSize
                         val u = it.servingSizeUnit
                         if (ss != null && !u.isNullOrBlank()) "$ss $u" else ""
                     },
                 gtinUpc = it.gtinUpc?.trim().orEmpty(),
 
-                // Included for later freshness/version gating in resolver/import orchestration.
                 publishedDateIso = it.publishedDate?.trim().takeIf { s -> !s.isNullOrBlank() },
                 modifiedDateIso = it.modifiedDate?.trim().takeIf { s -> !s.isNullOrBlank() },
+
+                servingSize = it.servingSize,
+                servingSizeUnit = it.servingSizeUnit
             )
         }
 
@@ -172,6 +172,9 @@ class SearchUsdaFoodsByBarcodeUseCase @Inject constructor(
         val gtinUpc: String,
         val publishedDateIso: String?,
         val modifiedDateIso: String?,
+
+        val servingSize: Double?,
+        val servingSizeUnit: String?
     )
 
     /**

@@ -36,13 +36,28 @@ import javax.inject.Inject
  *
  * ## Behavior
  * - Applies “safe grounding lock-in” to the incoming [Food] when its conversion bridge fields are blank:
- *   - Locks in `gramsPerServingUnit` for deterministic mass units (except grams itself).
- *   - Locks in `mlPerServingUnit` for deterministic volume units (except milliliters itself),
+ *   - Locks in `gramsPerServingUnit` for deterministic mass units only when needed.
+ *   - Locks in `mlPerServingUnit` for deterministic volume units only when needed,
  *     **but only if the food is not already mass-grounded** (single-grounding rule).
  * - Upserts the grounded food via [FoodRepository].
  * - Canonicalizes incoming nutrient [rows] into exactly one basis (PER_100G, PER_100ML, or USDA_REPORTED_SERVING)
  *   and ensures exactly one row per nutrient id.
  * - Replaces all persisted nutrient rows for the saved food via [FoodNutrientRepository].
+ *
+ * ## Important serving rule
+ * For deterministic mass units like `g`, `oz`, `lb`, `kg`:
+ * - the serving unit itself already defines the gram bridge
+ * - `servingSize` tells us how many of those units make one serving
+ *
+ * Example:
+ * - 50 g serving
+ * - user enters 360 kcal as per-serving UI value
+ * - canonical PER_100G stored value must become:
+ *   360 * (100 / 50) = 720
+ *
+ * Therefore:
+ * - foods with servingUnit=G must still canonicalize to PER_100G correctly
+ * - but we do NOT need to persist gramsPerServingUnit for ServingUnit.G
  *
  * ## Parameters
  * - `food`: The food to upsert. May be modified only by deterministic grounding lock-in rules.
@@ -50,27 +65,6 @@ import javax.inject.Inject
  *
  * ## Return
  * The persisted `foodId` returned from [FoodRepository.upsert].
- *
- * ## Edge cases
- * - Empty [rows] is allowed; nutrients are replaced with an empty set.
- * - If the food cannot be safely grounded in grams or mL, nutrients are persisted as USDA_REPORTED_SERVING
- *   (raw basis, not safely scalable).
- * - If mixed bases are provided and cannot be converted safely to the target basis, rows that require
- *   unsafe conversion are dropped (e.g., grams↔mL without density).
- *
- * ## Pitfalls / gotchas
- * - **Single grounding per food:** Do not auto-lock both mass and volume bridges. If mass grounding exists,
- *   volume grounding must not be inferred (and vice versa) to avoid ambiguity.
- * - **No density guessing:** Never convert between grams and mL without an explicit density field.
- * - **Truth-first bridges:** If a bridge field exists (gramsPerServingUnit / mlPerServingUnit), it is
- *   authoritative for “per serving” computations even if the unit is convertible.
- * - **Single-basis persistence:** Downstream logic assumes exactly one persisted row per nutrient id
- *   (within one basis). Do not allow multi-basis duplicates to slip into storage.
- *
- * ## Architectural rules
- * - Domain-layer correctness gate for persistence: grounding + canonicalization happens here.
- * - No UI state, no navigation, no side effects beyond repository writes.
- * - Repository contracts are the only persistence boundary (no direct DB/Room usage here).
  */
 class SaveFoodWithNutrientsUseCase @Inject constructor(
     private val foods: FoodRepository,
@@ -82,7 +76,6 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
         rows: List<FoodNutrientRow>
     ): Long {
 
-        // Lock-in deterministic grounding bridges when safe and blank.
         val foodToPersist = food
             .withLockedInMassGroundingIfPossible()
             .withLockedInVolumeGroundingIfPossible()
@@ -99,8 +92,8 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
         val existing = this.gramsPerServingUnit?.takeIf { it > 0.0 }
         if (existing != null) return this
 
-        // Only lock in for mass units where the conversion is deterministic.
-        // For ServingUnit.G, gramsPerServingUnit is unnecessary; keep null.
+        // For deterministic mass units except plain grams, we can safely persist grams per 1 unit.
+        // For ServingUnit.G we keep null because the unit itself already means 1 g.
         if (this.servingUnit.isMassUnit() && this.servingUnit != ServingUnit.G) {
             val gramsPer1Unit = this.servingUnit.toGrams(1.0)
             if (gramsPer1Unit != null && gramsPer1Unit > 0.0) {
@@ -115,15 +108,14 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
         val existing = this.mlPerServingUnit?.takeIf { it > 0.0 }
         if (existing != null) return this
 
-        // CRITICAL RULE (2026-02-06):
-        // Compute at most ONE grounding per food. If we already have mass grounding,
-        // we must not auto-add a volume bridge (would create ambiguity / violate invariants).
+        // Single-grounding rule:
+        // if this food is already mass-grounded, do not also infer a volume bridge.
         val alreadyMassGrounded =
-            (this.servingUnit.isMassUnit()) || (this.gramsPerServingUnit?.takeIf { it > 0.0 } != null)
+            this.servingUnit.isMassUnit() || effectiveGramsPerServingUnit(this) != null
         if (alreadyMassGrounded) return this
 
-        // Only lock in for volume units where conversion is deterministic.
-        // For ServingUnit.ML, mlPerServingUnit is unnecessary; keep null.
+        // For deterministic volume units except plain mL, we can safely persist mL per 1 unit.
+        // For ServingUnit.ML we keep null because the unit itself already means 1 mL.
         if (this.servingUnit.isVolumeUnit() && this.servingUnit != ServingUnit.ML) {
             val mlPer1Unit = this.servingUnit.toMilliliters(1.0)
             if (mlPer1Unit != null && mlPer1Unit > 0.0) {
@@ -138,7 +130,7 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
      * Ensures we persist exactly ONE basis row per nutrient per food by choosing ONE target basis:
      * - PER_100G when the food can be grounded in grams
      * - PER_100ML when the food can be grounded in milliliters
-     * - Otherwise USDA_REPORTED_SERVING (raw, not safely scalable)
+     * - Otherwise USDA_REPORTED_SERVING
      *
      * Also dedupes rows so there is exactly one row per nutrientId in the returned list.
      */
@@ -159,12 +151,17 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
 
         val converted: List<FoodNutrientRow> =
             when (targetBasis) {
+
                 BasisType.PER_100G -> {
                     val factor = 100.0 / gramsPerServing!!
                     rows.mapNotNull { row ->
                         when (row.basisType) {
+
                             BasisType.PER_100G ->
-                                row.copy(basisType = BasisType.PER_100G, basisGrams = 100.0)
+                                row.copy(
+                                    basisType = BasisType.PER_100G,
+                                    basisGrams = 100.0
+                                )
 
                             BasisType.USDA_REPORTED_SERVING ->
                                 row.copy(
@@ -173,8 +170,8 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
                                     basisGrams = 100.0
                                 )
 
-                            // Never convert between grams and mL without explicit density.
-                            else -> null
+                            // Never convert volume basis into mass basis without density.
+                            BasisType.PER_100ML -> null
                         }
                     }
                 }
@@ -183,8 +180,12 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
                     val factor = 100.0 / mlPerServing!!
                     rows.mapNotNull { row ->
                         when (row.basisType) {
+
                             BasisType.PER_100ML ->
-                                row.copy(basisType = BasisType.PER_100ML, basisGrams = 100.0)
+                                row.copy(
+                                    basisType = BasisType.PER_100ML,
+                                    basisGrams = 100.0
+                                )
 
                             BasisType.USDA_REPORTED_SERVING ->
                                 row.copy(
@@ -193,23 +194,22 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
                                     basisGrams = 100.0
                                 )
 
-                            // Never convert between grams and mL without explicit density.
-                            else -> null
+                            // Never convert mass basis into volume basis without density.
+                            BasisType.PER_100G -> null
                         }
                     }
                 }
 
-                else -> {
+                BasisType.USDA_REPORTED_SERVING -> {
                     rows.map {
-                        it.copy(basisType = BasisType.USDA_REPORTED_SERVING, basisGrams = null)
+                        it.copy(
+                            basisType = BasisType.USDA_REPORTED_SERVING,
+                            basisGrams = null
+                        )
                     }
                 }
             }
 
-        // Hard guarantee: ONE row per nutrientId (within the chosen basis).
-        // Preference order:
-        // 1) if any row was already in the target basis, keep that (stable)
-        // 2) else keep the first converted row (deterministic)
         return converted
             .groupBy { it.nutrient.id }
             .mapNotNull { (_, group) ->
@@ -217,28 +217,35 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
             }
     }
 
+    private fun effectiveGramsPerServingUnit(food: Food): Double? {
+        return when {
+            food.servingUnit.isMassUnit() -> food.servingUnit.toGrams(1.0)
+            else -> food.gramsPerServingUnit
+        }?.takeIf { it > 0.0 }
+    }
+
+    private fun effectiveMlPerServingUnit(food: Food): Double? {
+        return when (food.servingUnit) {
+            ServingUnit.ML -> 1.0
+            ServingUnit.L -> 1000.0
+            else -> food.mlPerServingUnit
+        }?.takeIf { it > 0.0 }
+    }
+
     private fun computeGramsPerServing(food: Food): Double? {
-        // Truth-first: if an explicit bridge exists, it wins over unit-based conversions.
-        val bridgedGPer1 = food.gramsPerServingUnit?.takeIf { it > 0.0 }
-        val grams = when {
-            bridgedGPer1 != null -> food.servingSize * bridgedGPer1
-            food.servingUnit.isMassUnit() -> food.servingUnit.toGrams(food.servingSize)
-            else -> null
-        }
-        return grams?.takeIf { it > 0.0 }
+        val gramsPer1Unit = effectiveGramsPerServingUnit(food) ?: return null
+        val servingSize = food.servingSize.takeIf { it > 0.0 } ?: return null
+        return (servingSize * gramsPer1Unit).takeIf { it > 0.0 }
     }
 
     private fun computeMlPerServing(food: Food): Double? {
-        // Truth-first: if an explicit bridge exists, it wins over unit-based conversions.
-        // This is required for USDA liquids where servingUnit may be a parseable display unit (CUP/FLOZ/CAN/etc)
-        // but USDA servingSize in mL is authoritative and stored in mlPerServingUnit.
-        val bridgedMlPer1 = food.mlPerServingUnit?.takeIf { it > 0.0 }
-        val ml = when {
-            bridgedMlPer1 != null -> food.servingSize * bridgedMlPer1
-            food.servingUnit.isVolumeUnit() -> food.servingUnit.toMilliliters(food.servingSize)
-            else -> null
-        }
-        return ml?.takeIf { it > 0.0 }
+        // Single-grounding rule:
+        // if mass grounding exists, do not also treat this as volume-grounded.
+        if (computeGramsPerServing(food) != null) return null
+
+        val mlPer1Unit = effectiveMlPerServingUnit(food) ?: return null
+        val servingSize = food.servingSize.takeIf { it > 0.0 } ?: return null
+        return (servingSize * mlPer1Unit).takeIf { it > 0.0 }
     }
 }
 
@@ -254,28 +261,19 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
  *   - Else if mL-per-serving can be computed -> PER_100ML
  *   - Else -> USDA_REPORTED_SERVING
  * - Truth-first bridges:
- *   - If `gramsPerServingUnit` is present (> 0), it is authoritative for gram grounding computations.
- *   - If `mlPerServingUnit` is present (> 0), it is authoritative for volume grounding computations.
- * - No grams↔mL conversion without explicit density (never guess density).
- * - “Single grounding per food” invariant:
- *   - If mass grounding is present (mass unit OR gramsPerServingUnit != null), do NOT auto-lock volume grounding.
- *   - If volume grounding is present (volume unit OR mlPerServingUnit != null), do NOT infer grams.
+ *   - Deterministic mass units count as an effective grams bridge even when gramsPerServingUnit is null.
+ *   - Deterministic volume units count as an effective mL bridge even when mlPerServingUnit is null.
+ * - No grams↔mL conversion without explicit density.
+ * - Single grounding per food:
+ *   - If mass grounding exists, do NOT also canonicalize as volume.
  *
  * ## Do not refactor notes
- * - Do not rework canonicalization to store multiple bases “for convenience”; downstream assumes one basis.
- * - Do not change the drop behavior in `mapNotNull` that rejects unsafe conversions between mass and volume.
- * - Keep the deterministic dedupe rule (prefer already-target-basis row, else first converted row).
- * - Keep “lock-in” behavior limited to deterministic unit conversions only; do not add heuristics.
+ * - Do not rework canonicalization to store multiple bases.
+ * - Do not remove deterministic mass-unit handling for ServingUnit.G / OZ / LB / KG.
+ *   That is the fix for foods like “50 g serving” showing 100 g nutrition in the editor/logging path.
+ * - Keep unsafe mass<->volume conversion impossible here.
  *
  * ## Architectural boundaries
  * - This use case owns persistence correctness rules for saving foods + nutrient rows.
  * - Repositories are the only persistence boundary; no direct DB/Room code may be added here.
- * - This use case must not join nutrients back to foods/recipes or query other tables during save.
- *
- * ## Migration notes (KMP / time APIs)
- * - No time APIs involved.
- *
- * ## Performance considerations
- * - Canonicalization is O(N) over nutrient rows and performed on each save. This is acceptable for the
- *   typical number of nutrients per food. Avoid adding additional passes unless required.
  */
