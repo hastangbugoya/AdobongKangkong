@@ -3,13 +3,17 @@ package com.example.adobongkangkong.ui.calendar
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedDaysInMonthUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodNeedsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
+import com.example.adobongkangkong.domain.repository.CalendarSuccessNutrientRepository
 import com.example.adobongkangkong.domain.repository.IouRepository
+import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutrientStatusesUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
@@ -45,6 +49,20 @@ enum class DayIconStatus {
     MISSED
 }
 
+/**
+ * Calendar-only settings option for monthly success nutrient selection.
+ *
+ * Scope guard:
+ * - Used by Calendar settings UI only.
+ * - Intentionally independent from dashboard pin option models.
+ */
+data class CalendarSuccessOption(
+    val key: NutrientKey,
+    val displayName: String,
+    val unit: String,
+    val sortCategoryOrdinal: Int
+)
+
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
     private val observePlannedDaysInMonth: ObservePlannedDaysInMonthUseCase,
@@ -53,6 +71,8 @@ class CalendarViewModel @Inject constructor(
     private val observeDailyNutrientStatuses: ObserveDailyNutrientStatusesUseCase,
     private val observeDailyNutritionTotals: ObserveDailyNutritionTotalsUseCase,
     private val iouRepository: IouRepository,
+    private val calendarSuccessNutrientRepository: CalendarSuccessNutrientRepository,
+    private val nutrientRepository: NutrientRepository,
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(YearMonth.now())
@@ -65,6 +85,36 @@ class CalendarViewModel @Inject constructor(
 
     private val _graphWeekStart = MutableStateFlow(startOfWeek(LocalDate.now()))
     val graphWeekStart: StateFlow<LocalDate> = _graphWeekStart
+
+    private val _settingsSheetOpen = MutableStateFlow(false)
+    val settingsSheetOpen: StateFlow<Boolean> = _settingsSheetOpen
+
+    val calendarSuccessOptions: StateFlow<List<CalendarSuccessOption>> =
+        nutrientRepository
+            .observeAllNutrients()
+            .map { nutrients ->
+                nutrients
+                    .map { it.toCalendarSuccessOption() }
+                    .sortedWith(
+                        compareBy<CalendarSuccessOption> { it.sortCategoryOrdinal }
+                            .thenBy { it.displayName.lowercase() }
+                    )
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                emptyList()
+            )
+
+    val selectedCalendarSuccessKeys: StateFlow<Set<String>> =
+        calendarSuccessNutrientRepository
+            .observeSelectedKeys()
+            .map { keys ->
+                keys
+                    .map { it.value.trim().uppercase() }
+                    .toSet()
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     //DEBUG
     private val _debugNeeds = MutableStateFlow<List<PlannedFoodNeed>>(emptyList())
@@ -86,6 +136,12 @@ class CalendarViewModel @Inject constructor(
      * Month grid icon status map.
      *
      * Computed as one flow per day (<=31) and then merged into a map.
+     *
+     * Calendar Success Revamp note:
+     * - Monthly calendar success is filtered by calendar-selected nutrient keys only.
+     * - If no keys are selected, we intentionally fall back to current behavior
+     *   (evaluate using the full daily status list).
+     * - Weekly graph and other calendar surfaces remain unchanged.
      */
     val dayIconStatusByDate: StateFlow<Map<LocalDate, DayIconStatus>> =
         _month
@@ -94,10 +150,13 @@ class CalendarViewModel @Inject constructor(
                 if (days.isEmpty()) return@flatMapLatest flowOf(emptyMap())
 
                 val perDayFlows = days.map { date ->
-                    observeDailyNutrientStatuses(date = date, zoneId = zoneId)
-                        .map { statuses ->
-                            date to statuses.toDayIconStatus()
-                        }
+                    combine(
+                        observeDailyNutrientStatuses(date = date, zoneId = zoneId),
+                        selectedCalendarSuccessKeys
+                    ) { statuses, selectedKeys ->
+                        val filtered = statuses.filterForCalendarSuccess(selectedKeys)
+                        date to filtered.toDayIconStatus()
+                    }
                 }
 
                 combine(perDayFlows) { pairsAny ->
@@ -204,6 +263,39 @@ class CalendarViewModel @Inject constructor(
         _selectedDate.value = null
     }
 
+    fun openSettingsSheet() {
+        _settingsSheetOpen.value = true
+    }
+
+    fun dismissSettingsSheet() {
+        _settingsSheetOpen.value = false
+    }
+
+    fun onCalendarSuccessToggle(key: NutrientKey, enabled: Boolean) {
+        viewModelScope.launch {
+            val canonical = key.value.trim().uppercase()
+            val updated = selectedCalendarSuccessKeys.value.toMutableSet()
+
+            if (enabled) {
+                updated.add(canonical)
+            } else {
+                updated.remove(canonical)
+            }
+
+            calendarSuccessNutrientRepository.setSelectedKeys(
+                updated
+                    .map { NutrientKey(it) }
+                    .sortedBy { it.value }
+            )
+        }
+    }
+
+    fun clearCalendarSuccessSelectedKeys() {
+        viewModelScope.launch {
+            calendarSuccessNutrientRepository.clearSelectedKeys()
+        }
+    }
+
     fun goPrevGraphWeek() {
         _graphWeekStart.update { it.minusWeeks(1) }
     }
@@ -269,15 +361,30 @@ class CalendarViewModel @Inject constructor(
     }
 }
 
+private fun Nutrient.toCalendarSuccessOption(): CalendarSuccessOption =
+    CalendarSuccessOption(
+        key = NutrientKey(code),
+        displayName = displayName,
+        unit = unit.name.lowercase(),
+        sortCategoryOrdinal = category.ordinal
+    )
+
+private fun List<com.example.adobongkangkong.domain.model.DailyNutrientStatus>.filterForCalendarSuccess(
+    selectedKeys: Set<String>
+): List<com.example.adobongkangkong.domain.model.DailyNutrientStatus> {
+    if (selectedKeys.isEmpty()) return this
+
+    return filter { status ->
+        status.nutrientCode.trim().uppercase() in selectedKeys
+    }
+}
+
 private fun List<com.example.adobongkangkong.domain.model.DailyNutrientStatus>.toDayIconStatus(): DayIconStatus {
     if (isEmpty()) return DayIconStatus.NO_TARGETS
 
-    // Ignore entries that have no active min/target/max.
     val targeted = filter { s -> (s.min != null) || (s.target != null) || (s.max != null) }
     if (targeted.isEmpty()) return DayIconStatus.NO_TARGETS
 
-    // Heuristic: if all consumed == 0, treat as no data.
-    // If later you expose a "hasLogs" / "logCount" signal, switch to that.
     val hasAnyConsumed = targeted.any { it.consumed != 0.0 }
     if (!hasAnyConsumed) return DayIconStatus.NO_DATA
 

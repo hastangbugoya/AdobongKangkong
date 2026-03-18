@@ -35,9 +35,12 @@ import com.example.adobongkangkong.data.local.db.dao.*
         IouEntity::class,
         FoodCategoryEntity::class,
         FoodCategoryCrossRefEntity::class,
-        RecipeCategoryCrossRefEntity::class
+        RecipeCategoryCrossRefEntity::class,
+
+        // NEW (v20)
+        CalendarSuccessNutrientEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -68,8 +71,10 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun plannedSeriesItemDao(): PlannedSeriesItemDao
     abstract fun iouDao(): IouDao
     abstract fun foodCategoryDao(): FoodCategoryDao
-
     abstract fun nutrientCatalogDao(): NutrientCatalogDao
+
+    // NEW
+    abstract fun calendarSuccessNutrientDao(): CalendarSuccessNutrientDao
 
     companion object {
 
@@ -189,14 +194,8 @@ abstract class NutriDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * v16
-         * - Add user-defined food categories
-         * - Add food/category cross references
-         */
         val MIGRATION_15_16: Migration = object : Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS food_categories (
@@ -235,13 +234,8 @@ abstract class NutriDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * v17
-         * - Add recipe/category cross references
-         */
         val MIGRATION_16_17: Migration = object : Migration(16, 17) {
             override fun migrate(db: SupportSQLiteDatabase) {
-
                 db.execSQL(
                     """
                     CREATE TABLE IF NOT EXISTS recipe_category_cross_refs (
@@ -266,25 +260,13 @@ abstract class NutriDatabase : RoomDatabase() {
 
         val MIGRATION_17_18: Migration = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE food_barcodes ADD COLUMN overrideServingsPerPackage REAL"
-                )
-                db.execSQL(
-                    "ALTER TABLE food_barcodes ADD COLUMN overrideHouseholdServingText TEXT"
-                )
-                db.execSQL(
-                    "ALTER TABLE food_barcodes ADD COLUMN overrideServingSize REAL"
-                )
-                db.execSQL(
-                    "ALTER TABLE food_barcodes ADD COLUMN overrideServingUnit TEXT"
-                )
+                db.execSQL("ALTER TABLE food_barcodes ADD COLUMN overrideServingsPerPackage REAL")
+                db.execSQL("ALTER TABLE food_barcodes ADD COLUMN overrideHouseholdServingText TEXT")
+                db.execSQL("ALTER TABLE food_barcodes ADD COLUMN overrideServingSize REAL")
+                db.execSQL("ALTER TABLE food_barcodes ADD COLUMN overrideServingUnit TEXT")
 
-                db.execSQL(
-                    "ALTER TABLE foods ADD COLUMN mergedIntoFoodId INTEGER"
-                )
-                db.execSQL(
-                    "ALTER TABLE foods ADD COLUMN mergedAtEpochMs INTEGER"
-                )
+                db.execSQL("ALTER TABLE foods ADD COLUMN mergedIntoFoodId INTEGER")
+                db.execSQL("ALTER TABLE foods ADD COLUMN mergedAtEpochMs INTEGER")
 
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_foods_mergedIntoFoodId ON foods(mergedIntoFoodId)"
@@ -292,15 +274,6 @@ abstract class NutriDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * v19
-         * - Add mergeChildCount to foods
-         *
-         * Why:
-         * - lets UI cheaply identify canonical merge targets using mergeChildCount > 0
-         * - preserves useful merge cardinality for future badges/debugging
-         * - avoids repeated "who merged into me?" read queries for simple list indicators
-         */
         val MIGRATION_18_19: Migration = object : Migration(18, 19) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -308,35 +281,36 @@ abstract class NutriDatabase : RoomDatabase() {
                 )
             }
         }
+
+        /**
+         * v20
+         * - Add calendar_success_nutrients table
+         *
+         * Why:
+         * - Stores user-selected nutrient codes used for monthly calendar success evaluation
+         * - Fully isolated from dashboard pinned/critical preferences
+         */
+        val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+
+                // Create table
+                db.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS calendar_success_nutrients (
+                nutrientCode TEXT NOT NULL,
+                PRIMARY KEY(nutrientCode)
+            )
+            """.trimIndent()
+                )
+
+                // Required index (Room expects this)
+                db.execSQL(
+                    """
+            CREATE INDEX IF NOT EXISTS index_calendar_success_nutrients_nutrientCode
+            ON calendar_success_nutrients(nutrientCode)
+            """.trimIndent()
+                )
+            }
+        }
     }
 }
-
-/**
- * =============================================================================
- * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
- * =============================================================================
- *
- * Merge child count migration intent
- * - v19 adds foods.mergeChildCount as operational state.
- * - Initial migration value is 0 for all rows.
- * - Existing historical merged relationships are not backfilled here.
- *
- * Why no backfill in MIGRATION_18_19
- * - Keep the migration narrow and low-risk.
- * - Existing UI behavior only needs correct values going forward for newly merged foods.
- * - If a later requirement demands historical backfill, do it explicitly in a dedicated migration
- *   or one-time repair routine, not silently here.
- *
- * Important guardrail
- * - Do not remove MIGRATION_18_19 from DatabaseModule wiring.
- * - Do not silently change the semantics of mergeChildCount without updating merge logic and UI.
- *
- * Future plans — do not remove
- * - Optional future one-time repair:
- *     UPDATE canonical foods based on COUNT(children grouped by mergedIntoFoodId)
- * - Optional future integrity test:
- *     verify mergeChildCount remains consistent after merge operations and restore/import flows
- *
- * IMPORTANT TO FUTURE AI:
- * - Do NOT delete these future plans during cleanup or refactors.
- */

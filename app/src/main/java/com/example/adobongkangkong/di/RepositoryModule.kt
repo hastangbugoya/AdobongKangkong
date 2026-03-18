@@ -1,6 +1,6 @@
 package com.example.adobongkangkong.di
 
-
+import com.example.adobongkangkong.data.repository.CalendarSuccessNutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodBarcodeRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodCategoryRepositoryImpl
 import com.example.adobongkangkong.data.repository.FoodGoalFlagsRepositoryImpl
@@ -17,6 +17,7 @@ import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryIm
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserNutrientTargetRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserPinnedNutrientRepositoryImpl
+import com.example.adobongkangkong.domain.repository.CalendarSuccessNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
@@ -79,7 +80,8 @@ abstract class RepositoryModule {
         impl: NutrientRepositoryImpl
     ): NutrientRepository
 
-    @Binds abstract fun bindNutrientAliasRepository(
+    @Binds
+    abstract fun bindNutrientAliasRepository(
         impl: NutrientAliasRepositoryImpl
     ): NutrientAliasRepository
 
@@ -91,7 +93,7 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindRecipeBatchLookupRepository (
+    abstract fun bindRecipeBatchLookupRepository(
         impl: RecipeBatchLookupRepositoryImpl
     ): RecipeBatchLookupRepository
 
@@ -115,6 +117,11 @@ abstract class RepositoryModule {
     abstract fun bindUserPinnedNutrientRepository(
         impl: UserPinnedNutrientRepositoryImpl
     ): UserPinnedNutrientRepository
+
+    @Binds
+    abstract fun bindCalendarSuccessNutrientRepository(
+        impl: CalendarSuccessNutrientRepositoryImpl
+    ): CalendarSuccessNutrientRepository
 
     @Binds
     @Singleton

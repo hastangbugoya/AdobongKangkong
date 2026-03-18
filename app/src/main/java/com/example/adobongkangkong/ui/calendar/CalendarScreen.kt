@@ -50,11 +50,19 @@ fun CalendarScreen(
     val graphWeekStart by vm.graphWeekStart.collectAsState()
     val graphBars by vm.graphBars.collectAsState()
     val caloriesReference by vm.graphCaloriesReference.collectAsState()
+    val settingsSheetOpen by vm.settingsSheetOpen.collectAsState()
+    val calendarSuccessOptions by vm.calendarSuccessOptions.collectAsState()
+    val selectedCalendarSuccessKeys by vm.selectedCalendarSuccessKeys.collectAsState()
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val daySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(selectedDate) {
-        if (selectedDate != null) sheetState.show()
+        if (selectedDate != null) daySheetState.show()
+    }
+
+    LaunchedEffect(settingsSheetOpen) {
+        if (settingsSheetOpen) settingsSheetState.show()
     }
 
     Surface(color = MaterialTheme.colorScheme.background) {
@@ -67,6 +75,14 @@ fun CalendarScreen(
                             Icon(
                                 painter = painterResource(R.drawable.angle_circle_left),
                                 contentDescription = "Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = vm::openSettingsSheet) {
+                            Icon(
+                                painter = painterResource(R.drawable.settings),
+                                contentDescription = "Calendar settings"
                             )
                         }
                     }
@@ -120,7 +136,7 @@ fun CalendarScreen(
             val date = selectedDate
             if (date != null) {
                 ModalBottomSheet(
-                    sheetState = sheetState,
+                    sheetState = daySheetState,
                     onDismissRequest = vm::dismissDayDetails
                 ) {
                     val hasPlanner = plannedDates.contains(date)
@@ -197,6 +213,21 @@ fun CalendarScreen(
                             Text("No planned meals for this day.")
                         }
                     }
+                }
+            }
+
+            if (settingsSheetOpen) {
+                ModalBottomSheet(
+                    sheetState = settingsSheetState,
+                    onDismissRequest = vm::dismissSettingsSheet
+                ) {
+                    CalendarSettingsSheet(
+                        options = calendarSuccessOptions,
+                        selectedKeys = selectedCalendarSuccessKeys,
+                        onToggle = vm::onCalendarSuccessToggle,
+                        onClearAll = vm::clearCalendarSuccessSelectedKeys,
+                        onDismiss = vm::dismissSettingsSheet
+                    )
                 }
             }
         }
