@@ -52,7 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -1476,11 +1475,9 @@ private fun ServingSection(
                 if (servingSizeD != null && bridgeD != null) servingSizeD * bridgeD else null
 
             var mlPerServingText by rememberSaveable { mutableStateOf("") }
-            var mlPerServingFocused by rememberSaveable { mutableStateOf(false) }
 
-            if (!mlPerServingFocused) {
-                val next = mlPerServingComputed?.toString().orEmpty()
-                if (mlPerServingText != next) mlPerServingText = next
+            if (mlPerServingText.isBlank() && mlPerServingComputed != null) {
+                mlPerServingText = mlPerServingComputed.toString()
             }
 
             OutlinedTextField(
@@ -1497,14 +1494,7 @@ private fun ServingSection(
                 },
                 label = { Text("mL per serving") },
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { focus ->
-                        mlPerServingFocused = focus.isFocused
-                        if (!focus.isFocused) {
-                            mlPerServingText = mlPerServingComputed?.toString().orEmpty()
-                        }
-                    }
+                modifier = Modifier.fillMaxWidth()
             )
 
             if (servingSizeD != null && mlPerServingComputed != null) {
@@ -1539,11 +1529,9 @@ private fun ServingSection(
                 else null
 
             var gramsPerServingText by rememberSaveable { mutableStateOf("") }
-            var gramsPerServingFocused by rememberSaveable { mutableStateOf(false) }
 
-            if (!gramsPerServingFocused) {
-                val next = gramsPerServingComputed?.toString().orEmpty()
-                if (gramsPerServingText != next) gramsPerServingText = next
+            if (gramsPerServingText.isBlank() && gramsPerServingComputed != null) {
+                gramsPerServingText = gramsPerServingComputed.toString()
             }
 
             OutlinedTextField(
@@ -1561,14 +1549,7 @@ private fun ServingSection(
                 },
                 label = { Text("Grams per serving") },
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { focus ->
-                        gramsPerServingFocused = focus.isFocused
-                        if (!focus.isFocused) {
-                            gramsPerServingText = gramsPerServingComputed?.toString().orEmpty()
-                        }
-                    }
+                modifier = Modifier.fillMaxWidth()
             )
 
             if (gramsPerUnitD != null) {
