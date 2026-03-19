@@ -44,6 +44,7 @@ fun DayLogScreen(
     onCreateFood: (String) -> Unit,
     onCreateFoodWithBarcode: (String) -> Unit = {},
     onOpenFoodEditor: (Long) -> Unit = {},
+    onOpenQuickAddFavorites: () -> Unit = {},
     onDelete: ((Long) -> Unit)? = null,
     vm: DayLogViewModel = hiltViewModel()
 ) {
@@ -79,6 +80,7 @@ fun DayLogScreen(
             onCreateFood = onCreateFood,
             onCreateFoodWithBarcode = onCreateFoodWithBarcode,
             onOpenFoodEditor = onOpenFoodEditor,
+            onOpenFavorites = onOpenQuickAddFavorites,
             logDate = date,
             editingLogId = editingLogId
         )

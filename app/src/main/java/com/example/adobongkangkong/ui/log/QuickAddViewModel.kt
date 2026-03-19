@@ -266,6 +266,8 @@ class QuickAddViewModel @Inject constructor(
             nutritionChoiceMessageFlow.value = null
             isTodayPlanPickerOpenFlow.value = false
 
+            clearEditIdentityState()
+
             try {
                 val entry = logRepository.getById(logId)
                 if (entry == null) {
@@ -279,7 +281,7 @@ class QuickAddViewModel @Inject constructor(
                     return@launch
                 }
 
-                val food = foodRepository.getByStableId(stableId)
+                val food = resolveFoodForLogEntry(entry, stableId)
                 if (food == null) {
                     errorFlow.value = "Logged food no longer exists."
                     return@launch
@@ -302,6 +304,42 @@ class QuickAddViewModel @Inject constructor(
                 isSavingFlow.value = false
             }
         }
+    }
+
+    private suspend fun resolveFoodForLogEntry(
+        entry: LogEntry,
+        stableId: String
+    ): Food? {
+        foodRepository.getByStableId(stableId)?.let { return it }
+
+        val recipeId = recipeDao.getIdByStableId(stableId) ?: return null
+        val recipe = recipeDao.getById(recipeId) ?: return null
+
+        if (entry.recipeBatchId != null) {
+            Log.d(
+                "Meow",
+                "QuickAddViewModel > startEdit resolved recipe stableId=$stableId recipeId=$recipeId foodId=${recipe.foodId} batchId=${entry.recipeBatchId}"
+            )
+        }
+
+        return foodRepository.getById(recipe.foodId)
+    }
+
+    private fun clearEditIdentityState() {
+        selectedFoodFlow.value = null
+        servingsFlow.value = 1.0
+        inputModeFlow.value = InputMode.SERVINGS
+        inputUnitFlow.value = ServingUnit.G
+        inputAmountFlow.value = null
+
+        mealSlotFlow.value = null
+
+        selectedRecipeIdFlow.value = null
+        selectedRecipeStableIdFlow.value = null
+        selectedRecipeServingsYieldDefaultFlow.value = null
+        selectedBatchIdFlow.value = null
+
+        errorFlow.value = null
     }
 
     private fun restoreAmountForEdit(

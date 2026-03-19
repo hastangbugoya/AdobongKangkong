@@ -186,6 +186,10 @@ fun AppNavHost(
                 },
                 onOpenFoodEditor = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
+                },
+                onOpenQuickAddFavorites = {
+                    entry.savedStateHandle[KEY_FOOD_PICK_INITIAL_FILTER] = FOOD_PICK_INITIAL_FILTER_FAVORITES
+                    navController.navigate(NavRoutes.Foods.pickFood)
                 }
             )
         }

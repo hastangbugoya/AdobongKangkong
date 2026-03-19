@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.logging
 
+import android.util.Log
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.logging.model.AmountInput
@@ -9,7 +10,9 @@ import com.example.adobongkangkong.domain.model.LogUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ComputeRecipeBatchNutritionUseCase
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
+import com.example.adobongkangkong.domain.nutrition.dividedBy
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.toRecipe
@@ -24,16 +27,6 @@ import com.example.adobongkangkong.domain.usage.UsageContext
 import javax.inject.Inject
 import kotlin.math.abs
 
-/**
- * Updates an existing log entry while keeping its identity/source fixed.
- *
- * Edit rules:
- * - Existing log rows can change amount and meal slot.
- * - Food / recipe identity is locked. If the wrong item was logged, the row should be deleted and
- *   recreated rather than retargeted to a different item.
- * - Nutrition can be recomputed from the current source definition or scaled from the stored
- *   original snapshot, depending on the user's choice when a material difference is detected.
- */
 class UpdateLogEntryUseCase @Inject constructor(
     private val foodRepository: FoodRepository,
     private val snapshotRepository: FoodNutritionSnapshotRepository,
@@ -70,10 +63,21 @@ class UpdateLogEntryUseCase @Inject constructor(
         val existing = logRepository.getById(logId)
             ?: return Result.Error("Log entry not found")
 
+        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
+
+        // No-op edit: nothing meaningful changed, so do not recompute nutrition or prompt.
+        if (
+            existing.amount == storedAmount &&
+            existing.unit == storedUnit &&
+            existing.mealSlot == mealSlot
+        ) {
+            return Result.Success(existing.id)
+        }
+
         val stableId = existing.foodStableId
             ?: return Result.Error("Log entry is missing food identity")
 
-        val food = foodRepository.getByStableId(stableId)
+        val food = resolveFoodForStableId(stableId)
             ?: return Result.Error("Logged food no longer exists")
 
         val recomputed = if (!food.isRecipe) {
@@ -105,7 +109,12 @@ class UpdateLogEntryUseCase @Inject constructor(
                 )
             }
 
-            materiallyDifferent(existing.nutrients, recomputedNutrients) -> {
+            materiallyDifferentNormalizedBasis(
+                existing = existing,
+                current = recomputedNutrients,
+                food = food,
+                editedAmountInput = amountInput
+            ) -> {
                 return Result.NutritionChoiceRequired(
                     existingEntry = existing,
                     recomputedNutrients = recomputedNutrients
@@ -114,8 +123,6 @@ class UpdateLogEntryUseCase @Inject constructor(
 
             else -> recomputedNutrients
         }
-
-        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
 
         val updatedEntry = existing.copy(
             itemName = food.name,
@@ -127,6 +134,15 @@ class UpdateLogEntryUseCase @Inject constructor(
 
         logRepository.update(updatedEntry)
         return Result.Success(existing.id)
+    }
+
+    private suspend fun resolveFoodForStableId(stableId: String): Food? {
+        foodRepository.getByStableId(stableId)?.let { return it }
+
+        val recipeId = recipeDao.getIdByStableId(stableId) ?: return null
+        val recipe = recipeDao.getById(recipeId) ?: return null
+
+        return foodRepository.getById(recipe.foodId)
     }
 
     private sealed interface RecomputeResult {
@@ -288,19 +304,103 @@ class UpdateLogEntryUseCase @Inject constructor(
         return existing.nutrients.scaledBy(factor)
     }
 
-    private fun materiallyDifferent(
-        old: NutrientMap,
-        new: NutrientMap,
-        absoluteTolerance: Double = 0.01,
-        relativeTolerance: Double = 0.02
+    private fun materiallyDifferentNormalizedBasis(
+        existing: LogEntry,
+        current: NutrientMap,
+        food: Food,
+        editedAmountInput: AmountInput,
+        absoluteTolerance: Double = 0.05,
+        relativeTolerance: Double = 0.05
     ): Boolean {
-        val keys = old.keys() + new.keys()
-        return keys.any { key ->
-            val a = old[key] ?: 0.0
-            val b = new[key] ?: 0.0
-            val diff = abs(a - b)
-            val scale = maxOf(abs(a), abs(b), 1.0)
-            diff > absoluteTolerance && diff / scale > relativeTolerance
+        val oldCanonicalAmount = canonicalAmountForStoredLog(
+            existing = existing,
+            food = food
+        ) ?: return false
+
+        val newCanonicalAmount = canonicalAmountForEditedInput(
+            amountInput = editedAmountInput,
+            food = food
+        ) ?: return false
+
+        if (oldCanonicalAmount <= 0.0 || newCanonicalAmount <= 0.0) {
+            return false
         }
+
+        val oldBasis = existing.nutrients.dividedBy(oldCanonicalAmount)
+        val currentBasis = current.dividedBy(newCanonicalAmount)
+
+        return SENTINEL_NUTRIENTS.any { key ->
+            val oldValue = oldBasis[key]
+            val currentValue = currentBasis[key]
+
+            val diff = abs(oldValue - currentValue)
+            val safeOld = if (abs(oldValue) < 1e-6) 0.0 else oldValue
+            val safeCurrent = if (abs(currentValue) < 1e-6) 0.0 else currentValue
+            val scale = maxOf(abs(safeOld), abs(safeCurrent), 1.0)
+
+            val changed = diff > absoluteTolerance && (diff / scale) > relativeTolerance
+            if (changed) {
+                Log.d(
+                    "NutritionChange",
+                    "Sentinel changed: key=$key oldBasis=$oldValue currentBasis=$currentValue diff=$diff"
+                )
+            }
+            changed
+        }
+    }
+
+    private fun canonicalAmountForStoredLog(
+        existing: LogEntry,
+        food: Food
+    ): Double? {
+        return when (existing.unit) {
+            LogUnit.GRAM_COOKED -> existing.amount.takeIf { it > 0.0 }
+
+            LogUnit.SERVING,
+            LogUnit.ITEM -> {
+                val gramsPerServing = when {
+                    existing.gramsPerServingCooked != null &&
+                            existing.gramsPerServingCooked > 0.0 -> {
+                        existing.gramsPerServingCooked
+                    }
+
+                    else -> food.gramsPerServingResolved()
+                }
+
+                if (gramsPerServing != null && gramsPerServing > 0.0) {
+                    existing.amount * gramsPerServing
+                } else {
+                    existing.amount.takeIf { it > 0.0 }
+                }
+            }
+        }
+    }
+
+    private fun canonicalAmountForEditedInput(
+        amountInput: AmountInput,
+        food: Food
+    ): Double? {
+        return when (amountInput) {
+            is AmountInput.ByGrams -> amountInput.grams.takeIf { it > 0.0 }
+
+            is AmountInput.ByServings -> {
+                val gramsPerServing = food.gramsPerServingResolved()
+                if (gramsPerServing != null && gramsPerServing > 0.0) {
+                    amountInput.servings * gramsPerServing
+                } else {
+                    amountInput.servings.takeIf { it > 0.0 }
+                }
+            }
+        }
+    }
+
+    private companion object {
+        val SENTINEL_NUTRIENTS = listOf(
+            NutrientKey.CALORIES_KCAL,
+            NutrientKey.PROTEIN_G,
+            NutrientKey.CARBS_G,
+            NutrientKey.FAT_G,
+            NutrientKey.SODIUM_MG
+        )
     }
 }
