@@ -440,7 +440,7 @@ private fun DashboardBottomActionBar(
                 modifier = Modifier.weight(1f))
             {
                 Icon(
-                    painter = painterResource(R.drawable.tasks),
+                    painter = painterResource(R.drawable.calendar_days),
                     contentDescription = "Open Calendar",
                 )
             }
