@@ -225,6 +225,7 @@ fun DashboardScreen(
                 onOpenMeowLogs = onOpenMeowLogs,
                 onOpenPlanner = onOpenPlanner,
                 onOpenBackup = onOpenBackup,
+                onDebugReset = vm::runDebugReset
             )
         }
     }

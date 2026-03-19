@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -31,11 +32,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.adobongkangkong.BuildConfig
 import com.example.adobongkangkong.domain.model.TargetDraft
 import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
+
+enum class DashboardDebugResetDomain(
+    val displayName: String
+) {
+    LOGS("Logs"),
+    RECIPE_BATCHES("Recipe batches"),
+    PLANNER("Planner data")
+}
+
+enum class DashboardDebugResetScope(
+    val displayName: String
+) {
+    ALL("All"),
+    BEFORE_SELECTED_DATE("Before selected date"),
+    AFTER_SELECTED_DATE("After selected date")
+}
 
 @Composable
 fun DashboardSettingsSheet(
@@ -62,7 +80,13 @@ fun DashboardSettingsSheet(
     onOpenPlanner: () -> Unit,
 
     // NEW: Full backup/restore screen (DB + images)
-    onOpenBackup: () -> Unit
+    onOpenBackup: () -> Unit,
+
+    // NEW: Debug reset (caller applies currently selected dashboard date)
+    onDebugReset: (
+        domains: Set<DashboardDebugResetDomain>,
+        scope: DashboardDebugResetScope
+    ) -> Unit
 ) {
     Column(
         Modifier
@@ -258,7 +282,6 @@ fun DashboardSettingsSheet(
 
         Spacer(Modifier.height(12.dp))
 
-        // NEW: Full app backup/restore (DB + images)
         Button(
             onClick = {
                 onDismiss()
@@ -267,6 +290,78 @@ fun DashboardSettingsSheet(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Backup & Restore")
+        }
+
+        if (BuildConfig.DEBUG) {
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+
+            Text("Debug Reset", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Uses the dashboard selected date for before/after actions.",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            var resetLogs by remember { mutableStateOf(true) }
+            var resetRecipeBatches by remember { mutableStateOf(false) }
+            var resetPlanner by remember { mutableStateOf(false) }
+
+            DebugResetCheckboxRow(
+                label = DashboardDebugResetDomain.LOGS.displayName,
+                checked = resetLogs,
+                onCheckedChange = { resetLogs = it }
+            )
+
+            DebugResetCheckboxRow(
+                label = DashboardDebugResetDomain.RECIPE_BATCHES.displayName,
+                checked = resetRecipeBatches,
+                onCheckedChange = { resetRecipeBatches = it }
+            )
+
+            DebugResetCheckboxRow(
+                label = DashboardDebugResetDomain.PLANNER.displayName,
+                checked = resetPlanner,
+                onCheckedChange = { resetPlanner = it }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            var resetScope by remember {
+                mutableStateOf(DashboardDebugResetScope.ALL)
+            }
+
+            DebugResetScopeDropdown(
+                selectedScope = resetScope,
+                onSelect = { resetScope = it }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            val selectedDomains = remember(resetLogs, resetRecipeBatches, resetPlanner) {
+                buildSet {
+                    if (resetLogs) add(DashboardDebugResetDomain.LOGS)
+                    if (resetRecipeBatches) add(DashboardDebugResetDomain.RECIPE_BATCHES)
+                    if (resetPlanner) add(DashboardDebugResetDomain.PLANNER)
+                }
+            }
+
+            Button(
+                enabled = selectedDomains.isNotEmpty(),
+                onClick = {
+                    onDismiss()
+                    onDebugReset(
+                        selectedDomains,
+                        resetScope
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Run Debug Reset")
+            }
         }
 
 //        Spacer(Modifier.height(16.dp))
@@ -280,6 +375,64 @@ fun DashboardSettingsSheet(
 //        ) {
 //            Text("Meal Planner")
 //        }
+    }
+}
+
+@Composable
+private fun DebugResetCheckboxRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label)
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DebugResetScopeDropdown(
+    selectedScope: DashboardDebugResetScope,
+    onSelect: (DashboardDebugResetScope) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedScope.displayName,
+            onValueChange = { },
+            readOnly = true,
+            label = { Text("Reset scope") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DashboardDebugResetScope.entries.forEach { scope ->
+                DropdownMenuItem(
+                    text = { Text(scope.displayName) },
+                    onClick = {
+                        onSelect(scope)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 

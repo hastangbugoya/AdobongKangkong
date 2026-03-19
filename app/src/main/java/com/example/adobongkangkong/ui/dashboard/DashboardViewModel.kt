@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.domain.debug.DebugResetUseCase
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
@@ -59,6 +60,7 @@ import com.example.adobongkangkong.domain.model.TodayLogItem
  *   - Log foods (servings/grams) with domain validation
  *   - Edit pinned nutrients + per-day nutrient targets (min/max/target)
  *   - Import/Export + nutrient catalog sync
+ *   - Debug reset actions for logs / recipe batches / planner
  *
  * Notes / common pitfall:
  * - The Dashboard layer should NOT construct FoodRef objects or build nutrient snapshots.
@@ -81,7 +83,6 @@ class DashboardViewModel @Inject constructor(
     private val logFood: LogFoodUseCase,
     private val observeDashboardPinOptions: ObserveDashboardPinOptionsUseCase,
 
-
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
     private val hasAnyUserData: HasAnyUserDataUseCase,
     private val exportFoodsAndRecipes: ExportFoodsAndRecipesUseCase,
@@ -95,6 +96,8 @@ class DashboardViewModel @Inject constructor(
     private val userPinnedNutrientRepository: UserPinnedNutrientRepository,
     private val setPinnedDashboardNutrientsUseCase: SetPinnedDashboardNutrientsUseCase,
     private val upsertUserNutrientTargetUseCase: UpsertUserNutrientTargetUseCase,
+
+    private val debugResetUseCase: DebugResetUseCase,
 
     private val application: Application
 ) : ViewModel() {
@@ -138,11 +141,9 @@ class DashboardViewModel @Inject constructor(
                 emptyList()
             )
 
-
     private val pinnedKeysFlow: StateFlow<List<NutrientKey>> =
         userPinnedNutrientRepository.observePinnedKeys()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
 
     val nutrientPreferences: StateFlow<List<UserNutrientPreference>> =
         userPinnedNutrientRepository.observePreferences()
@@ -189,7 +190,6 @@ class DashboardViewModel @Inject constructor(
             .map { it.targetDraft }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    // 1) First combine 5 flows (typed overload exists)
     private val coreStateFlow =
         combine(
             selectedDateFlow,
@@ -207,7 +207,6 @@ class DashboardViewModel @Inject constructor(
             )
         }
 
-    // 2) Then combine with overlay (typed overload for 2 flows exists)
     val state: StateFlow<DashboardState> =
         combine(coreStateFlow, _overlay) { core, overlay ->
             DashboardState(
@@ -241,7 +240,6 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun onDismissSettingsSheet() {
-        // Only closes the sheet; draft is left intact unless UI calls cancelTargetEdit().
         _overlay.update { it.copy(settingsSheetOpen = false) }
     }
 
@@ -354,7 +352,6 @@ class DashboardViewModel @Inject constructor(
     // endregion
 
     // region Import / Export / Sync
-    // region Import / Export / Sync
 
     fun devSyncNutrients() {
         viewModelScope.launch {
@@ -394,12 +391,10 @@ class DashboardViewModel @Inject constructor(
         val uri = _overlay.value.pendingRestoreUri ?: return
 
         viewModelScope.launch(Dispatchers.IO) {
-            // Close dialog first
             _overlay.update { o -> o.copy(restoreConfirmOpen = false) }
 
             runImportReplace(uri)
 
-            // Clear pending
             _overlay.update { o -> o.copy(pendingRestoreUri = null) }
         }
     }
@@ -424,7 +419,6 @@ class DashboardViewModel @Inject constructor(
             ?: throw IllegalStateException("Unable to open input stream")
 
         input.use { stream ->
-            // NOTE: add this parameter to your use case if it doesn't exist yet
             importFoodsAndRecipes(
                 inputStream = stream,
                 replaceExisting = true
@@ -459,6 +453,56 @@ class DashboardViewModel @Inject constructor(
 
     // endregion
 
+    // region Debug reset
+
+    fun runDebugReset(
+        domains: Set<DashboardDebugResetDomain>,
+        scope: DashboardDebugResetScope
+    ) {
+        if (domains.isEmpty()) return
+
+        val mappedDomains = domains.mapTo(mutableSetOf()) { it.toUseCaseDomain() }
+        val mappedScope = scope.toUseCaseScope()
+        val selectedDate = selectedDateFlow.value
+
+        _overlay.update { it.copy(settingsSheetOpen = false) }
+
+        viewModelScope.launch {
+            try {
+                debugResetUseCase(
+                    domains = mappedDomains,
+                    scope = mappedScope,
+                    selectedDate = selectedDate,
+                    zoneId = zoneId
+                )
+
+                val domainSummary = domains
+                    .map { it.displayName }
+                    .joinToString(", ")
+
+                _snackbar.value = "Debug reset completed: $domainSummary (${scope.displayName})"
+            } catch (e: Exception) {
+                _snackbar.value = "Debug reset failed: ${e.message ?: "unknown error"}"
+            }
+        }
+    }
+
+    private fun DashboardDebugResetDomain.toUseCaseDomain(): DebugResetUseCase.ResetDomain =
+        when (this) {
+            DashboardDebugResetDomain.LOGS -> DebugResetUseCase.ResetDomain.LOGS
+            DashboardDebugResetDomain.RECIPE_BATCHES -> DebugResetUseCase.ResetDomain.RECIPE_BATCHES
+            DashboardDebugResetDomain.PLANNER -> DebugResetUseCase.ResetDomain.PLANNER
+        }
+
+    private fun DashboardDebugResetScope.toUseCaseScope(): DebugResetUseCase.ResetScope =
+        when (this) {
+            DashboardDebugResetScope.ALL -> DebugResetUseCase.ResetScope.ALL
+            DashboardDebugResetScope.BEFORE_SELECTED_DATE ->
+                DebugResetUseCase.ResetScope.BEFORE_SELECTED_DATE
+
+            DashboardDebugResetScope.AFTER_SELECTED_DATE ->
+                DebugResetUseCase.ResetScope.AFTER_SELECTED_DATE
+        }
 
     // endregion
 
@@ -472,7 +516,6 @@ class DashboardViewModel @Inject constructor(
             )
         }
     }
-
 
     fun setPinnedFromSettings(key: NutrientKey, isPinned: Boolean) {
         viewModelScope.launch {
@@ -581,7 +624,6 @@ class DashboardViewModel @Inject constructor(
         val target = draft.target.toDoubleOrNull()
         val max = draft.max.toDoubleOrNull()
 
-        // Require at least one number; empty fields mean "unset".
         if (min == null && target == null && max == null) {
             _overlay.update { overlay ->
                 overlay.copy(
@@ -591,8 +633,6 @@ class DashboardViewModel @Inject constructor(
             return
         }
 
-        // Optional ordering validation (light UI guard; domain can also enforce):
-        // If all 3 are present, require min <= target <= max.
         val orderingOk =
             (min == null || target == null || min <= target) &&
                     (target == null || max == null || target <= max) &&
@@ -627,7 +667,6 @@ class DashboardViewModel @Inject constructor(
             } catch (e: Exception) {
                 _overlay.update { overlay ->
                     val current = overlay.targetDraft
-                    // Preserve whatever draft is currently present (user might have typed more while saving)
                     if (current == null) overlay
                     else overlay.copy(
                         targetDraft = current.copy(
@@ -683,7 +722,6 @@ private data class DashboardOverlay(
     val pendingRestoreUri: Uri? = null
 )
 
-// Local helper (private) to avoid introducing “new public identifiers”
 private data class CoreDash(
     val date: LocalDate,
     val totals: MacroTotals,
