@@ -3,12 +3,85 @@ package com.example.adobongkangkong.data.local.db.dao
 import androidx.room.Dao
 import androidx.room.Query
 
+/**
+ * DebugResetDao
+ *
+ * Purpose:
+ * - Provides destructive debug-only cleanup operations for development/testing.
+ *
+ * Design rules:
+ * - Itemized by domain (logs, recipe batches, planner)
+ * - Each domain supports:
+ *   - clear all
+ *   - clear before selected date
+ *   - clear after selected date
+ *
+ * Date semantics:
+ * - Logs / planner use ISO day string (YYYY-MM-DD)
+ * - Recipe batches use epoch millis because RecipeBatchEntity stores [createdAt] as Instant
+ *
+ * Safety:
+ * - No implicit deletes
+ * - No cross-domain coupling
+ * - Caller composes operations explicitly
+ */
 @Dao
 interface DebugResetDao {
 
-    // Keep: foods, food_nutrients, nutrients, nutrient_aliases, recipes, recipe_ingredient
+    /* ============================================================
+     * A) LOGS
+     * ============================================================ */
+
+    @Query("DELETE FROM log_entries")
+    suspend fun clearLogEntries()
+
+    @Query(
+        """
+        DELETE FROM log_entries
+        WHERE logDateIso < :dateIso
+        """
+    )
+    suspend fun clearLogEntriesBefore(dateIso: String)
+
+    @Query(
+        """
+        DELETE FROM log_entries
+        WHERE logDateIso > :dateIso
+        """
+    )
+    suspend fun clearLogEntriesAfter(dateIso: String)
+
+    /* ============================================================
+     * B) RECIPE BATCHES
+     * ============================================================ */
+
     @Query("DELETE FROM recipe_batches")
     suspend fun clearRecipeBatches()
+
+    @Query(
+        """
+        DELETE FROM recipe_batches
+        WHERE createdAt < :startOfSelectedDayEpochMs
+        """
+    )
+    suspend fun clearRecipeBatchesBefore(startOfSelectedDayEpochMs: Long)
+
+    @Query(
+        """
+        DELETE FROM recipe_batches
+        WHERE createdAt > :endOfSelectedDayEpochMs
+        """
+    )
+    suspend fun clearRecipeBatchesAfter(endOfSelectedDayEpochMs: Long)
+
+    /* ============================================================
+     * C) PLANNER DATA
+     * ============================================================ */
+
+    /**
+     * IMPORTANT:
+     * - Must delete children first (planned_items) before parents (planned_meals)
+     */
 
     @Query("DELETE FROM planned_items")
     suspend fun clearPlannedItems()
@@ -16,8 +89,47 @@ interface DebugResetDao {
     @Query("DELETE FROM planned_meals")
     suspend fun clearPlannedMeals()
 
-    @Query("DELETE FROM log_entries")
-    suspend fun clearLogEntries()
+    @Query(
+        """
+        DELETE FROM planned_items
+        WHERE mealId IN (
+            SELECT id FROM planned_meals
+            WHERE date < :dateIso
+        )
+        """
+    )
+    suspend fun clearPlannedItemsBefore(dateIso: String)
+
+    @Query(
+        """
+        DELETE FROM planned_meals
+        WHERE date < :dateIso
+        """
+    )
+    suspend fun clearPlannedMealsBefore(dateIso: String)
+
+    @Query(
+        """
+        DELETE FROM planned_items
+        WHERE mealId IN (
+            SELECT id FROM planned_meals
+            WHERE date > :dateIso
+        )
+        """
+    )
+    suspend fun clearPlannedItemsAfter(dateIso: String)
+
+    @Query(
+        """
+        DELETE FROM planned_meals
+        WHERE date > :dateIso
+        """
+    )
+    suspend fun clearPlannedMealsAfter(dateIso: String)
+
+    /* ============================================================
+     * EXISTING GLOBAL CLEANUPS (UNCHANGED)
+     * ============================================================ */
 
     @Query("DELETE FROM meal_template_items")
     suspend fun clearMealTemplateItems()
