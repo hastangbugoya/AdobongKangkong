@@ -199,7 +199,7 @@ private fun ServingUnit.mlPerUnit(): Double = when (this) {
     ServingUnit.TSP -> ServingUnit.TSP_US.mlPerUnit()
     ServingUnit.QUART -> ServingUnit.QUART_US.mlPerUnit()
 
-    else ->  throw IllegalArgumentException(
+    else -> throw IllegalArgumentException(
         "ServingUnit $this is not a volume unit"
     )
 }
@@ -218,7 +218,9 @@ fun ServingUnit.Companion.isAmbiguousForGrounding(unit: ServingUnit): Boolean {
         ServingUnit.CUP,
         ServingUnit.CAN,
         ServingUnit.BOTTLE,
-        ServingUnit.JAR -> true
+        ServingUnit.JAR,
+        ServingUnit.SERVING,
+        ServingUnit.OTHER -> true
         else -> false
     }
 }
@@ -237,7 +239,9 @@ fun ServingUnit.isAmbiguousForGrounding(): Boolean {
         ServingUnit.CUP,
         ServingUnit.CAN,
         ServingUnit.BOTTLE,
-        ServingUnit.JAR -> true
+        ServingUnit.JAR,
+        ServingUnit.SERVING,
+        ServingUnit.OTHER -> true
         else -> false
     }
 }
