@@ -156,13 +156,6 @@ class FoodsCsvImporter @Inject constructor(
      * If serving unit is "cup/tbsp/serving/etc", we need grams-per-serving to convert servings → grams.
      * If serving unit is already grams/oz/lb/mg, we do not need grams-per-serving.
      */
-//    private fun ServingUnit.requiresGramsPerServing(): Boolean = when (this) {
-//        ServingUnit.G,
-//        ServingUnit.MG,
-//        ServingUnit.OZ,
-//        ServingUnit.LB -> false
-//        else -> true
-//    }
 
     /**
      * Adds an import warning keyed by CSV row index.
@@ -194,14 +187,6 @@ class FoodsCsvImporter @Inject constructor(
         return row.getOrNull(idx)
     }
 
-    // Replace the old decideBasisType(...) with these helpers + “plan” functions.
-//
-// Assumptions:
-// - ServingUnit has at least G and ML (adjust names if yours differ).
-// - BasisType is the enum you updated in FoodNutrientEntity.kt:
-//     USDA_REPORTED_SERVING, PER_100G, PER_100ML
-// - This is Milestone 0/1 compatible (no UI, just correct basis decisions).
-
     private fun canComputePer100g(
         servingUnit: ServingUnit,
         gramsPerServingUnit: Double?
@@ -212,8 +197,14 @@ class FoodsCsvImporter @Inject constructor(
         }
     }
 
-    private fun canComputePer100ml(servingUnit: ServingUnit): Boolean {
-        return servingUnit == ServingUnit.ML
+    private fun canComputePer100ml(
+        servingUnit: ServingUnit,
+        mlPerServingUnit: Double?
+    ): Boolean {
+        return when (servingUnit) {
+            ServingUnit.ML -> true
+            else -> (mlPerServingUnit != null && mlPerServingUnit > 0.0)
+        }
     }
 
     /**
@@ -228,9 +219,8 @@ class FoodsCsvImporter @Inject constructor(
         return buildSet {
             add(BasisType.USDA_REPORTED_SERVING)
 
-            // Only compute per-100 normalization when the USDA serving is in that dimension
             if (usdaServingUnit == ServingUnit.G) add(BasisType.PER_100G)
-            if (usdaServingUnit == ServingUnit.ML) add(BasisType.PER_100ML) // keep even if unused for now
+            if (usdaServingUnit == ServingUnit.ML) add(BasisType.PER_100ML)
         }
     }
 
@@ -238,20 +228,20 @@ class FoodsCsvImporter @Inject constructor(
      * For manually created foods (non-USDA):
      * Pick a single "default" storage basis.
      *
-     * If you can compute per-100g (serving is grams OR unit is backed by gramsPerServingUnit),
-     * prefer PER_100G. Otherwise fall back to a serving-based basis.
-     *
-     * NOTE: Using USDA_REPORTED_SERVING as the serving-based fallback is fine for now.
-     * If you want stricter semantics later, add USER_DEFINED_SERVING to BasisType.
+     * Preference order:
+     * - PER_100G when grams grounding exists
+     * - PER_100ML when mL grounding exists
+     * - USDA_REPORTED_SERVING otherwise
      */
     private fun decideDefaultBasisForManualFood(
         servingUnit: ServingUnit,
-        gramsPerServingUnit: Double?
+        gramsPerServingUnit: Double?,
+        mlPerServingUnit: Double?
     ): BasisType {
-        return if (canComputePer100g(servingUnit, gramsPerServingUnit)) {
-            BasisType.PER_100G
-        } else {
-            BasisType.USDA_REPORTED_SERVING
+        return when {
+            canComputePer100g(servingUnit, gramsPerServingUnit) -> BasisType.PER_100G
+            canComputePer100ml(servingUnit, mlPerServingUnit) -> BasisType.PER_100ML
+            else -> BasisType.USDA_REPORTED_SERVING
         }
     }
 
@@ -281,7 +271,6 @@ class FoodsCsvImporter @Inject constructor(
         }
     }
 
-
     /**
      * Returns the list of column indices for a given header name.
      * Used for handling duplicate columns such as "Cu".
@@ -308,6 +297,50 @@ class FoodsCsvImporter @Inject constructor(
         }
 
         return nonEmpty.firstOrNull()
+    }
+
+    /**
+     * CSV helper for entries like:
+     * - "400ml"
+     * - "8floz"
+     * - "12 fl oz"
+     *
+     * We do NOT convert volume -> grams here.
+     */
+    private data class ParsedVolume(
+        val milliliters: Double?,
+        val original: String
+    )
+
+    private fun parseWeightToMilliliters(raw: String?): ParsedVolume {
+        val s = raw?.trim().orEmpty()
+        if (s.isBlank()) return ParsedVolume(null, s)
+
+        val compact = s.lowercase().replace(" ", "")
+
+        return when {
+            compact.endsWith("ml") -> {
+                val number = compact.removeSuffix("ml").toDoubleOrNull()
+                ParsedVolume(number?.takeIf { it > 0.0 }, s)
+            }
+
+            compact.endsWith("floz") -> {
+                val number = compact.removeSuffix("floz").toDoubleOrNull()
+                ParsedVolume(number?.takeIf { it > 0.0 }?.times(29.5735295625), s)
+            }
+
+            compact.endsWith("fl.oz") -> {
+                val number = compact.removeSuffix("fl.oz").toDoubleOrNull()
+                ParsedVolume(number?.takeIf { it > 0.0 }?.times(29.5735295625), s)
+            }
+
+            compact.endsWith("fl oz") -> {
+                val number = compact.removeSuffix("fl oz").toDoubleOrNull()
+                ParsedVolume(number?.takeIf { it > 0.0 }?.times(29.5735295625), s)
+            }
+
+            else -> ParsedVolume(null, s)
+        }
     }
 
     suspend fun importFromAssets(
@@ -424,7 +457,7 @@ class FoodsCsvImporter @Inject constructor(
             // Resolve nutrient ids by header
             val nutrientIdByHeader: Map<String, Long> = buildMap {
                 for (def in CsvNutrientCatalog.defs) {
-                    val headerKey = def.csvHeader.trim().lowercase() // normalize to match headerIndexNormalized
+                    val headerKey = def.csvHeader.trim().lowercase()
                     if (!headerIndex.containsKey(headerKey)) continue
 
                     val id = nutrientDao.getIdByCode(def.code)
@@ -462,11 +495,10 @@ class FoodsCsvImporter @Inject constructor(
 
             var skipped = 0
             var warnMissingGrams = 0
-            var warnDuplicateCuResolved = 0 // for notes only (run warningCount remains warnMissingGrams)
+            var warnDuplicateCuResolved = 0
             var errorCount = 0
 
             for (i in 1 until lines.size) {
-                // existing per-line logging (kept)
                 Log.d("Meow", lines[i])
 
                 val row = CsvParser.parseLine(lines[i])
@@ -482,22 +514,25 @@ class FoodsCsvImporter @Inject constructor(
 
                 val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
                 val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
+                val parsedVolume = parseWeightToMilliliters(weightRaw)
 
-                if (!weightRaw.isNullOrBlank() && weightRaw.contains("g", ignoreCase = true) && parsedWeight.grams == null) {
+                if (!weightRaw.isNullOrBlank() &&
+                    weightRaw.contains("g", ignoreCase = true) &&
+                    !weightRaw.contains("mg", ignoreCase = true) &&
+                    parsedWeight.grams == null
+                ) {
                     issues.warn(i, ImportIssueCode.BAD_WEIGHT_FORMAT)
                 }
-
-                // Warn but import anyway if volume-like serving unit requires grams-per-serving and it is missing.
 
                 val grounding = validateFoodForUsage.validateServingsGroundingOnly(
                     servingUnit = servingUnit,
                     gramsPerServingUnit = parsedWeight.grams,
-                    mlPerServingUnit = null, // importer doesn’t parse ml bridge yet
-                    context = UsageContext.LOGGING // or RECIPE; pick one, LOGGING is fine
+                    mlPerServingUnit = parsedVolume.milliliters,
+                    context = UsageContext.LOGGING
                 )
                 if (grounding is FoodValidationResult.Blocked &&
                     grounding.reason == FoodValidationResult.Reason.MissingGramsPerServing
-                )  {
+                ) {
                     issues.warn(i, ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT)
                     warnMissingGrams++
                 }
@@ -515,30 +550,40 @@ class FoodsCsvImporter @Inject constructor(
                  *
                  * Why do this?
                  * - It makes imports idempotent: importing the same CSV twice targets the same food ID.
-                 *
-                 * Operational caution (product/design):
-                 * - Do not recompute this ID during normal food edits; preserve the existing DB primary key.
-                 * - If users edit fields that contribute to the stable ID, future imports of the original CSV row
-                 *   may reintroduce a row with the original ID (depending on upsert strategy).
                  */
                 val foodId = CsvUnits.stableFoodId(name, servRaw, weightRaw)
 
-                foods += FoodEntity(
-                    id = foodId,
-                    name = name,
-                    brand = null,
-                    servingSize = servingSize,
-                    servingUnit = servingUnit,
-                    servingsPerPackage = null,
-                    gramsPerServingUnit = parsedWeight.grams, // ✅ Strawberry "144g" becomes 144.0 now
-                    isRecipe = false
+                val gramsPerServingUnit: Double? = parsedWeight.grams?.takeIf { it > 0.0 }
+                val mlPerServingUnit: Double? = parsedVolume.milliliters?.takeIf { it > 0.0 }
+
+                foods.add(
+                    FoodEntity(
+                        id = foodId,
+                        name = name,
+                        brand = null,
+                        servingSize = servingSize,
+                        servingUnit = servingUnit,
+                        servingsPerPackage = null,
+                        gramsPerServingUnit = gramsPerServingUnit,
+                        mlPerServingUnit = mlPerServingUnit,
+                        isRecipe = false
+                    )
                 )
 
-                val servingBasisType = BasisType.USDA_REPORTED_SERVING
+                val servingBasisType = decideDefaultBasisForManualFood(
+                    servingUnit = servingUnit,
+                    gramsPerServingUnit = gramsPerServingUnit,
+                    mlPerServingUnit = mlPerServingUnit
+                )
 
                 val gramsForServing: Double? = when {
                     servingUnit == ServingUnit.G -> servingSize.takeIf { it > 0.0 }
-                    else -> parsedWeight.grams?.takeIf { it > 0.0 }
+                    else -> gramsPerServingUnit?.takeIf { it > 0.0 }
+                }
+
+                val mlForServing: Double? = when {
+                    servingUnit == ServingUnit.ML -> servingSize.takeIf { it > 0.0 }
+                    else -> mlPerServingUnit?.takeIf { it > 0.0 }
                 }
 
                 val nutrientStartIndex = foodNutrients.size
@@ -547,7 +592,6 @@ class FoodsCsvImporter @Inject constructor(
                     val raw = cellNormalized(row, headerIndex, headerKey) ?: continue
                     val amount = parseAmount(raw) ?: continue
 
-                    // Handle duplicate Cu columns by choosing the first non-empty Cu value
                     val finalAmount = if (headerKey == "cu" && hasCuDuplicate) {
                         val chosen = pickCuValue(row, cuPositions, i, issues)
                         if (
@@ -556,46 +600,83 @@ class FoodsCsvImporter @Inject constructor(
                         ) {
                             warnDuplicateCuResolved++
                         }
-                        parseAmount(chosen ?: "") // chosen is a string, parse it
+                        parseAmount(chosen ?: "")
                     } else {
                         amount
                     } ?: continue
 
                     val unit = nutrientUnitByHeader[headerKey] ?: continue
 
-                    // Canonicalize import nutrients:
-                    // - If we can resolve grams-per-serving, store ONLY PER_100G (canonical internal basis).
-                    // - Otherwise, fall back to USDA_REPORTED_SERVING (we cannot safely normalize).
-                    //
-                    // This prevents duplicate (foodId, nutrientId) rows across basisType.
-                    if (gramsForServing != null) {
-                        val factor = 100.0 / gramsForServing
-                        foodNutrients += FoodNutrientEntity(
-                            foodId = foodId,
-                            nutrientId = nutrientId,
-                            nutrientAmountPerBasis = finalAmount * factor,
-                            unit = unit,
-                            basisType = BasisType.PER_100G
-                        )
-                    } else {
-                        foodNutrients += FoodNutrientEntity(
-                            foodId = foodId,
-                            nutrientId = nutrientId,
-                            nutrientAmountPerBasis = finalAmount,
-                            unit = unit,
-                            basisType = servingBasisType
-                        )
-                    }
+                    when (servingBasisType) {
+                        BasisType.PER_100G -> {
+                            if (gramsForServing != null && gramsForServing > 0.0) {
+                                val factor = 100.0 / gramsForServing
+                                foodNutrients.add(
+                                    FoodNutrientEntity(
+                                        foodId = foodId,
+                                        nutrientId = nutrientId,
+                                        nutrientAmountPerBasis = finalAmount * factor,
+                                        unit = unit,
+                                        basisType = BasisType.PER_100G
+                                    )
+                                )
+                            } else {
+                                foodNutrients.add(
+                                    FoodNutrientEntity(
+                                        foodId = foodId,
+                                        nutrientId = nutrientId,
+                                        nutrientAmountPerBasis = finalAmount,
+                                        unit = unit,
+                                        basisType = BasisType.USDA_REPORTED_SERVING
+                                    )
+                                )
+                            }
+                        }
 
+                        BasisType.PER_100ML -> {
+                            if (mlForServing != null && mlForServing > 0.0) {
+                                val factor = 100.0 / mlForServing
+                                foodNutrients.add(
+                                    FoodNutrientEntity(
+                                        foodId = foodId,
+                                        nutrientId = nutrientId,
+                                        nutrientAmountPerBasis = finalAmount * factor,
+                                        unit = unit,
+                                        basisType = BasisType.PER_100ML
+                                    )
+                                )
+                            } else {
+                                foodNutrients.add(
+                                    FoodNutrientEntity(
+                                        foodId = foodId,
+                                        nutrientId = nutrientId,
+                                        nutrientAmountPerBasis = finalAmount,
+                                        unit = unit,
+                                        basisType = BasisType.USDA_REPORTED_SERVING
+                                    )
+                                )
+                            }
+                        }
+
+                        BasisType.USDA_REPORTED_SERVING -> {
+                            foodNutrients.add(
+                                FoodNutrientEntity(
+                                    foodId = foodId,
+                                    nutrientId = nutrientId,
+                                    nutrientAmountPerBasis = finalAmount,
+                                    unit = unit,
+                                    basisType = BasisType.USDA_REPORTED_SERVING
+                                )
+                            )
+                        }
+                    }
                 }
 
                 // DEBUG invariant: exactly one basis row per nutrientId for THIS food only.
-                // IMPORTANT: check only the rows produced for this food, not the whole import list.
                 assertSingleBasisPerNutrient(
                     foodName = name,
                     rows = foodNutrients.subList(nutrientStartIndex, foodNutrients.size)
                 )
-
             }
 
             Log.d(
@@ -640,7 +721,7 @@ class FoodsCsvImporter @Inject constructor(
                             },
                             message = when (code) {
                                 ImportIssueCode.MISSING_GRAMS_FOR_VOLUME_UNIT ->
-                                    "This food uses a serving unit like cup/tbsp/serving, but its Weight (grams per serving) was missing or invalid. The food was imported, but you must set grams-per-serving before you can log or use it in recipes by servings."
+                                    "This food uses a serving unit like cup/tbsp/serving, but its Weight (grams/mL per serving) was missing or invalid. The food was imported, but you must set appropriate grounding before serving-based logging or recipe use."
                                 ImportIssueCode.DUPLICATE_NUTRIENT_COLUMN_RESOLVED ->
                                     "The CSV had two Copper (Cu) columns with different values. The importer chose the first non-empty Copper value."
                                 else -> code.name
@@ -663,7 +744,6 @@ class FoodsCsvImporter @Inject constructor(
                         nutrientsUpserted = nutrientsToUpsert.size,
                         foodNutrientsUpserted = foodNutrients.size,
                         skippedRows = skipped,
-                        // preserve existing behavior: warningCount currently equals warnMissingGrams only
                         warningCount = warnMissingGrams,
                         errorCount = errorCount
                     )
@@ -693,7 +773,7 @@ class FoodsCsvImporter @Inject constructor(
 
     private fun parseAmount(raw: String): Double? {
         val cleaned = raw.trim()
-            .replace(",", "")       // remove thousands separators
+            .replace(",", "")
             .removeSuffix("g")
             .removeSuffix("mg")
             .removeSuffix("mcg")
@@ -736,11 +816,11 @@ private fun assertSingleBasisPerNutrient(
             appendLine()
             appendLine("Rule: a nutrient must have ONLY ONE basis row.")
             appendLine("If grams-per-serving exists → PER_100G only.")
+            appendLine("Else if mL-per-serving exists → PER_100ML only.")
             appendLine("Otherwise → USDA_REPORTED_SERVING only.")
         }
     }
 }
-
 
 /** 2025-02-06
  * ============================
@@ -785,7 +865,6 @@ private fun assertSingleBasisPerNutrient(
  * - Use existing ServingUnit/ServingUnitExt helpers and existing BasisType.
  */
 
-
 /**
  * ============================
  * FOODS_CSV_IMPORTER – FUTURE-ME NOTES
@@ -808,7 +887,7 @@ private fun assertSingleBasisPerNutrient(
  * - After import, each food must have ONE basis row per nutrient:
  *     - If food can be grounded in grams → persist PER_100G only.
  *     - Else if grounded in ml → persist PER_100ML only.
- *     - Else → persist USDA_REPORTED_SERVING only (raw), and food is blocked until grounded.
+ *     - Else → USDA_REPORTED_SERVING only (raw), and food is blocked until grounded.
  *
  * “Blocked food” nuance:
  * - If servingUnit is packet/box/bunch/etc without grams backing:

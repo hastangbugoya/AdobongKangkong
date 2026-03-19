@@ -198,19 +198,15 @@ class FoodEditorViewModel @Inject constructor(
                     else -> null
                 }
 
-            val inferredBasisType: BasisType? =
-                current.basisType
-                    ?: when {
-                        rows.any { it.basisType == BasisType.PER_100ML } -> BasisType.PER_100ML
-                        rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
-                        else -> {
-                            when {
-                                mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
-                                gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
-                                else -> BasisType.USDA_REPORTED_SERVING
-                            }
-                        }
-                    }
+            val inferredBasisType: BasisType =
+                when {
+                    rows.any { it.basisType == BasisType.PER_100ML } -> BasisType.PER_100ML
+                    rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
+                    mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
+                    gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
+                    food == null -> current.basisType ?: BasisType.USDA_REPORTED_SERVING
+                    else -> BasisType.USDA_REPORTED_SERVING
+                }
 
             val assignedBarcodes = if (foodId != null) {
                 buildAssignedBarcodeUiList(foodId)
@@ -224,7 +220,8 @@ class FoodEditorViewModel @Inject constructor(
                         "gramsPerServingUnitEffectiveForDisplay=$gramsPerServingUnitEffectiveForDisplay " +
                         "mlPerServingUnitEffectiveForDisplay=$mlPerServingUnitEffectiveForDisplay " +
                         "gramsPerServingEffectiveForDisplay=$gramsPerServingEffectiveForDisplay " +
-                        "mlPerServingEffectiveForDisplay=$mlPerServingEffectiveForDisplay"
+                        "mlPerServingEffectiveForDisplay=$mlPerServingEffectiveForDisplay " +
+                        "inferredBasisType=$inferredBasisType"
             )
             val loadedRows = rows.map { r ->
                 val displayAmount =
@@ -273,11 +270,15 @@ class FoodEditorViewModel @Inject constructor(
                 servingSize = food?.servingSize?.toString() ?: "1.0",
                 servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
                 basisType = inferredBasisType,
-                gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() }
+                groundingMode = when (inferredBasisType) {
+                    BasisType.PER_100ML -> GroundingMode.LIQUID
+                    BasisType.PER_100G, BasisType.USDA_REPORTED_SERVING -> GroundingMode.SOLID
+                },
+                gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() && food == null }
                     ?: food?.gramsPerServingUnit?.toString().orEmpty(),
-                mlPerServingUnit = current.mlPerServingUnit.takeIf { it.isNotBlank() }
+                mlPerServingUnit = current.mlPerServingUnit.takeIf { it.isNotBlank() && food == null }
                     ?: food?.mlPerServingUnit?.toString().orEmpty(),
-                servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() }
+                servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() && food == null }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
                 categories = allCategories
                     .sortedBy { it.name.lowercase() }
@@ -607,6 +608,21 @@ class FoodEditorViewModel @Inject constructor(
         val grams = s.gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
         val ml = s.mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
 
+        if (s.servingUnit.isAmbiguousForGrounding()) {
+            return when (s.basisType) {
+                BasisType.PER_100ML ->
+                    if (ml == null) "Food needs mL per 1 ${s.servingUnit.display} when using PER 100mL grounding."
+                    else null
+
+                BasisType.PER_100G ->
+                    if (grams == null) "Food needs grams per 1 ${s.servingUnit.display} when using PER 100g grounding."
+                    else null
+
+                BasisType.USDA_REPORTED_SERVING, null ->
+                    "Serving unit needs grounding (PER 100g or PER 100mL) to be reliable for serving-based logging."
+            }
+        }
+
         val needsBacking = s.servingUnit.requiresGramsPerServing()
         val isVolumeGrounded = s.servingUnit.isVolumeUnit() || (ml != null)
 
@@ -712,10 +728,16 @@ class FoodEditorViewModel @Inject constructor(
     fun onPickBasisType(type: BasisType) {
         update {
             it.copy(
-                hasUnsavedChanges = it.basisType != type || it.gramsPerServingUnit.isNotBlank() || it.mlPerServingUnit.isNotBlank(),
+                hasUnsavedChanges = true,
+                isGroundingDialogOpen = false,
                 basisType = type,
+                groundingMode = when (type) {
+                    BasisType.PER_100ML -> GroundingMode.LIQUID
+                    BasisType.PER_100G, BasisType.USDA_REPORTED_SERVING -> GroundingMode.SOLID
+                },
                 gramsPerServingUnit = if (type == BasisType.PER_100ML) "" else it.gramsPerServingUnit,
                 mlPerServingUnit = if (type == BasisType.PER_100G) "" else it.mlPerServingUnit,
+                errorMessage = null
             )
         }
     }
@@ -1071,57 +1093,77 @@ class FoodEditorViewModel @Inject constructor(
         val hasDeterministicMassUnit = s.servingUnit.isMassUnit()
         val hasDeterministicVolumeUnit = s.servingUnit.toMilliliters(1.0) != null
 
+        val resolvedBasisType =
+            when {
+                s.servingUnit.isAmbiguousForGrounding() -> s.basisType ?: run {
+                    update { it.copy(isGroundingDialogOpen = true) }
+                    return
+                }
+
+                hasDeterministicVolumeUnit -> BasisType.PER_100ML
+                hasDeterministicMassUnit -> BasisType.PER_100G
+                else -> BasisType.USDA_REPORTED_SERVING
+            }
+
         val gramsPerServingUnitFinal: Double? =
             when {
                 hasDeterministicMassUnit -> null
-                gramsPerServingUnitInput != null && gramsPerServingUnitInput > 0.0 -> gramsPerServingUnitInput
+                resolvedBasisType == BasisType.PER_100G ->
+                    gramsPerServingUnitInput?.takeIf { it > 0.0 }
+
                 else -> null
-            }?.takeIf { it > 0.0 }
+            }
 
         val mlPerServingUnitFinal: Double? =
             when {
-                hasDeterministicMassUnit -> null
                 hasDeterministicVolumeUnit -> null
-                mlPerServingUnitInput != null && mlPerServingUnitInput > 0.0 -> mlPerServingUnitInput
+                resolvedBasisType == BasisType.PER_100ML ->
+                    mlPerServingUnitInput?.takeIf { it > 0.0 }
+
                 else -> null
-            }?.takeIf { it > 0.0 }
+            }
 
-        val needsGroundingPrompt =
-            s.servingUnit.isAmbiguousForGrounding() &&
-                    gramsPerServingUnitFinal == null &&
-                    mlPerServingUnitFinal == null
+        if (s.servingUnit.isAmbiguousForGrounding()) {
+            when (resolvedBasisType) {
+                BasisType.PER_100ML -> {
+                    if (mlPerServingUnitFinal == null) {
+                        update {
+                            it.copy(
+                                errorMessage = "Enter mL per 1 ${s.servingUnit.display} for PER 100mL grounding."
+                            )
+                        }
+                        return
+                    }
+                }
 
-        if (needsGroundingPrompt) {
-            update { it.copy(isGroundingDialogOpen = true) }
-            return
+                BasisType.PER_100G -> {
+                    if (gramsPerServingUnitFinal == null) {
+                        update {
+                            it.copy(
+                                errorMessage = "Enter grams per 1 ${s.servingUnit.display} for PER 100g grounding."
+                            )
+                        }
+                        return
+                    }
+                }
+
+                BasisType.USDA_REPORTED_SERVING -> Unit
+            }
         }
-
-        val finalGramsBridge =
-            if (s.groundingMode == GroundingMode.LIQUID) null else gramsPerServingUnitFinal
-
-        val finalMlBridge =
-            if (s.groundingMode == GroundingMode.SOLID) null else mlPerServingUnitFinal
 
         val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
         val gramsPerServingUnitEffective =
             gramsPerServingUnitEffective(
                 servingUnit = s.servingUnit,
-                gramsPerServingUnit = finalGramsBridge
+                gramsPerServingUnit = gramsPerServingUnitFinal
             )
 
         val mlPerServingUnitEffective =
             mlPerServingUnitEffective(
                 servingUnit = s.servingUnit,
-                mlPerServingUnit = finalMlBridge
+                mlPerServingUnit = mlPerServingUnitFinal
             )
-
-        val defaultBasisType =
-            when {
-                mlPerServingUnitEffective != null -> BasisType.PER_100ML
-                gramsPerServingUnitEffective != null -> BasisType.PER_100G
-                else -> BasisType.USDA_REPORTED_SERVING
-            }
 
         val rows = s.nutrientRows.mapNotNull { ui ->
             val amt = ui.amount.trim()
@@ -1129,7 +1171,7 @@ class FoodEditorViewModel @Inject constructor(
                 if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
 
             val amountToStore =
-                when (defaultBasisType) {
+                when (resolvedBasisType) {
                     BasisType.PER_100G -> NutrientBasisScaler.displayPerServingToCanonical(
                         uiPerServingAmount,
                         BasisType.PER_100G,
@@ -1157,8 +1199,8 @@ class FoodEditorViewModel @Inject constructor(
                     aliases = ui.aliases
                 ),
                 amount = amountToStore,
-                basisType = defaultBasisType,
-                basisGrams = when (defaultBasisType) {
+                basisType = resolvedBasisType,
+                basisGrams = when (resolvedBasisType) {
                     BasisType.PER_100G -> 100.0
                     BasisType.PER_100ML -> 100.0
                     BasisType.USDA_REPORTED_SERVING -> null
@@ -1167,7 +1209,18 @@ class FoodEditorViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            update { it.copy(isSaving = true, errorMessage = null, stableId = stableId) }
+            update {
+                it.copy(
+                    isSaving = true,
+                    errorMessage = null,
+                    stableId = stableId,
+                    basisType = resolvedBasisType,
+                    groundingMode = when (resolvedBasisType) {
+                        BasisType.PER_100ML -> GroundingMode.LIQUID
+                        BasisType.PER_100G, BasisType.USDA_REPORTED_SERVING -> GroundingMode.SOLID
+                    }
+                )
+            }
             try {
                 val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
 
@@ -1178,9 +1231,9 @@ class FoodEditorViewModel @Inject constructor(
                             brand = s.brand.trim().ifEmpty { null },
                             servingSize = servingSize,
                             servingUnit = s.servingUnit,
-                            gramsPerServingUnit = finalGramsBridge,
+                            gramsPerServingUnit = gramsPerServingUnitFinal,
                             servingsPerPackage = servingsPerPackage,
-                            mlPerServingUnit = finalMlBridge,
+                            mlPerServingUnit = mlPerServingUnitFinal,
                             isRecipe = false
                         )
                     } else {
@@ -1190,11 +1243,11 @@ class FoodEditorViewModel @Inject constructor(
                             brand = s.brand.trim().ifEmpty { null },
                             servingSize = servingSize,
                             servingUnit = s.servingUnit,
-                            gramsPerServingUnit = finalGramsBridge,
+                            gramsPerServingUnit = gramsPerServingUnitFinal,
                             servingsPerPackage = servingsPerPackage,
                             isRecipe = false,
                             stableId = stableId,
-                            mlPerServingUnit = finalMlBridge,
+                            mlPerServingUnit = mlPerServingUnitFinal,
                             isLowSodium = null
                         )
                     }

@@ -1465,116 +1465,71 @@ private fun ServingSection(
             )
         }
 
-        val useMlBridge = basisType == BasisType.PER_100ML || mlPerServingUnit.isNotBlank()
+        val useMlBridge = when (basisType) {
+            BasisType.PER_100ML -> true
+            BasisType.PER_100G -> false
+            BasisType.USDA_REPORTED_SERVING, null -> {
+                mlPerServingUnit.isNotBlank() && gramsPerServingUnit.isBlank()
+            }
+        }
+
+        val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
+        val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
+        val mlPerUnitD = mlPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
+
+        val gramsPerServingComputed: Double? =
+            if (servingSizeD != null && gramsPerUnitD != null) servingSizeD * gramsPerUnitD else null
+
+        val mlPerServingComputed: Double? =
+            if (servingSizeD != null && mlPerUnitD != null) servingSizeD * mlPerUnitD else null
 
         if (useMlBridge) {
-            val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
-            val bridgeD = mlPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
-
-            val mlPerServingComputed: Double? =
-                if (servingSizeD != null && bridgeD != null) servingSizeD * bridgeD else null
-
-            var mlPerServingText by rememberSaveable { mutableStateOf("") }
-
-            if (mlPerServingText.isBlank() && mlPerServingComputed != null) {
-                mlPerServingText = mlPerServingComputed.toString()
-            }
-
             OutlinedTextField(
-                value = mlPerServingText,
-                onValueChange = { newTotalText ->
-                    mlPerServingText = newTotalText
-                    val newTotal = newTotalText.toDoubleOrNull()?.takeIf { it > 0.0 }
-                    val s = servingSizeD
-
-                    if (newTotal != null && s != null) {
-                        val newBridge = newTotal / s
-                        onMlPerServingChange(newBridge.toString())
-                    }
-                },
-                label = { Text("mL per serving") },
+                value = mlPerServingUnit,
+                onValueChange = onMlPerServingChange,
+                label = { Text("mL per 1 ${servingUnit.display}") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (servingSizeD != null && mlPerServingComputed != null) {
-                OutlinedTextField(
-                    value = mlPerServingUnit,
-                    onValueChange = {},
-                    enabled = false,
-                    label = { Text("mL per 1 ${servingUnit.display}") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Text(
-                text = nutrientEditorContextText(
-                    servingSize = servingSize,
-                    servingUnit = servingUnit,
-                    gramsPerServingUnit = gramsPerServingUnit,
-                    mlPerServingUnit = mlPerServingUnit,
-                    basisType = basisType
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    val helper = when {
+                        servingSizeD != null && mlPerServingComputed != null ->
+                            "Current serving = ${servingSizeD.toUiCompactNumber()} ${servingUnit.display} = ${mlPerServingComputed.toUiCompactNumber()} mL"
+                        else ->
+                            "Used when this serving unit is volume-grounded (PER 100mL)."
+                    }
+                    Text(helper)
+                }
             )
         } else {
-            val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
-            val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
-
-            val gramsPerServingComputed: Double? =
-                if (servingSizeD != null && gramsPerUnitD != null)
-                    servingSizeD * gramsPerUnitD
-                else null
-
-            var gramsPerServingText by rememberSaveable { mutableStateOf("") }
-
-            if (gramsPerServingText.isBlank() && gramsPerServingComputed != null) {
-                gramsPerServingText = gramsPerServingComputed.toString()
-            }
-
             OutlinedTextField(
-                value = gramsPerServingText,
-                onValueChange = { newTotalText ->
-                    gramsPerServingText = newTotalText
-
-                    val newTotal = newTotalText.toDoubleOrNull()?.takeIf { it > 0.0 }
-                    val s = servingSizeD
-
-                    if (newTotal != null && s != null) {
-                        val newBridge = newTotal / s
-                        onGramsPerServingChange(newBridge.toString())
-                    }
-                },
-                label = { Text("Grams per serving") },
+                value = gramsPerServingUnit,
+                onValueChange = onGramsPerServingChange,
+                label = { Text("Grams per 1 ${servingUnit.display}") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (gramsPerUnitD != null) {
-                OutlinedTextField(
-                    value = gramsPerServingUnit,
-                    onValueChange = {},
-                    enabled = false,
-                    label = { Text("Grams per 1 ${servingUnit.display}") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Text(
-                text = nutrientEditorContextText(
-                    servingSize = servingSize,
-                    servingUnit = servingUnit,
-                    gramsPerServingUnit = gramsPerServingUnit,
-                    mlPerServingUnit = mlPerServingUnit,
-                    basisType = basisType
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    val helper = when {
+                        servingSizeD != null && gramsPerServingComputed != null ->
+                            "Current serving = ${servingSizeD.toUiCompactNumber()} ${servingUnit.display} = ${gramsPerServingComputed.toUiCompactNumber()} g"
+                        else ->
+                            "Used when this serving unit is mass-grounded (PER 100g)."
+                    }
+                    Text(helper)
+                }
             )
         }
+
+        Text(
+            text = nutrientEditorContextText(
+                servingSize = servingSize,
+                servingUnit = servingUnit,
+                gramsPerServingUnit = gramsPerServingUnit,
+                mlPerServingUnit = mlPerServingUnit,
+                basisType = basisType
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         OutlinedTextField(
             value = servingsPerPackage,
@@ -1805,6 +1760,11 @@ private fun nutrientEditorContextText(
 private fun Double.toUiNumber(): String {
     val whole = toLong().toDouble()
     return if (this == whole) whole.toLong().toString() else toString()
+}
+
+private fun Double.toUiCompactNumber(): String {
+    val whole = toLong().toDouble()
+    return if (this == whole) whole.toLong().toString() else "%,.2f".format(this).replace(",", "").trimEnd('0').trimEnd('.')
 }
 
 private fun NutrientCategory.labelForUi(): String =
