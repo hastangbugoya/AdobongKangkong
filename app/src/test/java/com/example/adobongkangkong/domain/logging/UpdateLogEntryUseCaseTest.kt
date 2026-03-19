@@ -5,8 +5,8 @@ import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.domain.logging.UpdateLogEntryUseCase.NutritionDecision
 import com.example.adobongkangkong.domain.logging.model.AmountInput
-import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.logging.model.BatchSummary
+import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.model.LogEntry
@@ -25,6 +25,7 @@ import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
+import com.example.adobongkangkong.domain.repository.RecipeInstructionStep
 import com.example.adobongkangkong.domain.repository.RecipeRepository
 import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
 import kotlinx.coroutines.flow.Flow
@@ -352,6 +353,67 @@ class UpdateLogEntryUseCaseTest {
 
                 override suspend fun getRecipeIdsByFoodIds(foodIds: Set<Long>): Map<Long, Long> =
                     emptyMap()
+
+                override suspend fun getInstructionSteps(recipeId: Long): List<RecipeInstructionStep> =
+                    emptyList()
+
+                override suspend fun insertInstructionStep(
+                    recipeId: Long,
+                    position: Int,
+                    text: String
+                ): Long {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun updateInstructionStepText(
+                    stepId: Long,
+                    text: String
+                ) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun updateInstructionStepPosition(
+                    stepId: Long,
+                    position: Int
+                ) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun setInstructionStepImage(
+                    stepId: Long,
+                    imagePath: String?
+                ) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun deleteInstructionStep(stepId: Long) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun deleteInstructionStepsForRecipe(recipeId: Long) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun reorderInstructionSteps(
+                    recipeId: Long,
+                    orderedStepIds: List<Long>
+                ) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun moveInstructionStepUp(
+                    recipeId: Long,
+                    stepId: Long
+                ) {
+                    throw UnsupportedOperationException()
+                }
+
+                override suspend fun moveInstructionStepDown(
+                    recipeId: Long,
+                    stepId: Long
+                ) {
+                    throw UnsupportedOperationException()
+                }
             },
             snapshotRepo = TestSnapshotRepo(
                 FoodNutritionSnapshot(

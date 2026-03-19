@@ -7,11 +7,13 @@ import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeInstructionStepDao
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeInstructionStepEntity
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
@@ -19,6 +21,7 @@ import com.example.adobongkangkong.domain.recipes.Recipe
 import com.example.adobongkangkong.domain.recipes.RecipeIngredient
 import com.example.adobongkangkong.domain.repository.RecipeHeader
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
+import com.example.adobongkangkong.domain.repository.RecipeInstructionStep
 import com.example.adobongkangkong.domain.repository.RecipeRepository
 import javax.inject.Inject
 
@@ -26,6 +29,7 @@ class RecipeRepositoryImpl @Inject constructor(
     private val db: NutriDatabase,
     private val recipeDao: RecipeDao,
     private val ingredientDao: RecipeIngredientDao,
+    private val instructionStepDao: RecipeInstructionStepDao,
     private val computeRecipeNutritionForSnapshot: ComputeRecipeNutritionForSnapshotUseCase,
     private val foodNutrientDao: FoodNutrientDao,
     private val foodDao: FoodDao,
@@ -36,7 +40,6 @@ class RecipeRepositoryImpl @Inject constructor(
         require(draft.servingsYield > 0.0)
         require(draft.ingredients.isNotEmpty())
 
-        // 1) Create Food row representing the recipe
         val recipeFoodId = foodDao.insert(
             FoodEntity(
                 name = draft.name,
@@ -51,7 +54,6 @@ class RecipeRepositoryImpl @Inject constructor(
             )
         )
 
-        // 2) Create recipe meta
         val recipeId = recipeDao.insert(
             RecipeEntity(
                 foodId = recipeFoodId,
@@ -61,10 +63,8 @@ class RecipeRepositoryImpl @Inject constructor(
             )
         )
 
-        // 3) Create ingredients
         ingredientDao.insertAll(
             draft.ingredients.map { ing ->
-                // Draft currently uses servings (and defaults to 1 when missing).
                 RecipeIngredientEntity(
                     recipeId = recipeId,
                     foodId = ing.foodId,
@@ -74,7 +74,6 @@ class RecipeRepositoryImpl @Inject constructor(
             }
         )
 
-        // 4) Persist computed recipe nutrition for snapshot resolution
         val domainRecipe = Recipe(
             id = recipeId,
             name = draft.name,
@@ -94,7 +93,6 @@ class RecipeRepositoryImpl @Inject constructor(
         perCookedGram?.takeIf { !it.isEmpty() }?.let {
             val nutrientDao: NutrientDao = db.nutrientDao()
 
-            // Replace existing nutrients for this recipe foodId.
             foodNutrientDao.deleteForFood(recipeFoodId)
 
             val rows = perCookedGram.entries().mapNotNull { (key, amountPerGram) ->
@@ -105,7 +103,7 @@ class RecipeRepositoryImpl @Inject constructor(
                 FoodNutrientEntity(
                     foodId = recipeFoodId,
                     nutrientId = nutrientId,
-                    nutrientAmountPerBasis = amountPerGram * 100.0, // per gram -> per 100g
+                    nutrientAmountPerBasis = amountPerGram * 100.0,
                     unit = unit,
                     basisType = BasisType.PER_100G
                 )
@@ -131,7 +129,6 @@ class RecipeRepositoryImpl @Inject constructor(
 
     override suspend fun getIngredients(recipeId: Long): List<RecipeIngredientLine> {
         return ingredientDao.getForRecipe(recipeId).map { entity ->
-            // Keep nulls as null (do NOT coerce to 0.0)
             RecipeIngredientLine(
                 ingredientFoodId = entity.foodId,
                 ingredientServings = entity.amountServings,
@@ -167,7 +164,6 @@ class RecipeRepositoryImpl @Inject constructor(
                 gramsPerServingUnit = gramsPerServing
             )
 
-            // Replace ingredient rows
             ingredientDao.deleteForRecipe(recipeId)
             ingredientDao.insertAll(
                 ingredients.map { line ->
@@ -180,16 +176,13 @@ class RecipeRepositoryImpl @Inject constructor(
                 }
             )
 
-            // Refresh persisted recipe nutrients after edits
             val domainRecipe = Recipe(
                 id = recipeId,
                 name = existing.name,
                 ingredients = ingredients.map { line ->
-                    // Default to 1.0 ONLY for compute path if both null.
-                    // This matches your “default-to-1” decision without destroying nulls in storage/output.
                     val servingsForCompute =
                         line.ingredientServings
-                            ?: line.ingredientGrams?.let { _ -> 1.0 }
+                            ?: line.ingredientGrams?.let { 1.0 }
                             ?: 1.0
 
                     RecipeIngredient(
@@ -251,6 +244,167 @@ class RecipeRepositoryImpl @Inject constructor(
         return recipeDao.getByFoodIds(foodIds.toList())
             .associate { it.foodId to it.id }
     }
+
+    override suspend fun getInstructionSteps(recipeId: Long): List<RecipeInstructionStep> {
+        return instructionStepDao.getForRecipe(recipeId).map { entity ->
+            entity.toDomain()
+        }
+    }
+
+    override suspend fun insertInstructionStep(
+        recipeId: Long,
+        position: Int,
+        text: String
+    ): Long = db.withTransaction {
+        instructionStepDao.insert(
+            RecipeInstructionStepEntity(
+                recipeId = recipeId,
+                position = position,
+                text = text
+            )
+        )
+    }
+
+    override suspend fun updateInstructionStepText(
+        stepId: Long,
+        text: String
+    ) {
+        instructionStepDao.updateText(
+            stepId = stepId,
+            text = text
+        )
+    }
+
+    override suspend fun updateInstructionStepPosition(
+        stepId: Long,
+        position: Int
+    ) {
+        instructionStepDao.updatePosition(
+            stepId = stepId,
+            position = position
+        )
+    }
+
+    override suspend fun setInstructionStepImage(
+        stepId: Long,
+        imagePath: String?
+    ) {
+        instructionStepDao.updateImagePath(
+            stepId = stepId,
+            imagePath = imagePath
+        )
+    }
+
+    override suspend fun deleteInstructionStep(stepId: Long) {
+        instructionStepDao.deleteById(stepId)
+    }
+
+    override suspend fun deleteInstructionStepsForRecipe(recipeId: Long) {
+        instructionStepDao.deleteForRecipe(recipeId)
+    }
+
+    override suspend fun reorderInstructionSteps(
+        recipeId: Long,
+        orderedStepIds: List<Long>
+    ) {
+        db.withTransaction {
+            reorderInstructionStepsInternal(
+                recipeId = recipeId,
+                orderedStepIds = orderedStepIds
+            )
+        }
+    }
+
+    override suspend fun moveInstructionStepUp(
+        recipeId: Long,
+        stepId: Long
+    ) {
+        db.withTransaction {
+            val existing = instructionStepDao.getForRecipe(recipeId)
+            val currentIndex = existing.indexOfFirst { it.id == stepId }
+
+            require(currentIndex >= 0) {
+                "moveInstructionStepUp failed: stepId=$stepId does not belong to recipeId=$recipeId"
+            }
+
+            if (currentIndex == 0) return@withTransaction
+
+            val reorderedIds = existing.map { it.id }.toMutableList()
+            val movingId = reorderedIds[currentIndex]
+            reorderedIds[currentIndex] = reorderedIds[currentIndex - 1]
+            reorderedIds[currentIndex - 1] = movingId
+
+            reorderInstructionStepsInternal(
+                recipeId = recipeId,
+                orderedStepIds = reorderedIds
+            )
+        }
+    }
+
+    override suspend fun moveInstructionStepDown(
+        recipeId: Long,
+        stepId: Long
+    ) {
+        db.withTransaction {
+            val existing = instructionStepDao.getForRecipe(recipeId)
+            val currentIndex = existing.indexOfFirst { it.id == stepId }
+
+            require(currentIndex >= 0) {
+                "moveInstructionStepDown failed: stepId=$stepId does not belong to recipeId=$recipeId"
+            }
+
+            if (currentIndex == existing.lastIndex) return@withTransaction
+
+            val reorderedIds = existing.map { it.id }.toMutableList()
+            val movingId = reorderedIds[currentIndex]
+            reorderedIds[currentIndex] = reorderedIds[currentIndex + 1]
+            reorderedIds[currentIndex + 1] = movingId
+
+            reorderInstructionStepsInternal(
+                recipeId = recipeId,
+                orderedStepIds = reorderedIds
+            )
+        }
+    }
+
+    private suspend fun reorderInstructionStepsInternal(
+        recipeId: Long,
+        orderedStepIds: List<Long>
+    ) {
+        val existing = instructionStepDao.getForRecipe(recipeId)
+
+        val existingIds = existing.map { it.id }.sorted()
+        val providedIds = orderedStepIds.sorted()
+
+        require(existingIds == providedIds) {
+            "reorderInstructionSteps strict mode failed: provided IDs do not match existing steps"
+        }
+
+        existing.forEachIndexed { index, step ->
+            instructionStepDao.updatePosition(
+                stepId = step.id,
+                position = -1000 - index
+            )
+        }
+
+        orderedStepIds.forEachIndexed { index, stepId ->
+            instructionStepDao.updatePosition(
+                stepId = stepId,
+                position = index
+            )
+        }
+    }
+
+    private fun RecipeInstructionStepEntity.toDomain(): RecipeInstructionStep {
+        return RecipeInstructionStep(
+            id = id,
+            stableId = stableId,
+            recipeId = recipeId,
+            position = position,
+            text = text,
+            imagePath = imagePath
+        )
+    }
 }
 
 /**
@@ -267,7 +421,7 @@ class RecipeRepositoryImpl @Inject constructor(
  * - Repo outputs keep null as null (no `?: 0.0`).
  * - For nutrition compute only (ComputeRecipeNutritionForSnapshotUseCase / builder previews),
  *   we may temporarily default missing quantity to 1.0 so the UI doesn’t crash and we can
- *   surface a better UX later (explicit prompt/validation, or grams-first compute).
+ *   surface a better UX later.
  *
  * Why default to 1.0 (for compute only):
  * - Prevents crashes / type mismatches where compute expects a non-null Double.

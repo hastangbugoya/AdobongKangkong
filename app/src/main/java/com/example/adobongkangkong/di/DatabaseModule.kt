@@ -39,7 +39,8 @@ object DatabaseModule {
                 NutriDatabase.MIGRATION_16_17,
                 NutriDatabase.MIGRATION_17_18,
                 NutriDatabase.MIGRATION_18_19,
-                NutriDatabase.MIGRATION_19_20
+                NutriDatabase.MIGRATION_19_20,
+                NutriDatabase.MIGRATION_20_21
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -52,6 +53,10 @@ object DatabaseModule {
     @Provides fun provideRecipeDao(db: NutriDatabase): RecipeDao = db.recipeDao()
     @Provides fun provideSummaryDao(db: NutriDatabase): SummaryDao = db.summaryDao()
     @Provides fun provideRecipeIngredientDao(db: NutriDatabase): RecipeIngredientDao = db.recipeIngredientDao()
+
+    @Provides
+    fun provideRecipeInstructionStepDao(db: NutriDatabase): RecipeInstructionStepDao =
+        db.recipeInstructionStepDao()
 
     @Provides fun provideNutrientAliasDao(db: NutriDatabase): NutrientAliasDao = db.nutrientAliasDao()
     @Provides fun provideRecipeBatchDao(db: NutriDatabase): RecipeBatchDao = db.recipeBatchDao()

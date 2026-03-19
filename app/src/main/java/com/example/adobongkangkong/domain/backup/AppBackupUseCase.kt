@@ -20,6 +20,7 @@ import javax.inject.Inject
  * Included:
  * - Room DB files: nutri.db (+ -wal / -shm if present)
  * - Banner masters directory: filesDir/food_images (all files inside)
+ * - Recipe instruction step images: filesDir/recipe_instruction_images (all files inside)
  *
  * Excluded (cache / derivable):
  * - cacheDir (blur images regenerate automatically)
@@ -46,6 +47,7 @@ class AppBackupUseCase @Inject constructor(
 
         // Authoritative media we include
         private const val FOOD_IMAGES_DIR = "food_images"
+        private const val RECIPE_INSTRUCTION_IMAGES_DIR = "recipe_instruction_images"
     }
 
     private var databasePathProvider: (Context, String) -> File = { ctx, dbName ->
@@ -69,6 +71,7 @@ class AppBackupUseCase @Inject constructor(
      * Creates a ZIP at [outputUri] containing:
      * - databases/nutri.db, nutri.db-wal, nutri.db-shm (if present)
      * - files/food_images (all files inside)
+     * - files/recipe_instruction_images (all files inside)
      *
      * Optional [beforeCopy] hook lets UI do a WAL checkpoint / pause writers if desired.
      */
@@ -80,7 +83,8 @@ class AppBackupUseCase @Inject constructor(
 
         val resolver = context.contentResolver
         val dbFiles = getDbFiles()
-        val bannerRoot = File(filesDirProvider(context), FOOD_IMAGES_DIR)
+        val foodImageRoot = File(filesDirProvider(context), FOOD_IMAGES_DIR)
+        val recipeInstructionImageRoot = File(filesDirProvider(context), RECIPE_INSTRUCTION_IMAGES_DIR)
 
         resolver.openOutputStream(outputUri)?.use { os ->
             ZipOutputStream(os.buffered()).use { zip ->
@@ -94,23 +98,28 @@ class AppBackupUseCase @Inject constructor(
                     zip.closeEntry()
                 }
 
+                fun addDirectoryContents(rootDir: File, zipDirName: String) {
+                    if (!rootDir.exists() || !rootDir.isDirectory) return
+
+                    rootDir
+                        .walkTopDown()
+                        .filter { it.isFile }
+                        .forEach { file ->
+                            val rel = file.absolutePath
+                                .removePrefix(rootDir.absolutePath + File.separator)
+                                .replace("\\", "/")
+                            addFile(file, ZIP_FILES_DIR + zipDirName + "/" + rel)
+                        }
+                }
+
                 // DB files (WAL mode => include wal/shm if present)
                 addFile(dbFiles.db, ZIP_DB_DIR + DB_NAME)
                 dbFiles.wal?.let { addFile(it, ZIP_DB_DIR + DB_NAME + "-wal") }
                 dbFiles.shm?.let { addFile(it, ZIP_DB_DIR + DB_NAME + "-shm") }
 
-                // Banner masters directory (filesDir/food_images)
-                if (bannerRoot.exists() && bannerRoot.isDirectory) {
-                    bannerRoot
-                        .walkTopDown()
-                        .filter { it.isFile }
-                        .forEach { f ->
-                            val rel = f.absolutePath
-                                .removePrefix(bannerRoot.absolutePath + File.separator)
-                                .replace("\\", "/")
-                            addFile(f, ZIP_FILES_DIR + FOOD_IMAGES_DIR + "/" + rel)
-                        }
-                }
+                // App-owned media under filesDir
+                addDirectoryContents(foodImageRoot, FOOD_IMAGES_DIR)
+                addDirectoryContents(recipeInstructionImageRoot, RECIPE_INSTRUCTION_IMAGES_DIR)
             }
         } ?: error("Unable to open output stream for export Uri.")
     }
@@ -121,6 +130,7 @@ class AppBackupUseCase @Inject constructor(
      * Overwrites:
      * - databases/nutri.db (+ -wal / -shm if present in zip)
      * - filesDir/food_images (all files inside)
+     * - filesDir/recipe_instruction_images (all files inside)
      *
      * Optional [beforeRestore] should close Room / stop writers.
      * Optional [afterRestore] is a good place to restart process.

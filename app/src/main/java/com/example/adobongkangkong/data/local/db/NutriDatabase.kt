@@ -38,9 +38,12 @@ import com.example.adobongkangkong.data.local.db.dao.*
         RecipeCategoryCrossRefEntity::class,
 
         // NEW (v20)
-        CalendarSuccessNutrientEntity::class
+        CalendarSuccessNutrientEntity::class,
+
+        // NEW (v21)
+        RecipeInstructionStepEntity::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 @TypeConverters(DbTypeConverters::class)
@@ -75,6 +78,9 @@ abstract class NutriDatabase : RoomDatabase() {
 
     // NEW
     abstract fun calendarSuccessNutrientDao(): CalendarSuccessNutrientDao
+
+    // NEW (v21)
+    abstract fun recipeInstructionStepDao(): RecipeInstructionStepDao
 
     companion object {
 
@@ -309,6 +315,61 @@ abstract class NutriDatabase : RoomDatabase() {
             CREATE INDEX IF NOT EXISTS index_calendar_success_nutrients_nutrientCode
             ON calendar_success_nutrients(nutrientCode)
             """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * v21
+         * - Add recipe_instruction_steps table
+         *
+         * Why:
+         * - Stores ordered instruction / notes rows for each recipe
+         * - Supports one optional app-owned image reference per step
+         * - Keeps instruction text and image references out of the recipes table so future
+         *   editing, reordering, and step-level media remain flexible
+         *
+         * Notes:
+         * - imagePath stores a nullable app-owned internal relative path; image bytes do not live
+         *   in Room
+         * - stableId is included for future export/import reconciliation
+         * - ON DELETE CASCADE ensures step rows are removed when the parent recipe is deleted
+         */
+        val MIGRATION_20_21: Migration = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS recipe_instruction_steps (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        stableId TEXT NOT NULL,
+                        recipeId INTEGER NOT NULL,
+                        position INTEGER NOT NULL,
+                        text TEXT NOT NULL,
+                        imagePath TEXT,
+                        FOREIGN KEY(recipeId) REFERENCES recipes(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_recipe_instruction_steps_stableId
+                    ON recipe_instruction_steps(stableId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_recipe_instruction_steps_recipeId
+                    ON recipe_instruction_steps(recipeId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_recipe_instruction_steps_recipeId_position
+                    ON recipe_instruction_steps(recipeId, position)
+                    """.trimIndent()
                 )
             }
         }

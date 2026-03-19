@@ -5,6 +5,7 @@ import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.RecipeHeader
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
+import com.example.adobongkangkong.domain.repository.RecipeInstructionStep
 import com.example.adobongkangkong.domain.repository.RecipeRepository
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
@@ -226,6 +227,65 @@ class ComputeRecipeBatchNutritionUseCaseTest {
             servingsYield: Double,
             totalYieldGrams: Double?,
             ingredients: List<RecipeIngredientLine>
+        ) {
+            error("not needed")
+        }
+
+        override suspend fun getInstructionSteps(recipeId: Long): List<RecipeInstructionStep> =
+            emptyList()
+
+        override suspend fun insertInstructionStep(
+            recipeId: Long,
+            position: Int,
+            text: String
+        ): Long = error("not needed")
+
+        override suspend fun updateInstructionStepText(
+            stepId: Long,
+            text: String
+        ) {
+            error("not needed")
+        }
+
+        override suspend fun updateInstructionStepPosition(
+            stepId: Long,
+            position: Int
+        ) {
+            error("not needed")
+        }
+
+        override suspend fun setInstructionStepImage(
+            stepId: Long,
+            imagePath: String?
+        ) {
+            error("not needed")
+        }
+
+        override suspend fun deleteInstructionStep(stepId: Long) {
+            error("not needed")
+        }
+
+        override suspend fun deleteInstructionStepsForRecipe(recipeId: Long) {
+            error("not needed")
+        }
+
+        override suspend fun reorderInstructionSteps(
+            recipeId: Long,
+            orderedStepIds: List<Long>
+        ) {
+            error("not needed")
+        }
+
+        override suspend fun moveInstructionStepUp(
+            recipeId: Long,
+            stepId: Long
+        ) {
+            error("not needed")
+        }
+
+        override suspend fun moveInstructionStepDown(
+            recipeId: Long,
+            stepId: Long
         ) {
             error("not needed")
         }
