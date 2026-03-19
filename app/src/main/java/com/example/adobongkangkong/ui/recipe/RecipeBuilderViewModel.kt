@@ -46,7 +46,6 @@ import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import kotlin.math.abs
 
-
 @HiltViewModel
 class RecipeBuilderViewModel @Inject constructor(
     private val foodRepo: FoodRepository,
@@ -140,6 +139,47 @@ class RecipeBuilderViewModel @Inject constructor(
 
     init {
         loadCategoriesForEditor()
+    }
+
+    /**
+     * Returns grams for one CURRENT serving of this food.
+     *
+     * Examples:
+     * - servingSize=100, servingUnit=G -> 100 g per serving
+     * - servingSize=1, servingUnit=CAN, gramsPerServingUnitResolved()=400 -> 400 g per serving
+     *
+     * This is intentionally different from gramsPerServingUnitResolved(), which is effectively
+     * grams per 1 serving UNIT, not always grams for the whole serving.
+     */
+    private fun Food.gramsPerCurrentServingResolved(): Double? {
+        val directMass = servingUnit.toGrams(servingSize)
+        if (directMass != null && directMass > 0.0) return directMass
+
+        val gramsPerOneUnit = gramsPerServingUnitResolved()
+        if (gramsPerOneUnit != null && gramsPerOneUnit > 0.0 && servingSize > 0.0) {
+            return servingSize * gramsPerOneUnit
+        }
+
+        return null
+    }
+
+    /**
+     * Returns milliliters for one CURRENT serving of this food.
+     *
+     * Examples:
+     * - servingSize=250, servingUnit=ML -> 250 mL per serving
+     * - servingSize=1, servingUnit=CAN, mlPerServingUnit=400 -> 400 mL per serving
+     */
+    private fun Food.millilitersPerCurrentServingResolved(): Double? {
+        val directVolume = servingUnit.toMilliliters(servingSize)
+        if (directVolume != null && directVolume > 0.0) return directVolume
+
+        val mlPerOneUnit = mlPerServingUnit
+        if (mlPerOneUnit != null && mlPerOneUnit > 0.0 && servingSize > 0.0) {
+            return servingSize * mlPerOneUnit
+        }
+
+        return null
     }
 
     private fun maybeAutoPrefillTotalYieldGramsFromIngredients() {
@@ -261,9 +301,10 @@ class RecipeBuilderViewModel @Inject constructor(
                 }.combine(nutrientTallyLoadingFlow) { list, loading ->
                     list + loading
                 }.combine(nutrientTallyErrorFlow) { list, tallyError ->
-                    val preview = list[0] as com.example.adobongkangkong.domain.model.RecipeMacroPreview
+                    val preview = list[0] as RecipeMacroPreview
                     val isSaving = list[1] as Boolean
                     val error = list[2] as String?
+                    @Suppress("UNCHECKED_CAST")
                     val rows = list[3] as List<NutrientRowUi>
                     val loading = list[4] as Boolean
 
@@ -329,8 +370,9 @@ class RecipeBuilderViewModel @Inject constructor(
 
             combine(leftFlow, rightFlow, overlayFlow, categoryFlow) { left, right, overlay, categoryState ->
                 val pickedGrams =
-                    left.pickedFood?.gramsPerServingUnitResolved()
-                        ?.let { g -> right.pickedServings * g }
+                    left.pickedFood
+                        ?.gramsPerCurrentServingResolved()
+                        ?.let { gramsPerServing -> right.pickedServings * gramsPerServing }
 
                 RecipeBuilderState(
                     name = left.name,
@@ -570,12 +612,12 @@ class RecipeBuilderViewModel @Inject constructor(
         if (isEditingGrams) return
 
         val food = pickedFoodFlow.value
-        val g = food?.gramsPerServingUnitResolved()
-        if (g == null || g <= 0.0) {
+        val gramsPerServing = food?.gramsPerCurrentServingResolved()
+        if (gramsPerServing == null || gramsPerServing <= 0.0) {
             pickedGramsTextFlow.value = ""
             return
         }
-        val grams = (pickedServingsFlow.value * g).coerceAtLeast(0.0)
+        val grams = (pickedServingsFlow.value * gramsPerServing).coerceAtLeast(0.0)
         pickedGramsTextFlow.value = formatNumberForInput(grams)
     }
 
@@ -665,10 +707,10 @@ class RecipeBuilderViewModel @Inject constructor(
 
         val mlInput = unit.toMilliliters(a) ?: return null
 
-        val gPerServing = food.gramsPerServingUnitResolved() ?: return null
+        val gPerServing = food.gramsPerCurrentServingResolved() ?: return null
         if (gPerServing <= 0.0) return null
 
-        val mlPerFoodServing = food.servingUnit.toMilliliters(food.servingSize) ?: return null
+        val mlPerFoodServing = food.millilitersPerCurrentServingResolved() ?: return null
         if (mlPerFoodServing <= 0.0) return null
 
         val densityGPerMl = gPerServing / mlPerFoodServing
@@ -730,10 +772,10 @@ class RecipeBuilderViewModel @Inject constructor(
 
     fun onPickedGramsChange(grams: Double) {
         val food = pickedFoodFlow.value ?: return
-        val g = food.gramsPerServingUnitResolved() ?: return
-        if (g <= 0.0) return
+        val gramsPerServing = food.gramsPerCurrentServingResolved() ?: return
+        if (gramsPerServing <= 0.0) return
 
-        val servingsRaw = (grams / g).coerceAtLeast(0.0)
+        val servingsRaw = (grams / gramsPerServing).coerceAtLeast(0.0)
         pickedServingsFlow.value = servingsRaw
         pickedServingsTextFlow.value = formatTo2Decimals(servingsRaw)
     }
@@ -777,16 +819,15 @@ class RecipeBuilderViewModel @Inject constructor(
             return
         }
 
-        val gramsBasis = food.gramsPerServingUnitResolved()
+        val gramsPerServing = food.gramsPerCurrentServingResolved()
+        val mlPerServing = food.millilitersPerCurrentServingResolved()
         val gramsForLine: Double?
         val isApproximateWeight: Boolean
 
-        if (gramsBasis != null) {
-            gramsForLine = (servings * gramsBasis).coerceAtLeast(0.0)
+        if (gramsPerServing != null) {
+            gramsForLine = (servings * gramsPerServing).coerceAtLeast(0.0)
             isApproximateWeight = false
         } else {
-            val mlPerServing = food.mlPerServingUnit
-                ?: food.servingUnit.toMilliliters(food.servingSize)
             gramsForLine = mlPerServing?.let { perServingMl ->
                 (servings * perServingMl).coerceAtLeast(0.0)
             }
@@ -991,18 +1032,17 @@ class RecipeBuilderViewModel @Inject constructor(
             ingredientsFlow.value = ingredients.map { line ->
                 val ingFood = foodById[line.ingredientFoodId]
 
-                val gramsBasis = ingFood?.gramsPerServingUnitResolved()
+                val gramsPerServing = ingFood?.gramsPerCurrentServingResolved()
+                val mlPerServing = ingFood?.millilitersPerCurrentServingResolved()
                 val gramsForLine: Double?
                 val isApproximateWeight: Boolean
 
-                if (gramsBasis != null) {
+                if (gramsPerServing != null) {
                     gramsForLine = line.ingredientServings?.let { servings ->
-                        (servings * gramsBasis).coerceAtLeast(0.0)
+                        (servings * gramsPerServing).coerceAtLeast(0.0)
                     }
                     isApproximateWeight = false
                 } else {
-                    val mlPerServing = ingFood?.mlPerServingUnit
-                        ?: ingFood?.servingUnit?.toMilliliters(ingFood.servingSize)
                     gramsForLine = line.ingredientServings?.let { servings ->
                         mlPerServing?.let { perServingMl ->
                             (servings * perServingMl).coerceAtLeast(0.0)
