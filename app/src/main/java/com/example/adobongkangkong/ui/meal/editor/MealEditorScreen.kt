@@ -30,13 +30,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -92,7 +92,10 @@ fun MealEditorScreen(
                 title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(painter = painterResource(R.drawable.angle_circle_left), contentDescription = "Back")
+                        Icon(
+                            painter = painterResource(R.drawable.angle_circle_left),
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 actions = {
@@ -117,7 +120,12 @@ fun MealEditorScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onRequestAddFood,
-                content = { Icon(painter = painterResource(R.drawable.add), contentDescription = "Add food") }
+                content = {
+                    Icon(
+                        painter = painterResource(R.drawable.add),
+                        contentDescription = "Add food"
+                    )
+                }
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -142,6 +150,12 @@ fun MealEditorScreen(
                 onNameChanged = contract::setName,
                 onTemplateDefaultSlotChanged = contract::setTemplateDefaultSlot
             )
+
+            state.liveMacroSummaryLine
+                ?.takeIf { it.isNotBlank() }
+                ?.let { summary ->
+                    MealMacroSummaryCard(summary = summary)
+                }
 
             Divider()
 
@@ -175,6 +189,34 @@ fun MealEditorScreen(
                 }
                 item { Spacer(modifier = Modifier.height(84.dp)) }
             }
+        }
+    }
+}
+
+@Composable
+private fun MealMacroSummaryCard(summary: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = "Meal total",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }
@@ -238,7 +280,9 @@ private fun MealEditorBannerSection(
             if (canCaptureBanner) {
                 IconButton(
                     onClick = { bannerOwner?.let { bannerCaptureController.open(it) } },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
                 ) {
                     Icon(
                         painter = painterResource(android.R.drawable.ic_menu_camera),
@@ -249,14 +293,19 @@ private fun MealEditorBannerSection(
 
             if (hasStoredBanner && bmp == null) {
                 CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp).size(50.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp)
+                        .size(50.dp),
                     strokeWidth = 2.dp
                 )
             }
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -265,7 +314,10 @@ private fun MealEditorBannerSection(
                 onClick = { bannerOwner?.let { bannerCaptureController.open(it) } },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Text(text = bannerChangeLabel, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    text = bannerChangeLabel,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
 

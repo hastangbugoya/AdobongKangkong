@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-//import androidx.compose.material.icons.Icons
-//import androidx.compose.material.icons.filled.ArrowDownward
-//import androidx.compose.material.icons.filled.ArrowUpward
-//import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,10 +46,28 @@ fun MealEditorItemRow(
                     text = item.foodName,
                     style = MaterialTheme.typography.titleMedium
                 )
-                Text(
-                    text = "foodId=${item.foodId}",
-                    style = MaterialTheme.typography.labelSmall
-                )
+
+                item.macroSummaryLine
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { summary ->
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+
+                item.effectiveQuantityText
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { quantityText ->
+                        Text(
+                            text = quantityText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -62,7 +76,7 @@ fun MealEditorItemRow(
                         painter = painterResource(R.drawable.trash),
                         contentDescription = "Remove",
                         modifier = Modifier.size(AppIconSize.CardAction),
-                        )
+                    )
                 }
                 if (onMoveUp != null) {
                     IconButton(onClick = onMoveUp) {
@@ -70,7 +84,7 @@ fun MealEditorItemRow(
                             painter = painterResource(R.drawable.angle_double_small_down),
                             contentDescription = "Move up",
                             modifier = Modifier.size(AppIconSize.CardAction),
-                            )
+                        )
                     }
                 } else {
                     Spacer(modifier = Modifier.width(12.dp))
@@ -81,7 +95,7 @@ fun MealEditorItemRow(
                             painter = painterResource(R.drawable.angle_double_small_up),
                             contentDescription = "Move down",
                             modifier = Modifier.size(AppIconSize.CardAction),
-                            )
+                        )
                     }
                 }
             }
@@ -89,7 +103,6 @@ fun MealEditorItemRow(
 
         Spacer(modifier = Modifier.padding(top = 8.dp))
 
-        // Primary input: servings text
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
             value = item.servings,
@@ -98,7 +111,6 @@ fun MealEditorItemRow(
             singleLine = true
         )
 
-        // Optional overrides (kept simple; you can hide behind an expand toggle later)
         Spacer(modifier = Modifier.padding(top = 8.dp))
 
         OutlinedTextField(
