@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.planner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientWithMetaRow
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
@@ -477,10 +478,9 @@ class PlannedMealEditorViewModel @Inject constructor(
                 val food = foods.getById(item.foodId)
                 val nutrients = getFoodNutrients(item.foodId)
 
-                val scale = resolveScale(item, food)
-                val macros = computeMacros(nutrients, scale)
+                val macros = computeMacros(item = item, food = food, rows = nutrients)
                 val macroLine = buildMacroSummaryLine(macros)
-                val critical = computeCritical(nutrients, scale)
+                val critical = computeCritical(item = item, food = food, rows = nutrients)
 
                 item.copy(
                     effectiveQuantityText = buildQuantityText(item, food),
@@ -508,26 +508,15 @@ class PlannedMealEditorViewModel @Inject constructor(
         }
     }
 
-    private fun resolveScale(item: MealEditorUiState.Item, food: Food?): Double {
-        val gramsOverride = item.grams
-        val millilitersOverride = item.milliliters
-        val servings = item.servings.toDoubleOrNull() ?: 1.0
-
-        return when {
-            gramsOverride != null -> gramsOverride / 100.0
-            millilitersOverride != null -> millilitersOverride / 100.0
-            food?.gramsPerServingUnit != null -> (servings * food.gramsPerServingUnit) / 100.0
-            food?.mlPerServingUnit != null -> (servings * food.mlPerServingUnit) / 100.0
-            else -> servings
-        }
-    }
-
     private fun computeMacros(
-        rows: List<FoodNutrientWithMetaRow>,
-        scale: Double
+        item: MealEditorUiState.Item,
+        food: Food?,
+        rows: List<FoodNutrientWithMetaRow>
     ): MealEditorUiState.MacroPreview {
-        fun find(code: String): Double? =
-            rows.firstOrNull { it.code == code }?.amount?.times(scale)
+        fun find(code: String): Double? {
+            val row = rows.firstOrNull { it.code == code } ?: return null
+            return scaleRowAmount(row = row, item = item, food = food)
+        }
 
         return MealEditorUiState.MacroPreview(
             caloriesKcal = find("CALORIES_KCAL"),
@@ -538,8 +527,9 @@ class PlannedMealEditorViewModel @Inject constructor(
     }
 
     private fun computeCritical(
-        rows: List<FoodNutrientWithMetaRow>,
-        scale: Double
+        item: MealEditorUiState.Item,
+        food: Food?,
+        rows: List<FoodNutrientWithMetaRow>
     ): List<MealEditorUiState.CriticalNutrientPreview> {
         val rowMap = rows.associateBy { it.code }
 
@@ -549,9 +539,84 @@ class PlannedMealEditorViewModel @Inject constructor(
                 nutrientId = row?.nutrientId ?: 0L,
                 nutrientName = row?.displayName ?: code,
                 unitName = row?.unit,
-                value = row?.amount?.times(scale),
+                value = row?.let { scaleRowAmount(row = it, item = item, food = food) },
                 isMissing = row == null
             )
+        }
+    }
+
+    private fun scaleRowAmount(
+        row: FoodNutrientWithMetaRow,
+        item: MealEditorUiState.Item,
+        food: Food?
+    ): Double? {
+        val factor = resolveBasisFactor(
+            basisType = row.basisType,
+            item = item,
+            food = food
+        ) ?: return null
+
+        return row.amount * factor
+    }
+
+    private fun resolveBasisFactor(
+        basisType: BasisType,
+        item: MealEditorUiState.Item,
+        food: Food?
+    ): Double? {
+        val gramsOverride = item.grams
+        val millilitersOverride = item.milliliters
+        val servings = item.servings.toDoubleOrNull()
+
+        return when (basisType) {
+            BasisType.PER_100G -> {
+                when {
+                    gramsOverride != null -> gramsOverride / 100.0
+                    millilitersOverride != null -> {
+                        val gramsPerServing = food?.gramsPerServingUnit
+                        val mlPerServing = food?.mlPerServingUnit
+                        if (gramsPerServing != null && mlPerServing != null && mlPerServing > 0.0) {
+                            val derivedGrams = millilitersOverride * (gramsPerServing / mlPerServing)
+                            derivedGrams / 100.0
+                        } else {
+                            null
+                        }
+                    }
+                    servings != null && food?.gramsPerServingUnit != null ->
+                        (servings * food.gramsPerServingUnit) / 100.0
+                    else -> null
+                }
+            }
+
+            BasisType.PER_100ML -> {
+                when {
+                    millilitersOverride != null -> millilitersOverride / 100.0
+                    gramsOverride != null -> {
+                        val gramsPerServing = food?.gramsPerServingUnit
+                        val mlPerServing = food?.mlPerServingUnit
+                        if (gramsPerServing != null && gramsPerServing > 0.0 && mlPerServing != null) {
+                            val derivedMl = gramsOverride * (mlPerServing / gramsPerServing)
+                            derivedMl / 100.0
+                        } else {
+                            null
+                        }
+                    }
+                    servings != null && food?.mlPerServingUnit != null ->
+                        (servings * food.mlPerServingUnit) / 100.0
+                    else -> null
+                }
+            }
+
+            BasisType.USDA_REPORTED_SERVING -> {
+                when {
+                    servings != null -> servings
+                    gramsOverride != null && food?.gramsPerServingUnit != null && food.gramsPerServingUnit > 0.0 ->
+                        gramsOverride / food.gramsPerServingUnit
+                    millilitersOverride != null && food?.mlPerServingUnit != null && food.mlPerServingUnit > 0.0 ->
+                        millilitersOverride / food.mlPerServingUnit
+                    else -> null
+                }
+            }
         }
     }
 
@@ -599,31 +664,27 @@ class PlannedMealEditorViewModel @Inject constructor(
     private fun aggregateCritical(
         items: List<MealEditorUiState.Item>
     ): List<MealEditorUiState.CriticalNutrientPreview> {
-        if (items.isEmpty() || criticalNutrientKeys.isEmpty()) return emptyList()
+        if (items.isEmpty()) return emptyList()
 
-        return criticalNutrientKeys.map { code ->
-            val rowsForCode = items.flatMap { item ->
-                item.criticalNutrients.filter { it.nutrientName == code || it.nutrientId != 0L && item.criticalNutrients.any() }
+        val allRows = items.flatMap { it.criticalNutrients }
+        if (allRows.isEmpty()) return emptyList()
+
+        return allRows
+            .groupBy { it.nutrientName }
+            .values
+            .map { group ->
+                val first = group.first()
+                val knownValues = group.mapNotNull { it.value }
+                MealEditorUiState.CriticalNutrientPreview(
+                    nutrientId = first.nutrientId,
+                    nutrientName = first.nutrientName,
+                    unitName = first.unitName,
+                    value = knownValues.takeIf { it.isNotEmpty() }?.sum(),
+                    isMissing = group.any { it.isMissing },
+                    isEstimated = group.any { it.isEstimated }
+                )
             }
-
-            val matched = items.mapNotNull { item ->
-                item.criticalNutrients.firstOrNull { preview ->
-                    preview.nutrientName == code || preview.nutrientId != 0L && preview.nutrientName.equals(code, ignoreCase = true)
-                }
-            }
-
-            val first = matched.firstOrNull()
-            val sum = matched.mapNotNull { it.value }.takeIf { it.isNotEmpty() }?.sum()
-            val isMissing = matched.isEmpty() || matched.any { it.isMissing }
-
-            MealEditorUiState.CriticalNutrientPreview(
-                nutrientId = first?.nutrientId ?: 0L,
-                nutrientName = first?.nutrientName ?: code,
-                unitName = first?.unitName,
-                value = sum,
-                isMissing = isMissing
-            )
-        }
+            .sortedBy { it.nutrientName }
     }
 
     private fun buildQuantityText(
