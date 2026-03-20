@@ -2,10 +2,13 @@ package com.example.adobongkangkong.ui.templates
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.dao.FoodNutrientWithMetaRow
+import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateItemEntity
-import com.example.adobongkangkong.domain.mealprep.usecase.ComputeMealTemplateDraftMacroTotalsUseCase
+import com.example.adobongkangkong.domain.model.Food
+import com.example.adobongkangkong.domain.nutrition.GetFoodNutrientsWithMetaUseCase
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.MealTemplateItemRepository
@@ -14,15 +17,16 @@ import com.example.adobongkangkong.ui.meal.editor.MealEditorContract
 import com.example.adobongkangkong.ui.meal.editor.MealEditorMode
 import com.example.adobongkangkong.ui.meal.editor.MealEditorUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.UUID
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
-import javax.inject.Inject
 
 /**
  * ViewModel backing the meal template editor.
@@ -32,13 +36,14 @@ import javax.inject.Inject
  * - Owns template-only actions: duplicate/delete.
  * - Computes advisory live macro totals from the current in-memory draft.
  * - Persists editable `defaultSlot` for template metadata.
+ * - Row-level macro/quantity display mirrors planned-meal editor behavior.
  */
 @HiltViewModel
 class MealTemplateEditorViewModel @Inject constructor(
     private val templates: MealTemplateRepository,
     private val templateItems: MealTemplateItemRepository,
     private val foods: FoodRepository,
-    private val computeDraftMacros: ComputeMealTemplateDraftMacroTotalsUseCase
+    private val getFoodNutrients: GetFoodNutrientsWithMetaUseCase
 ) : ViewModel(), MealEditorContract {
 
     sealed interface Effect {
@@ -64,6 +69,9 @@ class MealTemplateEditorViewModel @Inject constructor(
     )
     override val state: StateFlow<MealEditorUiState> = _state.asStateFlow()
 
+    private val foodCache = mutableMapOf<Long, Food?>()
+    private val nutrientCache = mutableMapOf<Long, List<FoodNutrientWithMetaRow>>()
+
     fun setTemplateId(templateId: Long) {
         _state.value = _state.value.copy(mealId = templateId, errorMessage = null)
         viewModelScope.launch {
@@ -71,7 +79,7 @@ class MealTemplateEditorViewModel @Inject constructor(
                 val template = templates.getById(templateId)
                 val items = templateItems.getItemsForTemplate(templateId).sortedBy { it.sortOrder }
                 val uiItems = items.map { entity ->
-                    val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
+                    val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
                     MealEditorUiState.Item(
                         lineId = UUID.randomUUID().toString(),
                         id = entity.id,
@@ -89,7 +97,7 @@ class MealTemplateEditorViewModel @Inject constructor(
                     errorMessage = null,
                     isDirty = false
                 )
-                recomputeDraftMacroGuidance(uiItems)
+                rebuildDerivedNutrition()
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Failed to load template")
             }
@@ -106,7 +114,7 @@ class MealTemplateEditorViewModel @Inject constructor(
 
     override fun addFood(foodId: Long) {
         viewModelScope.launch {
-            val foodName = foods.getById(foodId)?.name ?: "Food #$foodId"
+            val foodName = getCachedFood(foodId)?.name ?: "Food #$foodId"
             val newItem = MealEditorUiState.Item(
                 lineId = UUID.randomUUID().toString(),
                 id = null,
@@ -116,36 +124,57 @@ class MealTemplateEditorViewModel @Inject constructor(
                 grams = null,
                 milliliters = null
             )
-            val updated = _state.value.items + newItem
-            _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
-            recomputeDraftMacroGuidance(updated)
+            _state.value = _state.value.copy(
+                items = _state.value.items + newItem,
+                errorMessage = null,
+                isDirty = true
+            )
+            rebuildDerivedNutrition()
         }
     }
 
     override fun updateServings(lineId: String, servingsText: String) {
-        val updated = _state.value.items.map { if (it.lineId == lineId) it.copy(servings = servingsText) else it }
-        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
-        recomputeDraftMacroGuidance(updated)
+        _state.value = _state.value.copy(
+            items = _state.value.items.map {
+                if (it.lineId == lineId) it.copy(servings = servingsText) else it
+            },
+            errorMessage = null,
+            isDirty = true
+        )
+        rebuildDerivedNutrition()
     }
 
     override fun updateGrams(lineId: String, grams: String) {
         val g = grams.toDoubleOrNull()
-        val updated = _state.value.items.map { if (it.lineId == lineId) it.copy(grams = g) else it }
-        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
-        recomputeDraftMacroGuidance(updated)
+        _state.value = _state.value.copy(
+            items = _state.value.items.map {
+                if (it.lineId == lineId) it.copy(grams = g) else it
+            },
+            errorMessage = null,
+            isDirty = true
+        )
+        rebuildDerivedNutrition()
     }
 
     override fun updateMilliliters(lineId: String, ml: String) {
         val v = ml.toDoubleOrNull()
-        val updated = _state.value.items.map { if (it.lineId == lineId) it.copy(milliliters = v) else it }
-        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
-        recomputeDraftMacroGuidance(updated)
+        _state.value = _state.value.copy(
+            items = _state.value.items.map {
+                if (it.lineId == lineId) it.copy(milliliters = v) else it
+            },
+            errorMessage = null,
+            isDirty = true
+        )
+        rebuildDerivedNutrition()
     }
 
     override fun removeItem(lineId: String) {
-        val updated = _state.value.items.filterNot { it.lineId == lineId }
-        _state.value = _state.value.copy(items = updated, errorMessage = null, isDirty = true)
-        recomputeDraftMacroGuidance(updated)
+        _state.value = _state.value.copy(
+            items = _state.value.items.filterNot { it.lineId == lineId },
+            errorMessage = null,
+            isDirty = true
+        )
+        rebuildDerivedNutrition()
     }
 
     override fun moveItem(fromIndex: Int, toIndex: Int) {
@@ -154,7 +183,7 @@ class MealTemplateEditorViewModel @Inject constructor(
         val moved = list.removeAt(fromIndex)
         list.add(toIndex, moved)
         _state.value = _state.value.copy(items = list, errorMessage = null, isDirty = true)
-        recomputeDraftMacroGuidance(list)
+        rebuildDerivedNutrition()
     }
 
     override fun save() {
@@ -206,6 +235,7 @@ class MealTemplateEditorViewModel @Inject constructor(
                     )
                 }
                 _state.value = _state.value.copy(mealId = templateId, isDirty = false)
+                rebuildDerivedNutrition()
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Save failed")
             } finally {
@@ -265,8 +295,21 @@ class MealTemplateEditorViewModel @Inject constructor(
     override fun discardChanges() {
         val templateId = _state.value.mealId
         if (templateId == null) {
-            _state.value = _state.value.copy(errorMessage = null, isDirty = false)
-            recomputeDraftMacroGuidance(_state.value.items)
+            _state.value = _state.value.copy(
+                errorMessage = null,
+                isDirty = false,
+                liveMacroTotals = null,
+                liveMacroSummaryLine = "0 kcal • P 0 • C 0 • F 0",
+                mealMacroPreview = null,
+                items = _state.value.items.map {
+                    it.copy(
+                        macroPreview = null,
+                        macroSummaryLine = null,
+                        effectiveQuantityText = null
+                    )
+                }
+            )
+            rebuildDerivedNutrition()
             return
         }
         viewModelScope.launch {
@@ -274,7 +317,7 @@ class MealTemplateEditorViewModel @Inject constructor(
                 val template = templates.getById(templateId)
                 val items = templateItems.getItemsForTemplate(templateId).sortedBy { it.sortOrder }
                 val uiItems = items.map { entity ->
-                    val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
+                    val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
                     MealEditorUiState.Item(
                         lineId = UUID.randomUUID().toString(),
                         id = entity.id,
@@ -292,28 +335,251 @@ class MealTemplateEditorViewModel @Inject constructor(
                     errorMessage = null,
                     isDirty = false
                 )
-                recomputeDraftMacroGuidance(uiItems)
+                rebuildDerivedNutrition()
             } catch (t: Throwable) {
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Discard failed")
             }
         }
     }
 
-    private fun recomputeDraftMacroGuidance(items: List<MealEditorUiState.Item>) {
+    private suspend fun getCachedFood(foodId: Long): Food? {
+        if (foodCache.containsKey(foodId)) return foodCache[foodId]
+        val loaded = foods.getById(foodId)
+        foodCache[foodId] = loaded
+        return loaded
+    }
+
+    private suspend fun getCachedNutrients(foodId: Long): List<FoodNutrientWithMetaRow> {
+        val cached = nutrientCache[foodId]
+        if (cached != null) return cached
+        val loaded = getFoodNutrients(foodId)
+        nutrientCache[foodId] = loaded
+        return loaded
+    }
+
+    private suspend fun prefetchFor(foodIds: List<Long>) {
+        foodIds.distinct().forEach { foodId ->
+            getCachedFood(foodId)
+            getCachedNutrients(foodId)
+        }
+    }
+
+    private fun rebuildDerivedNutrition() {
         viewModelScope.launch {
-            val totals = computeDraftMacros(
-                items.map { item ->
-                    ComputeMealTemplateDraftMacroTotalsUseCase.DraftItem(
-                        foodId = item.foodId,
-                        servings = item.servings.toDoubleOrNull(),
-                        grams = item.grams
-                    )
+            val current = _state.value
+            val foodIds = current.items.map { it.foodId }
+            prefetchFor(foodIds)
+
+            val updatedItems = current.items.map { item ->
+                val food = getCachedFood(item.foodId)
+                val nutrients = getCachedNutrients(item.foodId)
+                val macros = computeMacros(item = item, food = food, rows = nutrients)
+
+                item.copy(
+                    effectiveQuantityText = buildQuantityText(item, food),
+                    macroPreview = macros,
+                    macroSummaryLine = buildMacroSummaryLine(macros)
+                )
+            }
+
+            val mealMacroPreview = aggregateMacros(updatedItems)
+
+            _state.update {
+                it.copy(
+                    items = updatedItems,
+                    mealMacroPreview = mealMacroPreview,
+                    liveMacroTotals = mealMacroPreview?.toMacroTotals(),
+                    liveMacroSummaryLine = buildMacroSummaryLine(mealMacroPreview) ?: "0 kcal • P 0 • C 0 • F 0"
+                )
+            }
+        }
+    }
+
+    private fun computeMacros(
+        item: MealEditorUiState.Item,
+        food: Food?,
+        rows: List<FoodNutrientWithMetaRow>
+    ): MealEditorUiState.MacroPreview {
+        fun find(code: String): Double? {
+            val row = rows.firstOrNull { it.code == code } ?: return null
+            return scaleRowAmount(row = row, item = item, food = food)
+        }
+
+        return MealEditorUiState.MacroPreview(
+            caloriesKcal = find("CALORIES_KCAL"),
+            proteinG = find("PROTEIN_G"),
+            carbsG = find("CARBS_G"),
+            fatG = find("FAT_G")
+        )
+    }
+
+    private fun scaleRowAmount(
+        row: FoodNutrientWithMetaRow,
+        item: MealEditorUiState.Item,
+        food: Food?
+    ): Double? {
+        val factor = resolveBasisFactor(
+            basisType = row.basisType,
+            item = item,
+            food = food
+        ) ?: return null
+
+        return row.amount * factor
+    }
+
+    private fun resolveBasisFactor(
+        basisType: BasisType,
+        item: MealEditorUiState.Item,
+        food: Food?
+    ): Double? {
+        val gramsOverride = item.grams
+        val millilitersOverride = item.milliliters
+        val servings = item.servings.toDoubleOrNull()
+
+        return when (basisType) {
+            BasisType.PER_100G -> {
+                when {
+                    gramsOverride != null -> gramsOverride / 100.0
+                    millilitersOverride != null -> {
+                        val gramsPerServing = food?.gramsPerServingUnit
+                        val mlPerServing = food?.mlPerServingUnit
+                        if (gramsPerServing != null && mlPerServing != null && mlPerServing > 0.0) {
+                            val derivedGrams = millilitersOverride * (gramsPerServing / mlPerServing)
+                            derivedGrams / 100.0
+                        } else {
+                            null
+                        }
+                    }
+                    servings != null && food?.gramsPerServingUnit != null ->
+                        (servings * food.gramsPerServingUnit) / 100.0
+                    else -> null
                 }
-            )
-            _state.value = _state.value.copy(
-                liveMacroTotals = totals,
-                liveMacroSummaryLine = totals.toMealTemplateMacroSummaryLine()
-            )
+            }
+
+            BasisType.PER_100ML -> {
+                when {
+                    millilitersOverride != null -> millilitersOverride / 100.0
+                    gramsOverride != null -> {
+                        val gramsPerServing = food?.gramsPerServingUnit
+                        val mlPerServing = food?.mlPerServingUnit
+                        if (gramsPerServing != null && gramsPerServing > 0.0 && mlPerServing != null) {
+                            val derivedMl = gramsOverride * (mlPerServing / gramsPerServing)
+                            derivedMl / 100.0
+                        } else {
+                            null
+                        }
+                    }
+                    servings != null && food?.mlPerServingUnit != null ->
+                        (servings * food.mlPerServingUnit) / 100.0
+                    else -> null
+                }
+            }
+
+            BasisType.USDA_REPORTED_SERVING -> {
+                when {
+                    servings != null -> servings
+                    gramsOverride != null && food?.gramsPerServingUnit != null && food.gramsPerServingUnit > 0.0 ->
+                        gramsOverride / food.gramsPerServingUnit
+                    millilitersOverride != null && food?.mlPerServingUnit != null && food.mlPerServingUnit > 0.0 ->
+                        millilitersOverride / food.mlPerServingUnit
+                    else -> null
+                }
+            }
+        }
+    }
+
+    private fun aggregateMacros(
+        items: List<MealEditorUiState.Item>
+    ): MealEditorUiState.MacroPreview? {
+        if (items.isEmpty()) return null
+
+        var hasAny = false
+        var kcal = 0.0
+        var protein = 0.0
+        var carbs = 0.0
+        var fat = 0.0
+
+        items.forEach { item ->
+            val m = item.macroPreview ?: return@forEach
+            if (m.caloriesKcal != null) {
+                kcal += m.caloriesKcal
+                hasAny = true
+            }
+            if (m.proteinG != null) {
+                protein += m.proteinG
+                hasAny = true
+            }
+            if (m.carbsG != null) {
+                carbs += m.carbsG
+                hasAny = true
+            }
+            if (m.fatG != null) {
+                fat += m.fatG
+                hasAny = true
+            }
+        }
+
+        if (!hasAny) return null
+
+        return MealEditorUiState.MacroPreview(
+            caloriesKcal = kcal,
+            proteinG = protein,
+            carbsG = carbs,
+            fatG = fat
+        )
+    }
+
+    private fun buildQuantityText(
+        item: MealEditorUiState.Item,
+        food: Food?
+    ): String {
+        item.grams?.let { return "${trimTrailingZero(it)} g" }
+        item.milliliters?.let { return "${trimTrailingZero(it)} mL" }
+
+        val servings = item.servings.toDoubleOrNull()
+        if (servings != null) {
+            val unitDisplay = food?.servingUnit?.display ?: "serving"
+            return "${trimTrailingZero(servings)} $unitDisplay"
+        }
+
+        return ""
+    }
+
+    private fun buildMacroSummaryLine(
+        preview: MealEditorUiState.MacroPreview?
+    ): String? {
+        preview ?: return null
+        if (
+            preview.caloriesKcal == null &&
+            preview.proteinG == null &&
+            preview.carbsG == null &&
+            preview.fatG == null
+        ) return null
+
+        return "${trimNullable(preview.caloriesKcal)} kcal • " +
+                "P ${trimNullable(preview.proteinG)} • " +
+                "C ${trimNullable(preview.carbsG)} • " +
+                "F ${trimNullable(preview.fatG)}"
+    }
+
+    private fun MealEditorUiState.MacroPreview.toMacroTotals(): com.example.adobongkangkong.domain.model.MacroTotals {
+        return com.example.adobongkangkong.domain.model.MacroTotals(
+            caloriesKcal = caloriesKcal ?: 0.0,
+            proteinG = proteinG ?: 0.0,
+            carbsG = carbsG ?: 0.0,
+            fatG = fatG ?: 0.0
+        )
+    }
+
+    private fun trimNullable(value: Double?): String {
+        return value?.let { trimTrailingZero(it) } ?: "-"
+    }
+
+    private fun trimTrailingZero(value: Double): String {
+        return if (value % 1.0 == 0.0) {
+            value.toLong().toString()
+        } else {
+            String.format("%.2f", value).trimEnd('0').trimEnd('.')
         }
     }
 }

@@ -24,6 +24,8 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
 @Composable
 fun MealEditorItemRow(
     item: MealEditorUiState.Item,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onServingsChanged: (String) -> Unit,
     onGramsChanged: (String) -> Unit,
     onMillilitersChanged: (String) -> Unit,
@@ -71,6 +73,17 @@ fun MealEditorItemRow(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onToggleExpanded) {
+                    Icon(
+                        painter = painterResource(
+                            if (isExpanded) R.drawable.compress_alt
+                            else R.drawable.expand_arrows
+                        ),
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        modifier = Modifier.size(AppIconSize.CardAction),
+                    )
+                }
+
                 IconButton(onClick = onRemove) {
                     Icon(
                         painter = painterResource(R.drawable.trash),
@@ -78,6 +91,7 @@ fun MealEditorItemRow(
                         modifier = Modifier.size(AppIconSize.CardAction),
                     )
                 }
+
                 if (onMoveUp != null) {
                     IconButton(onClick = onMoveUp) {
                         Icon(
@@ -89,6 +103,7 @@ fun MealEditorItemRow(
                 } else {
                     Spacer(modifier = Modifier.width(12.dp))
                 }
+
                 if (onMoveDown != null) {
                     IconButton(onClick = onMoveDown) {
                         Icon(
@@ -101,34 +116,36 @@ fun MealEditorItemRow(
             }
         }
 
-        Spacer(modifier = Modifier.padding(top = 8.dp))
+        if (isExpanded) {
+            Spacer(modifier = Modifier.padding(top = 8.dp))
 
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = item.servings,
-            onValueChange = onServingsChanged,
-            label = { Text("Servings") },
-            singleLine = true
-        )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = item.servings,
+                onValueChange = onServingsChanged,
+                label = { Text("Servings") },
+                singleLine = true
+            )
 
-        Spacer(modifier = Modifier.padding(top = 8.dp))
+            Spacer(modifier = Modifier.padding(top = 8.dp))
 
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = item.grams?.toString().orEmpty(),
-            onValueChange = onGramsChanged,
-            label = { Text("Grams override (optional)") },
-            singleLine = true
-        )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = item.grams?.toString().orEmpty(),
+                onValueChange = onGramsChanged,
+                label = { Text("Grams override (optional)") },
+                singleLine = true
+            )
 
-        Spacer(modifier = Modifier.padding(top = 8.dp))
+            Spacer(modifier = Modifier.padding(top = 8.dp))
 
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = item.milliliters?.toString().orEmpty(),
-            onValueChange = onMillilitersChanged,
-            label = { Text("mL override (optional)") },
-            singleLine = true
-        )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = item.milliliters?.toString().orEmpty(),
+                onValueChange = onMillilitersChanged,
+                label = { Text("mL override (optional)") },
+                singleLine = true
+            )
+        }
     }
 }

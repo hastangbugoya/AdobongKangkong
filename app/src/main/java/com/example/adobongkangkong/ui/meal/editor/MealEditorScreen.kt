@@ -37,8 +37,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +64,9 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
  * - Navigation stays outside this composable.
  * - Template-only actions are injected through [extraActions].
  * - Banner support is optional so planned-meal editor continues to work without banner ownership.
+ * - Item row expansion state is UI-local and keyed by lineId.
+ * - Existing rows default to collapsed.
+ * - Newly added rows auto-expand once when they first appear after initial load.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +87,35 @@ fun MealEditorScreen(
     LaunchedEffect(state.errorMessage) {
         val msg = state.errorMessage?.trim().orEmpty()
         if (msg.isNotBlank()) snackbarHostState.showSnackbar(message = msg)
+    }
+
+    val expandedRows = remember { mutableStateMapOf<String, Boolean>() }
+    var previousLineIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var hasInitializedRows by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { state.items.map { it.lineId } }
+            .collect { lineIds ->
+                val keep = lineIds.toSet()
+
+                val staleKeys = expandedRows.keys.filterNot { it in keep }
+                staleKeys.forEach { expandedRows.remove(it) }
+
+                if (!hasInitializedRows) {
+                    lineIds.forEach { lineId ->
+                        expandedRows[lineId] = false
+                    }
+                    previousLineIds = keep
+                    hasInitializedRows = true
+                } else {
+                    lineIds.forEach { lineId ->
+                        if (expandedRows[lineId] == null) {
+                            expandedRows[lineId] = lineId !in previousLineIds
+                        }
+                    }
+                    previousLineIds = keep
+                }
+            }
     }
 
     val title = when (state.mode) {
@@ -179,6 +216,10 @@ fun MealEditorScreen(
                 ) { index, item ->
                     MealEditorItemRow(
                         item = item,
+                        isExpanded = expandedRows[item.lineId] == true,
+                        onToggleExpanded = {
+                            expandedRows[item.lineId] = !(expandedRows[item.lineId] == true)
+                        },
                         onServingsChanged = { text -> contract.updateServings(item.lineId, text) },
                         onGramsChanged = { text -> contract.updateGrams(item.lineId, text) },
                         onMillilitersChanged = { text -> contract.updateMilliliters(item.lineId, text) },

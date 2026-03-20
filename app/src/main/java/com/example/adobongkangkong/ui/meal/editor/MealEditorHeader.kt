@@ -66,15 +66,14 @@ fun MealEditorHeader(
                 selected = state.templateDefaultSlot,
                 onSelected = onTemplateDefaultSlotChanged
             )
-
-            state.liveMacroSummaryLine?.takeIf { it.isNotBlank() }?.let { line ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+//            state.liveMacroSummaryLine?.takeIf { it.isNotBlank() }?.let { line ->
+//                Spacer(modifier = Modifier.height(8.dp))
+//                Text(
+//                    text = line,
+//                    style = MaterialTheme.typography.bodyMedium,
+//                    color = MaterialTheme.colorScheme.onSurfaceVariant
+//                )
+//            }
         }
     }
 }
