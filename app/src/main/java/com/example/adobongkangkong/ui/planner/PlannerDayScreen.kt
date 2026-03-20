@@ -22,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -47,7 +46,6 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,8 +86,6 @@ fun PlannerDayScreen(
     val dateText = s.date.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
 
     val snackbarHostState = remember { SnackbarHostState() }
-
-    var addOptionsSlot by remember { mutableStateOf<MealSlot?>(null) }
 
     val undo = s.undo
     LaunchedEffect(undo?.id) {
@@ -180,12 +176,16 @@ fun PlannerDayScreen(
                     SlotHeader(
                         slot = slot,
                         loggedBannerText = buildLoggedBannerText(loggedNames),
-                        onAdd = { addOptionsSlot = slot }
+                        onAdd = { onEvent(PlannerDayEvent.OpenMealPlanner(slot)) }
                     )
                 }
 
                 if (meals.isEmpty()) {
-                    item { EmptySlotCard(onAdd = { onEvent(PlannerDayEvent.AddMeal(slot)) }) }
+                    item {
+                        EmptySlotCard(
+                            onAdd = { onEvent(PlannerDayEvent.OpenMealPlanner(slot)) }
+                        )
+                    }
                 } else {
                     items(items = meals, key = { it.id }) { meal ->
                         PlannedMealCard(
@@ -219,48 +219,6 @@ fun PlannerDayScreen(
             }
 
             item { Spacer(Modifier.height(24.dp)) }
-        }
-    }
-
-    val openSlot = addOptionsSlot
-    if (openSlot != null) {
-        ModalBottomSheet(
-            onDismissRequest = { addOptionsSlot = null }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Add ${openSlot.display}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                TextButton(
-                    onClick = {
-                        addOptionsSlot = null
-                        onEvent(PlannerDayEvent.OpenMealPlanner(openSlot))
-                    },
-                    enabled = openSlot != MealSlot.CUSTOM,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("New empty meal")
-                }
-
-                TextButton(
-                    onClick = {
-                        addOptionsSlot = null
-                        onEvent(PlannerDayEvent.OpenTemplatePicker(slot = openSlot))
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("From template")
-                }
-
-                Spacer(Modifier.height(8.dp))
-            }
         }
     }
 
@@ -324,7 +282,7 @@ private fun SlotHeader(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onAdd) { Text("+ Add") }
+//            TextButton(onClick = onAdd) { Text("+ Add") }
         }
 
         if (!loggedBannerText.isNullOrBlank()) {

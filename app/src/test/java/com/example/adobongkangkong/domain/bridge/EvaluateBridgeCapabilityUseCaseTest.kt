@@ -209,7 +209,7 @@ class EvaluateBridgeCapabilityUseCaseTest {
     }
 
     @Test
-    fun `count to count without direct mapping is treated as same basis standard by current implementation`() {
+    fun `count to count without direct mapping is unresolvable`() {
         val result = subject(
             BridgeCapabilityInput(
                 fromUnit = ServingUnit.SERVING,
@@ -223,10 +223,10 @@ class EvaluateBridgeCapabilityUseCaseTest {
             )
         )
 
-        assertEquals(ConversionClass.INTRA_BASIS_STANDARD, result.conversionClass)
-        assertEquals(BridgeConfidence.STRONG, result.confidence)
-        assertEquals(BridgeSource.STANDARD_UNIT_CONVERSION, result.source)
+        assertEquals(ConversionClass.UNRESOLVABLE, result.conversionClass)
+        assertEquals(BridgeConfidence.NONE, result.confidence)
+        assertEquals(BridgeSource.NO_BRIDGE, result.source)
         assertFalse(result.fallbackUsed)
-        assertEquals("same_basis_standard_conversion", result.reason)
+        assertEquals("cross_basis_unresolvable_no_bridge", result.reason)
     }
 }
