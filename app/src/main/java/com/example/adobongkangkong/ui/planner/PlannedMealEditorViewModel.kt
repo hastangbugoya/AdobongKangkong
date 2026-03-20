@@ -88,6 +88,10 @@ class PlannedMealEditorViewModel @Inject constructor(
     // Critical nutrients sourced from the same dashboard preference system.
     private var criticalNutrientKeys: Set<String> = emptySet()
 
+    // Simple in-VM caches to reduce repeat DB reads during rebuilds.
+    private val foodCache = mutableMapOf<Long, Food?>()
+    private val nutrientCache = mutableMapOf<Long, List<FoodNutrientWithMetaRow>>()
+
     init {
         viewModelScope.launch {
             userPinnedNutrientRepository.observePreferences()
@@ -165,7 +169,7 @@ class PlannedMealEditorViewModel @Inject constructor(
                         .sortedBy { it.sortOrder }
 
                     val uiItems = templateItems.map { entity ->
-                        val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
+                        val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
                         MealEditorUiState.Item(
                             lineId = UUID.randomUUID().toString(),
                             id = null,
@@ -221,7 +225,7 @@ class PlannedMealEditorViewModel @Inject constructor(
                 val existing = plannedItems.getItemsForMeal(mealId).sortedBy { it.sortOrder }
 
                 val uiItems = existing.map { entity ->
-                    val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
+                    val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
                     MealEditorUiState.Item(
                         lineId = UUID.randomUUID().toString(),
                         id = entity.id,
@@ -264,7 +268,7 @@ class PlannedMealEditorViewModel @Inject constructor(
 
     override fun addFood(foodId: Long) {
         viewModelScope.launch {
-            val foodName = foods.getById(foodId)?.name ?: "Food #$foodId"
+            val foodName = getCachedFood(foodId)?.name ?: "Food #$foodId"
 
             val newItem = MealEditorUiState.Item(
                 lineId = UUID.randomUUID().toString(),
@@ -310,8 +314,6 @@ class PlannedMealEditorViewModel @Inject constructor(
     }
 
     override fun updateMilliliters(lineId: String, ml: String) {
-        // NOTE: PlannedItemEntity currently does NOT have milliliters.
-        // Keep the UI field for preview purposes, but don’t persist it.
         val v = ml.toDoubleOrNull()
         _state.value = _state.value.copy(
             items = _state.value.items.map {
@@ -444,7 +446,7 @@ class PlannedMealEditorViewModel @Inject constructor(
                 val existing = plannedItems.getItemsForMeal(mealId).sortedBy { it.sortOrder }
 
                 val uiItems = existing.map { entity ->
-                    val foodName = foods.getById(entity.refId)?.name ?: "Food #${entity.refId}"
+                    val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
                     MealEditorUiState.Item(
                         lineId = UUID.randomUUID().toString(),
                         id = entity.id,
@@ -470,13 +472,37 @@ class PlannedMealEditorViewModel @Inject constructor(
         }
     }
 
+    private suspend fun getCachedFood(foodId: Long): Food? {
+        if (foodCache.containsKey(foodId)) return foodCache[foodId]
+        val loaded = foods.getById(foodId)
+        foodCache[foodId] = loaded
+        return loaded
+    }
+
+    private suspend fun getCachedNutrients(foodId: Long): List<FoodNutrientWithMetaRow> {
+        val cached = nutrientCache[foodId]
+        if (cached != null) return cached
+        val loaded = getFoodNutrients(foodId)
+        nutrientCache[foodId] = loaded
+        return loaded
+    }
+
+    private suspend fun prefetchFor(foodIds: List<Long>) {
+        foodIds.distinct().forEach { foodId ->
+            getCachedFood(foodId)
+            getCachedNutrients(foodId)
+        }
+    }
+
     private fun rebuildDerivedNutrition() {
         viewModelScope.launch {
             val current = _state.value
+            val foodIds = current.items.map { it.foodId }
+            prefetchFor(foodIds)
 
             val updatedItems = current.items.map { item ->
-                val food = foods.getById(item.foodId)
-                val nutrients = getFoodNutrients(item.foodId)
+                val food = getCachedFood(item.foodId)
+                val nutrients = getCachedNutrients(item.foodId)
 
                 val macros = computeMacros(item = item, food = food, rows = nutrients)
                 val macroLine = buildMacroSummaryLine(macros)
@@ -670,7 +696,9 @@ class PlannedMealEditorViewModel @Inject constructor(
         if (allRows.isEmpty()) return emptyList()
 
         return allRows
-            .groupBy { it.nutrientName }
+            .groupBy { row ->
+                if (row.nutrientId != 0L) "id:${row.nutrientId}" else "name:${row.nutrientName}"
+            }
             .values
             .map { group ->
                 val first = group.first()
