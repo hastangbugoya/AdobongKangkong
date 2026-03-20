@@ -40,10 +40,8 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,11 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
@@ -67,7 +61,6 @@ import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.planner.model.PlannedItem
 import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
-import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.time.Instant
 import java.time.ZoneOffset
@@ -176,14 +169,14 @@ fun PlannerDayScreen(
                     SlotHeader(
                         slot = slot,
                         loggedBannerText = buildLoggedBannerText(loggedNames),
-                        onAdd = { onEvent(PlannerDayEvent.OpenMealPlanner(slot)) }
+                        onAdd = { onEvent(PlannerDayEvent.AddMeal(slot)) }
                     )
                 }
 
                 if (meals.isEmpty()) {
                     item {
                         EmptySlotCard(
-                            onAdd = { onEvent(PlannerDayEvent.OpenMealPlanner(slot)) }
+                            onAdd = { onEvent(PlannerDayEvent.AddMeal(slot)) }
                         )
                     }
                 } else {
@@ -222,12 +215,14 @@ fun PlannerDayScreen(
         }
     }
 
-    val sheet = s.addSheet
-    if (sheet != null) {
-        AddToPlanBottomSheet(
+    val addSheet = s.addSheet
+    if (addSheet != null) {
+        AddMealChoiceBottomSheet(
+            slot = addSheet.slot,
             dateText = dateText,
-            sheet = sheet,
-            onEvent = onEvent
+            onDismiss = { onEvent(PlannerDayEvent.DismissAddSheet) },
+            onEmptyMeal = { onEvent(PlannerDayEvent.OpenMealPlanner(addSheet.slot)) },
+            onFromTemplate = { onEvent(PlannerDayEvent.OpenTemplatePicker(addSheet.slot)) }
         )
     }
 
@@ -282,7 +277,13 @@ private fun SlotHeader(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
-//            TextButton(onClick = onAdd) { Text("+ Add") }
+            IconButton(onClick = onAdd) {
+                Icon(
+                    painter = painterResource(R.drawable.add),
+                    contentDescription = "Add meal",
+                    modifier = Modifier.size(AppIconSize.CardAction)
+                )
+            }
         }
 
         if (!loggedBannerText.isNullOrBlank()) {
@@ -326,8 +327,53 @@ private fun EmptySlotCard(
                 "Add a meal to plan foods/recipes for this slot.",
                 style = MaterialTheme.typography.bodySmall
             )
-            Spacer(Modifier.height(10.dp))
-            TextButton(onClick = onAdd) { Text("Add") }
+//            Spacer(Modifier.height(10.dp))
+//            TextButton(onClick = onAdd) { Text("Add") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddMealChoiceBottomSheet(
+    slot: MealSlot,
+    dateText: String,
+    onDismiss: () -> Unit,
+    onEmptyMeal: () -> Unit,
+    onFromTemplate: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Plan a meal",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Text(
+                text = "${slot.display} • $dateText",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            TextButton(
+                onClick = onEmptyMeal,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Empty meal")
+            }
+
+            TextButton(
+                onClick = onFromTemplate,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("From template")
+            }
         }
     }
 }
@@ -338,11 +384,8 @@ private fun RecurringMealBottomSheet(
     sheet: RecurringEditorState,
     onEvent: (PlannerDayEvent) -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
     ModalBottomSheet(
-        onDismissRequest = { onEvent(PlannerDayEvent.DismissRecurringEditor) },
-        sheetState = sheetState
+        onDismissRequest = { onEvent(PlannerDayEvent.DismissRecurringEditor) }
     ) {
         Column(
             modifier = Modifier
@@ -434,7 +477,12 @@ private fun RecurringMealBottomSheet(
                     enabled = !sheet.isSaving
                 ) {
                     if (sheet.isSaving) {
-                        CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .width(18.dp)
+                                .height(18.dp),
+                            strokeWidth = 2.dp
+                        )
                         Spacer(Modifier.width(8.dp))
                     }
                     Text("Save")
@@ -611,7 +659,9 @@ private fun PlannedMealCard(
                     Icon(
                         painter = painterResource(R.drawable.rotate_reverse),
                         contentDescription = "Recurring",
-                        modifier = Modifier.padding(end = 4.dp).size(AppIconSize.CardAction)
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .size(AppIconSize.CardAction)
                     )
                 }
 
@@ -762,259 +812,6 @@ private fun qtySummary(item: PlannedItem): String {
 private fun formatNumber(value: Double): String {
     val rounded = round(value * 10) / 10
     return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else String.format("%.1f", rounded)
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddToPlanBottomSheet(
-    dateText: String,
-    sheet: AddSheetState,
-    onEvent: (PlannerDayEvent) -> Unit
-) {
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    ModalBottomSheet(onDismissRequest = { onEvent(PlannerDayEvent.DismissAddSheet) }) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Add to plan", style = MaterialTheme.typography.titleLarge)
-            Text("${sheet.slot.display} • $dateText", style = MaterialTheme.typography.bodySmall)
-
-            if (sheet.customLabel != null && sheet.customLabel.isNotEmpty()) {
-                TextField(
-                    value = sheet.customLabel.orEmpty(),
-                    onValueChange = { onEvent(PlannerDayEvent.UpdateAddSheetCustomLabel(it)) },
-                    label = { Text("Custom slot label") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.labelMedium
-                )
-            }
-
-            TextField(
-                value = sheet.nameOverride.orEmpty(),
-                onValueChange = { onEvent(PlannerDayEvent.UpdateAddSheetName(it)) },
-                label = { Text("Meal name (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            if (sheet.errorMessage != null) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Error", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(sheet.errorMessage, style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            onClick = {
-                                focusManager.clearFocus(force = true)
-                                onEvent(PlannerDayEvent.CreateMealIfNeeded)
-                            },
-                            enabled = !sheet.isCreating
-                        ) {
-                            Text(if (sheet.isCreating) "Creating…" else "Retry create meal")
-                        }
-                    }
-                }
-            }
-
-            if (sheet.createdMealId == null) {
-                TextButton(
-                    onClick = { onEvent(PlannerDayEvent.CreateMealIfNeeded) },
-                    enabled = !sheet.isCreating,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (sheet.isCreating) "Creating meal…" else "Create meal")
-                }
-
-                Text(
-                    "Create the meal container first, then add foods.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                Spacer(Modifier.height(8.dp))
-                return@ModalBottomSheet
-            }
-
-            when (sheet.addItemMode) {
-                AddItemMode.NONE -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Add items",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = { onEvent(PlannerDayEvent.CreateAnotherMeal) }) {
-                            Text("New meal")
-                        }
-                    }
-
-                    TextButton(
-                        onClick = { onEvent(PlannerDayEvent.StartAddItem(AddItemMode.FOOD)) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Add food")
-                    }
-                }
-
-                AddItemMode.FOOD -> {
-                    FoodAddSection(sheet = sheet, onEvent = onEvent)
-                }
-
-                AddItemMode.RECIPE -> {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text("Recipe add not wired yet.", style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { onEvent(PlannerDayEvent.CancelAddItem) }) {
-                                Text("Back")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FoodAddSection(
-    sheet: AddSheetState,
-    onEvent: (PlannerDayEvent) -> Unit
-) {
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(sheet.addItemMode) {
-        if (sheet.addItemMode == AddItemMode.FOOD) {
-            focusRequester.requestFocus()
-            keyboardController?.show()
-        }
-    }
-
-    Text("Search foods", style = MaterialTheme.typography.titleMedium)
-
-    TextField(
-        value = sheet.query,
-        onValueChange = { onEvent(PlannerDayEvent.UpdateAddQuery(it)) },
-        label = { Text("Search") },
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusRequester(focusRequester),
-        singleLine = true
-    )
-
-    if (sheet.isSearching) {
-        Text("Searching…", style = MaterialTheme.typography.bodySmall)
-    }
-
-    if (sheet.results.isNotEmpty()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 240.dp)
-                    .padding(vertical = 6.dp)
-            ) {
-                items(sheet.results, key = { it.id }) { row ->
-                    FoodSearchResultRow(
-                        row = row,
-                        isSelected = row.id == sheet.selectedRefId,
-                        onClick = { onEvent(PlannerDayEvent.SelectSearchResult(row.id, row.title)) }
-                    )
-                }
-            }
-        }
-    }
-
-    if (sheet.selectedTitle != null) {
-        Text("Selected: ${sheet.selectedTitle}", style = MaterialTheme.typography.bodySmall)
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        TextField(
-            value = sheet.gramsText,
-            onValueChange = { onEvent(PlannerDayEvent.UpdateAddGrams(it)) },
-            label = { Text("Grams") },
-            modifier = Modifier.weight(1f),
-            singleLine = true
-        )
-        TextField(
-            value = sheet.servingsText,
-            onValueChange = { onEvent(PlannerDayEvent.UpdateAddServings(it)) },
-            label = { Text("Servings") },
-            modifier = Modifier.weight(1f),
-            singleLine = true
-        )
-    }
-
-    if (sheet.addItemError != null) {
-        Text(sheet.addItemError, style = MaterialTheme.typography.bodySmall)
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        TextButton(
-            onClick = { onEvent(PlannerDayEvent.CancelAddItem) },
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("Back")
-        }
-
-        val canConfirm =
-            !sheet.isAddingItem &&
-                    sheet.selectedRefId != null &&
-                    (sheet.gramsText.trim().isNotBlank() || sheet.servingsText.trim().isNotBlank())
-
-        TextButton(
-            onClick = { onEvent(PlannerDayEvent.ConfirmAddItem) },
-            enabled = canConfirm,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(if (sheet.isAddingItem) "Adding…" else "Add")
-        }
-    }
-}
-
-@Composable
-private fun FoodSearchResultRow(
-    row: FoodSearchRow,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(row.title, style = MaterialTheme.typography.bodyMedium)
-                row.subtitle?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            TextButton(onClick = onClick) { Text(if (isSelected) "Selected" else "Select") }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

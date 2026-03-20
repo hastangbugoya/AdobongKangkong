@@ -6,8 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedSeriesEndConditionType
-import com.example.adobongkangkong.domain.planner.usecase.AddPlannedFoodItemUseCase
-import com.example.adobongkangkong.domain.planner.usecase.AddPlannedRecipeItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ComputePlannedDayMacroTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreateIouUseCase
 import com.example.adobongkangkong.domain.planner.usecase.CreatePlannedMealFromTemplateUseCase
@@ -27,8 +25,6 @@ import com.example.adobongkangkong.domain.planner.usecase.ResolvePlannedItemToQu
 import com.example.adobongkangkong.domain.planner.usecase.RestorePlannedItemUseCase
 import com.example.adobongkangkong.domain.planner.usecase.SavePlannedMealAsTemplateUseCase
 import com.example.adobongkangkong.domain.planner.usecase.UpdateIouUseCase
-import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
-import com.example.adobongkangkong.ui.planner.model.FoodSearchRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import java.time.LocalDate
@@ -53,9 +49,6 @@ class PlannerDayViewModel @Inject constructor(
     private val computeDayMacros: ComputePlannedDayMacroTotalsUseCase,
     private val createPlannedMeal: CreatePlannedMealUseCase,
     private val removeEmptyPlannedMeal: RemoveEmptyPlannedMealUseCase,
-    private val addPlannedFoodItem: AddPlannedFoodItemUseCase,
-    private val addPlannedRecipeItem: AddPlannedRecipeItemUseCase,
-    private val searchFoods: SearchFoodsUseCase,
 
     // Undo plumbing (items)
     private val removePlannedItemForUndo: RemovePlannedItemForUndoUseCase,
@@ -105,7 +98,6 @@ class PlannerDayViewModel @Inject constructor(
     private val dateFlow = MutableStateFlow(_state.value.date)
     private var observeJob: Job? = null
     private var observeLoggedNamesJob: Job? = null
-    private var searchJob: Job? = null
 
     // Single-level undo (minimal + functional)
     private var lastUndoId: Long = 0L
@@ -159,120 +151,22 @@ class PlannerDayViewModel @Inject constructor(
             }
 
             PlannerDayEvent.DismissAddSheet -> {
-                dismissAddSheetWithCleanup()
+                dismissAddSheet()
             }
 
-            is PlannerDayEvent.UpdateAddSheetName -> {
-                _state.update { s ->
-                    val sheet = s.addSheet ?: return@update s
-                    s.copy(addSheet = sheet.copy(nameOverride = event.value))
-                }
-            }
-
-            is PlannerDayEvent.UpdateAddSheetCustomLabel -> {
-                _state.update { s ->
-                    val sheet = s.addSheet ?: return@update s
-                    s.copy(addSheet = sheet.copy(customLabel = event.value))
-                }
-            }
-
-            PlannerDayEvent.CreateMealIfNeeded -> {
-                createMealIfNeeded()
-            }
-
-            PlannerDayEvent.CreateAnotherMeal -> {
-                _state.update { s ->
-                    val current = s.addSheet ?: return@update s
-                    s.copy(addSheet = current.copy(isCreating = false, createdMealId = null, errorMessage = null))
-                }
-                createMealIfNeeded()
-            }
-
-            is PlannerDayEvent.StartAddItem -> {
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            addItemMode = event.mode,
-                            query = "",
-                            results = emptyList(),
-                            selectedRefId = null,
-                            selectedTitle = null,
-                            gramsText = "",
-                            servingsText = "",
-                            addItemError = null
-                        )
-                    )
-                }
-            }
-
-            PlannerDayEvent.CancelAddItem -> {
-                searchJob?.cancel()
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            addItemMode = AddItemMode.NONE,
-                            query = "",
-                            results = emptyList(),
-                            selectedRefId = null,
-                            selectedTitle = null,
-                            gramsText = "",
-                            servingsText = "",
-                            isSearching = false,
-                            isAddingItem = false,
-                            addItemError = null
-                        )
-                    )
-                }
-            }
-
-            is PlannerDayEvent.UpdateAddQuery -> {
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            query = event.value,
-                            isSearching = true,
-                            addItemError = null,
-                            selectedRefId = null,
-                            selectedTitle = null
-                        )
-                    )
-                }
-                refreshFoodSearch()
-            }
-
-            is PlannerDayEvent.SelectSearchResult -> {
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sh.copy(
-                            selectedRefId = event.id,
-                            selectedTitle = event.title,
-                            addItemError = null
-                        )
-                    )
-                }
-            }
-
-            is PlannerDayEvent.UpdateAddGrams -> {
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(addSheet = sh.copy(gramsText = event.value, addItemError = null))
-                }
-            }
-
-            is PlannerDayEvent.UpdateAddServings -> {
-                _state.update { s ->
-                    val sh = s.addSheet ?: return@update s
-                    s.copy(addSheet = sh.copy(servingsText = event.value, addItemError = null))
-                }
-            }
-
-            PlannerDayEvent.ConfirmAddItem -> {
-                addSelectedFoodToMeal()
-            }
+            // Old add-sheet field/edit/item events are intentionally left as no-ops
+            // because the old "create meal + add items" bottom sheet flow was removed.
+            is PlannerDayEvent.UpdateAddSheetName,
+            is PlannerDayEvent.UpdateAddSheetCustomLabel,
+            PlannerDayEvent.CreateMealIfNeeded,
+            PlannerDayEvent.CreateAnotherMeal,
+            is PlannerDayEvent.StartAddItem,
+            PlannerDayEvent.CancelAddItem,
+            is PlannerDayEvent.UpdateAddQuery,
+            is PlannerDayEvent.SelectSearchResult,
+            is PlannerDayEvent.UpdateAddGrams,
+            is PlannerDayEvent.UpdateAddServings,
+            PlannerDayEvent.ConfirmAddItem -> Unit
 
             is PlannerDayEvent.RemoveEmptyPlannedMeal -> {
                 clearUndoIfForMeal(event.mealId)
@@ -854,20 +748,8 @@ class PlannerDayViewModel @Inject constructor(
         }
     }
 
-    private fun dismissAddSheetWithCleanup() {
-        val createdMealId = _state.value.addSheet?.createdMealId
-
+    private fun dismissAddSheet() {
         _state.update { it.copy(addSheet = null) }
-
-        if (createdMealId != null && createdMealId > 0L) {
-            viewModelScope.launch {
-                try {
-                    removeEmptyPlannedMeal(createdMealId)
-                } catch (t: Throwable) {
-                    Log.w("Meow", "Cleanup empty planned meal failed: ${t.message}", t)
-                }
-            }
-        }
     }
 
     private fun removeEmptyMeal(mealId: Long) {
@@ -876,121 +758,6 @@ class PlannerDayViewModel @Inject constructor(
                 removeEmptyPlannedMeal(mealId)
             } catch (t: Throwable) {
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to remove meal") }
-            }
-        }
-    }
-
-    private fun refreshFoodSearch() {
-        searchJob?.cancel()
-
-        val query = _state.value.addSheet?.query?.trim().orEmpty()
-        if (query.isBlank()) {
-            _state.update { st ->
-                val sh = st.addSheet ?: return@update st
-                st.copy(addSheet = sh.copy(results = emptyList(), isSearching = false))
-            }
-            return
-        }
-
-        searchJob = viewModelScope.launch {
-            try {
-                searchFoods(query)
-                    .catch { t ->
-                        _state.update { st ->
-                            val sh = st.addSheet ?: return@update st
-                            st.copy(addSheet = sh.copy(results = emptyList(), isSearching = false, addItemError = t.message))
-                        }
-                    }
-                    .collectLatest { rows ->
-                        _state.update { st ->
-                            val sh = st.addSheet ?: return@update st
-                            st.copy(
-                                addSheet = sh.copy(
-                                    results = rows.map { FoodSearchRow(id = it.id, title = it.name, subtitle = null) },
-                                    isSearching = false
-                                )
-                            )
-                        }
-                    }
-            } catch (t: Throwable) {
-                _state.update { st ->
-                    val sh = st.addSheet ?: return@update st
-                    st.copy(addSheet = sh.copy(results = emptyList(), isSearching = false, addItemError = t.message))
-                }
-            }
-        }
-    }
-
-    private fun addSelectedFoodToMeal() {
-        val st = _state.value
-        val sh = st.addSheet ?: return
-        val mealId = sh.createdMealId ?: return
-
-        val selectedId = sh.selectedRefId ?: return
-        val mode = sh.addItemMode
-
-        val grams = sh.gramsText.toDoubleOrNull()
-        val servings = sh.servingsText.toDoubleOrNull()
-
-        _state.update { s ->
-            val sht = s.addSheet ?: return@update s
-            s.copy(addSheet = sht.copy(isAddingItem = true, addItemError = null))
-        }
-
-        viewModelScope.launch {
-            try {
-                when (mode) {
-                    AddItemMode.FOOD -> {
-                        addPlannedFoodItem(
-                            mealId = mealId,
-                            foodId = selectedId,
-                            grams = grams,
-                            servings = servings
-                        )
-                    }
-
-                    AddItemMode.RECIPE -> {
-                        val plannedServings = servings
-                        require(plannedServings != null && plannedServings > 0.0) {
-                            "Servings required for recipe"
-                        }
-
-                        addPlannedRecipeItem(
-                            mealId = mealId,
-                            recipeFoodId = selectedId,
-                            plannedServings = plannedServings
-                        )
-                    }
-
-                    AddItemMode.NONE -> Unit
-                }
-
-                _state.update { s ->
-                    val sht = s.addSheet ?: return@update s
-                    s.copy(
-                        addSheet = sht.copy(
-                            isAddingItem = false,
-                            addItemMode = AddItemMode.NONE,
-                            query = "",
-                            results = emptyList(),
-                            selectedRefId = null,
-                            selectedTitle = null,
-                            gramsText = "",
-                            servingsText = "",
-                            addItemError = null
-                        )
-                    )
-                }
-            } catch (t: Throwable) {
-                _state.update { st ->
-                    val sht = st.addSheet ?: return@update st
-                    st.copy(
-                        addSheet = sht.copy(
-                            isAddingItem = false,
-                            addItemError = t.message ?: "Failed to add food."
-                        )
-                    )
-                }
             }
         }
     }
@@ -1059,67 +826,21 @@ class PlannerDayViewModel @Inject constructor(
     }
 
     private fun openMealPlanner(slot: MealSlot) {
-        if (slot == MealSlot.CUSTOM) {
-            openAddSheet(slot)
-            return
-        }
-
         viewModelScope.launch {
             try {
                 val dateIso = _state.value.date.toString()
                 val mealId = createPlannedMeal(
                     dateIso = dateIso,
                     slot = slot,
-                    customLabel = null,
+                    customLabel = if (slot == MealSlot.CUSTOM) "Custom" else null,
                     nameOverride = null,
                     sortOrder = null
                 )
 
+                _state.update { it.copy(addSheet = null) }
                 _events.tryEmit(PlannerDayUiEvent.NavigateToPlannedMealEditor(mealId))
             } catch (t: Throwable) {
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to open meal") }
-            }
-        }
-    }
-
-    private fun createMealIfNeeded() {
-        val current = _state.value
-        val sheet = current.addSheet ?: return
-
-        if (sheet.isCreating || sheet.createdMealId != null) return
-
-        _state.update { it.copy(addSheet = sheet.copy(isCreating = true, errorMessage = null)) }
-
-        viewModelScope.launch {
-            try {
-                val dateIso = current.date.toString()
-
-                val customLabel: String? =
-                    if (sheet.slot == MealSlot.CUSTOM) sheet.customLabel?.trim().takeUnless { it.isNullOrBlank() }
-                    else null
-
-                val nameOverride: String? =
-                    sheet.nameOverride?.trim().takeUnless { it.isNullOrBlank() }
-
-                val mealId = createPlannedMeal(
-                    dateIso = dateIso,
-                    slot = sheet.slot,
-                    customLabel = customLabel,
-                    nameOverride = nameOverride,
-                    sortOrder = null
-                )
-
-                _state.update { s ->
-                    val sSheet = s.addSheet
-                    if (sSheet == null) s
-                    else s.copy(addSheet = sSheet.copy(isCreating = false, createdMealId = mealId))
-                }
-            } catch (t: Throwable) {
-                _state.update { s ->
-                    val sSheet = s.addSheet
-                    if (sSheet == null) s.copy(errorMessage = t.message ?: "Failed to create meal")
-                    else s.copy(addSheet = sSheet.copy(isCreating = false, errorMessage = t.message ?: "Failed to create meal"))
-                }
             }
         }
     }
