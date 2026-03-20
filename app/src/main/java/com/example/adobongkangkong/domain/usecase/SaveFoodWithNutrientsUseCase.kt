@@ -4,6 +4,7 @@ import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.isAmbiguousForGrounding
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toGrams
@@ -37,7 +38,7 @@ import javax.inject.Inject
  * ## Behavior
  * - Applies “safe grounding lock-in” to the incoming [Food] when its conversion bridge fields are blank:
  *   - Locks in `gramsPerServingUnit` for deterministic mass units only when needed.
- *   - Locks in `mlPerServingUnit` for deterministic volume units only when needed,
+ *   - Locks in `mlPerServingUnit` for deterministic non-ambiguous volume units only when needed,
  *     **but only if the food is not already mass-grounded** (single-grounding rule).
  * - Upserts the grounded food via [FoodRepository].
  * - Canonicalizes incoming nutrient [rows] into exactly one basis (PER_100G, PER_100ML, or USDA_REPORTED_SERVING)
@@ -114,9 +115,15 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
             this.servingUnit.isMassUnit() || effectiveGramsPerServingUnit(this) != null
         if (alreadyMassGrounded) return this
 
-        // For deterministic volume units except plain mL, we can safely persist mL per 1 unit.
-        // For ServingUnit.ML we keep null because the unit itself already means 1 mL.
-        if (this.servingUnit.isVolumeUnit() && this.servingUnit != ServingUnit.ML) {
+        // CRITICAL:
+        // Ambiguous volume-like units (tbsp/tsp/cup/fl oz/rc cup/etc.) must NOT auto-lock to mL.
+        // They require explicit user grounding choice. Only truly deterministic non-ambiguous
+        // volume units should auto-persist an mL bridge here.
+        if (
+            this.servingUnit.isVolumeUnit() &&
+            !this.servingUnit.isAmbiguousForGrounding() &&
+            this.servingUnit != ServingUnit.ML
+        ) {
             val mlPer1Unit = this.servingUnit.toMilliliters(1.0)
             if (mlPer1Unit != null && mlPer1Unit > 0.0) {
                 return this.copy(mlPerServingUnit = mlPer1Unit)
@@ -262,7 +269,7 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
  *   - Else -> USDA_REPORTED_SERVING
  * - Truth-first bridges:
  *   - Deterministic mass units count as an effective grams bridge even when gramsPerServingUnit is null.
- *   - Deterministic volume units count as an effective mL bridge even when mlPerServingUnit is null.
+ *   - Only deterministic NON-AMBIGUOUS volume units count as safe auto-lock candidates for persisted mL bridges.
  * - No grams↔mL conversion without explicit density.
  * - Single grounding per food:
  *   - If mass grounding exists, do NOT also canonicalize as volume.
@@ -271,6 +278,7 @@ class SaveFoodWithNutrientsUseCase @Inject constructor(
  * - Do not rework canonicalization to store multiple bases.
  * - Do not remove deterministic mass-unit handling for ServingUnit.G / OZ / LB / KG.
  *   That is the fix for foods like “50 g serving” showing 100 g nutrition in the editor/logging path.
+ * - Keep ambiguous volume units (tbsp/tsp/cup/fl oz/etc.) from auto-locking to mlPerServingUnit.
  * - Keep unsafe mass<->volume conversion impossible here.
  *
  * ## Architectural boundaries

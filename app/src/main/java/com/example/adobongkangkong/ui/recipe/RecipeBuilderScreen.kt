@@ -1,28 +1,39 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
-import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.ui.food.SelectedFoodPanel
-import androidx.compose.ui.Alignment
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -41,49 +52,40 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.adobongkangkong.R
-import com.example.adobongkangkong.feature.camera.FoodImageStorage
-import com.example.adobongkangkong.ui.camera.BannerCaptureController
-import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
-import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
-import kotlinx.coroutines.delay
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Divider
-import androidx.compose.runtime.produceState
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.draw.clip
-import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.adobongkangkong.R
+import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.isMassUnit
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
+import com.example.adobongkangkong.feature.camera.FoodImageStorage
+import com.example.adobongkangkong.ui.camera.BannerCaptureController
+import com.example.adobongkangkong.ui.common.QuantityDisplayFormatter
+import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
+import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
+import com.example.adobongkangkong.ui.food.SelectedFoodPanel
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -254,7 +256,7 @@ fun RecipeBuilderScreen(
                         ) {
                             Icon(
                                 painter = painterResource(android.R.drawable.ic_menu_camera),
-                                contentDescription = "${editFoodId?.let {"Change"} ?: "Assign" } banner"
+                                contentDescription = "${editFoodId?.let { "Change" } ?: "Assign"} banner"
                             )
                         }
                     } else {
@@ -284,7 +286,7 @@ fun RecipeBuilderScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "${editFoodId?.let {"Change"} ?: "Assign" } banner",
+                                text = "${editFoodId?.let { "Change" } ?: "Assign"} banner",
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
@@ -402,7 +404,7 @@ fun RecipeBuilderScreen(
                 if (state.ingredients.isEmpty()) {
                     Text("No ingredients yet.")
                 } else {
-                    androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         state.ingredients.forEachIndexed { index, ing ->
                             Column {
                                 FoodBannerCardBackground(
@@ -426,26 +428,55 @@ fun RecipeBuilderScreen(
                                                 overflow = TextOverflow.Ellipsis
                                             )
 
-                                            val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
-                                            val amountText = if (unitLabel.isNotBlank()) {
-                                                "${"%,.2f".format(ing.servings)} $unitLabel"
+                                            val resolvedServingUnit =
+                                                ing.servingUnitLabel.toServingUnitOrNull()
+                                            val totalGrams = ing.grams
+
+                                            val amountText = if (totalGrams != null && resolvedServingUnit != null) {
+                                                val baseText = QuantityDisplayFormatter.format(
+                                                    servings = ing.servings ?: 0.0,
+                                                    unit = resolvedServingUnit,
+                                                    totalGrams = totalGrams
+                                                )
+
+                                                when {
+                                                    ing.isApproximateWeight && resolvedServingUnit.isMassUnit() ->
+                                                        "≈ %,.0f g".format(totalGrams)
+
+                                                    ing.isApproximateWeight ->
+                                                        baseText.replace(" • ", " • ≈ ")
+
+                                                    else -> baseText
+                                                }
                                             } else {
-                                                "${"%,.2f".format(ing.servings)} servings"
+                                                val unitLabel = ing.servingUnitLabel?.trim().orEmpty()
+                                                val enteredAmountText = if (unitLabel.isNotBlank()) {
+                                                    "${"%,.2f".format(ing.servings)} $unitLabel"
+                                                } else {
+                                                    "${"%,.2f".format(ing.servings)} servings"
+                                                }
+                                                val gramsText = totalGrams?.let { g ->
+                                                    val prefix = if (ing.isApproximateWeight) " • ≈ " else " • "
+                                                    prefix + "%,.0f".format(g) + " g"
+                                                }.orEmpty()
+                                                enteredAmountText + gramsText
                                             }
-                                            val gramsText = ing.grams?.let { g ->
-                                                val prefix = if (ing.isApproximateWeight) " • ≈ " else " • "
-                                                prefix + "%,.0f".format(g) + " g"
-                                            }.orEmpty()
 
                                             Text(
-                                                text = amountText + gramsText,
+                                                text = amountText,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1
                                             )
 
                                             val enteredUnit = ing.enteredUnitLabel?.trim().orEmpty()
-                                            if (ing.enteredAmount != null && enteredUnit.isNotBlank()) {
+                                            val resolvedEnteredUnit = ing.enteredUnitLabel.toServingUnitOrNull()
+
+                                            if (
+                                                ing.enteredAmount != null &&
+                                                enteredUnit.isNotBlank() &&
+                                                (resolvedEnteredUnit == null || !resolvedEnteredUnit.isMassUnit())
+                                            ) {
                                                 Text(
                                                     text = "Entered as ${"%,.2f".format(ing.enteredAmount)} $enteredUnit",
                                                     style = MaterialTheme.typography.labelSmall,
@@ -491,9 +522,9 @@ fun RecipeBuilderScreen(
             }
             if (state.results.isNotEmpty()) {
                 item {
-                    androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         state.results.take(8).forEach { food ->
-                            androidx.compose.foundation.layout.Row(
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -718,7 +749,7 @@ fun RecipeBuilderScreen(
                 ) { Text("Save") }
             },
             dismissButton = {
-                androidx.compose.foundation.layout.Row {
+                Row {
                     TextButton(
                         onClick = {
                             showExitDialog.value = false
@@ -735,7 +766,6 @@ fun RecipeBuilderScreen(
     }
 }
 
-
 @Composable
 private fun NutrientTallyList(rows: List<NutrientRowUi>) {
     val grouped = rows.groupBy { it.category }
@@ -748,7 +778,8 @@ private fun NutrientTallyList(rows: List<NutrientRowUi>) {
                 list.forEach { row ->
                     Column {
                         Row(
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
                                 .background(color = MaterialTheme.colorScheme.secondaryContainer)
                                 .padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -772,12 +803,19 @@ private fun NutrientTallyList(rows: List<NutrientRowUi>) {
                                 text = row.amount,
                                 style = MaterialTheme.typography.bodyLarge
                             )
-
                         }
                         Divider(modifier = Modifier.padding(2.dp), thickness = 1.dp)
                     }
                 }
             }
         }
+    }
+}
+
+private fun String?.toServingUnitOrNull(): ServingUnit? {
+    val label = this?.trim().orEmpty()
+    if (label.isBlank()) return null
+    return ServingUnit.entries.firstOrNull { unit ->
+        unit.display.equals(label, ignoreCase = true)
     }
 }

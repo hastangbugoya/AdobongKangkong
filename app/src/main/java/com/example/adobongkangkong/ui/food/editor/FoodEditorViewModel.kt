@@ -93,6 +93,18 @@ class FoodEditorViewModel @Inject constructor(
     private val openFoodEditorRequestFlow = MutableStateFlow<Long?>(null)
     val openFoodEditorRequest: StateFlow<Long?> = openFoodEditorRequestFlow
 
+    /**
+     * Snapshot of the last loaded persisted food.
+     *
+     * Purpose
+     * - Prevent no-op saves (or non-bridge-only edits like Favorite) from silently introducing
+     *   inferred bridge values such as mlPerServingUnit=15 for ambiguous units like TBSP.
+     * - Compare current bridge text fields against what was actually loaded from persistence,
+     *   not against any inferred/current UI state.
+     */
+    private var loadedFoodSnapshot: Food? = null
+    private var loadedBasisTypeSnapshot: BasisType? = null
+
     fun consumeAssignBarcodeToExistingRequest() {
         assignBarcodeToExistingFlow.value = null
     }
@@ -192,7 +204,8 @@ class FoodEditorViewModel @Inject constructor(
 
             val mlPerServingEffectiveForDisplay: Double? =
                 when {
-                    servingUnit.isVolumeUnit() -> servingSize.takeIf { it > 0.0 }
+                    servingUnit.isVolumeUnit() && !servingUnit.isAmbiguousForGrounding() ->
+                        servingSize.takeIf { it > 0.0 }
                     mlPerServingUnitEffectiveForDisplay != null ->
                         (servingSize * mlPerServingUnitEffectiveForDisplay).takeIf { it > 0.0 }
                     else -> null
@@ -202,7 +215,12 @@ class FoodEditorViewModel @Inject constructor(
                 when {
                     rows.any { it.basisType == BasisType.PER_100ML } -> BasisType.PER_100ML
                     rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
-                    mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
+                    servingUnit.isAmbiguousForGrounding() &&
+                            gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
+                    servingUnit.isAmbiguousForGrounding() &&
+                            mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
+                    servingUnit.isVolumeUnit() && !servingUnit.isAmbiguousForGrounding() ->
+                        BasisType.PER_100ML
                     gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
                     food == null -> current.basisType ?: BasisType.USDA_REPORTED_SERVING
                     else -> BasisType.USDA_REPORTED_SERVING
@@ -213,6 +231,7 @@ class FoodEditorViewModel @Inject constructor(
             } else {
                 emptyList()
             }
+
             Log.d(
                 "FoodEditorDebug",
                 "load foodId=$foodId servingSize=$servingSize servingUnit=$servingUnit " +
@@ -223,6 +242,7 @@ class FoodEditorViewModel @Inject constructor(
                         "mlPerServingEffectiveForDisplay=$mlPerServingEffectiveForDisplay " +
                         "inferredBasisType=$inferredBasisType"
             )
+
             val loadedRows = rows.map { r ->
                 val displayAmount =
                     when (r.basisType) {
@@ -244,10 +264,12 @@ class FoodEditorViewModel @Inject constructor(
 
                         BasisType.USDA_REPORTED_SERVING -> r.amount
                     }
+
                 Log.d(
                     "FoodEditorDebug",
                     "nutrient=${r.nutrient.code} basis=${r.basisType} stored=${r.amount} display=$displayAmount"
                 )
+
                 NutrientRowUi(
                     nutrientId = r.nutrient.id,
                     code = r.nutrient.code,
@@ -260,6 +282,9 @@ class FoodEditorViewModel @Inject constructor(
             }
 
             val editorRows = buildEditorRowsForAllNutrients(loadedRows)
+
+            loadedFoodSnapshot = food
+            loadedBasisTypeSnapshot = inferredBasisType
 
             val next = current.copy(
                 hasLoaded = true,
@@ -1072,18 +1097,13 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
-        val unit = s.servingUnit
-        val needsBasis =
-            unit.isAmbiguousForGrounding() &&
-                    s.basisType == null
-
-        if (needsBasis) {
-            update { it.copy(isGroundingDialogOpen = true) }
-            return
-        }
-
         fun parseDoubleOrNull(x: String): Double? =
             x.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+
+        fun normalizePositive(value: Double?): Double? = value?.takeIf { it > 0.0 }
+
+        fun sameBridgeValue(a: Double?, b: Double?): Boolean =
+            normalizePositive(a) == normalizePositive(b)
 
         val servingSize = parseDoubleOrNull(s.servingSize) ?: 1.0
         val gramsPerServingUnitInput = parseDoubleOrNull(s.gramsPerServingUnit)
@@ -1091,60 +1111,85 @@ class FoodEditorViewModel @Inject constructor(
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
         val hasDeterministicMassUnit = s.servingUnit.isMassUnit()
-        val hasDeterministicVolumeUnit = s.servingUnit.toMilliliters(1.0) != null
-
-        val resolvedBasisType =
-            when {
-                s.servingUnit.isAmbiguousForGrounding() -> s.basisType ?: run {
-                    update { it.copy(isGroundingDialogOpen = true) }
-                    return
-                }
-
-                hasDeterministicVolumeUnit -> BasisType.PER_100ML
-                hasDeterministicMassUnit -> BasisType.PER_100G
-                else -> BasisType.USDA_REPORTED_SERVING
-            }
-
-        val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
+        val hasDeterministicVolumeUnit =
+            s.servingUnit.isVolumeUnit() && !s.servingUnit.isAmbiguousForGrounding()
 
         viewModelScope.launch {
             try {
                 val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
+                val originalFood: Food? = loadedFoodSnapshot ?: existing
+                val originalBasisType: BasisType? = loadedBasisTypeSnapshot ?: s.basisType
 
-                val preserveExistingMassBridge =
-                    existing != null &&
-                            existing.servingUnit.isAmbiguousForGrounding() &&
-                            s.servingUnit.isAmbiguousForGrounding() &&
-                            resolvedBasisType == BasisType.PER_100G &&
-                            gramsPerServingUnitInput == null
+                val userTouchedGramsBridge =
+                    !sameBridgeValue(originalFood?.gramsPerServingUnit, gramsPerServingUnitInput)
 
-                val preserveExistingVolumeBridge =
-                    existing != null &&
-                            existing.servingUnit.isAmbiguousForGrounding() &&
-                            s.servingUnit.isAmbiguousForGrounding() &&
-                            resolvedBasisType == BasisType.PER_100ML &&
-                            mlPerServingUnitInput == null
+                val userTouchedMlBridge =
+                    !sameBridgeValue(originalFood?.mlPerServingUnit, mlPerServingUnitInput)
+
+                val preserveLoadedBridgesOnNoOp =
+                    s.foodId != null &&
+                            !s.hasUnsavedChanges &&
+                            originalFood != null
+
+                val resolvedBasisType =
+                    when {
+                        s.servingUnit.isAmbiguousForGrounding() -> {
+                            when {
+                                preserveLoadedBridgesOnNoOp ->
+                                    originalBasisType ?: BasisType.USDA_REPORTED_SERVING
+
+                                userTouchedGramsBridge && !userTouchedMlBridge ->
+                                    BasisType.PER_100G
+
+                                userTouchedMlBridge && !userTouchedGramsBridge ->
+                                    BasisType.PER_100ML
+
+                                else -> s.basisType ?: originalBasisType ?: run {
+                                    update { it.copy(isGroundingDialogOpen = true) }
+                                    return@launch
+                                }
+                            }
+                        }
+
+                        hasDeterministicVolumeUnit -> BasisType.PER_100ML
+                        hasDeterministicMassUnit -> BasisType.PER_100G
+                        else -> BasisType.USDA_REPORTED_SERVING
+                    }
 
                 val gramsPerServingUnitFinal: Double? =
                     when {
+                        preserveLoadedBridgesOnNoOp ->
+                            normalizePositive(originalFood?.gramsPerServingUnit)
+
                         hasDeterministicMassUnit -> null
+
                         resolvedBasisType == BasisType.PER_100G ->
-                            gramsPerServingUnitInput?.takeIf { it > 0.0 }
-                                ?: existing?.gramsPerServingUnit?.takeIf {
-                                    preserveExistingMassBridge && it > 0.0
-                                }
+                            when {
+                                userTouchedGramsBridge ->
+                                    normalizePositive(gramsPerServingUnitInput)
+
+                                else ->
+                                    normalizePositive(originalFood?.gramsPerServingUnit)
+                            }
 
                         else -> null
                     }
 
                 val mlPerServingUnitFinal: Double? =
                     when {
+                        preserveLoadedBridgesOnNoOp ->
+                            normalizePositive(originalFood?.mlPerServingUnit)
+
                         hasDeterministicVolumeUnit -> null
+
                         resolvedBasisType == BasisType.PER_100ML ->
-                            mlPerServingUnitInput?.takeIf { it > 0.0 }
-                                ?: existing?.mlPerServingUnit?.takeIf {
-                                    preserveExistingVolumeBridge && it > 0.0
-                                }
+                            when {
+                                userTouchedMlBridge ->
+                                    normalizePositive(mlPerServingUnitInput)
+
+                                else ->
+                                    normalizePositive(originalFood?.mlPerServingUnit)
+                            }
 
                         else -> null
                     }
@@ -1231,6 +1276,8 @@ class FoodEditorViewModel @Inject constructor(
                         }
                     )
                 }
+
+                val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
 
                 update {
                     it.copy(
@@ -2172,4 +2219,8 @@ class FoodEditorViewModel @Inject constructor(
  * - Ambiguous volume units (cup/tbsp/fl oz/can/bottle) must prompt SOLID vs LIQUID
  *   instead of assuming PER_100ML.
  * - Never guess density. Never grams↔mL conversions.
+ *
+ * 2026-03-19 repair rule:
+ * - Ambiguous-unit bridge fields must preserve the last loaded persisted truth on no-op saves.
+ * - Non-bridge edits (favorite/category/etc.) must not silently introduce gramsPerServingUnit/mlPerServingUnit.
  */
