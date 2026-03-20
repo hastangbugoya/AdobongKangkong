@@ -12,6 +12,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -105,11 +107,11 @@ data class ShoppingNeedsGroupUi(
 private fun PlannedFoodTotalNeed.toUi(): ShoppingTotalRowUi {
     fun fmtDouble(v: Double): String =
         if (v == v.roundToInt().toDouble()) v.roundToInt().toString() else "%.2f".format(v)
-
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd, EEEE", Locale.getDefault())
     return ShoppingTotalRowUi(
         foodId = foodId,
         foodName = foodName,
-        earliestNextPlannedDateText = earliestNextPlannedDate?.toString(),
+        earliestNextPlannedDateText = earliestNextPlannedDate?.format(formatter),
         gramsText = gramsTotal?.let { "g: ${fmtDouble(it)}" },
         mlText = mlTotal?.let { "mL: ${fmtDouble(it)}" },
         unconvertedServingsText = unconvertedServingsTotal?.let { "servings: ${fmtDouble(it)} (unconverted)" }
@@ -124,7 +126,7 @@ private fun PlannedFoodTotalNeed.toUi(): ShoppingTotalRowUi {
  */
 private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
     val grouped = this.groupBy { it.foodId }
-
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd, EEEE", Locale.getDefault())
     val groups = grouped.map { (foodId, rows) ->
         val foodName = rows.firstOrNull()?.foodName ?: "Food #$foodId"
         val sortedRows = rows.sortedBy { it.date }
@@ -132,7 +134,9 @@ private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
         ShoppingNeedsGroupUi(
             foodId = foodId,
             foodName = foodName,
-            earliestDateText = sortedRows.firstOrNull()?.date?.toString(),
+            earliestDateText = sortedRows.firstOrNull()?.date?.let {
+                it.format(formatter)
+            } ?: "",
             rows = sortedRows.map { r ->
                 ShoppingNeedsRowUi(
                     dateText = r.date.toString(),

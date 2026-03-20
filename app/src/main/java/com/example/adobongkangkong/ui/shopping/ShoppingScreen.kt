@@ -88,7 +88,7 @@ fun ShoppingScreen(
         ) {
             Text(
                 text = "Needs as of $startDateLabel",
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
@@ -152,19 +152,46 @@ private fun TotalledTab(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent)
                 ) {
-                    ListItem(
-                        headlineContent = { Text(row.foodName) },
-                        supportingContent = {
-                            Column {
-                                row.earliestNextPlannedDateText?.let { Text("Next: $it") }
-                                row.gramsText?.let { Text(it) }
-                                row.mlText?.let { Text(it) }
-                                row.unconvertedServingsText?.let { Text(it) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = row.foodName,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            row.earliestNextPlannedDateText?.let {
+                                Text(
+                                    text = "Next: $it",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
-                        },
-                        trailingContent = { FoodGoalFlagsStrip(flagsByFoodId[row.foodId]) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
+                            row.gramsText?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            row.mlText?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            row.unconvertedServingsText?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        FoodGoalFlagsStrip(flagsByFoodId[row.foodId])
+                    }
                 }
             }
         }
@@ -191,16 +218,22 @@ private fun NotTotalledTab(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .padding(12.dp)
+                            .padding(16.dp)
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(g.foodName, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    text = g.foodName,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                                 g.earliestDateText?.let {
-                                    Text("Earliest: $it", style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        text = "Earliest: $it",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
                             }
                             FoodGoalFlagsStrip(flagsByFoodId[g.foodId])
