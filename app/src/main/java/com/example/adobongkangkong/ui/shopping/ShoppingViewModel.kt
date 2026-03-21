@@ -87,12 +87,24 @@ class ShoppingViewModel @Inject constructor(
         combine(startDateFlow, daysFlow) { start, days -> start to days }
             .flatMapLatest { (start, days) -> observeRecipeShopping(startDate = start, days = days) }
             .mapLatest { result ->
+                val earliestDateByRecipeFoodId: Map<Long, String> =
+                    result.notTotalled
+                        .groupBy { it.recipeFoodId }
+                        .mapValues { (_, rows) ->
+                            val earliestIso = rows.minOfOrNull { it.dateIso }
+                            formatShoppingDateFromIso(earliestIso ?: "")
+                        }
+
                 result.totalled
                     .sortedWith(
                         compareBy<RecipeTotalRequirement> { it.recipeName.lowercase() }
                             .thenBy { it.recipeFoodId }
                     )
-                    .map { it.toTotalledUi() }
+                    .map { total ->
+                        total.toTotalledUi(
+                            nextDateText = earliestDateByRecipeFoodId[total.recipeFoodId]
+                        )
+                    }
             }
 
     private val recipeNotTotalledUiFlow: Flow<List<ShoppingRecipeOccurrenceGroupUi>> =
@@ -197,6 +209,7 @@ data class ShoppingRecipeIngredientRowUi(
 data class ShoppingRecipeTotalGroupUi(
     val recipeFoodId: Long,
     val recipeName: String,
+    val nextDateText: String?,
     val servingsText: String,
     val batchesText: String,
     val ingredients: List<ShoppingRecipeIngredientRowUi>
@@ -215,12 +228,10 @@ private fun PlannedFoodTotalNeed.toUi(): ShoppingTotalRowUi {
     fun fmtDouble(v: Double): String =
         if (v == v.roundToInt().toDouble()) v.roundToInt().toString() else "%.2f".format(v)
 
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd, EEEE", Locale.getDefault())
-
     return ShoppingTotalRowUi(
         foodId = foodId,
         foodName = foodName,
-        earliestNextPlannedDateText = earliestNextPlannedDate?.format(formatter),
+        earliestNextPlannedDateText = formatShoppingDate(earliestNextPlannedDate),
         gramsText = gramsTotal?.let { "g: ${fmtDouble(it)}" },
         mlText = mlTotal?.let { "mL: ${fmtDouble(it)}" },
         unconvertedServingsText = unconvertedServingsTotal?.let { "servings: ${fmtDouble(it)} (unconverted)" }
@@ -235,7 +246,6 @@ private fun PlannedFoodTotalNeed.toUi(): ShoppingTotalRowUi {
  */
 private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
     val grouped = this.groupBy { it.foodId }
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd, EEEE", Locale.getDefault())
 
     val groups = grouped.map { (foodId, rows) ->
         val foodName = rows.firstOrNull()?.foodName ?: "Food #$foodId"
@@ -244,12 +254,10 @@ private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
         ShoppingNeedsGroupUi(
             foodId = foodId,
             foodName = foodName,
-            earliestDateText = sortedRows.firstOrNull()?.date?.let {
-                it.format(formatter)
-            } ?: "",
+            earliestDateText = formatShoppingDate(sortedRows.firstOrNull()?.date) ?: "",
             rows = sortedRows.map { r ->
                 ShoppingNeedsRowUi(
-                    dateText = r.date.toString(),
+                    dateText = formatShoppingDate(sortedRows.firstOrNull()?.date) ?: "",
                     gramsText = r.grams?.toString() ?: "-",
                     servingsText = r.servings?.toString() ?: "-"
                 )
@@ -264,10 +272,13 @@ private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
     )
 }
 
-private fun RecipeTotalRequirement.toTotalledUi(): ShoppingRecipeTotalGroupUi {
+private fun RecipeTotalRequirement.toTotalledUi(
+    nextDateText: String?
+): ShoppingRecipeTotalGroupUi {
     return ShoppingRecipeTotalGroupUi(
         recipeFoodId = recipeFoodId,
         recipeName = recipeName,
+        nextDateText = nextDateText,
         servingsText = "servings: ${fmtShoppingDouble(totalRequiredServings)}",
         batchesText = "batches: ${fmtShoppingDouble(batchesRequired)}",
         ingredients = ingredients
@@ -280,13 +291,10 @@ private fun RecipeTotalRequirement.toTotalledUi(): ShoppingRecipeTotalGroupUi {
 }
 
 private fun RecipeOccurrenceRequirement.toOccurrenceUi(): ShoppingRecipeOccurrenceGroupUi {
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd, EEEE", Locale.getDefault())
-    val parsedDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
-
     return ShoppingRecipeOccurrenceGroupUi(
         recipeFoodId = recipeFoodId,
         recipeName = recipeName,
-        dateText = parsedDate?.format(formatter) ?: dateIso,
+        dateText = formatShoppingDateFromIso(dateIso),
         servingsText = "servings: ${fmtShoppingDouble(requiredServings)}",
         batchesText = "batches: ${fmtShoppingDouble(batchesRequired)}",
         ingredients = ingredients
@@ -299,10 +307,17 @@ private fun RecipeOccurrenceRequirement.toOccurrenceUi(): ShoppingRecipeOccurren
 }
 
 private fun RecipeIngredientRequirement.toUi(): ShoppingRecipeIngredientRowUi {
+    val amountText = when (source) {
+        ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.SERVINGS ->
+            "${fmtShoppingDouble(amountRequired)} servings"
+
+        ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.GRAMS ->
+            "${fmtShoppingDouble(amountRequired)} g"
+    }
     return ShoppingRecipeIngredientRowUi(
         foodId = foodId,
         foodName = foodName,
-        amountText = "${fmtShoppingDouble(amountRequired)} ${unit.display}",
+        amountText = amountText,
         duplicateIconRes = if (isDuplicateAcrossRecipes) R.drawable.layers else null
     )
 }
@@ -313,4 +328,16 @@ private fun fmtShoppingDouble(v: Double): String {
     } else {
         "%.2f".format(v)
     }
+}
+
+private fun formatShoppingDate(date: LocalDate?): String? {
+    if (date == null) return null
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd, EEEE", Locale.getDefault())
+    val base = date.format(formatter)
+    return if (date == LocalDate.now()) "$base • Today" else base
+}
+
+private fun formatShoppingDateFromIso(dateIso: String): String {
+    val parsedDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
+    return formatShoppingDate(parsedDate) ?: dateIso
 }

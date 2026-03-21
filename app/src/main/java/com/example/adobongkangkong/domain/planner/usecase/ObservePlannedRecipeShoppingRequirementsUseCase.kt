@@ -104,22 +104,27 @@ class ObservePlannedRecipeShoppingRequirementsUseCase @Inject constructor(
                             recipeFoodId = row.recipeFoodId,
                             servingsYield = row.servingsYield,
                             ingredients = ingredients.mapNotNull { ing ->
-                                val amountPerBatch = ing.ingredientServings ?: ing.ingredientGrams
-                                val unit = when {
-                                    ing.ingredientServings != null && ing.ingredientServings > 0.0 -> ServingUnit.PIECE
-                                    ing.ingredientGrams != null && ing.ingredientGrams > 0.0 -> ServingUnit.G
+                                when {
+                                    ing.ingredientServings != null && ing.ingredientServings > 0.0 -> {
+                                        IngredientInput(
+                                            foodId = ing.ingredientFoodId,
+                                            amountPerBatch = ing.ingredientServings,
+                                            unit = ServingUnit.PIECE,
+                                            source = IngredientQuantitySource.SERVINGS
+                                        )
+                                    }
+
+                                    ing.ingredientGrams != null && ing.ingredientGrams > 0.0 -> {
+                                        IngredientInput(
+                                            foodId = ing.ingredientFoodId,
+                                            amountPerBatch = ing.ingredientGrams,
+                                            unit = ServingUnit.G,
+                                            source = IngredientQuantitySource.GRAMS
+                                        )
+                                    }
+
                                     else -> null
                                 }
-
-                                if (amountPerBatch == null || amountPerBatch <= 0.0 || unit == null) {
-                                    return@mapNotNull null
-                                }
-
-                                IngredientInput(
-                                    foodId = ing.ingredientFoodId,
-                                    amountPerBatch = amountPerBatch,
-                                    unit = unit
-                                )
                             }
                         )
                     )
@@ -166,6 +171,15 @@ class ObservePlannedRecipeShoppingRequirementsUseCase @Inject constructor(
                     )
                 }
 
+                val sourceLookup: Map<Pair<Long, ServingUnit>, IngredientQuantitySource> =
+                    definitionInputs.values
+                        .flatMap { input ->
+                            input.ingredients.map { ingredient ->
+                                (ingredient.foodId to ingredient.unit) to ingredient.source
+                            }
+                        }
+                        .toMap()
+
                 val computed = computeRecipeShoppingRequirements(
                     demandEntries = demandEntries,
                     recipeDefinitions = recipeDefinitions
@@ -184,6 +198,8 @@ class ObservePlannedRecipeShoppingRequirementsUseCase @Inject constructor(
                                     foodName = ingredient.foodName,
                                     amountRequired = ingredient.amountRequired,
                                     unit = ingredient.unit,
+                                    source = sourceLookup[ingredient.foodId to ingredient.unit]
+                                        ?: IngredientQuantitySource.GRAMS,
                                     isDuplicateAcrossRecipes = ingredient.isDuplicateAcrossRecipes
                                 )
                             }
@@ -203,6 +219,8 @@ class ObservePlannedRecipeShoppingRequirementsUseCase @Inject constructor(
                                     foodName = ingredient.foodName,
                                     amountRequired = ingredient.amountRequired,
                                     unit = ingredient.unit,
+                                    source = sourceLookup[ingredient.foodId to ingredient.unit]
+                                        ?: IngredientQuantitySource.GRAMS,
                                     isDuplicateAcrossRecipes = ingredient.isDuplicateAcrossRecipes
                                 )
                             }
@@ -231,7 +249,8 @@ class ObservePlannedRecipeShoppingRequirementsUseCase @Inject constructor(
     private data class IngredientInput(
         val foodId: Long,
         val amountPerBatch: Double,
-        val unit: ServingUnit
+        val unit: ServingUnit,
+        val source: IngredientQuantitySource
     )
 
     data class Result(
@@ -262,6 +281,12 @@ class ObservePlannedRecipeShoppingRequirementsUseCase @Inject constructor(
         val foodName: String,
         val amountRequired: Double,
         val unit: ServingUnit,
+        val source: IngredientQuantitySource,
         val isDuplicateAcrossRecipes: Boolean
     )
+
+    enum class IngredientQuantitySource {
+        SERVINGS,
+        GRAMS
+    }
 }

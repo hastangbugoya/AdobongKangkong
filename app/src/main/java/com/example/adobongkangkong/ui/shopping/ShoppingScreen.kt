@@ -293,6 +293,12 @@ private fun RecipeTotalledCard(
                             text = group.recipeName,
                             style = MaterialTheme.typography.titleMedium
                         )
+                        group.nextDateText?.let {
+                            Text(
+                                text = "Next: $it",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         Text(
                             text = group.servingsText,
                             style = MaterialTheme.typography.bodySmall
