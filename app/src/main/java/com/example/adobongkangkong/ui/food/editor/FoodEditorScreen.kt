@@ -67,6 +67,7 @@ import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
+import com.example.adobongkangkong.ui.common.editoraction.EditorActionMenu
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.theme.AppIconSize
 
@@ -668,6 +669,13 @@ fun FoodEditorScreen(
                             contentDescription = "Back"
                         )
                     }
+                },
+                actions = {
+                    EditorActionMenu(
+                        showDelete = (state.foodId != null && onDeleteFood != null),
+                        deleteLabel = "Delete food",
+                        onDelete = { showDeleteDialog = true }
+                    )
                 }
             )
         },
@@ -675,8 +683,6 @@ fun FoodEditorScreen(
             FoodEditorBottomBar(
                 isSaving = state.isSaving,
                 errorMessage = state.errorMessage ?: state.barcodeActionMessage,
-                showDelete = (onDeleteFood != null && state.foodId != null),
-                onDelete = { showDeleteDialog = true },
                 onSave = onSave,
                 bannerCaptureController = bannerCaptureController
             )
@@ -1662,8 +1668,6 @@ private fun NullableServingUnitDropdown(
 private fun FoodEditorBottomBar(
     isSaving: Boolean,
     errorMessage: String?,
-    showDelete: Boolean,
-    onDelete: () -> Unit,
     onSave: () -> Unit,
     bannerCaptureController: BannerCaptureController
 ) {
@@ -1680,23 +1684,12 @@ private fun FoodEditorBottomBar(
                 Spacer(Modifier.height(8.dp))
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Button(
+                onClick = onSave,
+                enabled = !isSaving,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                if (showDelete) {
-                    OutlinedButton(
-                        onClick = onDelete,
-                        enabled = !isSaving,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Delete") }
-                }
-
-                Button(
-                    onClick = onSave,
-                    enabled = !isSaving,
-                    modifier = Modifier.weight(1f)
-                ) { Text(if (isSaving) "Saving…" else "Save") }
+                Text(if (isSaving) "Saving…" else "Save")
             }
         }
     }

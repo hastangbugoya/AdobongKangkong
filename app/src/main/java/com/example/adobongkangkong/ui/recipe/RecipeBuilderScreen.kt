@@ -82,6 +82,7 @@ import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.QuantityDisplayFormatter
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
+import com.example.adobongkangkong.ui.common.editoraction.EditorActionMenu
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
@@ -106,7 +107,6 @@ fun RecipeBuilderScreen(
     val ingredientTotalGrams by vm.ingredientTotalGrams.collectAsState()
 
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
-    var menuExpanded by rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
     fun requestExit() {
@@ -188,31 +188,11 @@ fun RecipeBuilderScreen(
                     }
                 },
                 actions = {
-                    if (canDeleteRecipe) {
-                        Box {
-                            IconButton(
-                                onClick = { menuExpanded = true }
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.settings),
-                                    contentDescription = "Recipe actions"
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete recipe") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        showDeleteDialog = true
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    EditorActionMenu(
+                        showDelete = canDeleteRecipe,
+                        deleteLabel = "Delete recipe",
+                        onDelete = { showDeleteDialog = true }
+                    )
                 }
             )
         },
