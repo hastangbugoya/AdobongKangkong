@@ -1102,12 +1102,9 @@ class FoodEditorViewModel @Inject constructor(
 
         fun normalizePositive(value: Double?): Double? = value?.takeIf { it > 0.0 }
 
-        fun sameBridgeValue(a: Double?, b: Double?): Boolean =
-            normalizePositive(a) == normalizePositive(b)
-
         val servingSize = parseDoubleOrNull(s.servingSize) ?: 1.0
-        val gramsPerServingUnitInput = parseDoubleOrNull(s.gramsPerServingUnit)
-        val mlPerServingUnitInput = parseDoubleOrNull(s.mlPerServingUnit)
+        val gramsInput = normalizePositive(parseDoubleOrNull(s.gramsPerServingUnit))
+        val mlInput = normalizePositive(parseDoubleOrNull(s.mlPerServingUnit))
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
         val hasDeterministicMassUnit = s.servingUnit.isMassUnit()
@@ -1118,36 +1115,15 @@ class FoodEditorViewModel @Inject constructor(
             try {
                 val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
                 val originalFood: Food? = loadedFoodSnapshot ?: existing
-                val originalBasisType: BasisType? = loadedBasisTypeSnapshot ?: s.basisType
 
-                val userTouchedGramsBridge =
-                    !sameBridgeValue(originalFood?.gramsPerServingUnit, gramsPerServingUnitInput)
-
-                val userTouchedMlBridge =
-                    !sameBridgeValue(originalFood?.mlPerServingUnit, mlPerServingUnitInput)
-
-                val preserveLoadedBridgesOnNoOp =
-                    s.foodId != null &&
-                            !s.hasUnsavedChanges &&
-                            originalFood != null
-
+                // 🔴 FIX 1: If user typed grams → FORCE PER_100G
                 val resolvedBasisType =
                     when {
                         s.servingUnit.isAmbiguousForGrounding() -> {
                             when {
-                                preserveLoadedBridgesOnNoOp ->
-                                    originalBasisType ?: BasisType.USDA_REPORTED_SERVING
-
-                                userTouchedGramsBridge && !userTouchedMlBridge ->
-                                    BasisType.PER_100G
-
-                                userTouchedMlBridge && !userTouchedGramsBridge ->
-                                    BasisType.PER_100ML
-
-                                else -> s.basisType ?: originalBasisType ?: run {
-                                    update { it.copy(isGroundingDialogOpen = true) }
-                                    return@launch
-                                }
+                                gramsInput != null -> BasisType.PER_100G
+                                mlInput != null -> BasisType.PER_100ML
+                                else -> s.basisType ?: BasisType.USDA_REPORTED_SERVING
                             }
                         }
 
@@ -1156,44 +1132,22 @@ class FoodEditorViewModel @Inject constructor(
                         else -> BasisType.USDA_REPORTED_SERVING
                     }
 
+                // 🔴 FIX 2: NEVER DROP USER INPUT
                 val gramsPerServingUnitFinal: Double? =
                     when {
-                        preserveLoadedBridgesOnNoOp ->
-                            normalizePositive(originalFood?.gramsPerServingUnit)
-
                         hasDeterministicMassUnit -> null
-
-                        resolvedBasisType == BasisType.PER_100G ->
-                            when {
-                                userTouchedGramsBridge ->
-                                    normalizePositive(gramsPerServingUnitInput)
-
-                                else ->
-                                    normalizePositive(originalFood?.gramsPerServingUnit)
-                            }
-
-                        else -> null
+                        gramsInput != null -> gramsInput   // ✅ ALWAYS KEEP
+                        else -> normalizePositive(originalFood?.gramsPerServingUnit)
                     }
 
                 val mlPerServingUnitFinal: Double? =
                     when {
-                        preserveLoadedBridgesOnNoOp ->
-                            normalizePositive(originalFood?.mlPerServingUnit)
-
                         hasDeterministicVolumeUnit -> null
-
-                        resolvedBasisType == BasisType.PER_100ML ->
-                            when {
-                                userTouchedMlBridge ->
-                                    normalizePositive(mlPerServingUnitInput)
-
-                                else ->
-                                    normalizePositive(originalFood?.mlPerServingUnit)
-                            }
-
-                        else -> null
+                        mlInput != null -> mlInput   // ✅ ALWAYS KEEP
+                        else -> normalizePositive(originalFood?.mlPerServingUnit)
                     }
 
+                // 🔴 VALIDATION (unchanged logic, now safe)
                 if (s.servingUnit.isAmbiguousForGrounding()) {
                     when (resolvedBasisType) {
                         BasisType.PER_100ML -> {

@@ -945,7 +945,7 @@ fun FoodEditorScreen(
                     }
                 }
 
-                item {
+                item(key = "serving_section") {
                     ServingSection(
                         servingSize = state.servingSize,
                         servingUnit = state.servingUnit,
@@ -1483,6 +1483,18 @@ private fun ServingSection(
         val mlPerServingComputed: Double? =
             if (servingSizeD != null && mlPerUnitD != null) servingSizeD * mlPerUnitD else null
 
+        // 🔴 FIX: stable helper text (no layout jump)
+        @Composable
+        fun StableSupportingText(text: String) {
+            Text(
+                text = text,
+                maxLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+            )
+        }
+
         if (useMlBridge) {
             OutlinedTextField(
                 value = mlPerServingUnit,
@@ -1497,7 +1509,7 @@ private fun ServingSection(
                         else ->
                             "Used when this serving unit is volume-grounded (PER 100mL)."
                     }
-                    Text(helper)
+                    StableSupportingText(helper)
                 }
             )
         } else {
@@ -1514,7 +1526,7 @@ private fun ServingSection(
                         else ->
                             "Used when this serving unit is mass-grounded (PER 100g)."
                     }
-                    Text(helper)
+                    StableSupportingText(helper)
                 }
             )
         }
