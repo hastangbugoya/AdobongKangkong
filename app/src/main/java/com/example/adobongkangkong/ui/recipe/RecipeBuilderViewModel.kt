@@ -815,11 +815,18 @@ class RecipeBuilderViewModel @Inject constructor(
             return
         }
 
-        if (!ServingPolicy.canUseServings(food)) {
+        val gramsPerServing = food.gramsPerCurrentServingResolved()
+        val mlPerServing = food.millilitersPerCurrentServingResolved()
+
+        // ✅ NEW: allow if EITHER grams OR ml path exists
+        val hasNutritionPath = (gramsPerServing != null && gramsPerServing > 0.0) ||
+                (mlPerServing != null && mlPerServing > 0.0)
+
+        if (!hasNutritionPath) {
             blockedFoodIdFlow.value = food.id
             blockingSheetFlow.value = BlockingSheetModel(
-                title = "Needs grams-per-serving",
-                message = ServingPolicy.blockingReason(food),
+                title = "Missing recipe bridge",
+                message = "Add grams-per-serving or mL-per-serving to enable recipe conversion.",
                 primaryButtonText = "Edit food",
                 secondaryButtonText = "Dismiss",
                 onPrimary = {
@@ -831,8 +838,6 @@ class RecipeBuilderViewModel @Inject constructor(
             return
         }
 
-        val gramsPerServing = food.gramsPerCurrentServingResolved()
-        val mlPerServing = food.millilitersPerCurrentServingResolved()
         val gramsForLine: Double?
         val isApproximateWeight: Boolean
 
@@ -840,6 +845,7 @@ class RecipeBuilderViewModel @Inject constructor(
             gramsForLine = (servings * gramsPerServing).coerceAtLeast(0.0)
             isApproximateWeight = false
         } else {
+            // ✅ volume fallback for weight (approximate only)
             gramsForLine = mlPerServing?.let { perServingMl ->
                 (servings * perServingMl).coerceAtLeast(0.0)
             }
@@ -871,10 +877,12 @@ class RecipeBuilderViewModel @Inject constructor(
                 enteredUnitLabel = enteredUnitLabel
             )
         )
+
         ingredientsFlow.value = next
         recomputeNutrientTally()
         maybeAutoPrefillTotalYieldGramsFromIngredients()
         markDirty()
+
         isEditingGrams = false
         pickedFoodFlow.value = null
         pickedServingsFlow.value = 1.0

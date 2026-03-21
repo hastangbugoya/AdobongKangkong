@@ -256,10 +256,12 @@ fun SelectedFoodPanel(
             )
         }
 
-        val needsGramsPerServing =
-            (food.servingUnit != ServingUnit.G) && (food.gramsPerServingUnitResolved() == null)
+        val hasGramBridge = food.gramsPerServingUnitResolved() != null
+        val hasMlBridge = food.mlPerServingUnit != null
 
-        if (needsGramsPerServing) {
+        val needsRecipeBridge = !hasGramBridge && !hasMlBridge
+
+        if (needsRecipeBridge) {
             Spacer(Modifier.size(8.dp))
             Surface(
                 tonalElevation = 1.dp,
@@ -274,11 +276,11 @@ fun SelectedFoodPanel(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Missing grams-per-serving",
+                            text = "Missing recipe bridge",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            text = "Add grams-per-serving in the food editor to enable gram-based logging and accurate conversions.",
+                            text = "Add grams-per-serving or mL-per-serving to enable recipe conversion.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

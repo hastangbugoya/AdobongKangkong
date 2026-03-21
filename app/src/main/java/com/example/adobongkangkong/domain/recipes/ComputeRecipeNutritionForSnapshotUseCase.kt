@@ -176,25 +176,34 @@ class ComputeRecipeNutritionForSnapshotUseCase @Inject constructor(
             val nutrientsPerGram = snapshot.nutrientsPerGram
             val nutrientsPerMilliliter = snapshot.nutrientsPerMilliliter
 
+            val hasGramPath = gramsPerServingUnit != null && gramsPerServingUnit > 0.0
+            val hasMlPath = mlPerServingUnit != null && mlPerServingUnit > 0.0
+
             when {
-                gramsPerServingUnit != null && gramsPerServingUnit > 0.0 -> {
-                    if (nutrientsPerGram == null) {
-                        warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
-                        return@fold acc
-                    }
-                    val grams = servings * gramsPerServingUnit
+                // ✅ prefer grams if available
+                hasGramPath && nutrientsPerGram != null -> {
+                    val grams = servings * gramsPerServingUnit!!
                     acc + snapshot.nutrientsForGrams(grams)
                 }
 
-                mlPerServingUnit != null && mlPerServingUnit > 0.0 -> {
-                    if (nutrientsPerMilliliter == null) {
-                        warnings += RecipeNutritionWarning.MissingNutrientsPerMilliliter(foodId)
-                        return@fold acc
-                    }
-                    val milliliters = servings * mlPerServingUnit
+                // ✅ fallback to mL path
+                hasMlPath && nutrientsPerMilliliter != null -> {
+                    val milliliters = servings * mlPerServingUnit!!
                     acc + snapshot.nutrientsForMilliliters(milliliters)
                 }
 
+                // ⚠️ partial data cases (path exists but nutrients missing)
+                hasGramPath && nutrientsPerGram == null -> {
+                    warnings += RecipeNutritionWarning.MissingNutrientsPerGram(foodId)
+                    acc
+                }
+
+                hasMlPath && nutrientsPerMilliliter == null -> {
+                    warnings += RecipeNutritionWarning.MissingNutrientsPerMilliliter(foodId)
+                    acc
+                }
+
+                // ❌ no usable path at all
                 else -> {
                     warnings += RecipeNutritionWarning.MissingGramsPerServing(foodId)
                     warnings += RecipeNutritionWarning.MissingMlPerServing(foodId)
