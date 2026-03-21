@@ -9,16 +9,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -122,12 +122,14 @@ fun ShoppingScreen(
 
             when (tab) {
                 ShoppingTab.TOTALLED -> TotalledTab(
-                    rows = state.totalledRows,
+                    recipeGroups = state.recipeTotalledGroups,
+                    foodRows = state.totalledRows,
                     flagsByFoodId = state.flagsByFoodId
                 )
 
                 ShoppingTab.NOT_TOTALLED -> NotTotalledTab(
-                    groups = state.notTotalledGroups,
+                    recipeGroups = state.recipeNotTotalledGroups,
+                    foodGroups = state.notTotalledGroups,
                     flagsByFoodId = state.flagsByFoodId
                 )
             }
@@ -137,7 +139,8 @@ fun ShoppingScreen(
 
 @Composable
 private fun TotalledTab(
-    rows: List<ShoppingTotalRowUi>,
+    recipeGroups: List<ShoppingRecipeTotalGroupUi>,
+    foodRows: List<ShoppingTotalRowUi>,
     flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
 ) {
     LazyColumn(
@@ -145,7 +148,11 @@ private fun TotalledTab(
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(rows, key = { it.foodId }) { row ->
+        items(recipeGroups, key = { "recipe_${it.recipeFoodId}" }) { group ->
+            RecipeTotalledCard(group = group, flagsByFoodId = flagsByFoodId)
+        }
+
+        items(foodRows, key = { "food_${it.foodId}" }) { row ->
             FoodBannerCardBackground(foodId = row.foodId) {
                 // CRITICAL: Card must be transparent or it will paint over the blur background.
                 Card(
@@ -200,7 +207,8 @@ private fun TotalledTab(
 
 @Composable
 private fun NotTotalledTab(
-    groups: List<ShoppingNeedsGroupUi>,
+    recipeGroups: List<ShoppingRecipeOccurrenceGroupUi>,
+    foodGroups: List<ShoppingNeedsGroupUi>,
     flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
 ) {
     LazyColumn(
@@ -208,7 +216,11 @@ private fun NotTotalledTab(
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(groups, key = { it.foodId }) { g ->
+        items(recipeGroups, key = { "recipe_${it.recipeFoodId}_${it.dateText}_${it.recipeName}" }) { group ->
+            RecipeOccurrenceCard(group = group, flagsByFoodId = flagsByFoodId)
+        }
+
+        items(foodGroups, key = { "food_${it.foodId}" }) { g ->
             FoodBannerCardBackground(foodId = g.foodId) {
                 // CRITICAL: Card must be transparent or it will paint over the blur background.
                 Card(
@@ -251,5 +263,154 @@ private fun NotTotalledTab(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RecipeTotalledCard(
+    group: ShoppingRecipeTotalGroupUi,
+    flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
+) {
+    FoodBannerCardBackground(foodId = group.recipeFoodId) {
+        // CRITICAL: Card must be transparent or it will paint over the blur background.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = group.recipeName,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = group.servingsText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = group.batchesText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    FoodGoalFlagsStrip(flagsByFoodId[group.recipeFoodId])
+                }
+
+                if (group.ingredients.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                group.ingredients.forEach { ingredient ->
+                    RecipeIngredientRow(ingredient = ingredient)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecipeOccurrenceCard(
+    group: ShoppingRecipeOccurrenceGroupUi,
+    flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
+) {
+    FoodBannerCardBackground(foodId = group.recipeFoodId) {
+        // CRITICAL: Card must be transparent or it will paint over the blur background.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = group.recipeName,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = group.dateText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = group.servingsText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = group.batchesText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    FoodGoalFlagsStrip(flagsByFoodId[group.recipeFoodId])
+                }
+
+                if (group.ingredients.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                group.ingredients.forEach { ingredient ->
+                    RecipeIngredientRow(ingredient = ingredient)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecipeIngredientRow(
+    ingredient: ShoppingRecipeIngredientRowUi
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = ingredient.foodName,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+
+            if (ingredient.duplicateIconRes != null) {
+                Spacer(Modifier.padding(start = 6.dp))
+                Icon(
+                    painter = painterResource(ingredient.duplicateIconRes),
+                    contentDescription = "Ingredient appears in multiple recipes",
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Text(
+            text = ingredient.amountText,
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
