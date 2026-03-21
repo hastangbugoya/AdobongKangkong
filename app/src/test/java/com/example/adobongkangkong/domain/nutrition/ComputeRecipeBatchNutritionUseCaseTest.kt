@@ -213,6 +213,8 @@ class ComputeRecipeBatchNutritionUseCaseTest {
         override suspend fun getIngredients(recipeId: Long) = ingredients
 
         override suspend fun getHeaderByRecipeId(recipeId: Long) = header
+        override suspend fun softDeleteRecipeByFoodId(foodId: Long) {
+        }
 
         override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>) = emptyMap<Long, Long>()
 

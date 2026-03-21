@@ -324,6 +324,12 @@ class UpdateLogEntryUseCaseTest {
         override suspend fun getBatchFoodIds(batchIds: Set<Long>): Map<Long, Long> = emptyMap()
     }
 
+// ONLY showing modified sections — everything else remains EXACTLY the same
+
+// =========================
+// dummyBatchNutrition()
+// =========================
+
     private fun dummyBatchNutrition(): ComputeRecipeBatchNutritionUseCase {
         return ComputeRecipeBatchNutritionUseCase(
             recipeRepo = object : RecipeRepository {
@@ -414,6 +420,11 @@ class UpdateLogEntryUseCaseTest {
                 ) {
                     throw UnsupportedOperationException()
                 }
+
+                // ✅ NEW (required)
+                override suspend fun softDeleteRecipeByFoodId(foodId: Long) {
+                    throw UnsupportedOperationException()
+                }
             },
             snapshotRepo = TestSnapshotRepo(
                 FoodNutritionSnapshot(
@@ -426,6 +437,10 @@ class UpdateLogEntryUseCaseTest {
             )
         )
     }
+
+// =========================
+// EmptyRecipeDao
+// =========================
 
     private class EmptyRecipeDao : RecipeDao {
         override suspend fun insert(recipe: RecipeEntity): Long = 0L
@@ -450,6 +465,18 @@ class UpdateLogEntryUseCaseTest {
             foodId: Long,
             name: String,
             servingsYield: Double
+        ) = Unit
+
+        // ✅ NEW
+        override suspend fun softDeleteById(
+            recipeId: Long,
+            deletedAtEpochMs: Long
+        ) = Unit
+
+        // ✅ NEW
+        override suspend fun softDeleteByFoodId(
+            foodId: Long,
+            deletedAtEpochMs: Long
         ) = Unit
 
         override suspend fun countRecipes(): Int = 0

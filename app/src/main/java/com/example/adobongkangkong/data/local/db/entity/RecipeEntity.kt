@@ -10,7 +10,8 @@ import java.util.UUID
     tableName = "recipes",
     indices = [
         Index(value = ["stableId"], unique = true),
-        Index(value = ["foodId"])
+        Index(value = ["foodId"]),
+        Index(value = ["isDeleted"])
     ]
 )
 data class RecipeEntity(
@@ -37,6 +38,22 @@ data class RecipeEntity(
      */
     val totalYieldGrams: Double? = null,
 
+    /**
+     * Soft delete flag.
+     *
+     * - Default recipe delete should set this to true and hide the recipe from
+     *   normal recipe lists/pickers.
+     * - Historical references should remain valid.
+     * - Backing Food soft delete is coordinated separately by recipe delete flow;
+     *   this field exists so RecipeEntity retains its own lifecycle state.
+     */
+    val isDeleted: Boolean = false,
+
+    /**
+     * Optional deletion timestamp for debugging / future "Recently deleted" UI.
+     * Stored as epoch millis (nullable).
+     */
+    val deletedAtEpochMs: Long? = null,
+
     val createdAt: Instant = Instant.now()
 )
-

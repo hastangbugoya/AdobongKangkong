@@ -233,6 +233,29 @@ class RecipeRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun softDeleteRecipeByFoodId(foodId: Long) {
+        db.withTransaction {
+            val now = System.currentTimeMillis()
+
+            // 1. Soft delete recipe
+            recipeDao.softDeleteByFoodId(
+                foodId = foodId,
+                deletedAtEpochMs = now
+            )
+
+            // 2. Soft delete backing food (critical for hiding in search/logging)
+            val food = foodDao.getById(foodId)
+            if (food != null) {
+                foodDao.upsert(
+                    food.copy(
+                        isDeleted = true,
+                        deletedAtEpochMs = now
+                    )
+                )
+            }
+        }
+    }
+
     override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long> {
         if (recipeIds.isEmpty()) return emptyMap()
         return recipeDao.getByIds(recipeIds.toList())

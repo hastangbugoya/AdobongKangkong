@@ -25,24 +25,7 @@ object DatabaseModule {
             context,
             NutriDatabase::class.java,
             "nutri.db"
-        )
-            .addMigrations(
-                NutriDatabase.MIGRATION_3_4,
-                NutriDatabase.MIGRATION_5_6,
-                NutriDatabase.MIGRATION_6_7,
-                NutriDatabase.MIGRATION_7_8,
-                NutriDatabase.MIGRATION_8_9,
-                NutriDatabase.MIGRATION_9_10,
-                NutriDatabase.MIGRATION_11_12,
-                NutriDatabase.MIGRATION_13_14,
-                NutriDatabase.MIGRATION_15_16,
-                NutriDatabase.MIGRATION_16_17,
-                NutriDatabase.MIGRATION_17_18,
-                NutriDatabase.MIGRATION_18_19,
-                NutriDatabase.MIGRATION_19_20,
-                NutriDatabase.MIGRATION_20_21
-            )
-            .fallbackToDestructiveMigration()
+        ).fallbackToDestructiveMigration()
             .build()
     }
 

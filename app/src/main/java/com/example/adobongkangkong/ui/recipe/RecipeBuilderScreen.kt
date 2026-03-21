@@ -35,6 +35,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -95,7 +97,8 @@ fun RecipeBuilderScreen(
     onBack: () -> Unit,
     onEditFood: (Long) -> Unit,
     bannerRefreshTick: Int,
-    bannerCaptureController: BannerCaptureController
+    bannerCaptureController: BannerCaptureController,
+    onDeleteRecipe: (() -> Unit)? = null
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
@@ -103,6 +106,8 @@ fun RecipeBuilderScreen(
     val ingredientTotalGrams by vm.ingredientTotalGrams.collectAsState()
 
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
     fun requestExit() {
         if (state.hasUnsavedChanges && !state.isSaving) {
@@ -168,6 +173,7 @@ fun RecipeBuilderScreen(
     }
 
     val canSave = !state.isSaving
+    val canDeleteRecipe = editFoodId != null && onDeleteRecipe != null
 
     Scaffold(
         topBar = {
@@ -179,6 +185,33 @@ fun RecipeBuilderScreen(
                             painter = painterResource(R.drawable.angle_circle_left),
                             contentDescription = "Back"
                         )
+                    }
+                },
+                actions = {
+                    if (canDeleteRecipe) {
+                        Box {
+                            IconButton(
+                                onClick = { menuExpanded = true }
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.settings),
+                                    contentDescription = "Recipe actions"
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete recipe") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showDeleteDialog = true
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -761,6 +794,33 @@ fun RecipeBuilderScreen(
                         onClick = { showExitDialog.value = false }
                     ) { Text("Cancel") }
                 }
+            }
+        )
+    }
+
+    if (showDeleteDialog && canDeleteRecipe) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete recipe?") },
+            text = {
+                Text(
+                    "This will hide the recipe from lists, but any past usage (planned meals, logs, etc.) will be preserved."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        vm.deleteRecipe {
+                            onDeleteRecipe?.invoke()
+                        }
+                    }
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteDialog = false }
+                ) { Text("Cancel") }
             }
         )
     }

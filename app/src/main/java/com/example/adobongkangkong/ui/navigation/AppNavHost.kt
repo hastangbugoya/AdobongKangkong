@@ -404,6 +404,8 @@ fun AppNavHost(
             )
         }
 
+// (file unchanged ABOVE)
+
         composable(
             route = NavRoutes.Recipes.builder,
             arguments = listOf(
@@ -420,7 +422,10 @@ fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
                 bannerRefreshTick = bannerRefreshTick,
-                bannerCaptureController = bannerCaptureController
+                bannerCaptureController = bannerCaptureController,
+                onDeleteRecipe = {
+                    navController.popBackStack()
+                }
             )
         }
 

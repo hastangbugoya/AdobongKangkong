@@ -715,6 +715,9 @@ class ComputePlannedDayMacroTotalsUseCaseTest {
         override suspend fun getRecipeByFoodId(foodId: Long): RecipeHeader? = error("Not needed in this test")
         override suspend fun getIngredients(recipeId: Long): List<RecipeIngredientLine> = error("Not needed in this test")
         override suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader? = error("Not needed in this test")
+        override suspend fun softDeleteRecipeByFoodId(foodId: Long) {
+            error("Not needed in this test")
+        }
 
         override suspend fun createRecipe(draft: com.example.adobongkangkong.domain.model.RecipeDraft): Long =
             error("Not needed in this test")

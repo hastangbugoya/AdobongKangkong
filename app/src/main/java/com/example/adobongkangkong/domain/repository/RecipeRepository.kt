@@ -48,6 +48,17 @@ interface RecipeRepository {
 
     suspend fun getHeaderByRecipeId(recipeId: Long): RecipeHeader?
 
+    /**
+     * Soft deletes the recipe tied to the provided backing food row.
+     *
+     * Expected behavior:
+     * - Marks the Recipe row deleted
+     * - Preserves historical references
+     * - Coordinated backing Food soft delete happens in repository implementation
+     *   / use case layer as needed by app policy
+     */
+    suspend fun softDeleteRecipeByFoodId(foodId: Long)
+
     /** Bulk lookup to avoid N+1 in planner/day aggregation (recipeId -> recipe.foodId). */
     suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long>
 

@@ -9,13 +9,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecipeDao {
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(recipe: RecipeEntity): Long
 
-    @Query("SELECT * FROM recipes ORDER BY createdAt DESC")
+    // --------------------------------------------------
+    // Queries (exclude soft-deleted by default)
+    // --------------------------------------------------
+
+    @Query("SELECT * FROM recipes WHERE isDeleted = 0 ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<RecipeEntity>>
 
-    // Edit Recipe
+    @Query("SELECT * FROM recipes WHERE isDeleted = 0 ORDER BY createdAt DESC")
+    suspend fun getAll(): List<RecipeEntity>
 
     @Query("SELECT * FROM recipes WHERE id = :recipeId LIMIT 1")
     suspend fun getById(recipeId: Long): RecipeEntity?
@@ -29,11 +35,12 @@ interface RecipeDao {
     @Query("SELECT * FROM recipes WHERE foodId IN (:foodIds)")
     suspend fun getByFoodIds(foodIds: List<Long>): List<RecipeEntity>
 
-    @Query("SELECT * FROM recipes ORDER BY createdAt DESC")
-    suspend fun getAll(): List<RecipeEntity>
-
     @Query("SELECT id FROM recipes WHERE stableId = :stableId LIMIT 1")
     suspend fun getIdByStableId(stableId: String): Long?
+
+    // --------------------------------------------------
+    // Updates
+    // --------------------------------------------------
 
     @Query(
         """
@@ -51,6 +58,36 @@ interface RecipeDao {
         servingsYield: Double
     )
 
-    @Query("SELECT COUNT(*) FROM recipes")
+    // --------------------------------------------------
+    // Soft Delete
+    // --------------------------------------------------
+
+    @Query(
+        """
+        UPDATE recipes
+        SET isDeleted = 1,
+            deletedAtEpochMs = :deletedAtEpochMs
+        WHERE id = :recipeId
+        """
+    )
+    suspend fun softDeleteById(
+        recipeId: Long,
+        deletedAtEpochMs: Long
+    )
+
+    @Query(
+        """
+        UPDATE recipes
+        SET isDeleted = 1,
+            deletedAtEpochMs = :deletedAtEpochMs
+        WHERE foodId = :foodId
+        """
+    )
+    suspend fun softDeleteByFoodId(
+        foodId: Long,
+        deletedAtEpochMs: Long
+    )
+
+    @Query("SELECT COUNT(*) FROM recipes WHERE isDeleted = 0")
     suspend fun countRecipes(): Int
 }

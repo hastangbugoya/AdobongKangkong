@@ -439,6 +439,18 @@ class RecipeBuilderViewModel @Inject constructor(
         newCategoryNameFlow.value = v
     }
 
+    fun deleteRecipe(onDone: () -> Unit) {
+        val foodId = editFoodId ?: return
+
+        viewModelScope.launch {
+            try {
+                recipeRepo.softDeleteRecipeByFoodId(foodId)
+                onDone()
+            } catch (t: Throwable) {
+                errorFlow.value = t.message ?: "Failed to delete recipe."
+            }
+        }
+    }
     fun createCategory() {
         val rawName = newCategoryNameFlow.value.trim()
         if (rawName.isBlank()) {
