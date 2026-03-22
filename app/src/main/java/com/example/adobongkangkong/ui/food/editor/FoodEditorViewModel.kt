@@ -12,6 +12,8 @@ import com.example.adobongkangkong.domain.model.AliasAddResult
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
+import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.fromUsda
 import com.example.adobongkangkong.domain.model.isAmbiguousForGrounding
@@ -36,6 +38,7 @@ import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase
 import com.example.adobongkangkong.domain.usda.model.BarcodeRemapDialogState
 import com.example.adobongkangkong.domain.usecase.GetFoodEditorDataUseCase
 import com.example.adobongkangkong.domain.usecase.HardDeleteFoodIfUnusedUseCase
+import com.example.adobongkangkong.domain.usecase.SaveFoodMetadataUseCase
 import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SoftDeleteFoodUseCase
@@ -64,6 +67,7 @@ class FoodEditorViewModel @Inject constructor(
     private val getData: GetFoodEditorDataUseCase,
     private val searchNutrients: SearchNutrientsUseCase,
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
+    private val saveFoodMetadata: SaveFoodMetadataUseCase,
     private val foodRepo: FoodRepository,
     private val foodCategoryRepo: FoodCategoryRepository,
     private val nutrientAliasRepo: NutrientAliasRepository,
@@ -323,6 +327,9 @@ class FoodEditorViewModel @Inject constructor(
                 isSaving = false,
                 errorMessage = null,
                 hasUnsavedChanges = false,
+                isFoodMetadataDirty = false,
+                areNutrientsDirty = false,
+                isBasisInterpretationDirty = false,
                 assignedBarcodes = assignedBarcodes,
                 barcodeActionMessage = current.barcodeActionMessage,
                 barcodePackageEditor = null,
@@ -754,6 +761,8 @@ class FoodEditorViewModel @Inject constructor(
         update {
             it.copy(
                 hasUnsavedChanges = true,
+                isFoodMetadataDirty = true,
+                isBasisInterpretationDirty = true,
                 isGroundingDialogOpen = false,
                 basisType = type,
                 groundingMode = when (type) {
@@ -947,13 +956,62 @@ class FoodEditorViewModel @Inject constructor(
         update { it.copy(isGroundingDialogOpen = false) }
     }
 
-    fun onNameChange(v: String) = update { it.copy(name = v, errorMessage = null, hasUnsavedChanges = true) }
-    fun onBrandChange(v: String) = update { it.copy(brand = v, hasUnsavedChanges = true) }
-    fun onServingSizeChange(v: String) = update { it.copy(servingSize = v, hasUnsavedChanges = true) }
-    fun onServingUnitChange(v: ServingUnit) = update { it.copy(servingUnit = v, hasUnsavedChanges = true) }
-    fun onGramsPerServingChange(v: String) = update { it.copy(gramsPerServingUnit = v, hasUnsavedChanges = true) }
-    fun onMlPerServingChange(v: String) = update { it.copy(mlPerServingUnit = v, hasUnsavedChanges = true) }
-    fun onServingsPerPackageChange(v: String) = update { it.copy(servingsPerPackage = v, hasUnsavedChanges = true) }
+    fun onNameChange(v: String) = update {
+        it.copy(
+            name = v,
+            errorMessage = null,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onBrandChange(v: String) = update {
+        it.copy(
+            brand = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onServingSizeChange(v: String) = update {
+        it.copy(
+            servingSize = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onServingUnitChange(v: ServingUnit) = update {
+        it.copy(
+            servingUnit = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onGramsPerServingChange(v: String) = update {
+        it.copy(
+            gramsPerServingUnit = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onMlPerServingChange(v: String) = update {
+        it.copy(
+            mlPerServingUnit = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onServingsPerPackageChange(v: String) = update {
+        it.copy(
+            servingsPerPackage = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
 
     fun onGroundingModeChange(v: GroundingMode) {
         update { s ->
@@ -962,7 +1020,11 @@ class FoodEditorViewModel @Inject constructor(
             if (v == GroundingMode.LIQUID && next.mlPerServingUnit.isBlank()) {
                 val auto = next.servingUnit.toMilliliters(1.0)
                 if (auto != null && auto > 0.0) {
-                    return@update next.copy(mlPerServingUnit = auto.roundForUi())
+                    return@update next.copy(
+                        mlPerServingUnit = auto.roundForUi(),
+                        hasUnsavedChanges = true,
+                        isFoodMetadataDirty = true
+                    )
                 }
             }
             next
@@ -973,7 +1035,10 @@ class FoodEditorViewModel @Inject constructor(
         val totalMl = totalMlText.toDoubleOrNull()
         val servingSize = s.servingSize.toDoubleOrNull()
 
-        val base = s.copy(hasUnsavedChanges = true)
+        val base = s.copy(
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
 
         if (totalMl == null || totalMl <= 0.0 || servingSize == null || servingSize <= 0.0) {
             return@update base
@@ -993,7 +1058,11 @@ class FoodEditorViewModel @Inject constructor(
             val nextIds = s.selectedCategoryIds.toMutableSet().apply {
                 if (checked) add(categoryId) else remove(categoryId)
             }
-            s.copy(selectedCategoryIds = nextIds, hasUnsavedChanges = true)
+            s.copy(
+                selectedCategoryIds = nextIds,
+                hasUnsavedChanges = true,
+                isFoodMetadataDirty = true
+            )
         }
     }
 
@@ -1019,6 +1088,7 @@ class FoodEditorViewModel @Inject constructor(
                         selectedCategoryIds = s.selectedCategoryIds + created.id,
                         newCategoryName = "",
                         hasUnsavedChanges = true,
+                        isFoodMetadataDirty = true,
                         errorMessage = null,
                     )
                 }
@@ -1028,9 +1098,29 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    fun onFavoriteChange(v: Boolean) = update { it.copy(favorite = v, hasUnsavedChanges = true) }
-    fun onEatMoreChange(v: Boolean) = update { it.copy(eatMore = v, hasUnsavedChanges = true) }
-    fun onLimitChange(v: Boolean) = update { it.copy(limit = v, hasUnsavedChanges = true) }
+    fun onFavoriteChange(v: Boolean) = update {
+        it.copy(
+            favorite = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onEatMoreChange(v: Boolean) = update {
+        it.copy(
+            eatMore = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
+
+    fun onLimitChange(v: Boolean) = update {
+        it.copy(
+            limit = v,
+            hasUnsavedChanges = true,
+            isFoodMetadataDirty = true
+        )
+    }
 
     fun onNutrientAmountChange(nutrientId: Long, amount: String) {
         update { s ->
@@ -1038,7 +1128,8 @@ class FoodEditorViewModel @Inject constructor(
                 nutrientRows = s.nutrientRows.map {
                     if (it.nutrientId == nutrientId) it.copy(amount = amount) else it
                 },
-                hasUnsavedChanges = true
+                hasUnsavedChanges = true,
+                areNutrientsDirty = true
             )
         }
     }
@@ -1047,7 +1138,8 @@ class FoodEditorViewModel @Inject constructor(
         update { s ->
             s.copy(
                 nutrientRows = s.nutrientRows.filterNot { it.nutrientId == nutrientId },
-                hasUnsavedChanges = true
+                hasUnsavedChanges = true,
+                areNutrientsDirty = true
             )
         }
     }
@@ -1066,6 +1158,7 @@ class FoodEditorViewModel @Inject constructor(
             if (s.nutrientRows.any { it.nutrientId == n.id }) s
             else s.copy(
                 hasUnsavedChanges = true,
+                areNutrientsDirty = true,
                 nutrientRows = sortNutrientRows(
                     s.nutrientRows + NutrientRowUi(
                         nutrientId = n.id,
@@ -1116,7 +1209,7 @@ class FoodEditorViewModel @Inject constructor(
                 val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
                 val originalFood: Food? = loadedFoodSnapshot ?: existing
 
-                // 🔴 FIX 1: If user typed grams → FORCE PER_100G
+                // Keep current canonical/basis resolution behavior for now.
                 val resolvedBasisType =
                     when {
                         s.servingUnit.isAmbiguousForGrounding() -> {
@@ -1132,22 +1225,20 @@ class FoodEditorViewModel @Inject constructor(
                         else -> BasisType.USDA_REPORTED_SERVING
                     }
 
-                // 🔴 FIX 2: NEVER DROP USER INPUT
                 val gramsPerServingUnitFinal: Double? =
                     when {
                         hasDeterministicMassUnit -> null
-                        gramsInput != null -> gramsInput   // ✅ ALWAYS KEEP
+                        gramsInput != null -> gramsInput
                         else -> normalizePositive(originalFood?.gramsPerServingUnit)
                     }
 
                 val mlPerServingUnitFinal: Double? =
                     when {
                         hasDeterministicVolumeUnit -> null
-                        mlInput != null -> mlInput   // ✅ ALWAYS KEEP
+                        mlInput != null -> mlInput
                         else -> normalizePositive(originalFood?.mlPerServingUnit)
                     }
 
-                // 🔴 VALIDATION (unchanged logic, now safe)
                 if (s.servingUnit.isAmbiguousForGrounding()) {
                     when (resolvedBasisType) {
                         BasisType.PER_100ML -> {
@@ -1188,6 +1279,8 @@ class FoodEditorViewModel @Inject constructor(
                         mlPerServingUnit = mlPerServingUnitFinal
                     )
 
+                // Intentionally left in place for the next phase, when nutrient persistence is
+                // reintroduced behind typed dirty routing.
                 val rows = s.nutrientRows.mapNotNull { ui ->
                     val amt = ui.amount.trim()
                     val uiPerServingAmount =
@@ -1274,7 +1367,7 @@ class FoodEditorViewModel @Inject constructor(
                         )
                     }
 
-                val savedId = saveFoodWithNutrients(food, rows)
+                val savedId = saveFoodMetadata(food)
 
                 flagsRepo.setFlags(
                     foodId = savedId,
@@ -1288,7 +1381,14 @@ class FoodEditorViewModel @Inject constructor(
                     categoryIds = s.selectedCategoryIds,
                 )
 
-                update { it.copy(hasUnsavedChanges = false) }
+                update {
+                    it.copy(
+                        hasUnsavedChanges = false,
+                        isFoodMetadataDirty = false,
+                        areNutrientsDirty = false,
+                        isBasisInterpretationDirty = false
+                    )
+                }
                 onDone(savedId)
 
             } catch (t: Throwable) {
@@ -1316,7 +1416,12 @@ class FoodEditorViewModel @Inject constructor(
             when (nutrientAliasRepo.addAlias(id, alias)) {
                 AliasAddResult.Added -> {
                     aliasSheetMessageFlow.value = null
-                    update { it.copy(hasUnsavedChanges = true) }
+                    update {
+                        it.copy(
+                            hasUnsavedChanges = true,
+                            isFoodMetadataDirty = true
+                        )
+                    }
                 }
 
                 AliasAddResult.IgnoredEmpty -> aliasSheetMessageFlow.value = "Alias is empty."
@@ -1329,7 +1434,12 @@ class FoodEditorViewModel @Inject constructor(
         val id = aliasSheetNutrientIdFlow.value ?: return
         viewModelScope.launch {
             nutrientAliasRepo.deleteAlias(id, alias)
-            update { it.copy(hasUnsavedChanges = true) }
+            update {
+                it.copy(
+                    hasUnsavedChanges = true,
+                    isFoodMetadataDirty = true
+                )
+            }
         }
     }
 

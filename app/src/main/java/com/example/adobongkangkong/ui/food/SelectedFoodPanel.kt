@@ -62,6 +62,7 @@ import kotlin.math.max
  * - Servings row with +/- (canonical)
  * - Amount in food.servingUnit (number field) when it adds distinct value
  * - Grams field + unit button opens UnitToGramsDialog when grams logging is available
+ * - mL field + unit button opens UnitToMillilitersDialog when mL logging is available
  * - If missing grams-per-serving (and unit isn't grams), show blocking card with “Edit food”
  * - Package chips (½ package, 1 package) if servingsPerPackage exists
  * - Primary action button label is provided by caller (e.g., "Log" vs "Add ingredient")
@@ -101,8 +102,10 @@ fun SelectedFoodPanel(
 ) {
     val servingUnitIsMass = food.servingUnit.isMassUnit()
     val canLogGrams = food.gramsPerServingUnitResolved() != null
+    val canLogMilliliters = food.mlPerServingUnit != null
     val showServingUnitAmountField = !servingUnitIsMass
     val showGramsField = canLogGrams
+    val showMillilitersField = canLogMilliliters
 
     Column(
         modifier = modifier
@@ -137,7 +140,8 @@ fun SelectedFoodPanel(
 
         if (showServingUnitAmountField) {
             val canOpenServingVolumeDialog =
-                food.servingUnit.isVolumeUnit() && (food.gramsPerServingUnitResolved() != null)
+                food.servingUnit.isVolumeUnit() &&
+                        (food.gramsPerServingUnitResolved() != null || food.mlPerServingUnit != null)
             var isServingUnitDialogOpen by rememberSaveable { mutableStateOf(false) }
 
             Row(
@@ -166,13 +170,14 @@ fun SelectedFoodPanel(
                 }
             }
 
-            val showEnteredAsVolume = inputAmount != null &&
+            val showEnteredAsVolumeForServingUnit = !showMillilitersField &&
+                    inputAmount != null &&
                     inputAmount > 0.0 &&
                     inputUnit.isVolumeUnit() &&
                     !inputUnit.isMassUnit() &&
                     inputUnit != food.servingUnit
 
-            if (showEnteredAsVolume) {
+            if (showEnteredAsVolumeForServingUnit) {
                 Spacer(Modifier.size(4.dp))
                 Text(
                     text = "Entered as ${inputAmount.cleanDynamic()} ${inputUnit.display}",
@@ -254,6 +259,76 @@ fun SelectedFoodPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        if (showMillilitersField) {
+            val millilitersDefault = servings * (food.mlPerServingUnit ?: 0.0)
+            val displayedMilliliters =
+                if (inputUnit == ServingUnit.ML && inputAmount != null && inputAmount > 0.0) {
+                    inputAmount
+                } else {
+                    millilitersDefault
+                }
+
+            var isMillilitersDialogOpen by rememberSaveable { mutableStateOf(false) }
+
+            Spacer(Modifier.size(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.weight(1f)) {
+                    NumberField(
+                        label = "Milliliters (mL)",
+                        value = displayedMilliliters,
+                        onValue = { ml ->
+                            onInputUnitChanged(ServingUnit.ML)
+                            onInputAmountChanged(ml)
+                        }
+                    )
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = { isMillilitersDialogOpen = true }
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.exchange),
+                        contentDescription = "Change milliliter input unit",
+                        modifier = Modifier.size(AppIconSize.CardAction),
+                    )
+                }
+            }
+
+            val showEnteredAsVolumeForMilliliters = inputAmount != null &&
+                    inputAmount > 0.0 &&
+                    inputUnit.isVolumeUnit() &&
+                    !inputUnit.isMassUnit() &&
+                    inputUnit != ServingUnit.ML
+
+            if (showEnteredAsVolumeForMilliliters) {
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    text = "Entered as ${inputAmount.cleanDynamic()} ${inputUnit.display}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isMillilitersDialogOpen) {
+                UnitToMillilitersDialog(
+                    initialUnit = inputUnit,
+                    initialAmount = inputAmount,
+                    onDismiss = { isMillilitersDialogOpen = false },
+                    onApply = { unit, amount ->
+                        onInputUnitChanged(unit)
+                        onInputAmountChanged(amount)
+                        isMillilitersDialogOpen = false
+                    }
+                )
+            }
         }
 
         val hasGramBridge = food.gramsPerServingUnitResolved() != null
@@ -475,6 +550,85 @@ private fun UnitToGramsDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun UnitToMillilitersDialog(
+    initialUnit: ServingUnit,
+    initialAmount: Double?,
+    onDismiss: () -> Unit,
+    onApply: (ServingUnit, Double?) -> Unit
+) {
+    val unitOptions = remember { buildQuickAddVolumeInputUnits() }
+
+    var expanded by remember { mutableStateOf(false) }
+    var selectedUnit by remember { mutableStateOf(initialUnit.coerceToAvailable(unitOptions)) }
+    var amountText by remember { mutableStateOf(initialAmount?.toString().orEmpty()) }
+
+    LaunchedEffect(unitOptions) {
+        selectedUnit = selectedUnit.coerceToAvailable(unitOptions)
+    }
+
+    val parsedAmount: Double? = amountText.toDoubleOrNull()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Input amount") },
+        text = {
+            Column {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedUnit.display,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Unit") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        unitOptions.forEach { unit ->
+                            DropdownMenuItem(
+                                text = { Text(unit.display) },
+                                onClick = {
+                                    selectedUnit = unit
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.size(12.dp))
+
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Amount (${selectedUnit.display})") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onApply(selectedUnit, parsedAmount) },
+                enabled = parsedAmount != null && parsedAmount > 0.0
+            ) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun UnitToServingUnitDialog(
     food: Food,
     initialUnit: ServingUnit,
@@ -568,6 +722,25 @@ private fun buildQuickAddMassInputUnits(): List<ServingUnit> = listOf(
     ServingUnit.OZ,
     ServingUnit.LB,
     ServingUnit.KG
+)
+
+private fun buildQuickAddVolumeInputUnits(): List<ServingUnit> = listOf(
+    ServingUnit.ML,
+    ServingUnit.L,
+    ServingUnit.TSP_US,
+    ServingUnit.TBSP_US,
+    ServingUnit.FL_OZ_US,
+    ServingUnit.CUP_US,
+    ServingUnit.PINT_US,
+    ServingUnit.QUART_US,
+    ServingUnit.GALLON_US,
+    ServingUnit.CUP_METRIC,
+    ServingUnit.CUP_JP,
+    ServingUnit.RCCUP,
+    ServingUnit.FL_OZ_IMP,
+    ServingUnit.PINT_IMP,
+    ServingUnit.QUART_IMP,
+    ServingUnit.GALLON_IMP
 )
 
 private fun buildQuickAddServingVolumeUnits(food: Food): List<ServingUnit> {

@@ -2,10 +2,12 @@ package com.example.adobongkangkong.ui.food.editor
 
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.domain.importing.Decision
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.usda.model.BarcodeRemapDialogState
+import com.example.adobongkangkong.domain.usda.model.CollisionReason
 
 enum class GroundingMode {
     SOLID,
@@ -24,7 +26,7 @@ data class NutrientRowUi(
     val aliases: List<String> = emptyList(),
     val unit: NutrientUnit,
     val category: NutrientCategory,
-    val amount: String // keep as String for text field editing
+    val amount: String
 )
 
 data class AssignedBarcodeUi(
@@ -44,41 +46,12 @@ data class BarcodePackageEditorState(
     val overrideServingUnit: ServingUnit? = null,
 )
 
-/**
- * Pending USDA nutrient backfill prompt state after a barcode/package has been adopted into
- * the current existing food.
- *
- * Purpose
- * - Preserve the exact USDA candidate context that was just adopted so the ViewModel can offer:
- *   "Fill missing nutrients from USDA?"
- * - Keep nutrient backfill separate from package adoption.
- *
- * Important rules
- * - This is UI orchestration state only.
- * - This does not mean backfill has happened yet.
- * - The current Food remains canonical; USDA is only a donor candidate for nutrient rows.
- */
 data class PendingUsdaBackfillPromptState(
     val barcode: String,
     val selectedFdcId: Long,
     val candidateLabel: String,
 )
 
-/**
- * Prompt shown immediately after USDA import/adoption when the app cannot safely know whether
- * the USDA nutrient values should be treated as per-serving values or as per-100 values.
- *
- * Purpose
- * - Let the user decide interpretation instead of hard-forcing one rule when USDA payload semantics
- *   are unclear for the chosen item.
- * - Provide a lightweight preview (main macros + serving text) so the user can make the decision
- *   in context.
- *
- * Important rules
- * - This is orchestration/UI state only.
- * - No conversion has been applied yet for this decision until the user confirms.
- * - The numbers shown here are raw USDA values exactly as parsed from the chosen item.
- */
 data class PendingUsdaInterpretationPromptState(
     val foodId: Long,
     val selectedFdcId: Long,
@@ -90,14 +63,6 @@ data class PendingUsdaInterpretationPromptState(
     val fat: Double?,
 )
 
-/**
- * Lightweight UI feedback for a completed USDA nutrient backfill attempt.
- *
- * Purpose
- * - Surface a user-readable summary after BackfillUsdaNutrientsIntoFoodUseCase finishes.
- * - Keep result messaging separate from generic errorMessage because a blocked backfill is not
- *   necessarily the same as a fatal editor error.
- */
 data class UsdaBackfillMessageState(
     val message: String,
     val insertedCount: Int,
@@ -127,96 +92,76 @@ data class FoodEditorState(
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
 
-    // Navigate-away warning
+    val isFoodMetadataDirty: Boolean = false,
+    val areNutrientsDirty: Boolean = false,
+    val isBasisInterpretationDirty: Boolean = false,
+
     val hasUnsavedChanges: Boolean = false,
 
-    // Flags (stored separately from FoodEntity)
     val favorite: Boolean = false,
     val eatMore: Boolean = false,
     val limit: Boolean = false,
     val isLbDialogOpen: Boolean = false,
     val lbInputText: String = "",
 
-    // Barcode scan (UI-only, not persisted)
     val scannedBarcode: String = "",
     val isBarcodeScannerOpen: Boolean = false,
     val pendingUsdaSearchJson: String? = null,
     val barcodePickItems: List<com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByBarcodeUseCase.PickItem> = emptyList(),
 
-    // Post-import/adoption USDA interpretation choice when nutrient semantics are unclear
     val pendingUsdaInterpretationPrompt: PendingUsdaInterpretationPromptState? = null,
-
-    // Post-adoption USDA nutrient enrichment prompt/result
     val pendingUsdaBackfillPrompt: PendingUsdaBackfillPromptState? = null,
     val usdaBackfillMessage: UsdaBackfillMessageState? = null,
 
-    // Solid-vs-liquid grounding prompt (UI-only)
     val isGroundingDialogOpen: Boolean = false,
     val groundingMode: GroundingMode = GroundingMode.SOLID,
     val originalServingUnit: ServingUnit? = null,
     val basisType: BasisType? = null,
 
-    // Barcode fallback (USDA lookup failed)
     val isBarcodeFallbackOpen: Boolean = false,
     val barcodeFallbackMessage: String? = null,
     val barcodeFallbackCreateName: String = "",
     val barcodeAlreadyAssignedFoodId: Long? = null,
 
-    // Barcode remap confirm (when barcode already mapped to another food)
     val barcodeRemapDialog: BarcodeRemapDialogState? = null,
-
-    // Barcode collision prompt (USDA import collision flow)
     val barcodeCollisionDialog: BarcodeCollisionDialogState? = null,
 
-    // Barcode mappings for this food (persisted)
     val assignedBarcodes: List<AssignedBarcodeUi> = emptyList(),
     val barcodeActionMessage: String? = null,
     val barcodePackageEditor: BarcodePackageEditorState? = null,
 
     val hasLoaded: Boolean = false,
 
-    // Non-blocking “Needs Fix” banner state (computed by ViewModel)
     val needsFix: Boolean = false,
     val fixMessage: String? = null,
-
-    // Optional dismiss: hides banner until message changes (or becomes null)
     val fixBannerDismissed: Boolean = false,
 ) {
-    /**
-     * Convenience flags/fields used by FoodEditorScreen.
-     *
-     * These are derived from the canonical fields above (especially nutrientRows) so the UI can
-     * keep simple one-field text inputs for common nutrients while your data model stays generic.
-     *
-     * IMPORTANT:
-     * - These are read-only views over nutrientRows.
-     * - Updates must be handled by the ViewModel by modifying nutrientRows (typically by nutrientId).
-     */
-    val isEditing: Boolean get() = foodId != null
+    val isEditing: Boolean
+        get() = foodId != null
 
-    // UI convenience nutrient fields (Strings for TextField values)
-    val calories: String get() = amountForAnyName("Calories", "Energy", "kcal")
-    val carbs: String get() = amountForAnyName("Carbohydrate", "Carbs", "Total Carbohydrate")
-    val protein: String get() = amountForAnyName("Protein")
-    val fat: String get() = amountForAnyName("Fat", "Total Fat")
-    val fiber: String get() = amountForAnyName("Fiber", "Dietary Fiber")
-    val sodium: String get() = amountForAnyName("Sodium")
+    val calories: String
+        get() = amountForAnyName("Calories", "Energy", "kcal")
 
-    /**
-     * Minimal "Save enabled" rule for the screen.
-     *
-     * The strict validation belongs in the ViewModel / domain, but the bottom bar needs a quick
-     * signal to enable/disable the Save button.
-     */
+    val carbs: String
+        get() = amountForAnyName("Carbohydrate", "Carbs", "Total Carbohydrate")
+
+    val protein: String
+        get() = amountForAnyName("Protein")
+
+    val fat: String
+        get() = amountForAnyName("Fat", "Total Fat")
+
+    val fiber: String
+        get() = amountForAnyName("Fiber", "Dietary Fiber")
+
+    val sodium: String
+        get() = amountForAnyName("Sodium")
+
     val canSave: Boolean
         get() {
             if (isSaving) return false
             if (name.isBlank()) return false
 
-            // We intentionally do NOT block save when a unit is ambiguous (cup/tbsp/fl oz/etc.)
-            // because the ViewModel can prompt the user for SOLID vs LIQUID grounding.
-
-            // servingSize should be a positive number if present.
             val servingSizeValue = servingSize.toDoubleOrNull()
             return !(servingSizeValue != null && servingSizeValue <= 0.0)
         }
@@ -244,4 +189,14 @@ data class NutrientSearchResultUi(
     val unit: NutrientUnit,
     val category: NutrientCategory,
     val aliases: List<String> = emptyList()
+)
+
+data class BarcodeCollisionDialogState(
+    val barcode: String,
+    val existingFoodId: Long,
+    val existingSource: BarcodeMappingSource,
+    val incomingFdcId: Long?,
+    val incomingPublishedDateIso: String?,
+    val incomingLabel: String,
+    val reason: CollisionReason,
 )
