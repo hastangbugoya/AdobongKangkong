@@ -1,5 +1,40 @@
 package com.example.adobongkangkong.ui.food.editor
-
+/**
+ * Saves a [Food] and (optionally) its nutrient rows using canonical single-basis rules.
+ *
+ * ## Purpose
+ * This use case persists:
+ * - Food metadata (always)
+ * - Nutrient rows (only when explicitly provided by caller)
+ *
+ * ## Critical behavior contract (Food Editor integration)
+ *
+ * The caller (FoodEditorViewModel) is responsible for deciding:
+ *
+ * ### 1. Metadata-only changes
+ * - servingSize
+ * - servingUnit
+ * - gramsPerServingUnit
+ * - mlPerServingUnit
+ *
+ * → Call saveFoodMetadata ONLY
+ * → Existing canonical nutrients must remain unchanged
+ *
+ * ### 2. Nutrient edits present
+ * → Call SaveFoodWithNutrientsUseCase
+ * → Nutrient rows are treated as user-intended per-serving values
+ * → Rows are converted into canonical PER_100G / PER_100ML / USDA basis and persisted
+ *
+ * ## Why this split exists
+ * - Serving metadata is a DISPLAY SCALING mechanism, not nutrition data
+ * - Rewriting nutrients on metadata-only edits corrupts canonical values
+ * - Canonical nutrients must only change when user edits nutrient values
+ *
+ * ## Canonical guarantees
+ * - Single basis per food (PER_100G / PER_100ML / USDA)
+ * - No grams↔mL conversion without explicit density
+ * - Exactly one row per nutrient id
+ */
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -254,16 +289,16 @@ class FoodEditorViewModel @Inject constructor(
                             .canonicalToDisplayPerServing(
                                 storedAmount = r.amount,
                                 storedBasis = r.basisType,
-                                servingSize = 1.0,
-                                gramsPerServingUnit = gramsPerServingEffectiveForDisplay
+                                servingSize = servingSize,
+                                gramsPerServingUnit = gramsPerServingUnitEffectiveForDisplay
                             ).amount
 
                         BasisType.PER_100ML -> NutrientBasisScaler
                             .canonicalToDisplayPerServingVolume(
                                 storedAmount = r.amount,
                                 storedBasis = r.basisType,
-                                servingSize = 1.0,
-                                mlPerServingUnit = mlPerServingEffectiveForDisplay
+                                servingSize = servingSize,
+                                mlPerServingUnit = mlPerServingUnitEffectiveForDisplay
                             ).amount
 
                         BasisType.USDA_REPORTED_SERVING -> r.amount
@@ -1367,7 +1402,12 @@ class FoodEditorViewModel @Inject constructor(
                         )
                     }
 
-                val savedId = saveFoodMetadata(food)
+                val savedId =
+                    if (s.areNutrientsDirty) {
+                        saveFoodWithNutrients(food, rows)
+                    } else {
+                        saveFoodMetadata(food)
+                    }
 
                 flagsRepo.setFlags(
                     foodId = savedId,
@@ -2287,4 +2327,20 @@ class FoodEditorViewModel @Inject constructor(
  * 2026-03-19 repair rule:
  * - Ambiguous-unit bridge fields must preserve the last loaded persisted truth on no-op saves.
  * - Non-bridge edits (favorite/category/etc.) must not silently introduce gramsPerServingUnit/mlPerServingUnit.
- */
+*
+* 2026/03/24
+* ## Editor integration rule (CRITICAL)
+*
+* - This use case MUST NOT be called for metadata-only edits.
+* - Doing so will rewrite canonical nutrients using a new serving lens and corrupt data.
+*
+* - FoodEditorViewModel must:
+*   - call saveFoodMetadata(...) when only metadata changes
+*   - call SaveFoodWithNutrientsUseCase(...) when nutrient rows are dirty
+*
+* - This separation is REQUIRED to maintain nutrition correctness across:
+*   - Foods list
+*   - Recipe system
+*   - Logging
+*   - Snapshot generation
+*/

@@ -308,7 +308,13 @@ class FoodsListViewModel @Inject constructor(
                             when (result) {
                                 FoodValidationResult.Ok -> null
                                 is FoodValidationResult.Warning -> null
-                                is FoodValidationResult.Blocked -> result.message
+                                is FoodValidationResult.Blocked -> {
+                                    when (result.reason) {
+                                        FoodValidationResult.Reason.MissingSnapshot,
+                                        FoodValidationResult.Reason.MissingNutrients -> null
+                                        else -> result.message
+                                    }
+                                }
                             }
                         }
 

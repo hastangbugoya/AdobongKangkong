@@ -512,7 +512,7 @@ class FoodsCsvImporter @Inject constructor(
                 val servRaw = cellNormalized(row, headerIndex, "serv")
                 val weightRaw = cellNormalized(row, headerIndex, "weight")
 
-                val servingUnit: ServingUnit = CsvUnits.parseServingUnit(servRaw)
+                val servingUnit = CsvUnits.resolveServingUnit(servRaw, weightRaw)
                 val parsedWeight = CsvUnits.parseWeightToGrams(weightRaw)
                 val parsedVolume = parseWeightToMilliliters(weightRaw)
 

@@ -88,6 +88,15 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  *   - serving size + serving unit
  *   - and, when needed, grams/mL backing shown in the Serving section
  *
+ * Serving bridge visibility rule:
+ * - Deterministic units already carry their own conversion basis through [ServingUnit.asG] / [ServingUnit.asMl].
+ * - Therefore:
+ *   - hide manual grams-per-unit input when the selected serving unit has built-in mass grounding
+ *   - hide manual mL-per-unit input when the selected serving unit has built-in volume grounding
+ *   - hide BOTH bridge inputs when the selected serving unit is already deterministic
+ * - Manual bridge inputs are only shown for units that are not already deterministic.
+ * - This prevents the user from entering values the domain layer intentionally ignores for units like lb, oz, g, mL, or L.
+ *
  * USDA interpretation prompt:
  * - When [state.pendingUsdaInterpretationPrompt] is non-null, the app does not yet assume whether
  *   the chosen USDA nutrient values should be treated as per-100 or per-serving.
@@ -1471,13 +1480,9 @@ private fun ServingSection(
             )
         }
 
-        val useMlBridge = when (basisType) {
-            BasisType.PER_100ML -> true
-            BasisType.PER_100G -> false
-            BasisType.USDA_REPORTED_SERVING, null -> {
-                mlPerServingUnit.isNotBlank() && gramsPerServingUnit.isBlank()
-            }
-        }
+        val isDeterministicUnit = servingUnit.asG != null || servingUnit.asMl != null
+        val showGramsBridge = !isDeterministicUnit
+        val showMlBridge = !isDeterministicUnit
 
         val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
         val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
@@ -1489,7 +1494,6 @@ private fun ServingSection(
         val mlPerServingComputed: Double? =
             if (servingSizeD != null && mlPerUnitD != null) servingSizeD * mlPerUnitD else null
 
-        // 🔴 FIX: stable helper text (no layout jump)
         @Composable
         fun StableSupportingText(text: String) {
             Text(
@@ -1501,7 +1505,7 @@ private fun ServingSection(
             )
         }
 
-        if (useMlBridge) {
+        if (showMlBridge) {
             OutlinedTextField(
                 value = mlPerServingUnit,
                 onValueChange = onMlPerServingChange,
@@ -1518,7 +1522,9 @@ private fun ServingSection(
                     StableSupportingText(helper)
                 }
             )
-        } else {
+        }
+
+        if (showGramsBridge) {
             OutlinedTextField(
                 value = gramsPerServingUnit,
                 onValueChange = onGramsPerServingChange,
@@ -1769,7 +1775,11 @@ private fun Double.toUiNumber(): String {
 
 private fun Double.toUiCompactNumber(): String {
     val whole = toLong().toDouble()
-    return if (this == whole) whole.toLong().toString() else "%,.2f".format(this).replace(",", "").trimEnd('0').trimEnd('.')
+    return if (this == whole) {
+        whole.toLong().toString()
+    } else {
+        "%,.2f".format(this).replace(",", "").trimEnd('0').trimEnd('.')
+    }
 }
 
 private fun NutrientCategory.labelForUi(): String =
@@ -1784,6 +1794,12 @@ private fun NutrientUnit.labelForUi(): String = name.lowercase()
  * - Editable nutrient fields are labeled as per-serving UI values.
  * - This screen should not visually imply that editable nutrient fields are raw PER_100G / PER_100ML values.
  * - Canonical storage basis remains internal and is only surfaced here as explanatory text.
+ *
+ * Serving bridge visibility rule:
+ * - Do not show manual grams bridge input for units with built-in mass grounding (`asG != null`).
+ * - Do not show manual mL bridge input for units with built-in volume grounding (`asMl != null`).
+ * - Do not show either bridge input when the selected unit is already deterministic.
+ * - The domain layer already treats deterministic units as grounded, so showing editable bridge fields here is misleading.
  *
  * USDA interpretation prompt rule:
  * - When USDA nutrient semantics are unclear, this screen must ask the user how to interpret them.

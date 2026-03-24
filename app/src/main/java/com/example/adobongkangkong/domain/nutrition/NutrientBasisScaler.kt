@@ -1,6 +1,9 @@
 package com.example.adobongkangkong.domain.nutrition
 
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.isMassUnit
+import com.example.adobongkangkong.domain.model.toGrams
 import kotlin.math.abs
 
 /**
@@ -180,10 +183,24 @@ object NutrientBasisScaler {
      */
     fun almostEqual(a: Double, b: Double, eps: Double = 1e-9): Boolean = abs(a - b) <= eps
 
-    private fun gramsPerServing(servingSize: Double, gramsPerServingUnit: Double?): Double? {
+    private fun gramsPerServing(
+        servingSize: Double,
+        gramsPerServingUnit: Double?,
+        servingUnit: ServingUnit? = null
+    ): Double? {
         if (servingSize <= 0.0) return null
-        val g = gramsPerServingUnit ?: return null
+
+        val gPerUnit: Double? =
+            when {
+                // 🔥 NEW: handle deterministic mass units
+                servingUnit?.isMassUnit() == true -> servingUnit.toGrams(1.0)
+
+                else -> gramsPerServingUnit
+            }
+
+        val g = gPerUnit ?: return null
         if (g <= 0.0) return null
+
         return servingSize * g
     }
 
