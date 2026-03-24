@@ -33,6 +33,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -42,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -59,6 +61,7 @@ import com.example.adobongkangkong.ui.camera.generateBlurDerivative
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,11 +84,21 @@ fun FoodsListScreen(
 ) {
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
-    val query by vm.query.collectAsState()
+    val query = state.query
     val favoritesOnly by vm.favoritesOnly.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(initialFavoritesOnly) {
         vm.setFavoritesOnly(initialFavoritesOnly)
+    }
+
+    val alphabet = remember { ('A'..'Z').map { it.toString() } }
+
+    fun indexForLetter(letter: String): Int? {
+        val target = letter.firstOrNull() ?: return null
+        return state.rows.indexOfFirst { row ->
+            row.name.trim().firstOrNull()?.uppercaseChar() == target
+        }.takeIf { it >= 0 }
     }
 
     Scaffold(
@@ -127,99 +140,132 @@ fun FoodsListScreen(
             )
         }
     ) { padding ->
-        Column(
-            Modifier
+        Box(
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = vm::onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search") },
-                singleLine = true
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = state.filter == FoodsFilter.ALL,
-                    onClick = { vm.onFilterChange(FoodsFilter.ALL) },
-                    label = { Text("All") }
-                )
-                FilterChip(
-                    selected = state.filter == FoodsFilter.FOODS_ONLY,
-                    onClick = { vm.onFilterChange(FoodsFilter.FOODS_ONLY) },
-                    label = { Text("Foods") }
-                )
-                FilterChip(
-                    selected = state.filter == FoodsFilter.RECIPES_ONLY,
-                    onClick = { vm.onFilterChange(FoodsFilter.RECIPES_ONLY) },
-                    label = { Text("Recipes") }
-                )
-                FilterChip(
-                    selected = favoritesOnly,
-                    onClick = { vm.onFavoritesOnlyChange(!favoritesOnly) },
-                    label = { Text("Favorites") }
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .padding(end = if (state.sort.key == FoodSortKey.NAME) 20.dp else 0.dp)
             ) {
-                FilterChip(
-                    selected = state.selectedCategoryId == null,
-                    onClick = { vm.onSelectedCategoryChange(null) },
-                    label = { Text("All categories") }
-                )
-
-                state.categories.forEach { category ->
-                    FilterChip(
-                        selected = state.selectedCategoryId == category.id,
-                        onClick = { vm.onSelectedCategoryChange(category.id) },
-                        label = { Text(category.name) }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            FoodsSortRow(
-                sort = state.sort,
-                onSortKey = vm::onSortKeyChange,
-                onToggleDirection = vm::onSortDirectionToggle
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState
-            ) {
-                items(state.rows, key = { it.foodId }) { row ->
-                    FoodRow(
-                        row = row,
-                        onClick = {
-                            if (onPickFood != null) {
-                                onPickFood(row.foodId)
-                            } else {
-                                if (row.isRecipe) onEditRecipe(row.foodId) else onEditFood(row.foodId)
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = vm::onQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (query.isNotBlank()) {
+                            IconButton(onClick = { vm.onQueryChange("") }) {
+                                Icon(
+                                    painter = painterResource(
+                                        R.drawable.cross_small,
+                                    ),
+                                    contentDescription = "Clear search",
+                                )
                             }
                         }
+                    },
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = state.filter == FoodsFilter.ALL,
+                        onClick = { vm.onFilterChange(FoodsFilter.ALL) },
+                        label = { Text("All") }
                     )
-                    HorizontalDivider()
+                    FilterChip(
+                        selected = state.filter == FoodsFilter.FOODS_ONLY,
+                        onClick = { vm.onFilterChange(FoodsFilter.FOODS_ONLY) },
+                        label = { Text("Foods") }
+                    )
+                    FilterChip(
+                        selected = state.filter == FoodsFilter.RECIPES_ONLY,
+                        onClick = { vm.onFilterChange(FoodsFilter.RECIPES_ONLY) },
+                        label = { Text("Recipes") }
+                    )
+                    FilterChip(
+                        selected = favoritesOnly,
+                        onClick = { vm.onFavoritesOnlyChange(!favoritesOnly) },
+                        label = { Text("Favorites") }
+                    )
                 }
 
-                item {
-                    Text(state.toString(), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = state.selectedCategoryId == null,
+                        onClick = { vm.onSelectedCategoryChange(null) },
+                        label = { Text("All categories") }
+                    )
+
+                    state.categories.forEach { category ->
+                        FilterChip(
+                            selected = state.selectedCategoryId == category.id,
+                            onClick = { vm.onSelectedCategoryChange(category.id) },
+                            label = { Text(category.name) }
+                        )
+                    }
                 }
+
+                Spacer(Modifier.height(8.dp))
+
+                FoodsSortRow(
+                    sort = state.sort,
+                    onSortKey = vm::onSortKeyChange,
+                    onToggleDirection = vm::onSortDirectionToggle
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState
+                ) {
+                    items(state.rows, key = { it.foodId }) { row ->
+                        FoodRow(
+                            row = row,
+                            onClick = {
+                                if (onPickFood != null) {
+                                    onPickFood(row.foodId)
+                                } else {
+                                    if (row.isRecipe) onEditRecipe(row.foodId) else onEditFood(row.foodId)
+                                }
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+
+                    item {
+                        Text(state.toString(), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            if (state.sort.key == FoodSortKey.NAME && state.rows.isNotEmpty()) {
+                AlphabetIndexRail(
+                    letters = alphabet,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 4.dp),
+                    onLetterTap = { letter ->
+                        val index = indexForLetter(letter) ?: return@AlphabetIndexRail
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(index)
+                        }
+                    }
+                )
             }
         }
     }
@@ -230,12 +276,43 @@ fun FoodsListScreen(
 }
 
 @Composable
+private fun AlphabetIndexRail(
+    letters: List<String>,
+    modifier: Modifier = Modifier,
+    onLetterTap: (String) -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        tonalElevation = 2.dp,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            letters.forEach { letter ->
+                Text(
+                    text = letter,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clickable { onLetterTap(letter) }
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun FoodsSortRow(
     sort: FoodSortState,
     onSortKey: (FoodSortKey) -> Unit,
     onToggleDirection: () -> Unit,
 ) {
-    var expanded = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val expanded = remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
