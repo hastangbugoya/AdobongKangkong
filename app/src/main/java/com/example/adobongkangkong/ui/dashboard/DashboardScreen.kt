@@ -225,7 +225,8 @@ fun DashboardScreen(
                 onOpenMeowLogs = onOpenMeowLogs,
                 onOpenPlanner = onOpenPlanner,
                 onOpenBackup = onOpenBackup,
-                onDebugReset = vm::runDebugReset
+                onDebugReset = vm::runDebugReset,
+                onBuildSharedSnapshotJson = vm::buildSharedSnapshotJson
             )
         }
     }
@@ -420,8 +421,8 @@ private fun DashboardBottomActionBar(
         ) {
             IconButton(
                 onClick = onOpenFoods,
-                modifier = Modifier.weight(1f))
-            {
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.list),
                     contentDescription = "Open Foods",
@@ -429,8 +430,8 @@ private fun DashboardBottomActionBar(
             }
             IconButton(
                 onClick = onQuickAdd,
-                modifier = Modifier.weight(1f))
-            {
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.add),
                     contentDescription = "Quick Log",
@@ -438,8 +439,8 @@ private fun DashboardBottomActionBar(
             }
             IconButton(
                 onClick = onOpenCalendar,
-                modifier = Modifier.weight(1f))
-            {
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.calendar_days),
                     contentDescription = "Open Calendar",

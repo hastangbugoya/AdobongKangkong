@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -72,21 +71,17 @@ fun DashboardSettingsSheet(
     onDraftMaxChange: (String) -> Unit,
     onCancelTargetEdit: () -> Unit,
     onSaveTargetDraft: () -> Unit,
-
     onSync: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
     onOpenMeowLogs: () -> Unit,
     onOpenPlanner: () -> Unit,
-
-    // NEW: Full backup/restore screen (DB + images)
     onOpenBackup: () -> Unit,
-
-    // NEW: Debug reset (caller applies currently selected dashboard date)
     onDebugReset: (
         domains: Set<DashboardDebugResetDomain>,
         scope: DashboardDebugResetScope
-    ) -> Unit
+    ) -> Unit,
+    onBuildSharedSnapshotJson: () -> Unit
 ) {
     Column(
         Modifier
@@ -195,9 +190,13 @@ fun DashboardSettingsSheet(
                 Button(
                     enabled = !draft.isSaving && draft.isDirty,
                     onClick = onSaveTargetDraft
-                ) { Text("Save") }
+                ) {
+                    Text("Save")
+                }
 
-                TextButton(onClick = onCancelTargetEdit) { Text("Cancel") }
+                TextButton(onClick = onCancelTargetEdit) {
+                    Text("Cancel")
+                }
             }
         }
 
@@ -293,6 +292,20 @@ fun DashboardSettingsSheet(
         }
 
         if (BuildConfig.DEBUG) {
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+
+            Text("Debug Tools", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = onBuildSharedSnapshotJson,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Build Shared Nutrition Snapshot (JSON)")
+            }
+
             Spacer(Modifier.height(24.dp))
             HorizontalDivider()
             Spacer(Modifier.height(16.dp))

@@ -49,6 +49,7 @@ import java.time.ZoneId
 import javax.inject.Inject
 import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.model.TodayLogItem
+import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionSnapshotJsonUseCase
 
 /**
  * Dashboard screen state holder.
@@ -99,7 +100,8 @@ class DashboardViewModel @Inject constructor(
 
     private val debugResetUseCase: DebugResetUseCase,
 
-    private val application: Application
+    private val application: Application,
+    private val buildSharedNutritionSnapshotJsonUseCase: BuildSharedNutritionSnapshotJsonUseCase
 ) : ViewModel() {
 
     private val _snackbar = MutableStateFlow<String?>(null)
@@ -178,6 +180,19 @@ class DashboardViewModel @Inject constructor(
     fun useWeek() = setRollingDays(7)
     fun useTwoWeeks() = setRollingDays(14)
     fun useMonth() = setRollingDays(30)
+
+    fun buildSharedSnapshotJson() {
+        val date = selectedDateFlow.value
+        val zoneId = ZoneId.systemDefault()
+
+        viewModelScope.launch {
+            val json = buildSharedNutritionSnapshotJsonUseCase(
+                date = date,
+                zoneId = zoneId
+            )
+            Log.d("SharedSnapshot", json)
+        }
+    }
 
     private val _overlay = MutableStateFlow(DashboardOverlay())
 
