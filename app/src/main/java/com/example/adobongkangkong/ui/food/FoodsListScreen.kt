@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -84,7 +85,7 @@ fun FoodsListScreen(
 ) {
     val state by vm.state.collectAsState()
     val listState = rememberLazyListState()
-    val query = state.query
+    val query by vm.query.collectAsState()
     val favoritesOnly by vm.favoritesOnly.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -158,17 +159,21 @@ fun FoodsListScreen(
                     label = { Text("Search") },
                     singleLine = true,
                     trailingIcon = {
-                        if (query.isNotBlank()) {
-                            IconButton(onClick = { vm.onQueryChange("") }) {
-                                Icon(
-                                    painter = painterResource(
-                                        R.drawable.cross_small,
-                                    ),
-                                    contentDescription = "Clear search",
-                                )
-                            }
+                        IconButton(
+                            onClick = { vm.onQueryChange("") },
+                            enabled = query.isNotBlank()
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.cross_small),
+                                contentDescription = "Clear search",
+//                                tint = if (query.isNotBlank()) {
+//                                    LocalContentColor.current
+//                                } else {
+//                                    LocalContentColor.current.copy(alpha = 0.38f)
+//                                }
+                            )
                         }
-                    },
+                    }
                 )
 
                 Spacer(Modifier.height(10.dp))

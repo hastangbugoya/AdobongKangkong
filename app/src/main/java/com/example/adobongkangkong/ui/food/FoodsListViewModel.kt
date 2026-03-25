@@ -99,10 +99,13 @@ class FoodsListViewModel @Inject constructor(
     val query: StateFlow<String> = queryFlow
     val favoritesOnly: StateFlow<Boolean> = favoritesOnlyFlow
 
-    private val resultsFlow: Flow<List<Food>> =
+    private val debouncedQueryFlow: Flow<String> =
         queryFlow
             .debounce(150)
             .distinctUntilChanged()
+
+    private val resultsFlow: Flow<List<Food>> =
+        debouncedQueryFlow
             .flatMapLatest { q ->
                 if (q.isBlank()) searchFoods("", limit = 500) else searchFoods(q, limit = 200)
             }
@@ -448,9 +451,10 @@ class FoodsListViewModel @Inject constructor(
             val servingKcal: Int? = when (basis) {
                 BasisType.PER_100G -> {
                     val gramsPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 }
+
                     val grams: Double? =
-                        if (food.servingUnit == ServingUnit.G) food.servingSize
-                        else gramsPerUnit?.let { food.servingSize * it }
+                        food.servingUnit.asG?.let { food.servingSize * it }
+                            ?: gramsPerUnit?.let { food.servingSize * it }
 
                     if (grams != null && kcalPer100 != null) (kcalPer100 * grams / 100.0).roundToInt()
                     else {
@@ -493,11 +497,8 @@ class FoodsListViewModel @Inject constructor(
                 val gramsPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 }
 
                 val grams: Double? =
-                    if (food.servingUnit == ServingUnit.G) {
-                        food.servingSize
-                    } else {
-                        gramsPerUnit?.let { food.servingSize * it }
-                    }
+                    food.servingUnit.asG?.let { food.servingSize * it }
+                        ?: gramsPerUnit?.let { food.servingSize * it }
 
                 if (grams != null) {
                     val kcal = (kcalPer100 * grams / 100.0).roundToInt()
