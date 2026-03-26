@@ -1,354 +1,215 @@
-
-# AdobongKangkong
-
-AdobongKangkong is a **nutrition tracking and meal planning Android application** designed with a strong emphasis on:
-
-- accurate nutrition data
-- extensible nutrient modeling
-- local‑first architecture
-- clean architecture patterns
-- long‑term maintainability
-
-The project is built to support **food logging, recipe creation, meal planning, barcode scanning, and nutrient analysis** while remaining highly extensible for future features.
-
+🥬 AdobongKangkong
+A modern Android nutrition, meal planning, and food tracking app built with a strong focus on architecture, data correctness, and extensibility.
+This project is intentionally designed as a technical showcase of real-world mobile engineering practices:
+clean architecture
+complex domain modeling
+deterministic data handling (nutrition scaling, unit conversions)
+robust offline-first persistence
+testable business logic
 ---
-
-# Core Goals
-
-The app is designed around several guiding principles:
-
-• Accurate nutrient tracking  
-• Local‑first data storage (offline capable)  
-• Extensible nutrient catalog  
-• Clean architecture separation  
-• Long‑term schema stability  
-• Developer and AI collaboration friendliness  
-
+🚀 Tech Stack
+🧱 Core
+Kotlin
+Jetpack Compose (UI)
+Room (SQLite persistence with migrations)
+Hilt (Dependency Injection)
+WorkManager (background tasks)
+📦 Data & APIs
+USDA FoodData Central API
+Local-first architecture with synchronized enrichment flows
+Barcode ingestion + mapping system
+🧪 Testing
+JUnit (domain + pure logic)
+Instrumented tests (I/O, DB, Android components)
 ---
-
-# Tech Stack
-
-**Language**
-- Kotlin
-
-**UI**
-- Jetpack Compose
-
-**Architecture**
-- Clean Architecture
-
-**Dependency Injection**
-- Hilt
-
-**Database**
-- Room
-
-**Background Work**
-- WorkManager
-
-**External Data**
-- USDA FoodData Central API
-
-**Barcode Scanning**
-- CameraX
-
----
-
-# Architecture Overview
-
-The project follows a layered architecture:
-
+🧠 Architecture
+🧩 Clean Architecture (Strict Separation)
 ```
-domain/
-data/
-ui/
+UI (Compose)
+↓
+ViewModel
+↓
+Domain (Use Cases)
+↓
+Repositories (Interfaces)
+↓
+Data Layer (Room / API / Mappers)
 ```
-
-## Domain Layer
-
-Contains:
-
-- core models
-- business rules
-- use cases
-- repository interfaces
-
-Examples:
-
-- Food models
-- Recipe aggregation logic
-- Planner calculations
-- Nutrient computation
-
-The domain layer **does not depend on Android APIs**.
-
+Key Principles
+Single Source of Truth → canonical nutrition stored as:
+`PER_100G` or `PER_100ML`
+No implicit conversions (no density guessing)
+Explicit bridges only:
+`gramsPerServingUnit`
+`mlPerServingUnit`
+Deterministic transformations
+Test-first domain logic
 ---
-
-## Data Layer
-
-Responsible for:
-
-- Room database
-- DAO implementations
-- repository implementations
-- USDA import logic
-- barcode mapping
-
-Key responsibilities:
-
-- persist foods
-- store recipes
-- maintain planner entries
-- maintain nutrient preferences
-
----
-
-## UI Layer
-
-Implemented entirely using **Jetpack Compose**.
-
-Major screens include:
-
-- Dashboard
-- Food Editor
-- Planner
-- Calendar
-- Recipe Editor
-- Shopping List
-- Quick Log
-
-ViewModels connect the UI to domain use cases.
-
----
-
-# Major Features
-
-## Food Database
-
-Users can create foods manually or import foods from the USDA database.
-
-Stored information includes:
-
-- name
-- serving units
-- nutrient values
-- barcode mappings
-- optional banner images
-
----
-
-## Barcode Scanning
-
-Foods can be added quickly using barcode scanning.
-
-Workflow:
-
-1. Scan barcode
-2. Search USDA database
-3. Import food if found
-4. If not found, user may create food manually
-
-Barcode mappings are stored locally for future scans.
-
----
-
-## Recipe System
-
-Users can construct recipes composed of multiple foods.
-
-Recipes support:
-
-- ingredient scaling
-- nutrient aggregation
-- batch calculations
-
-Recipe nutrients are computed by summing ingredient nutrients.
-
----
-
-## Meal Planner
-
-The planner allows scheduling foods and recipes across days.
-
-Supported features:
-
-- recurring meal series
-- template meals
-- meal slot organization
-- shopping list generation
-
----
-
-## Nutrient Tracking
-
-The app tracks a wide range of nutrients including:
-
-- macronutrients
-- vitamins
-- minerals
-
-Users can:
-
-- pin nutrients
-- mark nutrients as critical
-- set minimum / target / maximum values
-
----
-
-## Dashboard
-
-The dashboard provides a daily overview of:
-
-- calories
-- macronutrient distribution
-- selected nutrient targets
-
-The UI prioritizes nutrients that are **pinned or marked critical**.
-
----
-
-# Nutrient System Design
-
-The nutrient system is designed to be **extensible**.
-
-Key ideas:
-
-• nutrients are defined in a central catalog  
-• foods store nutrient values dynamically  
-• UI renders nutrients based on catalog metadata  
-• users choose which nutrients matter to them  
-
-This allows the app to support new nutrients without redesigning the UI.
-
-See documentation:
-
+📊 Domain Modeling Highlights
+🥗 Food Model (Unified)
+Foods and recipes share the same model:
+```kotlin
+Food(
+  servingSize,
+  servingUnit,
+  gramsPerServingUnit?,
+  mlPerServingUnit?,
+  nutrients (canonical basis)
+)
 ```
-docs/add_new_nutrient_procedure.md
-docs/nutrient_catalog_extension_guide.md
+---
+⚖️ Nutrient Basis System
+Basis Type	Meaning
+PER_100G	Canonical mass-based
+PER_100ML	Canonical volume-based
+USDA_REPORTED_SERVING	Raw imported
+➡️ All UI editing is scaled from canonical → per serving → back to canonical
+---
+🔁 Nutrient Scaling Engine
+`NutrientBasisScaler`
+Lossless round-trip:
+canonical → UI → canonical
+Avoids:
+double-scaling
+drift
+rounding corruption
+---
+🔗 Bridge Confidence System
+Classifies conversion reliability:
+`STRONG`
+`ESTIMATED`
+`NONE`
+Used across:
+logging
+recipes
+quick add
+UI warnings
+---
+🧾 CSV Import System (Advanced)
+Custom importer with:
+Stable hash-based IDs (idempotent imports)
+Automatic:
+nutrient detection
+basis normalization
+Duplicate handling (e.g., Copper column conflicts)
+Warning system instead of hard failures
+Key design:
 ```
-
----
-
-# Database Design
-
-The app uses **Room** as the persistence layer.
-
-Important characteristics:
-
-- migration‑safe schema changes
-- stable primary keys
-- separation between entities and domain models
-
-All schema updates must include **explicit migrations**.
-
----
-
-# User Preferences
-
-Users may configure nutrient monitoring using:
-
-- pinned nutrients
-- critical nutrients
-- target values
-
-These preferences control dashboard behavior and nutrient visibility.
-
----
-
-# Offline‑First Design
-
-The app is built to function **without network access**.
-
-Key principles:
-
-- all foods stored locally
-- recipes computed locally
-- planner stored locally
-- USDA imports cached locally
-
-Network access is only required for:
-
-- initial food import
-- optional future cloud features
-
----
-
-# Documentation
-
-Detailed development documentation can be found in the `/docs` directory.
-
-Examples:
-
+1 nutrient → 1 basis only
+(no dual-basis storage)
 ```
-docs/ai_patch_delivery_protocol.md
-docs/add_new_nutrient_procedure.md
-docs/nutrient_catalog_extension_guide.md
+---
+📦 Barcode System
+Dedicated `FoodBarcodeEntity`
+Supports:
+multiple barcodes per food
+packaging overrides
+USDA mapping + user overrides
+Collision-safe flows:
+remap
+adopt
+merge
+---
+🔀 Merge System (Non-trivial)
+Food deduplication system:
+Soft-delete overrides
+Reassign all barcodes
+Merge nutrients:
+canonical wins
+missing values filled
+Track lineage:
+```kotlin
+mergedIntoFoodId
+mergeChildCount
 ```
-
-These guides help developers and AI assistants safely extend the project.
-
+UI reflects merge state (layered icon)
 ---
-
-# Development Guidelines
-
-When modifying the codebase:
-
-• Avoid refactoring unrelated systems  
-• Preserve schema compatibility  
-• Follow existing repository patterns  
-• Maintain null‑safe nutrient handling  
-
-Always test migrations before release.
-
+🍳 Recipe System
+Recipes are foods
+Ingredient expansion system
+Supports:
+per-serving scaling
+batch scaling
+Future-ready:
+“finished food logging” mode
 ---
-
-# Building the Project
-
-Requirements:
-
-- Android Studio
-- Android SDK
-- Gradle
-
-Steps:
-
-1. Clone the repository
-2. Open the project in Android Studio
-3. Allow Gradle to sync
-4. Run the app on an emulator or device
-
+🛒 Planner + Shopping Engine
+Planning
+Multi-day expansion
+Recurrence-aware
+Override handling
+Shopping Aggregation
+Expands recipes → ingredients
+Aggregates:
+grams
+ml
+servings (separately)
+Deterministic conversion only (no guessing)
 ---
-
-# Future Development
-
-Potential future features include:
-
-- cloud backup
-- multi‑device sync
-- advanced nutrient analytics
-- expanded food database
-- improved recipe tooling
-
-The architecture is intentionally designed to support these features.
-
+⚡ UI/UX Engineering (Compose)
+Patterns Used
+State hoisting
+Unidirectional data flow
+Single source of truth (ViewModel state)
+Notable UI Systems
+Dynamic food editor:
+basis-aware scaling
+serving conversion logic
+Quick Add:
+synchronized inputs (grams, ml, servings)
+user intent preservation
+Planner:
+slot-based UX
+template reuse
+Alphabet index scrolling (custom implementation)
 ---
-
-# Project Philosophy
-
-AdobongKangkong aims to balance:
-
-- powerful nutrition tracking
-- flexible data modeling
-- maintainable architecture
-
-The system is built to evolve as nutritional science and user needs change.
-
+🧪 Testing Strategy
+Domain (JUnit)
+Conversion correctness
+Bridge capability evaluation
+Nutrient scaling invariants
+Instrumented
+Database backup/restore
+File system interactions
+Content resolver flows
 ---
-
-# License
-
-Specify your project license here.
-
-Example:
-
-MIT License
+🧠 Engineering Decisions (Highlights)
+❌ What is intentionally avoided
+Density guessing (g ↔ mL)
+Silent unit conversion
+Hidden normalization
+multi-basis nutrient storage
+✅ What is enforced
+Explicit user-provided bridges
+deterministic math
+reversible transformations
+testable domain logic
+---
+🧰 Tooling & Libraries
+Kotlin Coroutines / Flow
+Jetpack Compose Material3
+Room (with TypeConverters)
+Hilt DI
+WorkManager
+kotlinx.serialization
+---
+📌 Why This Project Exists
+This is not just a calorie tracker.
+It is a systems-heavy mobile app designed to demonstrate:
+handling messy real-world data (USDA, barcodes, user edits)
+designing for correctness over convenience
+building scalable domain models
+writing production-grade Android architecture
+---
+🔮 Future Work
+iOS via Kotlin Multiplatform
+advanced nutrient analytics
+smarter bridge estimation (optional, user-controlled)
+cloud sync layer
+performance tuning for large datasets
+---
+👤 Author
+Built by an Android developer focused on:
+correctness-first systems
+clean architecture
+long-term maintainability
