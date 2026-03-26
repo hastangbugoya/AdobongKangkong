@@ -17,6 +17,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AdobongKangkong">
+
         <activity
             android:name="com.example.adobongkangkong.MainActivity"
             android:exported="true"
@@ -24,10 +25,10 @@
             android:theme="@style/Theme.AdobongKangkong">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -38,6 +39,13 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
-    </application>
 
+        <!-- ✅ FIXED: Public read-only ContentProvider -->
+        <provider
+            android:name=".shared.SharedSnapshotProvider"
+            android:authorities="com.example.adobongkangkong.shared"
+            android:exported="true"
+            android:grantUriPermissions="false" />
+
+    </application>
 </manifest>
