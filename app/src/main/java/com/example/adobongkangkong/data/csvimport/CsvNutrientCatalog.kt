@@ -60,7 +60,7 @@ object CsvNutrientCatalog {
         Def("Vit D", "VITAMIN_D_MCG", "Vitamin D", "mcg", NutrientCategory.VITAMIN.dbValue),
         Def("Vit A", "VITAMIN_A_MCG", "Vitamin A", "mcg", NutrientCategory.VITAMIN.dbValue),
         Def("Vit C", "VITAMIN_C_MG", "Vitamin C", "mg", NutrientCategory.VITAMIN.dbValue),
-        Def("Vit K", "VITAMIN_C_MCG", "Vitamin K", "mcg", NutrientCategory.VITAMIN.dbValue),
+        Def("Vit K", "VITAMIN_K_MCG", "Vitamin K", "mcg", NutrientCategory.VITAMIN.dbValue),
         Def("B6", "VITAMIN_B6_MG", "Vitamin B6", "mg", NutrientCategory.VITAMIN.dbValue),
         Def("B12", "VITAMIN_B12_MCG", "Vitamin B12", "mcg", NutrientCategory.VITAMIN.dbValue),
         Def("Folic acid", "FOLIC_ACID_MCG", "Folic Acid", "mcg", NutrientCategory.VITAMIN.dbValue),
