@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.nutrition
 
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import javax.inject.Inject
 
 /**
  * Recomputes displayed nutrient values (per serving) from canonical nutrients.
@@ -13,7 +14,7 @@ import com.example.adobongkangkong.data.local.db.entity.BasisType
  * - per-serving nutrient map
  * - computation status
  */
-class RecomputeDisplayedNutrientsUseCase {
+class RecomputeDisplayedNutrientsUseCase @Inject constructor() {
 
     fun execute(
         canonicalNutrients: Map<NutrientKey, Double>,

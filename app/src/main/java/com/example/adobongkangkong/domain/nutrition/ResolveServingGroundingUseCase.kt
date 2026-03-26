@@ -3,6 +3,7 @@ package com.example.adobongkangkong.domain.nutrition
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
+import javax.inject.Inject
 
 /**
  * Resolves a serving definition into all deterministic grounding capabilities.
@@ -14,7 +15,7 @@ import com.example.adobongkangkong.domain.model.toMilliliters
  * - Never derive grams from mL or mL from grams unless an explicit bridge exists
  * - Zero/negative bridge values are treated as invalid
  */
-class ResolveServingGroundingUseCase {
+class ResolveServingGroundingUseCase @Inject constructor() {
 
     fun execute(
         servingSize: Double,

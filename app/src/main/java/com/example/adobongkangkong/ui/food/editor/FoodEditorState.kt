@@ -6,6 +6,7 @@ import com.example.adobongkangkong.domain.importing.Decision
 import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.nutrition.ServingResolution
 import com.example.adobongkangkong.domain.usda.model.BarcodeRemapDialogState
 import com.example.adobongkangkong.domain.usda.model.CollisionReason
 
@@ -69,16 +70,71 @@ data class UsdaBackfillMessageState(
     val skippedExistingCount: Int,
 )
 
-data class FoodEditorState(
-    val foodId: Long? = null,
-    val stableId: String? = null,
-    val name: String = "",
-    val brand: String = "",
+/**
+ * Explicit serving draft used by the new bulk-math editor flow.
+ *
+ * IMPORTANT:
+ * - This is layered on top of the legacy top-level serving fields for now.
+ * - We intentionally keep both during the migration to avoid breaking existing UI/VM code all at once.
+ * - Once the editor/ViewModel fully migrates, the duplicated legacy fields can be cleaned up later.
+ */
+data class ServingDraftState(
     val servingSize: String = "1.0",
     val servingUnit: ServingUnit = ServingUnit.SERVING,
     val gramsPerServingUnit: String = "",
     val mlPerServingUnit: String = "",
     val servingsPerPackage: String = "",
+)
+
+/**
+ * Explicit nutrient draft used by the new bulk recompute/apply workflow.
+ *
+ * For now this mirrors the editable nutrient rows already shown in the UI.
+ * Later, the editor flow should treat this as:
+ * - recompute target (canonical -> UI draft)
+ * - apply source (UI draft -> canonical)
+ */
+data class NutrientDraftState(
+    val rows: List<NutrientRowUi> = emptyList(),
+)
+
+/**
+ * Explicit editor workflow/status flags for the new nutrition editing model.
+ *
+ * These flags are intentionally separate from the older generic dirty flags so we can migrate safely.
+ */
+data class NutritionEditorStatusState(
+    val isServingDirty: Boolean = false,
+    val isNutrientsDirty: Boolean = false,
+    val hasPendingRecompute: Boolean = false,
+    val hasPendingApply: Boolean = false,
+    val showDiscardNutrientEditsDialog: Boolean = false,
+    val servingResolution: ServingResolution? = null,
+)
+
+data class FoodEditorState(
+    val foodId: Long? = null,
+    val stableId: String? = null,
+    val name: String = "",
+    val brand: String = "",
+
+    // -------------------------------------------------------------------------
+    // Legacy top-level serving fields
+    // Kept during migration so existing screen / VM code keeps compiling.
+    // New code should gradually prefer servingDraft.
+    // -------------------------------------------------------------------------
+    val servingSize: String = "1.0",
+    val servingUnit: ServingUnit = ServingUnit.SERVING,
+    val gramsPerServingUnit: String = "",
+    val mlPerServingUnit: String = "",
+    val servingsPerPackage: String = "",
+
+    // -------------------------------------------------------------------------
+    // New explicit draft/state buckets
+    // -------------------------------------------------------------------------
+    val servingDraft: ServingDraftState = ServingDraftState(),
+    val nutrientDraft: NutrientDraftState = NutrientDraftState(),
+    val nutritionEditorStatus: NutritionEditorStatusState = NutritionEditorStatusState(),
 
     val categories: List<FoodCategoryUi> = emptyList(),
     val selectedCategoryIds: Set<Long> = emptySet(),
@@ -156,6 +212,38 @@ data class FoodEditorState(
 
     val sodium: String
         get() = amountForAnyName("Sodium")
+
+    /**
+     * New explicit status accessors for the refactored editor flow.
+     * Kept as convenience properties so screen/viewmodel wiring can migrate gradually.
+     */
+    val isServingDirty: Boolean
+        get() = nutritionEditorStatus.isServingDirty
+
+    val isNutrientsDirtyExplicit: Boolean
+        get() = nutritionEditorStatus.isNutrientsDirty
+
+    val hasPendingRecompute: Boolean
+        get() = nutritionEditorStatus.hasPendingRecompute
+
+    val hasPendingApply: Boolean
+        get() = nutritionEditorStatus.hasPendingApply
+
+    val showDiscardNutrientEditsDialog: Boolean
+        get() = nutritionEditorStatus.showDiscardNutrientEditsDialog
+
+    val servingResolution: ServingResolution?
+        get() = nutritionEditorStatus.servingResolution
+
+    /**
+     * Migration-friendly aggregate status.
+     *
+     * During migration:
+     * - old dirty flags still matter
+     * - new explicit workflow flags also matter
+     */
+    val hasPendingNutritionWorkflowChanges: Boolean
+        get() = isServingDirty || isNutrientsDirtyExplicit || hasPendingRecompute || hasPendingApply
 
     val canSave: Boolean
         get() {

@@ -218,6 +218,10 @@ fun FoodEditorScreen(
 
     // Optional dismiss action for needs-fix banner
     onDismissNeedsFixBanner: (() -> Unit)? = null,
+
+    onRecomputeDisplayedNutrients: () -> Unit,
+    onConfirmDiscardNutrientEditsAndRecompute: () -> Unit,
+    onDismissDiscardNutrientEditsDialog: () -> Unit,
 ) {
     val (primaryNutrientRows, secondaryNutrientRows) = remember(state.nutrientRows) {
         state.nutrientRows.partition { it.code in EditorDefaultNutrients.codes }
@@ -661,6 +665,28 @@ fun FoodEditorScreen(
         )
     }
 
+    if (state.nutritionEditorStatus.showDiscardNutrientEditsDialog) {
+        AlertDialog(
+            onDismissRequest = onDismissDiscardNutrientEditsDialog,
+            title = { Text("Discard edited nutrient values?") },
+            text = {
+                Text(
+                    "Recompute will replace your manually edited per-serving nutrient values with values recalculated from canonical nutrition."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmDiscardNutrientEditsAndRecompute) {
+                    Text("Recompute")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissDiscardNutrientEditsDialog) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1060,6 +1086,52 @@ fun FoodEditorScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                // ----------------------------------------------------
+// NEW: Recompute UX (safe, non-destructive)
+// ----------------------------------------------------
+                if (state.hasPendingRecompute) {
+                    item(key = "recompute_warning") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.employee_handbook),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(AppIconSize.CardAction)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Serving changed",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = "Nutrient values may be out of sync. Recompute to update per-serving values.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item(key = "recompute_button") {
+                        Button(
+                            onClick = onRecomputeDisplayedNutrients,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Recompute nutrient values")
+                        }
+                    }
                 }
 
                 items(
@@ -1741,21 +1813,26 @@ private fun nutrientEditorContextText(
     basisType: BasisType?
 ): String {
     val sizeText = servingSize.trim().ifBlank { "1" }
-    val gramsPerUnit = gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
-    val mlPerUnit = mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
     val sizeValue = servingSize.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
 
+    val gramsPerUnitManual = gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+    val mlPerUnitManual = mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+
+    val gramsPerUnit = servingUnit.asG ?: gramsPerUnitManual
+    val mlPerUnit = servingUnit.asMl ?: mlPerUnitManual
+
     val amountPart = when {
-        basisType == BasisType.PER_100ML && sizeValue != null && mlPerUnit != null ->
-            "Current serving = $sizeText ${servingUnit.display} (${sizeValue * mlPerUnit} mL)."
-        basisType == BasisType.PER_100G && sizeValue != null && gramsPerUnit != null ->
-            "Current serving = $sizeText ${servingUnit.display} (${sizeValue * gramsPerUnit} g)."
-        basisType == BasisType.PER_100ML ->
-            "Current serving = $sizeText ${servingUnit.display}."
-        basisType == BasisType.PER_100G ->
-            "Current serving = $sizeText ${servingUnit.display}."
-        else ->
-            "Current serving = $sizeText ${servingUnit.display}."
+        basisType == BasisType.PER_100G && sizeValue != null && gramsPerUnit != null -> {
+            val grams = sizeValue * gramsPerUnit
+            " Current serving = $sizeText ${servingUnit.display} (${grams.toUiCompactNumber()} g)."
+        }
+
+        basisType == BasisType.PER_100ML && sizeValue != null && mlPerUnit != null -> {
+            val ml = sizeValue * mlPerUnit
+            " Current serving = $sizeText ${servingUnit.display} (${ml.toUiCompactNumber()} mL)."
+        }
+
+        else -> " Current serving = $sizeText ${servingUnit.display}."
     }
 
     val basisPart = when (basisType) {

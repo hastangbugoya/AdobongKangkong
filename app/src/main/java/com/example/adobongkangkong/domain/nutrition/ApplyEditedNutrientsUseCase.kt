@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.nutrition
 
 import com.example.adobongkangkong.data.local.db.entity.BasisType
+import javax.inject.Inject
 
 
 /**
@@ -20,7 +21,7 @@ import com.example.adobongkangkong.data.local.db.entity.BasisType
  * - No partial conversion logic
  * - All nutrients are converted in one bulk pass
  */
-class ApplyEditedNutrientsUseCase {
+class ApplyEditedNutrientsUseCase @Inject constructor() {
 
     fun execute(
         displayedNutrients: Map<NutrientKey, Double>,

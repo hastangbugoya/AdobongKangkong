@@ -48,6 +48,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.model.NutrientCategory
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.fromUsda
@@ -57,7 +58,11 @@ import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
+import com.example.adobongkangkong.domain.nutrition.ApplyEditedNutrientsUseCase
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
+import com.example.adobongkangkong.domain.nutrition.RecomputeDisplayedNutrientsUseCase
+import com.example.adobongkangkong.domain.nutrition.ResolveServingGroundingUseCase
+import com.example.adobongkangkong.domain.nutrition.ServingResolution
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
@@ -118,6 +123,9 @@ class FoodEditorViewModel @Inject constructor(
     private val resolveBarcodeWithUsda: ResolveBarcodeWithUsdaUseCase,
     private val nutrientRepo: NutrientRepository,
     private val mergeFoodsUseCase: MergeFoodsUseCase,
+    private val resolveServingGrounding: ResolveServingGroundingUseCase,
+    private val recomputeDisplayedNutrients: RecomputeDisplayedNutrientsUseCase,
+    private val applyEditedNutrients: ApplyEditedNutrientsUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -143,6 +151,8 @@ class FoodEditorViewModel @Inject constructor(
      */
     private var loadedFoodSnapshot: Food? = null
     private var loadedBasisTypeSnapshot: BasisType? = null
+
+    private var loadedCanonicalNutrientsSnapshot: Map<NutrientKey, Double> = emptyMap()
 
     fun consumeAssignBarcodeToExistingRequest() {
         assignBarcodeToExistingFlow.value = null
@@ -271,6 +281,10 @@ class FoodEditorViewModel @Inject constructor(
                 emptyList()
             }
 
+            loadedCanonicalNutrientsSnapshot = rows.associate { row ->
+                NutrientKey(row.nutrient.code) to row.amount
+            }
+
             Log.d(
                 "FoodEditorDebug",
                 "load foodId=$foodId servingSize=$servingSize servingUnit=$servingUnit " +
@@ -324,7 +338,7 @@ class FoodEditorViewModel @Inject constructor(
 
             loadedFoodSnapshot = food
             loadedBasisTypeSnapshot = inferredBasisType
-
+            Log.d("FoodEditorDebug", "FINAL UI servingUnit=${food?.servingUnit} servingSize=${food?.servingSize} gramsPerServingUnit=${food?.gramsPerServingUnit}")
             val next = current.copy(
                 hasLoaded = true,
                 foodId = foodId,
@@ -344,6 +358,25 @@ class FoodEditorViewModel @Inject constructor(
                     ?: food?.mlPerServingUnit?.toString().orEmpty(),
                 servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() && food == null }
                     ?: food?.servingsPerPackage?.toString().orEmpty(),
+                servingDraft = ServingDraftState(
+                    servingSize = food?.servingSize?.toString() ?: "1.0",
+                    servingUnit = food?.servingUnit ?: ServingUnit.SERVING,
+                    gramsPerServingUnit = current.gramsPerServingUnit.takeIf { it.isNotBlank() && food == null }
+                        ?: food?.gramsPerServingUnit?.toString().orEmpty(),
+                    mlPerServingUnit = current.mlPerServingUnit.takeIf { it.isNotBlank() && food == null }
+                        ?: food?.mlPerServingUnit?.toString().orEmpty(),
+                    servingsPerPackage = current.servingsPerPackage.takeIf { it.isNotBlank() && food == null }
+                        ?: food?.servingsPerPackage?.toString().orEmpty(),
+                ),
+                nutrientDraft = NutrientDraftState(rows = sortNutrientRows(editorRows)),
+                nutritionEditorStatus = NutritionEditorStatusState(
+                    isServingDirty = false,
+                    isNutrientsDirty = false,
+                    hasPendingRecompute = false,
+                    hasPendingApply = false,
+                    showDiscardNutrientEditsDialog = false,
+                    servingResolution = null
+                ),
                 categories = allCategories
                     .sortedBy { it.name.lowercase() }
                     .map { category ->
@@ -371,8 +404,28 @@ class FoodEditorViewModel @Inject constructor(
                 scannedBarcode = current.scannedBarcode
             )
 
-            _state.value = applyNeedsFix(next, current)
+            val resolvedNext = next.copy(
+                nutritionEditorStatus = next.nutritionEditorStatus.copy(
+                    servingResolution = computeServingResolution(next)
+                )
+            )
+
+            _state.value = applyNeedsFix(resolvedNext, current)
         }
+    }
+
+    private fun computeServingResolution(state: FoodEditorState): ServingResolution? {
+        val size = state.servingSize.toDoubleOrNull() ?: return null
+
+        val grams = state.gramsPerServingUnit.trim().toDoubleOrNull()
+        val ml = state.mlPerServingUnit.trim().toDoubleOrNull()
+
+        return resolveServingGrounding.execute(
+            servingSize = size,
+            servingUnit = state.servingUnit,
+            gramsPerServingUnit = grams,
+            millilitersPerServingUnit = ml
+        )
     }
 
     private suspend fun buildEditorRowsForAllNutrients(
@@ -1012,7 +1065,11 @@ class FoodEditorViewModel @Inject constructor(
         it.copy(
             servingSize = v,
             hasUnsavedChanges = true,
-            isFoodMetadataDirty = true
+            isFoodMetadataDirty = true,
+            nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                isServingDirty = true,
+                hasPendingRecompute = true
+            )
         )
     }
 
@@ -1020,7 +1077,11 @@ class FoodEditorViewModel @Inject constructor(
         it.copy(
             servingUnit = v,
             hasUnsavedChanges = true,
-            isFoodMetadataDirty = true
+            isFoodMetadataDirty = true,
+            nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                isServingDirty = true,
+                hasPendingRecompute = true
+            )
         )
     }
 
@@ -1028,7 +1089,11 @@ class FoodEditorViewModel @Inject constructor(
         it.copy(
             gramsPerServingUnit = v,
             hasUnsavedChanges = true,
-            isFoodMetadataDirty = true
+            isFoodMetadataDirty = true,
+            nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                isServingDirty = true,
+                hasPendingRecompute = true
+            )
         )
     }
 
@@ -1036,7 +1101,11 @@ class FoodEditorViewModel @Inject constructor(
         it.copy(
             mlPerServingUnit = v,
             hasUnsavedChanges = true,
-            isFoodMetadataDirty = true
+            isFoodMetadataDirty = true,
+            nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                isServingDirty = true,
+                hasPendingRecompute = true
+            )
         )
     }
 
@@ -1044,13 +1113,24 @@ class FoodEditorViewModel @Inject constructor(
         it.copy(
             servingsPerPackage = v,
             hasUnsavedChanges = true,
-            isFoodMetadataDirty = true
+            isFoodMetadataDirty = true,
+            servingDraft = it.servingDraft.copy(servingsPerPackage = v),
+            nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                isServingDirty = true,
+                hasPendingRecompute = true
+            )
         )
     }
 
     fun onGroundingModeChange(v: GroundingMode) {
         update { s ->
-            val next = s.copy(groundingMode = v)
+            val next = s.copy(
+                groundingMode = v,
+                nutritionEditorStatus = s.nutritionEditorStatus.copy(
+                    isServingDirty = true,
+                    hasPendingRecompute = true
+                )
+            )
 
             if (v == GroundingMode.LIQUID && next.mlPerServingUnit.isBlank()) {
                 val auto = next.servingUnit.toMilliliters(1.0)
@@ -1058,7 +1138,12 @@ class FoodEditorViewModel @Inject constructor(
                     return@update next.copy(
                         mlPerServingUnit = auto.roundForUi(),
                         hasUnsavedChanges = true,
-                        isFoodMetadataDirty = true
+                        isFoodMetadataDirty = true,
+                        servingDraft = next.servingDraft.copy(mlPerServingUnit = auto.roundForUi()),
+                        nutritionEditorStatus = next.nutritionEditorStatus.copy(
+                            isServingDirty = true,
+                            hasPendingRecompute = true
+                        )
                     )
                 }
             }
@@ -1072,7 +1157,11 @@ class FoodEditorViewModel @Inject constructor(
 
         val base = s.copy(
             hasUnsavedChanges = true,
-            isFoodMetadataDirty = true
+            isFoodMetadataDirty = true,
+            nutritionEditorStatus = s.nutritionEditorStatus.copy(
+                isServingDirty = true,
+                hasPendingRecompute = true
+            )
         )
 
         if (totalMl == null || totalMl <= 0.0 || servingSize == null || servingSize <= 0.0) {
@@ -1082,7 +1171,8 @@ class FoodEditorViewModel @Inject constructor(
         val perUnit = totalMl / servingSize
 
         base.copy(
-            mlPerServingUnit = perUnit.roundForUi()
+            mlPerServingUnit = perUnit.roundForUi(),
+            servingDraft = base.servingDraft.copy(mlPerServingUnit = perUnit.roundForUi())
         )
     }
 
@@ -1159,22 +1249,35 @@ class FoodEditorViewModel @Inject constructor(
 
     fun onNutrientAmountChange(nutrientId: Long, amount: String) {
         update { s ->
+            val updatedRows = s.nutrientRows.map {
+                if (it.nutrientId == nutrientId) it.copy(amount = amount) else it
+            }
+
             s.copy(
-                nutrientRows = s.nutrientRows.map {
-                    if (it.nutrientId == nutrientId) it.copy(amount = amount) else it
-                },
+                nutrientRows = updatedRows,
+                nutrientDraft = s.nutrientDraft.copy(rows = updatedRows),
                 hasUnsavedChanges = true,
-                areNutrientsDirty = true
+                areNutrientsDirty = true,
+                nutritionEditorStatus = s.nutritionEditorStatus.copy(
+                    isNutrientsDirty = true,
+                    hasPendingApply = true
+                )
             )
         }
     }
 
     fun removeNutrientRow(nutrientId: Long) {
         update { s ->
+            val updatedRows = s.nutrientRows.filterNot { it.nutrientId == nutrientId }
             s.copy(
-                nutrientRows = s.nutrientRows.filterNot { it.nutrientId == nutrientId },
+                nutrientRows = updatedRows,
+                nutrientDraft = s.nutrientDraft.copy(rows = updatedRows),
                 hasUnsavedChanges = true,
-                areNutrientsDirty = true
+                areNutrientsDirty = true,
+                nutritionEditorStatus = s.nutritionEditorStatus.copy(
+                    isNutrientsDirty = true,
+                    hasPendingApply = true
+                )
             )
         }
     }
@@ -1191,10 +1294,8 @@ class FoodEditorViewModel @Inject constructor(
     fun addNutrient(n: NutrientSearchResultUi) {
         update { s ->
             if (s.nutrientRows.any { it.nutrientId == n.id }) s
-            else s.copy(
-                hasUnsavedChanges = true,
-                areNutrientsDirty = true,
-                nutrientRows = sortNutrientRows(
+            else {
+                val updatedRows = sortNutrientRows(
                     s.nutrientRows + NutrientRowUi(
                         nutrientId = n.id,
                         code = n.code,
@@ -1205,7 +1306,150 @@ class FoodEditorViewModel @Inject constructor(
                         amount = ""
                     )
                 )
+
+                s.copy(
+                    hasUnsavedChanges = true,
+                    areNutrientsDirty = true,
+                    nutrientRows = updatedRows,
+                    nutrientDraft = s.nutrientDraft.copy(rows = updatedRows),
+                    nutritionEditorStatus = s.nutritionEditorStatus.copy(
+                        isNutrientsDirty = true,
+                        hasPendingApply = true
+                    )
+                )
+            }
+        }
+    }
+
+    // =========================
+    // RECOMPUTE (SAFE + GUARDED)
+    // =========================
+
+    fun onRecomputeDisplayedNutrientsClicked() {
+        val s = _state.value
+
+        if (s.nutritionEditorStatus.isNutrientsDirty) {
+            update {
+                it.copy(
+                    nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                        showDiscardNutrientEditsDialog = true
+                    )
+                )
+            }
+            return
+        }
+
+        performRecompute(s)
+    }
+
+    fun confirmDiscardNutrientEditsAndRecompute() {
+        update {
+            it.copy(
+                nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                    showDiscardNutrientEditsDialog = false,
+                    isNutrientsDirty = false,
+                    hasPendingApply = false
+                )
             )
+        }
+
+        performRecompute(_state.value)
+    }
+
+    fun dismissDiscardNutrientEditsDialog() {
+        update {
+            it.copy(
+                nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                    showDiscardNutrientEditsDialog = false
+                )
+            )
+        }
+    }
+
+    private fun performRecompute(s: FoodEditorState) {
+        val basisType = s.basisType ?: run {
+            update { it.copy(errorMessage = "Missing basis type for nutrient recompute.") }
+            return
+        }
+
+        val resolution = s.servingResolution ?: computeServingResolution(s) ?: run {
+            update {
+                it.copy(
+                    errorMessage = "Serving definition is incomplete or invalid.",
+                    nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                        hasPendingRecompute = true
+                    )
+                )
+            }
+            return
+        }
+
+        val canonicalNutrients = loadedCanonicalNutrientsSnapshot
+        if (canonicalNutrients.isEmpty()) {
+            update {
+                it.copy(
+                    errorMessage = "No canonical nutrients are available to recompute from.",
+                    nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                        hasPendingRecompute = true
+                    )
+                )
+            }
+            return
+        }
+
+        when (
+            val result = recomputeDisplayedNutrients.execute(
+                canonicalNutrients = canonicalNutrients,
+                basisType = basisType,
+                resolution = resolution
+            )
+        ) {
+            is RecomputeDisplayedNutrientsUseCase.Result.Success -> {
+                val recomputedRows = s.nutrientRows.map { row ->
+                    val recomputed = result.nutrients[NutrientKey(row.code)]
+                    row.copy(amount = recomputed?.toString().orEmpty())
+                }
+
+                update {
+                    it.copy(
+                        nutrientRows = recomputedRows,
+                        nutrientDraft = it.nutrientDraft.copy(rows = recomputedRows),
+                        errorMessage = null,
+                        nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                            isServingDirty = false,
+                            isNutrientsDirty = false,
+                            hasPendingRecompute = false,
+                            hasPendingApply = false,
+                            showDiscardNutrientEditsDialog = false,
+                            servingResolution = resolution
+                        )
+                    )
+                }
+            }
+
+            is RecomputeDisplayedNutrientsUseCase.Result.Blocked -> {
+                val message = when (result.reason) {
+                    RecomputeDisplayedNutrientsUseCase.BlockReason.NO_GRAM_PATH ->
+                        "Cannot recompute from PER 100g without a gram grounding path."
+                    RecomputeDisplayedNutrientsUseCase.BlockReason.NO_ML_PATH ->
+                        "Cannot recompute from PER 100mL without an mL grounding path."
+                    RecomputeDisplayedNutrientsUseCase.BlockReason.NO_NUTRIENTS ->
+                        "No nutrients are available to recompute."
+                    RecomputeDisplayedNutrientsUseCase.BlockReason.UNSUPPORTED_BASIS ->
+                        "Unsupported nutrient basis for recompute."
+                }
+
+                update {
+                    it.copy(
+                        errorMessage = message,
+                        nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                            hasPendingRecompute = true,
+                            showDiscardNutrientEditsDialog = false,
+                            servingResolution = resolution
+                        )
+                    )
+                }
+            }
         }
     }
 
@@ -1235,131 +1479,95 @@ class FoodEditorViewModel @Inject constructor(
         val mlInput = normalizePositive(parseDoubleOrNull(s.mlPerServingUnit))
         val servingsPerPackage = parseDoubleOrNull(s.servingsPerPackage)
 
-        val hasDeterministicMassUnit = s.servingUnit.isMassUnit()
-        val hasDeterministicVolumeUnit =
-            s.servingUnit.isVolumeUnit() && !s.servingUnit.isAmbiguousForGrounding()
-
         viewModelScope.launch {
             try {
                 val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
-                val originalFood: Food? = loadedFoodSnapshot ?: existing
 
-                // Keep current canonical/basis resolution behavior for now.
+                // ✅ CRITICAL FIX: DO NOT RE-INTERPRET BASIS
                 val resolvedBasisType =
-                    when {
-                        s.servingUnit.isAmbiguousForGrounding() -> {
-                            when {
-                                gramsInput != null -> BasisType.PER_100G
-                                mlInput != null -> BasisType.PER_100ML
-                                else -> s.basisType ?: BasisType.USDA_REPORTED_SERVING
+                    loadedBasisTypeSnapshot
+                        ?: s.basisType
+                        ?: BasisType.USDA_REPORTED_SERVING
+
+                // ✅ CRITICAL FIX: DO NOT WIPE OR FORCE BRIDGES
+                val gramsPerServingUnitFinal = gramsInput
+                val mlPerServingUnitFinal = mlInput
+
+                val rows = if (s.areNutrientsDirty) {
+                    val resolution = s.servingResolution ?: computeServingResolution(s)
+
+                    if (resolution == null) {
+                        update {
+                            it.copy(
+                                errorMessage = "Serving definition is incomplete or invalid for nutrient save."
+                            )
+                        }
+                        return@launch
+                    }
+
+                    val displayedNutrients = s.nutrientRows.mapNotNull { ui ->
+                        val amt = ui.amount.trim()
+                        val value =
+                            if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
+                        NutrientKey(ui.code) to value
+                    }.toMap()
+
+                    when (
+                        val result = applyEditedNutrients.execute(
+                            displayedNutrients = displayedNutrients,
+                            basisType = resolvedBasisType,
+                            resolution = resolution
+                        )
+                    ) {
+                        is ApplyEditedNutrientsUseCase.Result.Success -> {
+                            s.nutrientRows.map { ui ->
+                                val canonical =
+                                    result.canonicalNutrients[NutrientKey(ui.code)] ?: 0.0
+
+                                FoodNutrientRow(
+                                    nutrient = Nutrient(
+                                        id = ui.nutrientId,
+                                        code = ui.code,
+                                        displayName = ui.name,
+                                        unit = ui.unit,
+                                        category = ui.category,
+                                        aliases = ui.aliases
+                                    ),
+                                    amount = canonical,
+                                    basisType = resolvedBasisType,
+                                    basisGrams = when (resolvedBasisType) {
+                                        BasisType.PER_100G -> 100.0
+                                        BasisType.PER_100ML -> 100.0
+                                        BasisType.USDA_REPORTED_SERVING -> null
+                                    }
+                                )
                             }
                         }
 
-                        hasDeterministicVolumeUnit -> BasisType.PER_100ML
-                        hasDeterministicMassUnit -> BasisType.PER_100G
-                        else -> BasisType.USDA_REPORTED_SERVING
-                    }
-
-                val gramsPerServingUnitFinal: Double? =
-                    when {
-                        hasDeterministicMassUnit -> null
-                        gramsInput != null -> gramsInput
-                        else -> normalizePositive(originalFood?.gramsPerServingUnit)
-                    }
-
-                val mlPerServingUnitFinal: Double? =
-                    when {
-                        hasDeterministicVolumeUnit -> null
-                        mlInput != null -> mlInput
-                        else -> normalizePositive(originalFood?.mlPerServingUnit)
-                    }
-
-                if (s.servingUnit.isAmbiguousForGrounding()) {
-                    when (resolvedBasisType) {
-                        BasisType.PER_100ML -> {
-                            if (mlPerServingUnitFinal == null) {
-                                update {
-                                    it.copy(
-                                        errorMessage = "Enter mL per 1 ${s.servingUnit.display} for PER 100mL grounding."
-                                    )
-                                }
-                                return@launch
+                        is ApplyEditedNutrientsUseCase.Result.Blocked -> {
+                            val message = when (result.reason) {
+                                ApplyEditedNutrientsUseCase.BlockReason.NO_GRAM_PATH ->
+                                    "Cannot save PER 100g nutrients without a gram grounding path."
+                                ApplyEditedNutrientsUseCase.BlockReason.NO_ML_PATH ->
+                                    "Cannot save PER 100mL nutrients without an mL grounding path."
+                                ApplyEditedNutrientsUseCase.BlockReason.NO_NUTRIENTS ->
+                                    "No nutrients are available to save."
+                                ApplyEditedNutrientsUseCase.BlockReason.INVALID_SERVING_AMOUNT ->
+                                    "Serving amount is invalid for nutrient save."
+                                ApplyEditedNutrientsUseCase.BlockReason.UNSUPPORTED_BASIS ->
+                                    "Unsupported nutrient basis for save."
                             }
-                        }
 
-                        BasisType.PER_100G -> {
-                            if (gramsPerServingUnitFinal == null) {
-                                update {
-                                    it.copy(
-                                        errorMessage = "Enter grams per 1 ${s.servingUnit.display} for PER 100g grounding."
-                                    )
-                                }
-                                return@launch
-                            }
+                            update { it.copy(errorMessage = message) }
+                            return@launch
                         }
-
-                        BasisType.USDA_REPORTED_SERVING -> Unit
                     }
+                } else {
+                    emptyList()
                 }
 
-                val gramsPerServingUnitEffective =
-                    gramsPerServingUnitEffective(
-                        servingUnit = s.servingUnit,
-                        gramsPerServingUnit = gramsPerServingUnitFinal
-                    )
-
-                val mlPerServingUnitEffective =
-                    mlPerServingUnitEffective(
-                        servingUnit = s.servingUnit,
-                        mlPerServingUnit = mlPerServingUnitFinal
-                    )
-
-                // Intentionally left in place for the next phase, when nutrient persistence is
-                // reintroduced behind typed dirty routing.
-                val rows = s.nutrientRows.mapNotNull { ui ->
-                    val amt = ui.amount.trim()
-                    val uiPerServingAmount =
-                        if (amt.isEmpty()) 0.0 else (amt.toDoubleOrNull() ?: return@mapNotNull null)
-
-                    val amountToStore =
-                        when (resolvedBasisType) {
-                            BasisType.PER_100G -> NutrientBasisScaler.displayPerServingToCanonical(
-                                uiPerServingAmount,
-                                BasisType.PER_100G,
-                                servingSize,
-                                gramsPerServingUnitEffective
-                            ).amount
-
-                            BasisType.PER_100ML -> NutrientBasisScaler.displayPerServingToCanonicalVolume(
-                                uiPerServingAmount,
-                                BasisType.PER_100ML,
-                                servingSize,
-                                mlPerServingUnitEffective
-                            ).amount
-
-                            BasisType.USDA_REPORTED_SERVING -> uiPerServingAmount
-                        }
-
-                    FoodNutrientRow(
-                        nutrient = Nutrient(
-                            id = ui.nutrientId,
-                            code = ui.code,
-                            displayName = ui.name,
-                            unit = ui.unit,
-                            category = ui.category,
-                            aliases = ui.aliases
-                        ),
-                        amount = amountToStore,
-                        basisType = resolvedBasisType,
-                        basisGrams = when (resolvedBasisType) {
-                            BasisType.PER_100G -> 100.0
-                            BasisType.PER_100ML -> 100.0
-                            BasisType.USDA_REPORTED_SERVING -> null
-                        }
-                    )
-                }
-
-                val stableId = s.stableId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
+                val stableId = s.stableId?.takeIf { it.isNotBlank() }
+                    ?: UUID.randomUUID().toString()
 
                 update {
                     it.copy(
@@ -1418,7 +1626,7 @@ class FoodEditorViewModel @Inject constructor(
 
                 foodCategoryRepo.replaceForFood(
                     foodId = savedId,
-                    categoryIds = s.selectedCategoryIds,
+                    categoryIds = s.selectedCategoryIds
                 )
 
                 update {
@@ -1426,9 +1634,16 @@ class FoodEditorViewModel @Inject constructor(
                         hasUnsavedChanges = false,
                         isFoodMetadataDirty = false,
                         areNutrientsDirty = false,
-                        isBasisInterpretationDirty = false
+                        isBasisInterpretationDirty = false,
+                        nutritionEditorStatus = it.nutritionEditorStatus.copy(
+                            isServingDirty = false,
+                            isNutrientsDirty = false,
+                            hasPendingRecompute = false,
+                            hasPendingApply = false
+                        )
                     )
                 }
+
                 onDone(savedId)
 
             } catch (t: Throwable) {
@@ -1655,7 +1870,16 @@ class FoodEditorViewModel @Inject constructor(
     private fun update(block: (FoodEditorState) -> FoodEditorState) {
         val prev = _state.value
         val nextRaw = block(prev)
-        _state.value = applyNeedsFix(nextRaw, prev)
+
+        val resolution = computeServingResolution(nextRaw)
+
+        val nextWithResolution = nextRaw.copy(
+            nutritionEditorStatus = nextRaw.nutritionEditorStatus.copy(
+                servingResolution = resolution
+            )
+        )
+
+        _state.value = applyNeedsFix(nextWithResolution, prev)
     }
 
     private fun Double.roundForUi(): String {
@@ -2327,20 +2551,20 @@ class FoodEditorViewModel @Inject constructor(
  * 2026-03-19 repair rule:
  * - Ambiguous-unit bridge fields must preserve the last loaded persisted truth on no-op saves.
  * - Non-bridge edits (favorite/category/etc.) must not silently introduce gramsPerServingUnit/mlPerServingUnit.
-*
-* 2026/03/24
-* ## Editor integration rule (CRITICAL)
-*
-* - This use case MUST NOT be called for metadata-only edits.
-* - Doing so will rewrite canonical nutrients using a new serving lens and corrupt data.
-*
-* - FoodEditorViewModel must:
-*   - call saveFoodMetadata(...) when only metadata changes
-*   - call SaveFoodWithNutrientsUseCase(...) when nutrient rows are dirty
-*
-* - This separation is REQUIRED to maintain nutrition correctness across:
-*   - Foods list
-*   - Recipe system
-*   - Logging
-*   - Snapshot generation
-*/
+ *
+ * 2026/03/24
+ * ## Editor integration rule (CRITICAL)
+ *
+ * - This use case MUST NOT be called for metadata-only edits.
+ * - Doing so will rewrite canonical nutrients using a new serving lens and corrupt data.
+ *
+ * - FoodEditorViewModel must:
+ *   - call saveFoodMetadata(...) when only metadata changes
+ *   - call SaveFoodWithNutrientsUseCase(...) when nutrient rows are dirty
+ *
+ * - This separation is REQUIRED to maintain nutrition correctness across:
+ *   - Foods list
+ *   - Recipe system
+ *   - Logging
+ *   - Snapshot generation
+ */

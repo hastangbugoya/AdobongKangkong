@@ -196,7 +196,10 @@ fun FoodEditorRoute(
         onDismissUsdaBackfillPrompt = viewModel::dismissUsdaBackfillPrompt,
         onDismissUsdaBackfillMessage = viewModel::dismissUsdaBackfillMessage,
 
-        onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner
+        onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner,
+        onRecomputeDisplayedNutrients = viewModel::onRecomputeDisplayedNutrientsClicked,
+        onConfirmDiscardNutrientEditsAndRecompute = viewModel::confirmDiscardNutrientEditsAndRecompute,
+        onDismissDiscardNutrientEditsDialog = viewModel::dismissDiscardNutrientEditsDialog
     )
 
     LaunchedEffect(mergePickedFoodId) {
