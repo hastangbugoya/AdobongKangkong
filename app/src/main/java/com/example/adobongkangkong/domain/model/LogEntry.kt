@@ -6,6 +6,9 @@ import java.time.Instant
 
 data class LogEntry(
     val id: Long = 0,
+    val stableId: String,
+    val createdAt: Instant,
+    val modifiedAt: Instant,
     val timestamp: Instant,
     val logDateIso: String,
     val itemName: String,

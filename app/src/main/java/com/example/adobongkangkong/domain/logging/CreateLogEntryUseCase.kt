@@ -21,6 +21,7 @@ import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
 import com.example.adobongkangkong.domain.usage.FoodUsageCheck
 import com.example.adobongkangkong.domain.usage.UsageContext
 import java.time.Instant
+import java.util.UUID
 import javax.inject.Inject
 
 // NOTE:
@@ -128,11 +129,6 @@ class CreateLogEntryUseCase @Inject constructor(
                 }
             }
 
-            Log.d(
-                "Meow",
-                "CreateLogEntryUseCase> scaleByGrams grams=$grams gramsPerServing=$gramsPerServing amountInput=$amountInput"
-            )
-
             perG.scaledBy(grams)
         } ?: snapshot.nutrientsPerMilliliter?.let { perMl ->
             val ml = when (amountInput) {
@@ -148,34 +144,96 @@ class CreateLogEntryUseCase @Inject constructor(
                 }
             }
 
-            Log.d(
-                "Meow",
-                "CreateLogEntryUseCase> scaleByMl ml=$ml mlPerServing=$mlPerServing amountInput=$amountInput"
-            )
-
             perMl.scaledBy(ml)
         } ?: return Result.Error("Food nutrition incomplete")
 
-        Log.d(
-            "Meow",
-            "CreateLogEntryUseCase> Snapshot debug foodId=${food.id} " +
-                    "serving=${food.servingSize} ${food.servingUnit} " +
-                    "gramsPerServing=$gramsPerServing " +
-                    "mlPerServing=$mlPerServing " +
-                    "food.gpsu=${food.gramsPerServingUnit} food.mlpsu=${food.mlPerServingUnit} " +
-                    "snapshot.hasNutrientsPerGram=${snapshot.nutrientsPerGram != null} " +
-                    "snapshot.hasNutrientsPerMilliliter=${snapshot.nutrientsPerMilliliter != null}"
-        )
-
         val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
 
+        val now = Instant.now()
+
         val entry = LogEntry(
+            stableId = UUID.randomUUID().toString(),
+            createdAt = now,
+            modifiedAt = now,
             timestamp = timestamp,
             foodStableId = food.stableId,
             itemName = food.name,
             nutrients = nutrients,
             amount = storedAmount,
             unit = storedUnit,
+            mealSlot = mealSlot,
+            logDateIso = logDateIso
+        )
+
+        val id = logRepository.insert(entry)
+        return Result.Success(id = id)
+    }
+
+    private suspend fun logRecipe(
+        recipeRef: FoodRef.Recipe,
+        timestamp: Instant,
+        amountInput: AmountInput,
+        recipeBatchId: Long?,
+        mealSlot: MealSlot?,
+        logDateIso: String
+    ): Result {
+        val baseDraft = recipeDraftLookup.getRecipeDraft(recipeRef.recipeId)
+            ?: return Result.Error("Recipe not found")
+
+        val batch = if (recipeBatchId != null) {
+            val resolvedBatch = recipeBatchLookup.getBatchById(recipeBatchId)
+                ?: return Result.Error("Recipe batch not found")
+
+            if (resolvedBatch.recipeId != recipeRef.recipeId) {
+                return Result.Blocked("Selected batch does not belong to this recipe.")
+            }
+
+            resolvedBatch
+        } else null
+
+        val effectiveDraft = if (batch != null) {
+            baseDraft.copy(
+                totalYieldGrams = batch.cookedYieldGrams,
+                servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
+            )
+        } else baseDraft
+
+        val computed = computeRecipeBatchNutritionUseCase(effectiveDraft.toRecipe())
+            ?: return Result.Error("Recipe nutrition unavailable")
+
+        val logged = computeLoggedRecipeNutrition.invoke(
+            recipeNutrition = computed,
+            input = amountInput.toRecipeLogInput()
+        )
+
+        if (!logged.isAllowed) {
+            val reason = logged.warnings.firstOrNull()?.toString()
+                ?: "Logging blocked by recipe rules."
+            return Result.Blocked(reason)
+        }
+
+        val gramsPerServingCooked = if (batch != null) {
+            batch.gramsPerServingCooked(
+                fallbackServings = effectiveDraft.servingsYield
+            )
+        } else null
+
+        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
+
+        val now = Instant.now()
+
+        val entry = LogEntry(
+            stableId = UUID.randomUUID().toString(),
+            createdAt = now,
+            modifiedAt = now,
+            timestamp = timestamp,
+            foodStableId = recipeRef.stableId,
+            itemName = recipeRef.displayName,
+            nutrients = logged.totals,
+            amount = storedAmount,
+            unit = storedUnit,
+            recipeBatchId = batch?.batchId,
+            gramsPerServingCooked = gramsPerServingCooked,
             mealSlot = mealSlot,
             logDateIso = logDateIso
         )
@@ -222,79 +280,5 @@ class CreateLogEntryUseCase @Inject constructor(
         if (size <= 0.0) return null
 
         return size * mlPerUnitFromBridge
-    }
-
-    private suspend fun logRecipe(
-        recipeRef: FoodRef.Recipe,
-        timestamp: Instant,
-        amountInput: AmountInput,
-        recipeBatchId: Long?,
-        mealSlot: MealSlot?,
-        logDateIso: String
-    ): Result {
-        val baseDraft = recipeDraftLookup.getRecipeDraft(recipeRef.recipeId)
-            ?: return Result.Error("Recipe not found")
-
-        val batch = if (recipeBatchId != null) {
-            val resolvedBatch = recipeBatchLookup.getBatchById(recipeBatchId)
-                ?: return Result.Error("Recipe batch not found")
-
-            if (resolvedBatch.recipeId != recipeRef.recipeId) {
-                return Result.Blocked("Selected batch does not belong to this recipe.")
-            }
-
-            resolvedBatch
-        } else {
-            null
-        }
-
-        val effectiveDraft = if (batch != null) {
-            baseDraft.copy(
-                totalYieldGrams = batch.cookedYieldGrams,
-                servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
-            )
-        } else {
-            baseDraft
-        }
-
-        val computed = computeRecipeBatchNutritionUseCase(effectiveDraft.toRecipe())
-            ?: return Result.Error("Recipe nutrition unavailable")
-
-        val logged = computeLoggedRecipeNutrition.invoke(
-            recipeNutrition = computed,
-            input = amountInput.toRecipeLogInput()
-        )
-
-        if (!logged.isAllowed) {
-            val reason = logged.warnings.firstOrNull()?.toString()
-                ?: "Logging blocked by recipe rules."
-            return Result.Blocked(reason)
-        }
-
-        val gramsPerServingCooked = if (batch != null) {
-            batch.gramsPerServingCooked(
-                fallbackServings = effectiveDraft.servingsYield
-            )
-        } else {
-            null
-        }
-
-        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
-
-        val entry = LogEntry(
-            timestamp = timestamp,
-            foodStableId = recipeRef.stableId,
-            itemName = recipeRef.displayName,
-            nutrients = logged.totals,
-            amount = storedAmount,
-            unit = storedUnit,
-            recipeBatchId = batch?.batchId,
-            gramsPerServingCooked = gramsPerServingCooked,
-            mealSlot = mealSlot,
-            logDateIso = logDateIso
-        )
-
-        val id = logRepository.insert(entry)
-        return Result.Success(id = id)
     }
 }

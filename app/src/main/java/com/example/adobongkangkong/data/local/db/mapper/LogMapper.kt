@@ -50,6 +50,9 @@ internal fun LogEntryEntity.toDomain(converters: DbTypeConverters): LogEntry =
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,
         logDateIso = logDateIso,
+        stableId = stableId,
+        createdAt = createdAt,
+        modifiedAt = modifiedAt
     )
 
 internal fun LogEntry.toLogEntryEntity(converters: DbTypeConverters): LogEntryEntity =
@@ -65,6 +68,9 @@ internal fun LogEntry.toLogEntryEntity(converters: DbTypeConverters): LogEntryEn
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,
         nutrientsJson = converters.nutrientMapToJson(nutrients),
+        stableId = stableId,
+        createdAt = createdAt,
+        modifiedAt = modifiedAt
     )
 
 internal fun LogEntryEntity.toDomainLogEntry(converters: DbTypeConverters): LogEntry =
@@ -80,4 +86,7 @@ internal fun LogEntryEntity.toDomainLogEntry(converters: DbTypeConverters): LogE
         gramsPerServingCooked = gramsPerServingCooked,
         mealSlot = mealSlot,
         nutrients = converters.nutrientMapFromJson(nutrientsJson),
+        stableId = stableId,
+        createdAt = createdAt,
+        modifiedAt = modifiedAt
     )

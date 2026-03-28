@@ -77,4 +77,7 @@ interface LogEntryDao {
 
     @Query("SELECT COUNT(*) FROM log_entries WHERE foodStableId = :stableId")
     suspend fun countByFoodStableId(stableId: String): Int
+
+    @Query("SELECT * FROM log_entries ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecent(limit: Int = 200): List<LogEntryEntity>
 }

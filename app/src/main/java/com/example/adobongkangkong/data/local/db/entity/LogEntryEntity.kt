@@ -80,6 +80,30 @@ data class LogEntryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
 
     /**
+     * 🔑 Cross-app stable identity (UUID).
+     *
+     * - Generated ONCE at insert
+     * - Never changes
+     * - Used for cross-app upsert (HH, future apps)
+     */
+    val stableId: String,
+
+    /**
+     * Created timestamp (first insertion time).
+     *
+     * Immutable.
+     */
+    val createdAt: Instant,
+
+    /**
+     * Last modification timestamp.
+     *
+     * Updated ONLY when meaningful fields change.
+     * Used for cross-app change detection.
+     */
+    val modifiedAt: Instant,
+
+    /**
      * Instant when the log entry was recorded.
      *
      * Used for ordering and posterity. MUST NOT be used for deciding which day bucket the entry

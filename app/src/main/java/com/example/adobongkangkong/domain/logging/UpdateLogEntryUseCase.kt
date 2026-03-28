@@ -24,6 +24,7 @@ import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
 import com.example.adobongkangkong.domain.usage.FoodUsageCheck
 import com.example.adobongkangkong.domain.usage.UsageContext
+import java.time.Instant
 import javax.inject.Inject
 import kotlin.math.abs
 
@@ -65,7 +66,6 @@ class UpdateLogEntryUseCase @Inject constructor(
 
         val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
 
-        // No-op edit: nothing meaningful changed, so do not recompute nutrition or prompt.
         if (
             existing.amount == storedAmount &&
             existing.unit == storedUnit &&
@@ -124,12 +124,15 @@ class UpdateLogEntryUseCase @Inject constructor(
             else -> recomputedNutrients
         }
 
+        val now = Instant.now()
+
         val updatedEntry = existing.copy(
             itemName = food.name,
             nutrients = finalNutrients,
             amount = storedAmount,
             unit = storedUnit,
-            mealSlot = mealSlot
+            mealSlot = mealSlot,
+            modifiedAt = now
         )
 
         logRepository.update(updatedEntry)
@@ -149,6 +152,13 @@ class UpdateLogEntryUseCase @Inject constructor(
         data class Success(val nutrients: NutrientMap) : RecomputeResult
         data class Blocked(val message: String) : RecomputeResult
         data class Error(val message: String) : RecomputeResult
+    }
+
+    private fun toStoredAmountAndUnit(amountInput: AmountInput): Pair<Double, LogUnit> {
+        return when (amountInput) {
+            is AmountInput.ByServings -> amountInput.servings to LogUnit.SERVING
+            is AmountInput.ByGrams -> amountInput.grams to LogUnit.GRAM_COOKED
+        }
     }
 
     private suspend fun recomputeFoodNutrients(
@@ -262,13 +272,6 @@ class UpdateLogEntryUseCase @Inject constructor(
         return RecomputeResult.Success(logged.totals)
     }
 
-    private fun toStoredAmountAndUnit(amountInput: AmountInput): Pair<Double, LogUnit> {
-        return when (amountInput) {
-            is AmountInput.ByServings -> amountInput.servings to LogUnit.SERVING
-            is AmountInput.ByGrams -> amountInput.grams to LogUnit.GRAM_COOKED
-        }
-    }
-
     private fun scaleStoredNutrients(
         existing: LogEntry,
         food: Food,
@@ -338,14 +341,7 @@ class UpdateLogEntryUseCase @Inject constructor(
             val safeCurrent = if (abs(currentValue) < 1e-6) 0.0 else currentValue
             val scale = maxOf(abs(safeOld), abs(safeCurrent), 1.0)
 
-            val changed = diff > absoluteTolerance && (diff / scale) > relativeTolerance
-            if (changed) {
-                Log.d(
-                    "NutritionChange",
-                    "Sentinel changed: key=$key oldBasis=$oldValue currentBasis=$currentValue diff=$diff"
-                )
-            }
-            changed
+            diff > absoluteTolerance && (diff / scale) > relativeTolerance
         }
     }
 
@@ -360,9 +356,8 @@ class UpdateLogEntryUseCase @Inject constructor(
             LogUnit.ITEM -> {
                 val gramsPerServing = when {
                     existing.gramsPerServingCooked != null &&
-                            existing.gramsPerServingCooked > 0.0 -> {
+                            existing.gramsPerServingCooked > 0.0 ->
                         existing.gramsPerServingCooked
-                    }
 
                     else -> food.gramsPerServingResolved()
                 }

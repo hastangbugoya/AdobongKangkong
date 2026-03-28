@@ -159,10 +159,14 @@ class UpdateLogEntryUseCaseTest {
         proteinPer100g: Double
     ): LogEntry {
         val totalProtein = proteinPer100g * (grams / 100.0)
+        val now = Instant.now()
 
         return LogEntry(
             id = 1L,
-            timestamp = Instant.now(),
+            stableId = "log-1",
+            createdAt = now,
+            modifiedAt = now,
+            timestamp = now,
             logDateIso = "2026-01-01",
             itemName = food.name,
             foodStableId = food.stableId,
@@ -324,12 +328,6 @@ class UpdateLogEntryUseCaseTest {
         override suspend fun getBatchFoodIds(batchIds: Set<Long>): Map<Long, Long> = emptyMap()
     }
 
-// ONLY showing modified sections — everything else remains EXACTLY the same
-
-// =========================
-// dummyBatchNutrition()
-// =========================
-
     private fun dummyBatchNutrition(): ComputeRecipeBatchNutritionUseCase {
         return ComputeRecipeBatchNutritionUseCase(
             recipeRepo = object : RecipeRepository {
@@ -421,7 +419,6 @@ class UpdateLogEntryUseCaseTest {
                     throw UnsupportedOperationException()
                 }
 
-                // ✅ NEW (required)
                 override suspend fun softDeleteRecipeByFoodId(foodId: Long) {
                     throw UnsupportedOperationException()
                 }
@@ -437,10 +434,6 @@ class UpdateLogEntryUseCaseTest {
             )
         )
     }
-
-// =========================
-// EmptyRecipeDao
-// =========================
 
     private class EmptyRecipeDao : RecipeDao {
         override suspend fun insert(recipe: RecipeEntity): Long = 0L
@@ -467,13 +460,11 @@ class UpdateLogEntryUseCaseTest {
             servingsYield: Double
         ) = Unit
 
-        // ✅ NEW
         override suspend fun softDeleteById(
             recipeId: Long,
             deletedAtEpochMs: Long
         ) = Unit
 
-        // ✅ NEW
         override suspend fun softDeleteByFoodId(
             foodId: Long,
             deletedAtEpochMs: Long

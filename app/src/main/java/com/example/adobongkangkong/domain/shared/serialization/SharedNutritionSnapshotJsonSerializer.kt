@@ -1,7 +1,6 @@
 package com.example.adobongkangkong.domain.shared.serialization
 
 import com.example.adobongkangkong.domain.shared.model.SharedNutritionSnapshot
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
