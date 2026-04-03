@@ -64,10 +64,15 @@ class SharedSnapshotProvider : ContentProvider() {
 
         try {
             val match = uriMatcher.match(uri)
+            val path = uri.path.orEmpty().trimStart('/')
 
-            val (json, fileName) = when (match) {
-                SNAPSHOT_LATEST,
-                SNAPSHOT_BY_DATE -> {
+            Log.d(
+                "SharedSnapshotProvider",
+                "openFile uri=$uri authority=${uri.authority} path=$path match=$match"
+            )
+
+            val (json, fileName) = when {
+                match == SNAPSHOT_LATEST || match == SNAPSHOT_BY_DATE -> {
                     val targetDate = resolveTargetDate(uri)
                     val json = buildSnapshotJson(
                         context = context,
@@ -76,8 +81,7 @@ class SharedSnapshotProvider : ContentProvider() {
                     json to "shared_snapshot_${targetDate}.json"
                 }
 
-                SNAPSHOT_MONTH_LATEST,
-                SNAPSHOT_MONTH_BY_MONTH -> {
+                match == SNAPSHOT_MONTH_LATEST || match == SNAPSHOT_MONTH_BY_MONTH -> {
                     val targetMonth = resolveTargetMonth(uri)
                     val json = buildMonthSnapshotJson(
                         context = context,
@@ -86,9 +90,27 @@ class SharedSnapshotProvider : ContentProvider() {
                     json to "shared_snapshot_month_${targetMonth}.json"
                 }
 
-                LOGS_RECENT -> {
+                match == LOGS_RECENT || path == LOGS_PATH -> {
                     val json = buildLogsJson(context)
                     json to "shared_logs.json"
+                }
+
+                path == "$SNAPSHOT_PATH_PREFIX/latest" || path.startsWith("$SNAPSHOT_PATH_PREFIX/") -> {
+                    val targetDate = resolveTargetDate(uri)
+                    val json = buildSnapshotJson(
+                        context = context,
+                        date = targetDate
+                    )
+                    json to "shared_snapshot_${targetDate}.json"
+                }
+
+                path == "$SNAPSHOT_MONTH_PATH_PREFIX/latest" || path.startsWith("$SNAPSHOT_MONTH_PATH_PREFIX/") -> {
+                    val targetMonth = resolveTargetMonth(uri)
+                    val json = buildMonthSnapshotJson(
+                        context = context,
+                        month = targetMonth
+                    )
+                    json to "shared_snapshot_month_${targetMonth}.json"
                 }
 
                 else -> throw IllegalArgumentException("Unknown URI: $uri")
@@ -209,12 +231,20 @@ class SharedSnapshotProvider : ContentProvider() {
     }
 
     override fun getType(uri: Uri): String {
-        return when (uriMatcher.match(uri)) {
-            SNAPSHOT_LATEST,
-            SNAPSHOT_BY_DATE,
-            SNAPSHOT_MONTH_LATEST,
-            SNAPSHOT_MONTH_BY_MONTH,
-            LOGS_RECENT -> "application/json"
+        val match = uriMatcher.match(uri)
+        val path = uri.path.orEmpty().trimStart('/')
+
+        return when {
+            match == SNAPSHOT_LATEST ||
+                    match == SNAPSHOT_BY_DATE ||
+                    match == SNAPSHOT_MONTH_LATEST ||
+                    match == SNAPSHOT_MONTH_BY_MONTH ||
+                    match == LOGS_RECENT ||
+                    path == LOGS_PATH ||
+                    path == "$SNAPSHOT_PATH_PREFIX/latest" ||
+                    path.startsWith("$SNAPSHOT_PATH_PREFIX/") ||
+                    path == "$SNAPSHOT_MONTH_PATH_PREFIX/latest" ||
+                    path.startsWith("$SNAPSHOT_MONTH_PATH_PREFIX/") -> "application/json"
 
             else -> throw IllegalArgumentException("Unknown URI: $uri")
         }
