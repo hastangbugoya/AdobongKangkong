@@ -52,7 +52,7 @@ class RecomputeDisplayedNutrientsUseCase @Inject constructor() {
                 )
             }
 
-            else -> Result.Blocked(BlockReason.UNSUPPORTED_BASIS)
+            else -> Result.Blocked(BlockReason.NO_SERVING_GROUNDING_PATH)
         }
     }
 
@@ -88,6 +88,6 @@ class RecomputeDisplayedNutrientsUseCase @Inject constructor() {
         NO_GRAM_PATH,
         NO_ML_PATH,
         NO_NUTRIENTS,
-        UNSUPPORTED_BASIS
+        NO_SERVING_GROUNDING_PATH
     }
 }

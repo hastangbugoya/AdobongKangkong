@@ -747,7 +747,7 @@ class FoodEditorViewModel @Inject constructor(
         val isVolumeGrounded = s.servingUnit.isVolumeUnit() || (ml != null)
 
         if (needsBacking && grams == null && !isVolumeGrounded) {
-            return "Food needs grams per serving unit to be loggable (and recipe-usable) when using servings."
+            return "Enter grams for 1 ${s.servingUnit.display} so this serving can be saved and used in recipes."
         }
 
         return null
@@ -1435,8 +1435,8 @@ class FoodEditorViewModel @Inject constructor(
                         "Cannot recompute from PER 100mL without an mL grounding path."
                     RecomputeDisplayedNutrientsUseCase.BlockReason.NO_NUTRIENTS ->
                         "No nutrients are available to recompute."
-                    RecomputeDisplayedNutrientsUseCase.BlockReason.UNSUPPORTED_BASIS ->
-                        "Unsupported nutrient basis for recompute."
+                    RecomputeDisplayedNutrientsUseCase.BlockReason.NO_SERVING_GROUNDING_PATH ->
+                        "Serving unit needs grounding (PER 100g or PER 100mL) to be reliable for serving-based logging."
                 }
 
                 update {
