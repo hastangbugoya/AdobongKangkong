@@ -1905,9 +1905,8 @@ class FoodEditorViewModel @Inject constructor(
         servingUnit: ServingUnit,
         mlPerServingUnit: Double?
     ): Double? {
-        return when (servingUnit) {
-            ServingUnit.ML -> 1.0
-            ServingUnit.L -> 1000.0
+        return when {
+            servingUnit.asMl != null -> servingUnit.asMl
             else -> mlPerServingUnit
         }?.takeIf { it > 0.0 }
     }
