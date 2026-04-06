@@ -1520,6 +1520,11 @@ class FoodEditorViewModel @Inject constructor(
                         )
                     ) {
                         is ApplyEditedNutrientsUseCase.Result.Success -> {
+                            val canonicalBasisType = when (result.usedPath) {
+                                ApplyEditedNutrientsUseCase.ComputationPath.PER_100G -> BasisType.PER_100G
+                                ApplyEditedNutrientsUseCase.ComputationPath.PER_100ML -> BasisType.PER_100ML
+                            }
+
                             s.nutrientRows.map { ui ->
                                 val canonical =
                                     result.canonicalNutrients[NutrientKey(ui.code)] ?: 0.0
@@ -1534,12 +1539,8 @@ class FoodEditorViewModel @Inject constructor(
                                         aliases = ui.aliases
                                     ),
                                     amount = canonical,
-                                    basisType = resolvedBasisType,
-                                    basisGrams = when (resolvedBasisType) {
-                                        BasisType.PER_100G -> 100.0
-                                        BasisType.PER_100ML -> 100.0
-                                        BasisType.USDA_REPORTED_SERVING -> null
-                                    }
+                                    basisType = canonicalBasisType,
+                                    basisGrams = 100.0
                                 )
                             }
                         }
@@ -1554,8 +1555,8 @@ class FoodEditorViewModel @Inject constructor(
                                     "No nutrients are available to save."
                                 ApplyEditedNutrientsUseCase.BlockReason.INVALID_SERVING_AMOUNT ->
                                     "Serving amount is invalid for nutrient save."
-                                ApplyEditedNutrientsUseCase.BlockReason.UNSUPPORTED_BASIS ->
-                                    "Unsupported nutrient basis for save."
+                                ApplyEditedNutrientsUseCase.BlockReason.NO_SERVING_GROUNDING_PATH  ->
+                                    "This serving needs a gram or mL bridge before nutrients can be saved. Example: 1 pc = 50 g."
                             }
 
                             update { it.copy(errorMessage = message) }

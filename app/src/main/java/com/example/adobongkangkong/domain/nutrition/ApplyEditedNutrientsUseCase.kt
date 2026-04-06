@@ -3,13 +3,12 @@ package com.example.adobongkangkong.domain.nutrition
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import javax.inject.Inject
 
-
 /**
  * Converts edited displayed nutrient values (per serving) back into canonical nutrients.
  *
  * Input:
  * - edited UI nutrient values for the current serving
- * - canonical basis type
+ * - canonical basis type (editor interpretation, not storage basis)
  * - resolved serving grounding
  *
  * Output:
@@ -20,6 +19,13 @@ import javax.inject.Inject
  * - No density guessing
  * - No partial conversion logic
  * - All nutrients are converted in one bulk pass
+ *
+ * ## UPDATED BEHAVIOR
+ * - USDA_REPORTED_SERVING is now SUPPORTED for manual entry flows
+ * - It will normalize using:
+ *   - grams path if available
+ *   - else mL path if available
+ *   - else blocked
  */
 class ApplyEditedNutrientsUseCase @Inject constructor() {
 
@@ -67,7 +73,40 @@ class ApplyEditedNutrientsUseCase @Inject constructor() {
                 )
             }
 
-            else -> Result.Blocked(BlockReason.UNSUPPORTED_BASIS)
+            BasisType.USDA_REPORTED_SERVING -> {
+                // ✅ NEW: support per-serving manual entry
+
+                val grams = resolution.gramsPerServing
+                if (grams != null) {
+                    if (grams <= 0.0) {
+                        return Result.Blocked(BlockReason.INVALID_SERVING_AMOUNT)
+                    }
+
+                    val canonical = normalize(displayedNutrients, grams)
+
+                    return Result.Success(
+                        canonicalNutrients = canonical,
+                        usedPath = ComputationPath.PER_100G
+                    )
+                }
+
+                val milliliters = resolution.millilitersPerServing
+                if (milliliters != null) {
+                    if (milliliters <= 0.0) {
+                        return Result.Blocked(BlockReason.INVALID_SERVING_AMOUNT)
+                    }
+
+                    val canonical = normalize(displayedNutrients, milliliters)
+
+                    return Result.Success(
+                        canonicalNutrients = canonical,
+                        usedPath = ComputationPath.PER_100ML
+                    )
+                }
+
+                // No valid grounding path
+                Result.Blocked(BlockReason.NO_SERVING_GROUNDING_PATH)
+            }
         }
     }
 
@@ -104,6 +143,6 @@ class ApplyEditedNutrientsUseCase @Inject constructor() {
         NO_ML_PATH,
         NO_NUTRIENTS,
         INVALID_SERVING_AMOUNT,
-        UNSUPPORTED_BASIS
+        NO_SERVING_GROUNDING_PATH
     }
 }
