@@ -204,7 +204,7 @@ object CsvUnits {
             "oz", "ounce", "ounces" -> ServingUnit.OZ
             "lb", "pound", "pounds" -> ServingUnit.LB
             "ml" -> ServingUnit.ML
-
+            "rc" -> ServingUnit.RCCUP
             "cup", "cups" -> ServingUnit.CUP
             "tbsp", "tablespoon", "tablespoons" -> ServingUnit.TBSP
             "tsp", "teaspoon", "teaspoons" -> ServingUnit.TSP

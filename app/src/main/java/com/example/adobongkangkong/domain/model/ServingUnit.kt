@@ -49,7 +49,7 @@ enum class ServingUnit(
 
     // Rice cooker cup (commonly used for dry rice measurement)
     // Deterministic as a volume, but NOT safe to convert to grams without density.
-    RCCUP("rc cup (180 mL)", asMl = 180.0),
+    RCCUP("rc cup (180 g)", asG = 180.0),
 
     // Imperial / UK volume set (exact)
     FL_OZ_IMP("fl oz (imp)", asMl = 28.4130625),
