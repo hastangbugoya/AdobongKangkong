@@ -492,38 +492,30 @@ class FoodsListViewModel @Inject constructor(
         if (basis == null || kcalPer100 == null) return "— kcal"
 
         val label = servingLabel(food.servingSize, food.servingUnit)
-        return when (basis) {
-            BasisType.PER_100G -> {
-                val gramsPerUnit = food.gramsPerServingUnit?.takeIf { it > 0.0 }
 
-                val grams: Double? =
-                    food.servingUnit.asG?.let { food.servingSize * it }
-                        ?: gramsPerUnit?.let { food.servingSize * it }
+        return when (basis) {
+
+            BasisType.PER_100G -> {
+                val gramsPerUnit =
+                    food.servingUnit.asG
+                        ?: food.gramsPerServingUnit?.takeIf { it > 0.0 }
+
+                val grams = gramsPerUnit?.let { food.servingSize * it }
 
                 if (grams != null) {
                     val kcal = (kcalPer100 * grams / 100.0).roundToInt()
                     "$kcal kcal/$label"
                 } else {
-                    val result = NutrientBasisScaler.canonicalToDisplayPerServing(
-                        storedAmount = kcalPer100,
-                        storedBasis = BasisType.PER_100G,
-                        servingSize = food.servingSize,
-                        gramsPerServingUnit = gramsPerUnit
-                    )
-
-                    if (result.didScale) "${result.amount.roundToInt()} kcal/$label" else "— kcal/$label"
+                    "— kcal/$label"
                 }
             }
 
             BasisType.PER_100ML -> {
-                val mlPerUnit = food.mlPerServingUnit?.takeIf { it > 0.0 }
+                val mlPerUnit =
+                    food.servingUnit.asMl
+                        ?: food.mlPerServingUnit?.takeIf { it > 0.0 }
 
-                val ml: Double? =
-                    if (food.servingUnit == ServingUnit.ML) {
-                        food.servingSize
-                    } else {
-                        mlPerUnit?.let { food.servingSize * it }
-                    }
+                val ml = mlPerUnit?.let { food.servingSize * it }
 
                 if (ml != null) {
                     val kcal = (kcalPer100 * ml / 100.0).roundToInt()

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedLogExportJsonUseCase
+import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionGoalProfileJsonUseCase
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionMonthSnapshotJsonUseCase
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionSnapshotJsonUseCase
 import dagger.hilt.EntryPoint
@@ -30,6 +31,7 @@ class SharedSnapshotProvider : ContentProvider() {
 
         private const val SNAPSHOT_PATH_PREFIX = "snapshot"
         private const val SNAPSHOT_MONTH_PATH_PREFIX = "snapshot-month"
+        private const val GOALS_PATH_PREFIX = "goals"
         private const val LOGS_PATH = "logs"
 
         private const val SNAPSHOT_LATEST = 1
@@ -37,6 +39,7 @@ class SharedSnapshotProvider : ContentProvider() {
         private const val SNAPSHOT_MONTH_LATEST = 3
         private const val SNAPSHOT_MONTH_BY_MONTH = 4
         private const val LOGS_RECENT = 5
+        private const val GOALS_CURRENT = 6
 
         private val uriMatcher = UriMatcher(UriMatcher.NO_MATCH).apply {
             addURI(AUTHORITY, "$SNAPSHOT_PATH_PREFIX/latest", SNAPSHOT_LATEST)
@@ -46,6 +49,8 @@ class SharedSnapshotProvider : ContentProvider() {
             addURI(AUTHORITY, "$SNAPSHOT_MONTH_PATH_PREFIX/*", SNAPSHOT_MONTH_BY_MONTH)
 
             addURI(AUTHORITY, LOGS_PATH, LOGS_RECENT)
+
+            addURI(AUTHORITY, "$GOALS_PATH_PREFIX/current", GOALS_CURRENT)
         }
     }
 
@@ -55,6 +60,7 @@ class SharedSnapshotProvider : ContentProvider() {
         fun buildSharedNutritionSnapshotJsonUseCase(): BuildSharedNutritionSnapshotJsonUseCase
         fun buildSharedNutritionMonthSnapshotJsonUseCase(): BuildSharedNutritionMonthSnapshotJsonUseCase
         fun buildSharedLogExportJsonUseCase(): BuildSharedLogExportJsonUseCase
+        fun buildSharedNutritionGoalProfileJsonUseCase(): BuildSharedNutritionGoalProfileJsonUseCase
     }
 
     override fun onCreate(): Boolean = true
@@ -88,6 +94,11 @@ class SharedSnapshotProvider : ContentProvider() {
                         month = targetMonth
                     )
                     json to "shared_snapshot_month_${targetMonth}.json"
+                }
+
+                match == GOALS_CURRENT || path == "$GOALS_PATH_PREFIX/current" -> {
+                    val json = buildGoalsJson(context)
+                    json to "shared_nutrition_goals_current.json"
                 }
 
                 match == LOGS_RECENT || path == LOGS_PATH -> {
@@ -210,6 +221,21 @@ class SharedSnapshotProvider : ContentProvider() {
         }
     }
 
+    private fun buildGoalsJson(
+        context: Context
+    ): String {
+        val entryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            SharedSnapshotProviderEntryPoint::class.java
+        )
+
+        return runBlocking {
+            entryPoint
+                .buildSharedNutritionGoalProfileJsonUseCase()
+                .invoke()
+        }
+    }
+
     private fun buildLogsJson(
         context: Context
     ): String {
@@ -240,7 +266,9 @@ class SharedSnapshotProvider : ContentProvider() {
                     match == SNAPSHOT_MONTH_LATEST ||
                     match == SNAPSHOT_MONTH_BY_MONTH ||
                     match == LOGS_RECENT ||
+                    match == GOALS_CURRENT ||
                     path == LOGS_PATH ||
+                    path == "$GOALS_PATH_PREFIX/current" ||
                     path == "$SNAPSHOT_PATH_PREFIX/latest" ||
                     path.startsWith("$SNAPSHOT_PATH_PREFIX/") ||
                     path == "$SNAPSHOT_MONTH_PATH_PREFIX/latest" ||
