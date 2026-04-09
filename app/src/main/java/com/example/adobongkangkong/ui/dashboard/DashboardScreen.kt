@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,6 +51,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
@@ -88,6 +92,7 @@ fun DashboardScreen(
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -101,8 +106,21 @@ fun DashboardScreen(
     val pinOptions by vm.pinOptions.collectAsState()
 
     val selectedDate = state.date
-    val today = remember { LocalDate.now() }
-    val isToday = selectedDate == today
+    val currentDate = state.currentDate
+    val isToday = selectedDate == currentDate
+
+    DisposableEffect(lifecycleOwner, vm) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.onScreenResumed()
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val exportLauncher =
         rememberLauncherForActivityResult(
@@ -345,14 +363,18 @@ fun DashboardScreen(
                     }
 
                     Text(
-                        text = if (isToday) "Today" else dateLabel,
+                        text = buildDashboardDateLabel(
+                            selectedDate = selectedDate,
+                            currentDate = currentDate,
+                            fallbackFormattedDate = dateLabel
+                        ),
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
 
                     IconButton(
                         onClick = vm::showNextDay,
-                        enabled = state.date < LocalDate.now()
+                        enabled = state.date < currentDate
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.angle_small_right),
@@ -612,5 +634,18 @@ private fun DashboardNutrientCard.toDisplay(
                 progress = 0f
             )
         }
+    }
+}
+
+private fun buildDashboardDateLabel(
+    selectedDate: LocalDate,
+    currentDate: LocalDate,
+    fallbackFormattedDate: String
+): String {
+    return when (selectedDate) {
+        currentDate -> "Today"
+        currentDate.minusDays(1) -> "Yesterday"
+        currentDate.plusDays(1) -> "Tomorrow"
+        else -> fallbackFormattedDate
     }
 }

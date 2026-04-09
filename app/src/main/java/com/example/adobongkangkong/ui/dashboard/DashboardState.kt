@@ -9,7 +9,26 @@ import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import java.time.LocalDate
 
 data class DashboardState(
+    /**
+     * The date currently being viewed on the dashboard.
+     *
+     * This should remain stable unless the user explicitly changes day.
+     * It must not auto-shift on resume just because the real-world date changed.
+     */
     val date: LocalDate = LocalDate.now(),
+
+    /**
+     * The app's current reference for "today".
+     *
+     * This should be refreshed on resume so header labels such as:
+     * - Today
+     * - Yesterday
+     * - Tomorrow
+     *
+     * can update without changing [date].
+     */
+    val currentDate: LocalDate = LocalDate.now(),
+
     val totals: MacroTotals = MacroTotals(),
     val todayItems: List<TodayLogItem> = emptyList(),
 

@@ -34,6 +34,7 @@ fun CalendarDayCell(
     cell: CalendarCell,
     isSelected: Boolean,
     iconStatus: DayIconStatus?,
+    isToday: Boolean,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
@@ -42,7 +43,7 @@ fun CalendarDayCell(
     val bg = MaterialTheme.colorScheme.surfaceVariant
 
     val today = LocalDate.now()
-    val isToday = cell.date == today
+//    val isToday = cell.date == today
 
     val backgroundColor = when {
         isToday -> MaterialTheme.colorScheme.secondaryContainer

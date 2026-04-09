@@ -31,6 +31,7 @@ fun MonthlyCalendar(
     dayIconStatusByDate: Map<LocalDate, DayIconStatus> = emptyMap(),
     modifier: Modifier = Modifier,
     selectedDate: LocalDate? = null,
+    currentDate: LocalDate,
     onDateClick: (LocalDate) -> Unit
 ) {
     val cells = remember(month, plannedDates) {
@@ -51,13 +52,19 @@ fun MonthlyCalendar(
             userScrollEnabled = false
         ) {
             items(cells) { cell ->
+                val date = cell.date
+
+                val isSelected = (date != null && date == selectedDate)
+                val isToday = (date != null && date == currentDate)
+
                 CalendarDayCell(
                     cell = cell,
-                    isSelected = (cell.date != null && cell.date == selectedDate),
-                    iconStatus = cell.date?.let { dayIconStatusByDate[it] },
+                    isSelected = isSelected,
+                    isToday = isToday, // 👈 NEW
+                    iconStatus = date?.let { dayIconStatusByDate[it] },
                     onClick = {
-                        val date = cell.date ?: return@CalendarDayCell
-                        onDateClick(date)
+                        val d = date ?: return@CalendarDayCell
+                        onDateClick(d)
                     }
                 )
             }

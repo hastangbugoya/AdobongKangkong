@@ -115,6 +115,7 @@ class DashboardViewModel @Inject constructor(
 
     private val zoneId = ZoneId.systemDefault()
 
+    private val currentDateFlow = MutableStateFlow(LocalDate.now())
     private val macrosFlow =
         selectedDateFlow.flatMapLatest { date ->
             observeTodayMacrosUseCase(date = date, zoneId = zoneId)
@@ -181,6 +182,9 @@ class DashboardViewModel @Inject constructor(
     fun useTwoWeeks() = setRollingDays(14)
     fun useMonth() = setRollingDays(30)
 
+    fun onScreenResumed() {
+        currentDateFlow.value = LocalDate.now()
+    }
     fun buildSharedSnapshotJson() {
         val date = selectedDateFlow.value
         val zoneId = ZoneId.systemDefault()

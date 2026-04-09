@@ -80,6 +80,13 @@ class CalendarViewModel @Inject constructor(
     private val _month = MutableStateFlow(YearMonth.now())
     val month: StateFlow<YearMonth> = _month
 
+    private val _currentDate = MutableStateFlow(LocalDate.now())
+    val currentDate: StateFlow<LocalDate> = _currentDate
+
+    fun onScreenResumed() {
+        _currentDate.value = LocalDate.now()
+    }
+
     private val zoneId = ZoneId.systemDefault()
 
     private val _selectedDate = MutableStateFlow<LocalDate?>(null)
@@ -327,7 +334,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun goToCurrentGraphWeek() {
-        _graphWeekStart.value = startOfWeek(LocalDate.now())
+        _graphWeekStart.value = startOfWeek(_currentDate.value)
     }
 
     // DEBUG
@@ -336,7 +343,7 @@ class CalendarViewModel @Inject constructor(
         debugJob?.cancel()
 
         debugJob = viewModelScope.launch {
-            val start = LocalDate.now()
+            val start = _currentDate.value
 
             // --- NEEDS ---
             observePlannedFoodNeeds(

@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -29,6 +30,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.adobongkangkong.R
 import java.time.LocalDate
 
@@ -53,6 +57,7 @@ fun CalendarScreen(
     val settingsSheetOpen by vm.settingsSheetOpen.collectAsState()
     val calendarSuccessOptions by vm.calendarSuccessOptions.collectAsState()
     val selectedCalendarSuccessKeys by vm.selectedCalendarSuccessKeys.collectAsState()
+    val currentDate by vm.currentDate.collectAsState()
 
     val daySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -63,6 +68,17 @@ fun CalendarScreen(
 
     LaunchedEffect(settingsSheetOpen) {
         if (settingsSheetOpen) settingsSheetState.show()
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.onScreenResumed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Surface(color = MaterialTheme.colorScheme.background) {
@@ -116,7 +132,8 @@ fun CalendarScreen(
                         dayIconStatusByDate = dayIconStatusByDate,
                         selectedDate = selectedDate,
                         onDateClick = vm::onDateClicked,
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        currentDate = currentDate
                     )
                 }
 
