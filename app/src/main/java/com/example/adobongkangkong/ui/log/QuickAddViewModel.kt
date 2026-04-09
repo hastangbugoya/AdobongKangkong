@@ -1144,7 +1144,7 @@ class QuickAddViewModel @Inject constructor(
         inputModeFlow.value = when {
             unit.asG != null -> InputMode.GRAMS
             unit == food.servingUnit -> InputMode.SERVING_UNIT
-            unit.asMl != null -> InputMode.SERVING_UNIT
+            unit.asMl != null -> InputMode.GRAMS   // ✅ treat volume like grams (derived)
             else -> InputMode.SERVING_UNIT
         }
     }
@@ -1449,8 +1449,11 @@ class QuickAddViewModel @Inject constructor(
         }
 
         val inputMlPerUnit = unit.asMl ?: return null
-        val foodMlPerUnit = food.servingUnit.asMl ?: return null
-        if (foodMlPerUnit <= 0.0) return null
+
+        val foodMlPerUnit =
+            food.mlPerServingUnit?.takeIf { it > 0.0 }
+                ?: food.servingUnit.asMl?.takeIf { it > 0.0 }
+                ?: return null
 
         val gPerUnit = food.gramsPerServingUnitResolved() ?: return null
         if (gPerUnit <= 0.0) return null
