@@ -40,7 +40,68 @@ interface FoodRepository {
     suspend fun cleanupOrphanFoodMedia(): Int
 
     suspend fun getByStableId(stableId: String): Food?
+
+    // -------------------------
+    // New: store pricing APIs
+    // -------------------------
+
+    /**
+     * Inserts or replaces the current best-known price for a food at a store.
+     *
+     * Current contract:
+     * - One active price row per (foodId, storeId)
+     * - Re-saving the same pair replaces the old value
+     */
+    suspend fun upsertFoodStorePrice(
+        foodId: Long,
+        storeId: Long,
+        estimatedPrice: Double
+    ): Long
+
+    /**
+     * Removes the current price row for a food-store pair.
+     */
+    suspend fun deleteFoodStorePrice(
+        foodId: Long,
+        storeId: Long
+    )
+
+    /**
+     * Returns the average price for a food across all stores.
+     *
+     * Today:
+     * - One row per store, so this is the mean of current known store prices.
+     *
+     * Later:
+     * - If price history is added, this method can remain while repository logic
+     *   decides whether to average all rows or latest-per-store rows.
+     */
+    suspend fun getAveragePriceForFood(foodId: Long): Double?
+
+    /**
+     * Observable version of average price for a food across all stores.
+     */
+    fun observeAveragePriceForFood(foodId: Long): Flow<Double?>
+
+    /**
+     * Returns the current price for a specific food-store pair.
+     *
+     * Because the table currently enforces uniqueness on (foodId, storeId),
+     * this is effectively the current stored value for that relationship.
+     */
+    suspend fun getAveragePriceForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Double?
+
+    /**
+     * Observable version of the current price for a specific food-store pair.
+     *
+     * Named "average" intentionally to preserve a stable contract if multi-row
+     * or historical pricing is introduced later.
+     */
+    fun observeAveragePriceForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Flow<Double?>
 }
-
-
-

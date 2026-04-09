@@ -4,14 +4,16 @@ import android.util.Log
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.dao.FoodNutrientDao
+import com.example.adobongkangkong.data.local.db.dao.FoodStorePriceDao
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedItemDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
+import com.example.adobongkangkong.data.local.db.entity.FoodStorePriceEntity
 import com.example.adobongkangkong.data.local.db.mapper.toDomain
-import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.data.local.db.mapper.toEntity
 import com.example.adobongkangkong.domain.logging.model.FoodRef
+import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -29,6 +31,7 @@ class FoodRepositoryImpl @Inject constructor(
     private val logEntryDao: LogEntryDao,
     private val plannedItemDao: PlannedItemDao,
     private val recipeBatchDao: RecipeBatchDao,
+    private val foodStorePriceDao: FoodStorePriceDao,
     private val foodImageStorage: FoodImageStorage
 ) : FoodRepository {
 
@@ -57,11 +60,6 @@ class FoodRepositoryImpl @Inject constructor(
         return FoodRef.Food(foodId = entity.id)
     }
 
-    /**
-     * Default delete behavior: SOFT delete.
-     *
-     * Kept for compatibility with existing callers.
-     */
     override suspend fun deleteFood(foodId: Long): Boolean {
         val now = System.currentTimeMillis()
         foodDao.softDeleteById(id = foodId, deletedAtEpochMs = now)
@@ -69,7 +67,6 @@ class FoodRepositoryImpl @Inject constructor(
     }
 
     override suspend fun softDeleteFood(foodId: Long) {
-        // Idempotent: if missing, no-op.
         val now = Instant.now().toEpochMilli()
         foodDao.softDeleteById(id = foodId, deletedAtEpochMs = now)
     }
@@ -86,23 +83,17 @@ class FoodRepositoryImpl @Inject constructor(
 
         val stableId = entity.stableId
 
-        // Logs reference stableId (not foodId)
         val logsCount = logEntryDao.countByFoodStableId(stableId)
 
-        // Planner references (FOOD refId is foodId)
         val plannedCount = plannedItemDao.countByTypeAndRefId(
             type = PlannedItemSource.FOOD,
             refId = foodId
         )
 
-        // Food used as ingredient
         val ingredientCount = recipeIngredientDao.countRecipesUsingFood(foodId)
 
-        // Food used as a batch snapshot
         val batchSnapshotCount = recipeBatchDao.countByBatchFoodId(foodId)
 
-        // IMPORTANT: Hard delete for recipe-foods needs RecipeDao cleanup too.
-        // We refuse hard delete here rather than guessing.
         val isRecipeFood = entity.isRecipe
 
         return FoodHardDeleteBlockers(
@@ -115,16 +106,9 @@ class FoodRepositoryImpl @Inject constructor(
     }
 
     override suspend fun hardDeleteFood(foodId: Long) {
-        // Execute-only. Policy enforced by use case.
-
-        // Delete owned rows first to avoid orphans (and to work even without FK cascades).
         foodNutrientDao.deleteForFood(foodId)
         foodGoalFlagsDao.clear(foodId)
-
-        // Delete food row
         foodDao.deleteById(foodId)
-
-        // Media cleanup (best-effort)
         foodImageStorage.deleteBanner(foodId)
     }
 
@@ -134,10 +118,8 @@ class FoodRepositoryImpl @Inject constructor(
     override suspend fun cleanupOrphanFoodMedia(): Int {
         var deletedCount = 0
 
-        // 1) Clean cache blur derivatives (safe to wipe)
         deletedCount += foodImageStorage.deleteAllBlurCache()
 
-        // 2) Clean orphan banners in filesDir (only if food id no longer exists)
         val orphanIds = foodImageStorage.findFoodIdsWithBannerInFilesDir()
         if (orphanIds.isEmpty()) return deletedCount
 
@@ -151,5 +133,50 @@ class FoodRepositoryImpl @Inject constructor(
         return deletedCount
     }
 
-}
+    // -------------------------
+    // 🔥 NEW: pricing
+    // -------------------------
 
+    override suspend fun upsertFoodStorePrice(
+        foodId: Long,
+        storeId: Long,
+        estimatedPrice: Double
+    ): Long {
+        return foodStorePriceDao.upsertFoodStorePrice(
+            FoodStorePriceEntity(
+                foodId = foodId,
+                storeId = storeId,
+                estimatedPrice = estimatedPrice
+            )
+        )
+    }
+
+    override suspend fun deleteFoodStorePrice(
+        foodId: Long,
+        storeId: Long
+    ) {
+        foodStorePriceDao.deleteByFoodIdAndStoreId(foodId, storeId)
+    }
+
+    override suspend fun getAveragePriceForFood(foodId: Long): Double? {
+        return foodStorePriceDao.getAveragePriceForFood(foodId)
+    }
+
+    override fun observeAveragePriceForFood(foodId: Long): Flow<Double?> {
+        return foodStorePriceDao.observeAveragePriceForFood(foodId)
+    }
+
+    override suspend fun getAveragePriceForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Double? {
+        return foodStorePriceDao.getAveragePriceForFoodAtStore(foodId, storeId)
+    }
+
+    override fun observeAveragePriceForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Flow<Double?> {
+        return foodStorePriceDao.observeAveragePriceForFoodAtStore(foodId, storeId)
+    }
+}

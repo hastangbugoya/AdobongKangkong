@@ -300,6 +300,40 @@ class UpdateLogEntryUseCaseTest {
 
         override suspend fun getByStableId(stableId: String): Food? =
             if (stableId == food.stableId) food else null
+
+        override suspend fun upsertFoodStorePrice(
+            foodId: Long,
+            storeId: Long,
+            estimatedPrice: Double
+        ): Long {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override suspend fun deleteFoodStorePrice(foodId: Long, storeId: Long) {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override suspend fun getAveragePriceForFood(foodId: Long): Double? {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override fun observeAveragePriceForFood(foodId: Long): Flow<Double?> {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override suspend fun getAveragePriceForFoodAtStore(
+            foodId: Long,
+            storeId: Long
+        ): Double? {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override fun observeAveragePriceForFoodAtStore(
+            foodId: Long,
+            storeId: Long
+        ): Flow<Double?> {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
     }
 
     private class TestSnapshotRepo(
