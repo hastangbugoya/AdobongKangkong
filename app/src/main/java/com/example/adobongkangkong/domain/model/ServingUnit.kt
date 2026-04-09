@@ -47,9 +47,7 @@ enum class ServingUnit(
     CUP_METRIC("cup (metric)", asMl = 250.0),
     CUP_JP("cup (JP)", asMl = 200.0),
 
-    // Rice cooker cup (commonly used for dry rice measurement)
-    // Deterministic as a volume, but NOT safe to convert to grams without density.
-    RCCUP("rc cup (180 g)", asG = 180.0),
+
 
     // Imperial / UK volume set (exact)
     FL_OZ_IMP("fl oz (imp)", asMl = 28.4130625),
@@ -72,8 +70,11 @@ enum class ServingUnit(
     BOTTLE("bottle"),
     JAR("jar"),
     SERVING("serving"),
+    STICK("stick"),
     OTHER("other"),
     BATCH("batch"),
+    // Rice cooker cup (commonly used for dry rice measurement), grams is used since majority of food labels have grams for rice
+    RCCUP("rc cup"),
 
     /**
      * Legacy aliases kept for backward compatibility.
