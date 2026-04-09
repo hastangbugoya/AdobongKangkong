@@ -54,7 +54,6 @@ import javax.inject.Inject
  *
  * - Validates [Input] for internal consistency:
  *   - slotRules non-empty
- *   - endConditionType is one of the allowed enum names
  *   - endConditionValue presence matches endConditionType requirements
  *   - weekday range is 1..7 (Mon..Sun)
  *   - CUSTOM slot requires customLabel
@@ -151,7 +150,7 @@ class CreatePlannedSeriesUseCase @Inject constructor(
      *   This is an additional clamp separate from endConditionType/value.
      *
      * - [endConditionType]:
-     *   Enum-name string from [PlannedSeriesEndConditionType]:
+     *   Strongly typed recurrence end condition:
      *   UNTIL_DATE / REPEAT_COUNT / INDEFINITE.
      *
      * - [endConditionValue]:
@@ -174,7 +173,7 @@ class CreatePlannedSeriesUseCase @Inject constructor(
     data class Input(
         val effectiveStartDateIso: String,   // yyyy-MM-dd
         val effectiveEndDateIso: String? = null,
-        val endConditionType: String,        // PlannedSeriesEndConditionType.*
+        val endConditionType: PlannedSeriesEndConditionType,
         val endConditionValue: String? = null,
         val slotRules: List<SlotRuleInput>,
         val sourceMealId: Long,
@@ -221,19 +220,15 @@ class CreatePlannedSeriesUseCase @Inject constructor(
     private fun validate(input: Input) {
         require(input.slotRules.isNotEmpty()) { "slotRules cannot be empty" }
 
-        require(
-            input.endConditionType == PlannedSeriesEndConditionType.UNTIL_DATE ||
-                    input.endConditionType == PlannedSeriesEndConditionType.REPEAT_COUNT ||
-                    input.endConditionType == PlannedSeriesEndConditionType.INDEFINITE
-        ) { "Invalid endConditionType: ${input.endConditionType}" }
-
         when (input.endConditionType) {
             PlannedSeriesEndConditionType.UNTIL_DATE -> require(!input.endConditionValue.isNullOrBlank()) {
                 "endConditionValue (until date ISO) required for UNTIL_DATE"
             }
+
             PlannedSeriesEndConditionType.REPEAT_COUNT -> require(!input.endConditionValue.isNullOrBlank()) {
                 "endConditionValue (repeat count) required for REPEAT_COUNT"
             }
+
             PlannedSeriesEndConditionType.INDEFINITE -> {
                 // endConditionValue should be null; allow but ignore if passed
             }

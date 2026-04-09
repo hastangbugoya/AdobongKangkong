@@ -78,6 +78,12 @@ enum class RecurrenceFrequencyUi {
     WEEKLY,
 }
 
+enum class RecurrenceEndConditionUi {
+    INDEFINITE,
+    UNTIL_DATE,
+    REPEAT_COUNT,
+}
+
 data class RecurringDayRuleUiState(
     val weekday: Int,
     val isEnabled: Boolean,
@@ -90,6 +96,32 @@ data class RecurringEditorState(
     val anchorWeekday: Int,
     val frequency: RecurrenceFrequencyUi,
     val rules: List<RecurringDayRuleUiState>,
+
+    /**
+     * PlannedSeries end condition editor state.
+     *
+     * INDEFINITE
+     * - no explicit end
+     *
+     * UNTIL_DATE
+     * - inclusive end date
+     *
+     * REPEAT_COUNT
+     * - total intended occurrences for this series
+     */
+    val endConditionType: RecurrenceEndConditionUi = RecurrenceEndConditionUi.INDEFINITE,
+
+    /**
+     * Inclusive end date used when endConditionType == UNTIL_DATE.
+     */
+    val endDate: LocalDate? = null,
+
+    /**
+     * Raw text field for repeat-count entry so the UI can use a stable integer input
+     * without cursor jumping/reformat churn.
+     */
+    val repeatCountText: String = "",
+
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
 )

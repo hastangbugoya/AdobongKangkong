@@ -22,10 +22,12 @@ data class PlannedSeriesEntity(
     val effectiveEndDate: String? = null,
 
     /**
-     * UNTIL_DATE | REPEAT_COUNT | INDEFINITE
-     * Stored as TEXT to avoid adding converters in Phase 0.
+     * Recurrence end-condition mode for this series.
+     *
+     * Room supports enum persistence via enum-to-string conversion, so this can remain
+     * strongly typed in Kotlin while still being stored in a single database column.
      */
-    val endConditionType: String,
+    val endConditionType: PlannedSeriesEndConditionType,
 
     /**
      * For UNTIL_DATE: ISO yyyy-MM-dd
@@ -44,8 +46,8 @@ data class PlannedSeriesEntity(
     val updatedAtEpochMs: Long
 )
 
-object PlannedSeriesEndConditionType {
-    const val UNTIL_DATE = "UNTIL_DATE"
-    const val REPEAT_COUNT = "REPEAT_COUNT"
-    const val INDEFINITE = "INDEFINITE"
+enum class PlannedSeriesEndConditionType {
+    UNTIL_DATE,
+    REPEAT_COUNT,
+    INDEFINITE
 }

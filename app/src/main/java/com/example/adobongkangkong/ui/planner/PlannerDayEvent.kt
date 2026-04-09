@@ -77,6 +77,20 @@ sealed interface PlannerDayEvent {
     data class UpdateRecurringFrequency(val frequency: RecurrenceFrequencyUi) : PlannerDayEvent
     data class ToggleRecurringWeekday(val weekday: Int, val enabled: Boolean) : PlannerDayEvent
     data class UpdateRecurringWeekdaySlot(val weekday: Int, val slot: MealSlot) : PlannerDayEvent
+
+    // NEW: recurring end condition UI
+    data class UpdateRecurringEndConditionType(
+        val endConditionType: RecurrenceEndConditionUi
+    ) : PlannerDayEvent
+
+    data class UpdateRecurringUntilDate(
+        val dateIso: String?
+    ) : PlannerDayEvent
+
+    data class UpdateRecurringRepeatCountText(
+        val value: String
+    ) : PlannerDayEvent
+
     data object ConfirmMakeRecurring : PlannerDayEvent
 
     data class LogMeal(val mealId: Long) : PlannerDayEvent

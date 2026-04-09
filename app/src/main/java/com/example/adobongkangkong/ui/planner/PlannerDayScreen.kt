@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -54,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
@@ -63,6 +66,7 @@ import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.math.round
@@ -327,8 +331,6 @@ private fun EmptySlotCard(
                 "Add a meal to plan foods/recipes for this slot.",
                 style = MaterialTheme.typography.bodySmall
             )
-//            Spacer(Modifier.height(10.dp))
-//            TextButton(onClick = onAdd) { Text("Add") }
         }
     }
 }
@@ -384,6 +386,8 @@ private fun RecurringMealBottomSheet(
     sheet: RecurringEditorState,
     onEvent: (PlannerDayEvent) -> Unit,
 ) {
+    var showEndDatePicker by remember(sheet.mealId, sheet.endDate) { mutableStateOf(false) }
+
     ModalBottomSheet(
         onDismissRequest = { onEvent(PlannerDayEvent.DismissRecurringEditor) }
     ) {
@@ -410,22 +414,30 @@ private fun RecurringMealBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
-                    modifier = Modifier.clickable { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.DAILY)) },
+                    modifier = Modifier.clickable {
+                        onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.DAILY))
+                    },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = sheet.frequency == RecurrenceFrequencyUi.DAILY,
-                        onClick = { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.DAILY)) }
+                        onClick = {
+                            onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.DAILY))
+                        }
                     )
                     Text("Daily")
                 }
                 Row(
-                    modifier = Modifier.clickable { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.WEEKLY)) },
+                    modifier = Modifier.clickable {
+                        onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.WEEKLY))
+                    },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = sheet.frequency == RecurrenceFrequencyUi.WEEKLY,
-                        onClick = { onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.WEEKLY)) }
+                        onClick = {
+                            onEvent(PlannerDayEvent.UpdateRecurringFrequency(RecurrenceFrequencyUi.WEEKLY))
+                        }
                     )
                     Text("Weekly")
                 }
@@ -448,6 +460,116 @@ private fun RecurringMealBottomSheet(
                         onSlotSelected = { slot ->
                             onEvent(PlannerDayEvent.UpdateRecurringWeekdaySlot(rule.weekday, slot))
                         }
+                    )
+                }
+            }
+
+            Text(
+                text = "Ends",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringEndConditionType(
+                                    RecurrenceEndConditionUi.INDEFINITE
+                                )
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = sheet.endConditionType == RecurrenceEndConditionUi.INDEFINITE,
+                        onClick = {
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringEndConditionType(
+                                    RecurrenceEndConditionUi.INDEFINITE
+                                )
+                            )
+                        }
+                    )
+                    Text("Never ends")
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringEndConditionType(
+                                    RecurrenceEndConditionUi.UNTIL_DATE
+                                )
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = sheet.endConditionType == RecurrenceEndConditionUi.UNTIL_DATE,
+                        onClick = {
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringEndConditionType(
+                                    RecurrenceEndConditionUi.UNTIL_DATE
+                                )
+                            )
+                        }
+                    )
+                    Text("Until date")
+                }
+
+                if (sheet.endConditionType == RecurrenceEndConditionUi.UNTIL_DATE) {
+                    TextButton(
+                        onClick = { showEndDatePicker = true }
+                    ) {
+                        Text(
+                            sheet.endDate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                                ?: "Pick end date"
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringEndConditionType(
+                                    RecurrenceEndConditionUi.REPEAT_COUNT
+                                )
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = sheet.endConditionType == RecurrenceEndConditionUi.REPEAT_COUNT,
+                        onClick = {
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringEndConditionType(
+                                    RecurrenceEndConditionUi.REPEAT_COUNT
+                                )
+                            )
+                        }
+                    )
+                    Text("After count")
+                }
+
+                if (sheet.endConditionType == RecurrenceEndConditionUi.REPEAT_COUNT) {
+                    OutlinedTextField(
+                        value = sheet.repeatCountText,
+                        onValueChange = { raw ->
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringRepeatCountText(
+                                    raw.filter { it.isDigit() }
+                                )
+                            )
+                        },
+                        label = { Text("Occurrence count") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                 }
             }
@@ -490,6 +612,59 @@ private fun RecurringMealBottomSheet(
             }
 
             Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    if (showEndDatePicker) {
+        val initialSelectedMillis = remember(sheet.endDate) {
+            sheet.endDate
+                ?.atStartOfDay(ZoneOffset.UTC)
+                ?.toInstant()
+                ?.toEpochMilli()
+        }
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialSelectedMillis
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val millis = pickerState.selectedDateMillis
+                        onEvent(
+                            PlannerDayEvent.UpdateRecurringUntilDate(
+                                millis?.let {
+                                    Instant.ofEpochMilli(it)
+                                        .atZone(ZoneOffset.UTC)
+                                        .toLocalDate()
+                                        .toString()
+                                }
+                            )
+                        )
+                        showEndDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            onEvent(PlannerDayEvent.UpdateRecurringUntilDate(null))
+                            showEndDatePicker = false
+                        }
+                    ) {
+                        Text("Clear")
+                    }
+                    TextButton(onClick = { showEndDatePicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        ) {
+            DatePicker(state = pickerState)
         }
     }
 }

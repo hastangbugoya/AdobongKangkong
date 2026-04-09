@@ -166,12 +166,21 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
         if (windowEnd.isBefore(windowStart)) return 0
 
         // Further clamp by endCondition (UNTIL_DATE / REPEAT_COUNT / INDEFINITE)
-        windowEnd = applyEndConditionClamp(series.endConditionType, series.endConditionValue, windowStart, windowEnd)
+        windowEnd = applyEndConditionClamp(
+            endConditionType = series.endConditionType,
+            endConditionValue = series.endConditionValue,
+            windowStart = windowStart,
+            windowEnd = windowEnd
+        )
 
         if (windowEnd.isBefore(windowStart)) return 0
 
         // Load existing occurrences for dedupe (single DB hit)
-        val existing = mealsRepo.getMealsForSeriesInRange(seriesId, windowStart.toString(), windowEnd.toString())
+        val existing = mealsRepo.getMealsForSeriesInRange(
+            seriesId,
+            windowStart.toString(),
+            windowEnd.toString()
+        )
 
         // Key by (dateIso, slotName, customLabelNormalized)
         val existingKeys = existing.asSequence()
@@ -217,7 +226,7 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
     }
 
     private fun applyEndConditionClamp(
-        endConditionType: String,
+        endConditionType: PlannedSeriesEndConditionType,
         endConditionValue: String?,
         windowStart: LocalDate,
         windowEnd: LocalDate
@@ -234,14 +243,13 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
                 // Repeat N times in terms of OCCURRENCES is ambiguous when multiple slot rules exist.
                 // Phase 1 interpretation: cap by DAYS from windowStart (N days).
                 val nDays = endConditionValue?.toIntOrNull()
-                if (nDays == null || nDays <= 0) windowEnd
-                else {
+                if (nDays == null || nDays <= 0) {
+                    windowEnd
+                } else {
                     val cap = windowStart.plusDays((nDays - 1).toLong())
                     minOf(windowEnd, cap)
                 }
             }
-
-            else -> windowEnd
         }
     }
 }

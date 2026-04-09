@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.adobongkangkong.ui.planner.RecurrenceEndConditionUi
 
 @HiltViewModel
 class PlannerDayViewModel @Inject constructor(
@@ -375,6 +376,43 @@ class PlannerDayViewModel @Inject constructor(
 
             is PlannerDayEvent.OpenTemplatePicker -> {
                 // Navigation-only; handled by Route/NavHost.
+            }
+
+            is PlannerDayEvent.UpdateRecurringEndConditionType -> {
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    s.copy(
+                        recurringEditor = ed.copy(
+                            endConditionType = event.endConditionType,
+                            errorMessage = null
+                        )
+                    )
+                }
+            }
+
+            is PlannerDayEvent.UpdateRecurringUntilDate -> {
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    s.copy(
+                        recurringEditor = ed.copy(
+                            endDate = event.dateIso?.let { LocalDate.parse(it) },
+                            errorMessage = null
+                        )
+                    )
+                }
+            }
+
+            is PlannerDayEvent.UpdateRecurringRepeatCountText -> {
+                _state.update { s ->
+                    val ed = s.recurringEditor ?: return@update s
+                    val digitsOnly = event.value.filter { it.isDigit() }
+                    s.copy(
+                        recurringEditor = ed.copy(
+                            repeatCountText = digitsOnly,
+                            errorMessage = null
+                        )
+                    )
+                }
             }
         }
     }
@@ -725,6 +763,37 @@ class PlannerDayViewModel @Inject constructor(
             )
         }
 
+        // 🔥 NEW: map UI → domain
+        val (endType, endValue) = when (snapshot.endConditionType) {
+            RecurrenceEndConditionUi.INDEFINITE -> {
+                PlannedSeriesEndConditionType.INDEFINITE to null
+            }
+
+            RecurrenceEndConditionUi.UNTIL_DATE -> {
+                val date = snapshot.endDate
+                if (date == null) {
+                    _state.update { s ->
+                        val ed = s.recurringEditor ?: return@update s
+                        s.copy(recurringEditor = ed.copy(errorMessage = "Select an end date."))
+                    }
+                    return
+                }
+                PlannedSeriesEndConditionType.UNTIL_DATE to date.toString()
+            }
+
+            RecurrenceEndConditionUi.REPEAT_COUNT -> {
+                val count = snapshot.repeatCountText.toIntOrNull()
+                if (count == null || count <= 0) {
+                    _state.update { s ->
+                        val ed = s.recurringEditor ?: return@update s
+                        s.copy(recurringEditor = ed.copy(errorMessage = "Enter a valid repeat count."))
+                    }
+                    return
+                }
+                PlannedSeriesEndConditionType.REPEAT_COUNT to count.toString()
+            }
+        }
+
         _state.update { s ->
             val ed = s.recurringEditor ?: return@update s
             s.copy(recurringEditor = ed.copy(isSaving = true, errorMessage = null))
@@ -736,13 +805,24 @@ class PlannerDayViewModel @Inject constructor(
                     mealId = snapshot.mealId,
                     horizonDays = 180,
                     slotRulesOverride = slotRules,
+
+                    // 🔥 THIS IS THE MISSING PIECE
+                    endConditionType = endType,
+                    endConditionValue = endValue
                 )
+
                 _state.update { it.copy(recurringEditor = null) }
                 _events.tryEmit(PlannerDayUiEvent.ShowToast("Recurring series created."))
+
             } catch (t: Throwable) {
                 _state.update { s ->
                     val ed = s.recurringEditor ?: return@update s
-                    s.copy(recurringEditor = ed.copy(isSaving = false, errorMessage = t.message ?: "Failed to make meal recurring"))
+                    s.copy(
+                        recurringEditor = ed.copy(
+                            isSaving = false,
+                            errorMessage = t.message ?: "Failed to make meal recurring"
+                        )
+                    )
                 }
             }
         }
