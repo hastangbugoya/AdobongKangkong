@@ -63,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -327,16 +328,49 @@ fun RecipeBuilderScreen(
                 )
             }
 
+            fun Double.cleanRecipeYield(): String =
+                if (this % 1.0 == 0.0) this.toInt().toString() else this.toString()
+
             item {
+                var servingsYieldText by rememberSaveable(editFoodId) {
+                    mutableStateOf(state.servingsYield.cleanRecipeYield())
+                }
+                var servingsYieldFocused by remember { mutableStateOf(false) }
+
+                LaunchedEffect(state.servingsYield, servingsYieldFocused) {
+                    if (!servingsYieldFocused) {
+                        servingsYieldText = state.servingsYield.cleanRecipeYield()
+                    }
+                }
+
                 OutlinedTextField(
-                    value = state.servingsYield.toString(),
-                    onValueChange = { raw -> raw.toDoubleOrNull()?.let(vm::onYieldChange) },
+                    value = servingsYieldText,
+                    onValueChange = { raw ->
+                        servingsYieldText = raw
+                        raw.toDoubleOrNull()?.let(vm::onYieldChange)
+                    },
                     label = { Text("Servings yield") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            val nowFocused = focusState.isFocused
+                            if (servingsYieldFocused && !nowFocused) {
+                                val parsed = servingsYieldText.toDoubleOrNull()
+                                servingsYieldText = if (parsed != null) {
+                                    parsed.cleanRecipeYield()
+                                } else {
+                                    state.servingsYield.cleanRecipeYield()
+                                }
+                            }
+                            servingsYieldFocused = nowFocused
+                        },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true
                 )
             }
+
+
+
             item { Spacer(Modifier.height(4.dp)) }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
