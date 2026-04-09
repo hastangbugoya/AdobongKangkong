@@ -47,21 +47,18 @@ import com.example.adobongkangkong.domain.model.AliasAddResult
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
 import com.example.adobongkangkong.domain.model.Nutrient
-import com.example.adobongkangkong.domain.model.NutrientCategory
-import com.example.adobongkangkong.domain.nutrition.NutrientKey
-import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.canResolveToGramsDeterministically
-import com.example.adobongkangkong.domain.model.fromUsda
 import com.example.adobongkangkong.domain.model.canResolveToMlDeterministically
-import com.example.adobongkangkong.domain.model.requiresExplicitGrounding
+import com.example.adobongkangkong.domain.model.fromUsda
 import com.example.adobongkangkong.domain.model.isMassUnit
-import com.example.adobongkangkong.domain.model.isVolumeUnit
+import com.example.adobongkangkong.domain.model.requiresExplicitGrounding
 import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ApplyEditedNutrientsUseCase
 import com.example.adobongkangkong.domain.nutrition.NutrientBasisScaler
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.RecomputeDisplayedNutrientsUseCase
 import com.example.adobongkangkong.domain.nutrition.ResolveServingGroundingUseCase
 import com.example.adobongkangkong.domain.nutrition.ServingResolution
@@ -85,8 +82,6 @@ import com.example.adobongkangkong.domain.usecase.SaveFoodWithNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SearchNutrientsUseCase
 import com.example.adobongkangkong.domain.usecase.SoftDeleteFoodUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.util.UUID
-import javax.inject.Inject
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -99,6 +94,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.UUID
+import javax.inject.Inject
+import com.example.adobongkangkong.domain.repository.StoreRepository
+import kotlinx.coroutines.flow.asStateFlow
 
 private const val KEY_BARCODE_ASSIGN_FOOD_ID = "barcode_assign_foodId"
 private const val KEY_BARCODE_ASSIGN_BARCODE = "barcode_assign_barcode"
@@ -128,11 +127,15 @@ class FoodEditorViewModel @Inject constructor(
     private val resolveServingGrounding: ResolveServingGroundingUseCase,
     private val recomputeDisplayedNutrients: RecomputeDisplayedNutrientsUseCase,
     private val applyEditedNutrients: ApplyEditedNutrientsUseCase,
+    private val storeRepo: StoreRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FoodEditorState())
     val state: StateFlow<FoodEditorState> = _state
+
+    private val storeNamesFlow = MutableStateFlow<List<String>>(emptyList())
+    val storeNames: StateFlow<List<String>> = storeNamesFlow.asStateFlow()
 
     private val savedState = savedStateHandle
 
@@ -283,6 +286,8 @@ class FoodEditorViewModel @Inject constructor(
                 emptyList()
             }
 
+            storeNamesFlow.value = storeRepo.getAllStoreNames()
+
             loadedCanonicalNutrientsSnapshot = rows.associate { row ->
                 NutrientKey(row.nutrient.code) to row.amount
             }
@@ -413,6 +418,54 @@ class FoodEditorViewModel @Inject constructor(
             )
 
             _state.value = applyNeedsFix(resolvedNext, current)
+        }
+    }
+
+    fun updateStorePrice(storeName: String, priceText: String) {
+        val foodId = _state.value.foodId ?: run {
+            update { it.copy(errorMessage = "Save the food first before adding a store price.") }
+            return
+        }
+
+        val trimmedStoreName = storeName.trim()
+        if (trimmedStoreName.isBlank()) {
+            update { it.copy(errorMessage = "Store is required.") }
+            return
+        }
+
+        val price = priceText.trim().toDoubleOrNull()
+        if (price == null || price <= 0.0) {
+            update { it.copy(errorMessage = "Estimated price must be a positive number.") }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val storeId = storeRepo.getStoreIdByName(trimmedStoreName)
+                if (storeId == null) {
+                    update {
+                        it.copy(errorMessage = "Store not found: $trimmedStoreName")
+                    }
+                    return@launch
+                }
+
+                foodRepo.upsertFoodStorePrice(
+                    foodId = foodId,
+                    storeId = storeId,
+                    estimatedPrice = price
+                )
+
+                update {
+                    it.copy(
+                        errorMessage = null,
+                        barcodeActionMessage = "Updated $trimmedStoreName price to $priceText."
+                    )
+                }
+            } catch (t: Throwable) {
+                update {
+                    it.copy(errorMessage = t.message ?: "Failed to update store price.")
+                }
+            }
         }
     }
 

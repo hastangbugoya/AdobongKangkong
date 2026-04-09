@@ -34,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -67,7 +68,6 @@ import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
-import com.example.adobongkangkong.ui.common.editoraction.EditorActionMenu
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.theme.AppIconSize
 
@@ -219,6 +219,10 @@ fun FoodEditorScreen(
     // Optional dismiss action for needs-fix banner
     onDismissNeedsFixBanner: (() -> Unit)? = null,
 
+    // Store price shell UI
+    storePriceStoreNames: List<String> = emptyList(),
+    onUpdateStorePrice: ((storeName: String, priceText: String) -> Unit)? = null,
+
     onRecomputeDisplayedNutrients: () -> Unit,
     onConfirmDiscardNutrientEditsAndRecompute: () -> Unit,
     onDismissDiscardNutrientEditsDialog: () -> Unit,
@@ -232,6 +236,13 @@ fun FoodEditorScreen(
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    var showStorePriceSheet by remember { mutableStateOf(false) }
+    var storePriceExpanded by remember { mutableStateOf(false) }
+    var selectedStoreName by rememberSaveable { mutableStateOf(storePriceStoreNames.firstOrNull().orEmpty()) }
+    var storePriceInput by rememberSaveable { mutableStateOf("") }
+
+    var actionMenuExpanded by remember { mutableStateOf(false) }
+
     val multiplePackages = state.assignedBarcodes.size > 1
 
     fun requestExit() {
@@ -243,6 +254,10 @@ fun FoodEditorScreen(
     }
 
     BackHandler { requestExit() }
+
+    if (selectedStoreName.isBlank() && storePriceStoreNames.isNotEmpty()) {
+        selectedStoreName = storePriceStoreNames.first()
+    }
 
     if (state.barcodePickItems.isNotEmpty()) {
         AlertDialog(
@@ -687,6 +702,91 @@ fun FoodEditorScreen(
         )
     }
 
+    if (showStorePriceSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showStorePriceSheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Store price",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Text(
+                    text = "Simple first pass. Pick a store, enter a price, then update.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = storePriceExpanded,
+                    onExpandedChange = { storePriceExpanded = !storePriceExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = selectedStoreName,
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        label = { Text("Store") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = storePriceExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = storePriceExpanded,
+                        onDismissRequest = { storePriceExpanded = false }
+                    ) {
+                        storePriceStoreNames.forEach { storeName ->
+                            DropdownMenuItem(
+                                text = { Text(storeName) },
+                                onClick = {
+                                    selectedStoreName = storeName
+                                    storePriceExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = storePriceInput,
+                    onValueChange = { newValue ->
+                        storePriceInput = newValue.filter { it.isDigit() || it == '.' }
+                    },
+                    label = { Text("Estimated price") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Button(
+                    onClick = {
+                        onUpdateStorePrice?.invoke(selectedStoreName, storePriceInput)
+                        showStorePriceSheet = false
+                    },
+                    enabled = selectedStoreName.isNotBlank() &&
+                            storePriceInput.isNotBlank() &&
+                            onUpdateStorePrice != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Update")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -706,11 +806,42 @@ fun FoodEditorScreen(
                     }
                 },
                 actions = {
-                    EditorActionMenu(
-                        showDelete = (state.foodId != null && onDeleteFood != null),
-                        deleteLabel = "Delete food",
-                        onDelete = { showDeleteDialog = true }
-                    )
+                    BoxWithConstraints {
+                        IconButton(
+                            onClick = { actionMenuExpanded = true }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                contentDescription = "More actions",
+                                modifier = Modifier.size(AppIconSize.CardAction)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = actionMenuExpanded,
+                            onDismissRequest = { actionMenuExpanded = false }
+                        ) {
+                            if (state.foodId != null && onDeleteFood != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete food") },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        showDeleteDialog = true
+                                    }
+                                )
+                            }
+
+                            if (state.foodId != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Store price") },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        showStorePriceSheet = true
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             )
         },
@@ -1088,9 +1219,6 @@ fun FoodEditorScreen(
                     )
                 }
 
-                // ----------------------------------------------------
-// NEW: Recompute UX (safe, non-destructive)
-// ----------------------------------------------------
                 if (state.hasPendingRecompute) {
                     item(key = "recompute_warning") {
                         Surface(

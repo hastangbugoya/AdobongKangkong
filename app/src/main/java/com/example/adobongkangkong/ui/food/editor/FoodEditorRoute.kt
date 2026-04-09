@@ -38,6 +38,7 @@ fun FoodEditorRoute(
     val didMerge by viewModel.didMerge.collectAsState()
     val assignExistingBarcode by viewModel.assignBarcodeToExistingBarcode.collectAsState()
     val openFoodEditorRequest by viewModel.openFoodEditorRequest.collectAsState()
+    val storeNames by viewModel.storeNames.collectAsState()
 
     LaunchedEffect(Unit) {
         Log.d("Meow", "FOOD_EDITOR_ROUTE vm=${System.identityHashCode(viewModel)}")
@@ -199,7 +200,11 @@ fun FoodEditorRoute(
         onDismissNeedsFixBanner = viewModel::dismissNeedsFixBanner,
         onRecomputeDisplayedNutrients = viewModel::onRecomputeDisplayedNutrientsClicked,
         onConfirmDiscardNutrientEditsAndRecompute = viewModel::confirmDiscardNutrientEditsAndRecompute,
-        onDismissDiscardNutrientEditsDialog = viewModel::dismissDiscardNutrientEditsDialog
+        onDismissDiscardNutrientEditsDialog = viewModel::dismissDiscardNutrientEditsDialog,
+
+        // Store-price first-pass wiring
+        storePriceStoreNames = storeNames,
+        onUpdateStorePrice = viewModel::updateStorePrice
     )
 
     LaunchedEffect(mergePickedFoodId) {
@@ -263,6 +268,11 @@ fun FoodEditorRoute(
  *   pendingUsdaBackfillPrompt.
  * - Route simply forwards prompt/result callbacks between screen and ViewModel.
  * - Do not move nutrient backfill business logic into this route.
+ *
+ * Store-price flow:
+ * - Store names are loaded by the ViewModel and passed into the stateless screen.
+ * - Store price update actions route back through the ViewModel.
+ * - Keep DB/repository work out of the screen composable.
  *
  * Merge wiring:
  * - Keep merge completion bridge at route level.

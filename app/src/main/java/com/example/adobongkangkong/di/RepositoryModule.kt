@@ -15,6 +15,7 @@ import com.example.adobongkangkong.data.repository.PlannedSeriesItemRepositoryIm
 import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
+import com.example.adobongkangkong.data.repository.StoreRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserNutrientTargetRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserPinnedNutrientRepositoryImpl
 import com.example.adobongkangkong.domain.repository.CalendarSuccessNutrientRepository
@@ -32,6 +33,7 @@ import com.example.adobongkangkong.domain.repository.PlannedSeriesRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.domain.repository.StoreRepository
 import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
 import dagger.Binds
@@ -164,4 +166,11 @@ abstract class RepositoryModule {
     abstract fun bindNutrientCatalogBootstrapRepository(
         impl: NutrientCatalogBootstrapRepositoryImpl
     ): NutrientCatalogBootstrapRepository
+
+    // 🔥 NEW: Store repository binding
+    @Binds
+    @Singleton
+    abstract fun bindStoreRepository(
+        impl: StoreRepositoryImpl
+    ): StoreRepository
 }
