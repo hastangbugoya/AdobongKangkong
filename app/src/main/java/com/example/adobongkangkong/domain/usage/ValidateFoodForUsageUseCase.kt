@@ -2,8 +2,8 @@ package com.example.adobongkangkong.domain.usage
 
 import com.example.adobongkangkong.domain.logging.model.AmountInput
 import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.model.isMassUnit
-import com.example.adobongkangkong.domain.model.isVolumeUnit
+import com.example.adobongkangkong.domain.model.canResolveToGramsDeterministically
+import com.example.adobongkangkong.domain.model.canResolveToMlDeterministically
 import com.example.adobongkangkong.domain.model.requiresGramsPerServing
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
@@ -28,7 +28,7 @@ import javax.inject.Inject
  * - No silent grams↔mL conversion (no density guessing).
  * - Volume-grounded foods do NOT require grams-per-serving to be loggable by servings.
  *   "Volume-grounded" means:
- *     - servingUnit is a deterministic volume unit (asMl), OR
+ *     - servingUnit is a deterministic volume unit, OR
  *     - mlPerServingUnit bridge is present (> 0).
  * - A food with no usable nutrient basis is blocked for LOGGING and RECIPE contexts.
  *
@@ -40,17 +40,6 @@ import javax.inject.Inject
  */
 class ValidateFoodForUsageUseCase @Inject constructor() {
 
-    // -------------------------------------------------------------------------
-    // Inputs
-    // -------------------------------------------------------------------------
-
-    /**
-     * Persisted validation input (used by FoodsList + CreateLogEntry).
-     *
-     * Snapshot can be null when:
-     * - the food has never had nutrients saved
-     * - the snapshot pipeline cannot produce a canonical basis
-     */
     data class PersistedInput(
         val servingUnit: ServingUnit,
         val gramsPerServingUnit: Double?,
@@ -60,28 +49,11 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         val snapshot: FoodNutritionSnapshot?
     )
 
-    /**
-     * Draft nutrient summary for FoodEditor validation.
-     *
-     * Draft has no snapshot; we only know:
-     * - whether the editor currently has nutrient rows
-     * - whether any row contains a numeric value
-     *
-     * "All nutrients zero" is not enforced here by default (draft is free-form UI data),
-     * but you can add it later if you want to treat explicit zeros as incomplete.
-     */
     data class DraftNutrients(
         val hasAnyRows: Boolean,
         val hasAnyNumeric: Boolean
     )
 
-    /**
-     * Draft validation input (used by FoodEditor).
-     *
-     * Note: FoodEditor "fix banner" is about "loggable / recipe-usable by servings"
-     * (not necessarily a specific amount entry mode). We therefore validate it as
-     * servings-based completeness.
-     */
     data class DraftInput(
         val servingUnit: ServingUnit,
         val gramsPerServingUnit: Double?,
@@ -90,28 +62,14 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         val draft: DraftNutrients
     )
 
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
-
-    /**
-     * Persisted (snapshot-backed) validation.
-     *
-     * Use this everywhere outside FoodEditor:
-     * - FoodsList
-     * - CreateLogEntry (logging gate)
-     * - future: recipe ingredient pickers
-     */
     fun execute(input: PersistedInput): FoodValidationResult {
         val (unit, gpsu, mlpsu, amount, context, snapshot) = input
 
-        // ---------- Snapshot gate ----------
         val snap = snapshot ?: return blocked(
             reason = FoodValidationResult.Reason.MissingSnapshot,
             message = msgMissingSnapshot(context)
         )
 
-        // Determine canonical nutrient basis present
         val massMap = snap.nutrientsPerGram
         val volMap = snap.nutrientsPerMilliliter
 
@@ -125,7 +83,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
             )
         }
 
-        // If chosen basis exists but all values are zero, treat as incomplete.
         if ((hasMass && allZero(massMap)) || (hasVol && allZero(volMap))) {
             return blocked(
                 reason = FoodValidationResult.Reason.AllNutrientsZero,
@@ -133,7 +90,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
             )
         }
 
-        // ---------- Serving grounding gate (shared) ----------
         val grounding = validateServingGrounding(
             servingUnit = unit,
             gramsPerServingUnit = gpsu,
@@ -143,7 +99,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         )
         if (grounding is FoodValidationResult.Blocked) return grounding
 
-        // ---------- Basis/amount compatibility gate ----------
         return validateBasisCompatibility(
             hasMass = hasMass,
             hasVol = hasVol,
@@ -154,15 +109,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         )
     }
 
-    /**
-     * Draft (FoodEditor) validation.
-     *
-     * This intentionally validates editor completeness as "servings-based usage",
-     * because that's what matters for "loggable / recipe usable" banners:
-     * - serving backing bridges
-     * - "has nutrients"
-     * - "nutrient amounts not blank"
-     */
     fun executeDraft(input: DraftInput): FoodValidationResult {
         val (unit, gpsu, mlpsu, context, draft) = input
 
@@ -180,7 +126,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
             )
         }
 
-        // Draft banners are about "using servings". Enforce grounding accordingly.
         val amount = AmountInput.ByServings(1.0)
 
         val grounding = validateServingGrounding(
@@ -192,13 +137,8 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         )
         if (grounding is FoodValidationResult.Blocked) return grounding
 
-        // Draft does NOT know snapshot basis (per-g vs per-mL). We stop here.
         return FoodValidationResult.Ok
     }
-
-    // -------------------------------------------------------------------------
-    // Shared validators (private)
-    // -------------------------------------------------------------------------
 
     private fun validateServingGrounding(
         servingUnit: ServingUnit,
@@ -210,11 +150,16 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         val needsBacking = servingUnit.requiresGramsPerServing()
         val isServingBased = amountInput is AmountInput.ByServings
 
-        // LOCKED-IN: Volume-grounded means grams are not required for servings-based entry.
         val isVolumeGrounded =
-            servingUnit.isVolumeUnit() || (mlPerServingUnit?.takeIf { it > 0.0 } != null)
+            servingUnit.canResolveToMlDeterministically() ||
+                    (mlPerServingUnit?.takeIf { it > 0.0 } != null)
 
-        if (needsBacking && isServingBased && (gramsPerServingUnit == null || gramsPerServingUnit <= 0.0) && !isVolumeGrounded) {
+        if (
+            needsBacking &&
+            isServingBased &&
+            (gramsPerServingUnit == null || gramsPerServingUnit <= 0.0) &&
+            !isVolumeGrounded
+        ) {
             val noun = when (context) {
                 UsageContext.LOGGING -> "log this food by serving"
                 UsageContext.RECIPE -> "use this food in a recipe by servings"
@@ -227,19 +172,7 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
 
         return FoodValidationResult.Ok
     }
-    /**
-     * Validates ONLY the "servings grounding" rule, without requiring a snapshot.
-     *
-     * Use cases:
-     * - CSV import warnings ("this food will be blocked when logging by servings")
-     * - Any UX that wants to warn about missing grams-per-serving / ml-per-serving bridges
-     *   without loading snapshots.
-     *
-     * Important:
-     * - This does NOT check nutrients or snapshot presence.
-     * - This intentionally validates using servings-based input (ByServings),
-     *   since grounding is only relevant when the user uses servings.
-     */
+
     fun validateServingsGroundingOnly(
         servingUnit: ServingUnit,
         gramsPerServingUnit: Double?,
@@ -261,7 +194,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
         mlPerServingUnit: Double?,
         amountInput: AmountInput
     ): FoodValidationResult {
-        // If volume-only nutrients, grams input cannot be supported (no density).
         if (!hasMass && hasVol) {
             return when (amountInput) {
                 is AmountInput.ByGrams -> blocked(
@@ -270,10 +202,9 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
                 )
 
                 is AmountInput.ByServings -> {
-                    // Need to be able to compute mL from servings:
-                    // deterministic volume unit OR ml-per-serving bridge
                     val canComputeMl =
-                        servingUnit.isVolumeUnit() || (mlPerServingUnit?.takeIf { it > 0.0 } != null)
+                        servingUnit.canResolveToMlDeterministically() ||
+                                (mlPerServingUnit?.takeIf { it > 0.0 } != null)
 
                     if (!canComputeMl) blocked(
                         reason = FoodValidationResult.Reason.MissingMlPerServing,
@@ -283,16 +214,14 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
             }
         }
 
-        // If mass-only nutrients, servings require grams.
         if (hasMass && !hasVol) {
             return when (amountInput) {
                 is AmountInput.ByGrams -> FoodValidationResult.Ok
 
                 is AmountInput.ByServings -> {
                     val canComputeGrams =
-                        (gramsPerServingUnit?.takeIf { it > 0.0 } != null) ||
-                                servingUnit == ServingUnit.G ||
-                                servingUnit.isMassUnit()
+                        servingUnit.canResolveToGramsDeterministically() ||
+                                (gramsPerServingUnit?.takeIf { it > 0.0 } != null)
 
                     if (!canComputeGrams) blocked(
                         reason = FoodValidationResult.Reason.BasisMismatchMassNeedsGrams,
@@ -302,7 +231,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
             }
         }
 
-        // If both exist, allow (call site will choose the right basis to scale by).
         return FoodValidationResult.Ok
     }
 
@@ -315,10 +243,6 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
 
     private fun blocked(reason: FoodValidationResult.Reason, message: String): FoodValidationResult =
         FoodValidationResult.Blocked(reason = reason, message = message)
-
-    // -------------------------------------------------------------------------
-    // Message helpers (single wording source)
-    // -------------------------------------------------------------------------
 
     private fun msgMissingSnapshot(context: UsageContext): String =
         when (context) {
@@ -357,8 +281,7 @@ class ValidateFoodForUsageUseCase @Inject constructor() {
  * Locked-in safety rule
  *
  * - Do not add grams↔mL conversion here.
- * - Only allow grams/mL bridging via explicit fields:
- *     - gramsPerServingUnit
- *     - mlPerServingUnit
- *   OR deterministic volume units (ServingUnit.asMl).
+ * - Only allow grams/mL grounding via:
+ *     - explicit fields (gramsPerServingUnit / mlPerServingUnit), OR
+ *     - deterministic unit grounding from ServingUnit.
  */

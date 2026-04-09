@@ -51,8 +51,10 @@ import com.example.adobongkangkong.domain.model.NutrientCategory
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.canResolveToGramsDeterministically
 import com.example.adobongkangkong.domain.model.fromUsda
-import com.example.adobongkangkong.domain.model.isAmbiguousForGrounding
+import com.example.adobongkangkong.domain.model.canResolveToMlDeterministically
+import com.example.adobongkangkong.domain.model.requiresExplicitGrounding
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.requiresGramsPerServing
@@ -253,7 +255,7 @@ class FoodEditorViewModel @Inject constructor(
 
             val mlPerServingEffectiveForDisplay: Double? =
                 when {
-                    servingUnit.isVolumeUnit() && !servingUnit.isAmbiguousForGrounding() ->
+                    servingUnit.canResolveToMlDeterministically() ->
                         servingSize.takeIf { it > 0.0 }
                     mlPerServingUnitEffectiveForDisplay != null ->
                         (servingSize * mlPerServingUnitEffectiveForDisplay).takeIf { it > 0.0 }
@@ -264,11 +266,11 @@ class FoodEditorViewModel @Inject constructor(
                 when {
                     rows.any { it.basisType == BasisType.PER_100ML } -> BasisType.PER_100ML
                     rows.any { it.basisType == BasisType.PER_100G } -> BasisType.PER_100G
-                    servingUnit.isAmbiguousForGrounding() &&
+                    servingUnit.requiresExplicitGrounding() &&
                             gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
-                    servingUnit.isAmbiguousForGrounding() &&
+                    servingUnit.requiresExplicitGrounding() &&
                             mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
-                    servingUnit.isVolumeUnit() && !servingUnit.isAmbiguousForGrounding() ->
+                    servingUnit.canResolveToMlDeterministically() ->
                         BasisType.PER_100ML
                     gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
                     food == null -> current.basisType ?: BasisType.USDA_REPORTED_SERVING
@@ -713,6 +715,9 @@ class FoodEditorViewModel @Inject constructor(
         )
     }
 
+    // ONLY showing the parts that changed + final computeFixMessage
+// (rest of your file stays exactly the same)
+
     private fun computeFixMessage(s: FoodEditorState): String? {
         if (!s.hasLoaded) return null
 
@@ -728,14 +733,23 @@ class FoodEditorViewModel @Inject constructor(
         val grams = s.gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
         val ml = s.mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
 
-        if (s.servingUnit.isAmbiguousForGrounding()) {
+        val isMassGrounded =
+            s.servingUnit.canResolveToGramsDeterministically() || (grams != null)
+
+        val isVolumeGrounded =
+            s.servingUnit.canResolveToMlDeterministically() || (ml != null)
+
+        // 🔥 NEW MODEL: only FLEXIBLE units require grounding
+        if (s.servingUnit.requiresExplicitGrounding()) {
             return when (s.basisType) {
                 BasisType.PER_100ML ->
-                    if (ml == null) "Food needs mL per 1 ${s.servingUnit.display} when using PER 100mL grounding."
+                    if (!isVolumeGrounded)
+                        "Food needs mL per 1 ${s.servingUnit.display} when using PER 100mL grounding."
                     else null
 
                 BasisType.PER_100G ->
-                    if (grams == null) "Food needs grams per 1 ${s.servingUnit.display} when using PER 100g grounding."
+                    if (!isMassGrounded)
+                        "Food needs grams per 1 ${s.servingUnit.display} when using PER 100g grounding."
                     else null
 
                 BasisType.USDA_REPORTED_SERVING, null ->
@@ -744,7 +758,6 @@ class FoodEditorViewModel @Inject constructor(
         }
 
         val needsBacking = s.servingUnit.requiresGramsPerServing()
-        val isVolumeGrounded = s.servingUnit.isVolumeUnit() || (ml != null)
 
         if (needsBacking && grams == null && !isVolumeGrounded) {
             return "Enter grams for 1 ${s.servingUnit.display} so this serving can be saved and used in recipes."

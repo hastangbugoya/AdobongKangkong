@@ -74,8 +74,6 @@ class ApplyEditedNutrientsUseCase @Inject constructor() {
             }
 
             BasisType.USDA_REPORTED_SERVING -> {
-                // ✅ NEW: support per-serving manual entry
-
                 val grams = resolution.gramsPerServing
                 if (grams != null) {
                     if (grams <= 0.0) {
@@ -104,7 +102,6 @@ class ApplyEditedNutrientsUseCase @Inject constructor() {
                     )
                 }
 
-                // No valid grounding path
                 Result.Blocked(BlockReason.NO_SERVING_GROUNDING_PATH)
             }
         }

@@ -10,6 +10,13 @@ package com.example.adobongkangkong.domain.model
  * - asG: grams per 1 unit (for mass-like units only)
  *
  * Units that are container-ish / subjective / count-ish should keep both null.
+ *
+ * RCCUP POLICY (locked in):
+ * - Rice cooker cup remains explicitly grounded / ambiguous.
+ * - Even though a rice cooker cup often implies a real-world volume, AK should not treat it as
+ *   deterministically mL-grounded by default.
+ * - Rationale: rice nutrition/label workflows in AK are primarily grams-based, and assuming a fixed
+ *   mL grounding for rc cup would create misleading confidence for serving-based nutrition math.
  */
 enum class ServingUnit(
     val display: String,
@@ -47,8 +54,6 @@ enum class ServingUnit(
     CUP_METRIC("cup (metric)", asMl = 250.0),
     CUP_JP("cup (JP)", asMl = 200.0),
 
-
-
     // Imperial / UK volume set (exact)
     FL_OZ_IMP("fl oz (imp)", asMl = 28.4130625),
     PINT_IMP("pt (imp)", asMl = 568.26125),
@@ -73,7 +78,7 @@ enum class ServingUnit(
     STICK("stick"),
     OTHER("other"),
     BATCH("batch"),
-    // Rice cooker cup (commonly used for dry rice measurement), grams is used since majority of food labels have grams for rice
+    // Rice cooker cup intentionally stays ambiguous / explicitly grounded.
     RCCUP("rc cup"),
 
     /**
@@ -93,4 +98,99 @@ enum class ServingUnit(
     QUART("qt", asMl = 960.0);
 
     companion object
+}
+
+/**
+ * Grounding model for serving units.
+ *
+ * MASS:
+ * - unit is inherently gram-resolvable
+ *
+ * VOLUME:
+ * - unit is inherently mL-resolvable
+ *
+ * FLEXIBLE:
+ * - unit is container-ish / subjective and requires explicit user grounding
+ */
+enum class ServingUnitGroundingKind {
+    MASS,
+    VOLUME,
+    FLEXIBLE
+}
+
+fun ServingUnit.groundingKind(): ServingUnitGroundingKind {
+    return when {
+        asG != null -> ServingUnitGroundingKind.MASS
+        asMl != null -> ServingUnitGroundingKind.VOLUME
+        else -> ServingUnitGroundingKind.FLEXIBLE
+    }
+}
+
+fun ServingUnit.canResolveToGramsDeterministically(): Boolean {
+    return groundingKind() == ServingUnitGroundingKind.MASS
+}
+
+fun ServingUnit.canResolveToMlDeterministically(): Boolean {
+    return groundingKind() == ServingUnitGroundingKind.VOLUME
+}
+
+fun ServingUnit.requiresExplicitGrounding(): Boolean {
+    return groundingKind() == ServingUnitGroundingKind.FLEXIBLE
+}
+
+/**
+ * Policy helper:
+ * even if a unit is already mass/volume grounded by nature, the editor may still
+ * allow the user to enter explicit grounding values for override/precision.
+ */
+fun ServingUnit.shouldAllowExplicitGroundingOverride(): Boolean {
+    return when (this) {
+        ServingUnit.TSP_US,
+        ServingUnit.TBSP_US,
+        ServingUnit.FL_OZ_US,
+        ServingUnit.CUP_US,
+        ServingUnit.PINT_US,
+        ServingUnit.QUART_US,
+        ServingUnit.GALLON_US,
+        ServingUnit.CUP_METRIC,
+        ServingUnit.CUP_JP,
+        ServingUnit.FL_OZ_IMP,
+        ServingUnit.PINT_IMP,
+        ServingUnit.QUART_IMP,
+        ServingUnit.GALLON_IMP,
+        ServingUnit.RCCUP,
+        ServingUnit.TSP,
+        ServingUnit.TBSP,
+        ServingUnit.CUP,
+        ServingUnit.QUART,
+        ServingUnit.CAN,
+        ServingUnit.BOTTLE,
+        ServingUnit.JAR,
+        ServingUnit.SERVING,
+        ServingUnit.OTHER -> true
+
+        else -> false
+    }
+}
+
+/**
+ * Backward-compatibility shim.
+ *
+ * Historically this mixed together:
+ * - "unit needs explicit grounding"
+ * - "unit should allow manual override"
+ *
+ * That caused volume units like TBSP/CUP to be treated too much like SERVING/JAR.
+ *
+ * Keep this temporarily so old call sites compile, but migrate call sites to:
+ * - requiresExplicitGrounding()
+ * - canResolveToMlDeterministically()
+ * - canResolveToGramsDeterministically()
+ * - shouldAllowExplicitGroundingOverride()
+ */
+@Deprecated(
+    message = "Use requiresExplicitGrounding()/canResolveToMlDeterministically()/canResolveToGramsDeterministically()/shouldAllowExplicitGroundingOverride() instead."
+)
+fun ServingUnit.isAmbiguousForGrounding(): Boolean {
+    return requiresExplicitGrounding()
 }
