@@ -15,14 +15,17 @@ import javax.inject.Inject
  * Room-backed implementation of [FoodNutritionSnapshotRepository].
  *
  * Builds per-1-unit normalized snapshots:
- * - PER_100G  -> per gram
- * - PER_100ML -> per mL
+ * - PER_100G              -> per gram
+ * - PER_100ML             -> per mL
+ * - USDA_REPORTED_SERVING -> per gram / per mL when serving bridges exist
  *
  * Important:
  * - For deterministic mass units (for example G, KG, OZ, LB), snapshot creation should behave as if
  *   the food has an effective gramsPerServingUnit of "grams per 1 servingUnit", even when the
  *   persisted Food leaves gramsPerServingUnit null.
  * - Likewise for deterministic volume units and mlPerServingUnit.
+ * - USDA_REPORTED_SERVING normalization requires the persisted servingSize so the mapper can
+ *   compute nutrients per reported serving correctly.
  *
  * This keeps logging / scaling correct for foods whose serving unit itself already carries the
  * physical grounding.
@@ -59,6 +62,7 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
         val codeById = nutrientCodeById()
         return toFoodNutritionSnapshot(
             foodId = food.id,
+            servingSize = food.servingSize,
             gramsPerServingUnit = effectiveGramsPerServingUnit,
             mlPerServingUnit = effectiveMlPerServingUnit,
             rows = rows,
@@ -98,4 +102,10 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
  *   gramsPerServingUnit is null.
  * - Do not require gramsPerServingUnit to be physically persisted for mass units whose unit
  *   already provides deterministic gram conversion.
+ *
+ * 2026-04-09 note:
+ * - USDA_REPORTED_SERVING rows are valid snapshot input when serving bridges exist.
+ * - Mapper must receive servingSize so it can compute per-reported-serving normalization:
+ *     servingSize * gramsPerServingUnit
+ *     servingSize * mlPerServingUnit
  */
