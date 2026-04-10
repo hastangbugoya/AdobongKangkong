@@ -51,11 +51,7 @@ fun DayLogRowCard(
                 .clickable(onClick = onClick),
             tonalElevation = 1.dp,
             shape = MaterialTheme.shapes.medium,
-            color = if (row.bannerFoodId != null) {
-                Color.Transparent
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+            color = Color.Transparent
         ) {
             Row(
                 modifier = Modifier

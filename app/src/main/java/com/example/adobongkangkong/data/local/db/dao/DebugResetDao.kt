@@ -79,8 +79,25 @@ interface DebugResetDao {
      * ============================================================ */
 
     /**
-     * IMPORTANT:
-     * - Must delete children first (planned_items) before parents (planned_meals)
+     * Planner reset scope intentionally includes only planner/prep data:
+     *
+     * - planned_items
+     * - planned_meals
+     * - planned_series_items
+     * - planned_series_slot_rules
+     * - planned_series
+     * - ious
+     *
+     * It intentionally preserves:
+     * - foods
+     * - recipes
+     * - recipe batches
+     * - logs
+     * - nutrient/settings/profile-like data
+     *
+     * Delete order matters:
+     * - occurrence/template children first
+     * - then occurrence/template parents
      */
 
     @Query("DELETE FROM planned_items")
@@ -88,6 +105,32 @@ interface DebugResetDao {
 
     @Query("DELETE FROM planned_meals")
     suspend fun clearPlannedMeals()
+
+    @Query("DELETE FROM planned_series_items")
+    suspend fun clearPlannedSeriesItems()
+
+    @Query("DELETE FROM planned_series_slot_rules")
+    suspend fun clearPlannedSeriesSlotRules()
+
+    @Query("DELETE FROM planned_series")
+    suspend fun clearPlannedSeries()
+
+    @Query("DELETE FROM ious")
+    suspend fun clearPlannerIous()
+
+    /**
+     * Full planner-domain wipe.
+     *
+     * Ordering is explicit so callers only need one DAO method for the common case.
+     */
+    suspend fun clearAllPlannerData() {
+        clearPlannedItems()
+        clearPlannedMeals()
+        clearPlannedSeriesItems()
+        clearPlannedSeriesSlotRules()
+        clearPlannedSeries()
+        clearPlannerIous()
+    }
 
     @Query(
         """
@@ -110,6 +153,14 @@ interface DebugResetDao {
 
     @Query(
         """
+        DELETE FROM ious
+        WHERE dateIso < :dateIso
+        """
+    )
+    suspend fun clearPlannerIousBefore(dateIso: String)
+
+    @Query(
+        """
         DELETE FROM planned_items
         WHERE mealId IN (
             SELECT id FROM planned_meals
@@ -126,6 +177,14 @@ interface DebugResetDao {
         """
     )
     suspend fun clearPlannedMealsAfter(dateIso: String)
+
+    @Query(
+        """
+        DELETE FROM ious
+        WHERE dateIso > :dateIso
+        """
+    )
+    suspend fun clearPlannerIousAfter(dateIso: String)
 
     /* ============================================================
      * EXISTING GLOBAL CLEANUPS (UNCHANGED)

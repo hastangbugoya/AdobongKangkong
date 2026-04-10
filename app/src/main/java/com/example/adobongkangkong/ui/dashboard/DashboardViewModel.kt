@@ -14,6 +14,7 @@ import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.model.TargetEdit
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
+import com.example.adobongkangkong.domain.planner.usecase.ResetPlannerDataUseCase
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
 import com.example.adobongkangkong.domain.trend.model.RollingNutritionAverages
 import com.example.adobongkangkong.domain.trend.model.RollingNutritionStats
@@ -99,6 +100,7 @@ class DashboardViewModel @Inject constructor(
     private val upsertUserNutrientTargetUseCase: UpsertUserNutrientTargetUseCase,
 
     private val debugResetUseCase: DebugResetUseCase,
+    private val resetPlannerDataUseCase: ResetPlannerDataUseCase,
 
     private val application: Application,
     private val buildSharedNutritionSnapshotJsonUseCase: BuildSharedNutritionSnapshotJsonUseCase
@@ -185,6 +187,7 @@ class DashboardViewModel @Inject constructor(
     fun onScreenResumed() {
         currentDateFlow.value = LocalDate.now()
     }
+
     fun buildSharedSnapshotJson() {
         val date = selectedDateFlow.value
         val zoneId = ZoneId.systemDefault()
@@ -321,7 +324,7 @@ class DashboardViewModel @Inject constructor(
         foodId: Long,
         result: CreateLogEntryUseCase.Result
     ) {
-        Log.d("Meow","DashboardViewModel> handleLogResult foodId:${foodId} result:${result.toString()}")
+        Log.d("Meow", "DashboardViewModel> handleLogResult foodId:${foodId} result:${result.toString()}")
         when (result) {
             is CreateLogEntryUseCase.Result.Success -> Unit
 
@@ -502,6 +505,19 @@ class DashboardViewModel @Inject constructor(
                 _snackbar.value = "Debug reset completed: $domainSummary (${scope.displayName})"
             } catch (e: Exception) {
                 _snackbar.value = "Debug reset failed: ${e.message ?: "unknown error"}"
+            }
+        }
+    }
+
+    fun resetPlannerData() {
+        _overlay.update { it.copy(settingsSheetOpen = false) }
+
+        viewModelScope.launch {
+            try {
+                resetPlannerDataUseCase()
+                _snackbar.value = "Planner data reset completed"
+            } catch (e: Exception) {
+                _snackbar.value = "Planner data reset failed: ${e.message ?: "unknown error"}"
             }
         }
     }

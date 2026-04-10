@@ -81,7 +81,8 @@ fun DashboardSettingsSheet(
         domains: Set<DashboardDebugResetDomain>,
         scope: DashboardDebugResetScope
     ) -> Unit,
-    onBuildSharedSnapshotJson: () -> Unit
+    onBuildSharedSnapshotJson: () -> Unit,
+    onResetPlannerData: () -> Unit
 ) {
     Column(
         Modifier
@@ -304,6 +305,18 @@ fun DashboardSettingsSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Build Shared Nutrition Snapshot (JSON)")
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    onDismiss()
+                    onResetPlannerData()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Nuke Planner Data")
             }
 
             Spacer(Modifier.height(24.dp))

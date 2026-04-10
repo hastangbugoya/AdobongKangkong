@@ -244,7 +244,8 @@ fun DashboardScreen(
                 onOpenPlanner = onOpenPlanner,
                 onOpenBackup = onOpenBackup,
                 onDebugReset = vm::runDebugReset,
-                onBuildSharedSnapshotJson = vm::buildSharedSnapshotJson
+                onBuildSharedSnapshotJson = vm::buildSharedSnapshotJson,
+                onResetPlannerData = vm::resetPlannerData,
             )
         }
     }
