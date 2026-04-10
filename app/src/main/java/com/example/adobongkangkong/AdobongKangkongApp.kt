@@ -18,7 +18,7 @@ class AdobongKangkongApp : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
     // 🔥 Inject seeder
-    @Inject lateinit var seedStoresUseCase: SeedStoresUseCase
+//    @Inject lateinit var seedStoresUseCase: SeedStoresUseCase
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -32,8 +32,8 @@ class AdobongKangkongApp : Application(), Configuration.Provider {
         MeowLog.init(this)
 
         // 🔥 Run store seeding (non-blocking)
-        CoroutineScope(Dispatchers.IO).launch {
-            seedStoresUseCase()
-        }
+//        CoroutineScope(Dispatchers.IO).launch {
+//            seedStoresUseCase()
+//        }
     }
 }
