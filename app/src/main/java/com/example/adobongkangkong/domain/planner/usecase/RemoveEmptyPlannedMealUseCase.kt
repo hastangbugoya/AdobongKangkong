@@ -1,124 +1,23 @@
 package com.example.adobongkangkong.domain.planner.usecase
 
+import com.example.adobongkangkong.data.local.db.entity.PlannedOccurrenceStatus
 import com.example.adobongkangkong.domain.repository.PlannedItemRepository
 import com.example.adobongkangkong.domain.repository.PlannedMealRepository
 import javax.inject.Inject
 
 /**
- * Deletes a planned meal ONLY if it has zero planned items.
+ * Removes an empty planned meal occurrence safely.
  *
- * =============================================================================
- * WHAT is a Planned Meal
- * =============================================================================
+ * One-off meals:
+ * - hard delete
  *
- * A PlannedMeal represents a scheduled meal occurrence on a specific date and slot
- * (breakfast, lunch, dinner, snack, or custom).
+ * Series-backed occurrences:
+ * - DO NOT hard delete
+ * - mark as CANCELLED so recurrence expansion treats the occurrence as intentionally removed
+ *   and does not recreate it later
  *
- * It serves as a container for PlannedItemEntity rows (foods, recipes, or batches).
- *
- * PlannedMeal lifecycle:
- *
- * created → items added/removed → possibly logged → possibly deleted
- *
- * This use case handles ONLY the deletion phase for meals that have become empty.
- *
- *
- * =============================================================================
- * WHY this use case exists
- * =============================================================================
- *
- * Empty planned meals can occur during normal UI workflows:
- *
- * Examples:
- *
- * • User creates a meal, then removes all items.
- * • User moves items to another meal.
- * • User deletes items one-by-one.
- * • Series occurrence creates a meal but template items are later removed.
- *
- * Without cleanup, these empty meals would:
- *
- * • clutter planner UI
- * • create confusing empty slots
- * • waste DB rows
- * • complicate planner aggregation logic
- *
- * This use case provides SAFE automatic cleanup.
- *
- *
- * =============================================================================
- * SAFETY GUARANTEE (CRITICAL INVARIANT)
- * =============================================================================
- *
- * Meals with items are NEVER deleted.
- *
- * Deletion only occurs if:
- *
- * PlannedItemRepository.getItemsForMeal(mealId) returns empty list
- *
- * This prevents:
- *
- * • accidental data loss
- * • deleting meals still in use
- * • deleting series occurrences with items
- *
- *
- * =============================================================================
- * DESIGN RATIONALE
- * =============================================================================
- *
- * This logic lives in a domain use case (NOT repository, NOT UI) because:
- *
- * • deletion depends on business rules (item count)
- * • not a raw CRUD operation
- * • ensures consistent behavior across all callers
- *
- * This keeps planner integrity centralized.
- *
- *
- * =============================================================================
- * IDENTITY AND IDEMPOTENCY
- * =============================================================================
- *
- * This use case is safe to call repeatedly.
- *
- * If:
- *
- * • meal does not exist → no-op
- * • meal has items → no-op
- * • meal already deleted → no-op
- *
- *
- * =============================================================================
- * WHEN to call this
- * =============================================================================
- *
- * Typical trigger points:
- *
- * • after removing a PlannedItem
- * • after moving items between meals
- * • after clearing a meal
- * • after series modifications
- *
- *
- * =============================================================================
- * EDGE CASES handled
- * =============================================================================
- *
- * mealId <= 0 → ignored
- *
- * meal does not exist → ignored
- *
- * meal has ≥1 items → preserved
- *
- *
- * =============================================================================
- * PERFORMANCE
- * =============================================================================
- *
- * Single meal lookup + single item lookup.
- *
- * O(items per meal), typically very small.
+ * This preserves user intent:
+ * “I removed this specific generated occurrence.”
  */
 class RemoveEmptyPlannedMealUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
@@ -128,17 +27,28 @@ class RemoveEmptyPlannedMealUseCase @Inject constructor(
     suspend operator fun invoke(mealId: Long) {
         if (mealId <= 0L) return
 
-        // Ensure the meal still exists
         val meal = meals.getById(mealId) ?: return
 
-        // Only delete if there are no planned items
         val children = items.getItemsForMeal(mealId)
-        if (children.isEmpty()) {
+        if (children.isNotEmpty()) return
+
+        if (meal.seriesId != null) {
+            // Recurring occurrence tombstone:
+            // keep the row so recurrence materialization can see that this occurrence
+            // already exists and was intentionally removed by the user.
+            if (meal.status != PlannedOccurrenceStatus.CANCELLED.name) {
+                meals.update(
+                    meal.copy(
+                        status = PlannedOccurrenceStatus.CANCELLED.name
+                    )
+                )
+            }
+        } else {
+            // One-off meal: safe to remove entirely.
             meals.delete(meal)
         }
     }
 }
-
 
 /**
  * =============================================================================
@@ -152,6 +62,22 @@ class RemoveEmptyPlannedMealUseCase @Inject constructor(
  * Planner integrity depends on meals being stable containers.
  *
  *
+ * Recurring-series rule (IMPORTANT)
+ *
+ * If an empty meal belongs to a series (seriesId != null), do NOT hard delete it.
+ * Mark it CANCELLED instead.
+ *
+ * Why:
+ * - hard delete makes the recurrence materializer think the occurrence is missing
+ * - next horizon ensure can recreate it
+ * - CANCELLED acts as a tombstone for “user intentionally removed this occurrence”
+ *
+ *
+ * One-off meal rule
+ *
+ * If seriesId == null and the meal is empty, hard delete is correct.
+ *
+ *
  * Why this exists as a separate use case
  *
  * Deletion depends on planner business logic, not raw repository access.
@@ -163,8 +89,8 @@ class RemoveEmptyPlannedMealUseCase @Inject constructor(
  *
  * Series occurrences create PlannedMeal rows automatically.
  *
- * Empty occurrences should be cleaned up safely,
- * but NEVER delete meals that still contain template-derived items.
+ * Empty recurring occurrences should be tombstoned safely,
+ * but NEVER hard-deleted once user intent is “remove this generated occurrence”.
  *
  *
  * Possible future improvements

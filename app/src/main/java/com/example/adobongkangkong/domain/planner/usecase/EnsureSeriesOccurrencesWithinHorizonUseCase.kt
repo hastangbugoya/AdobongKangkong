@@ -76,7 +76,7 @@ import javax.inject.Inject
  * - Requested window invalid (end < start) → throws (programmer error).
  * - Requested window outside series effective dates → returns 0 (no-op after clamp).
  * - Series UNTIL_DATE earlier than requested end → clamp end to until date.
- * - Series REPEAT_COUNT with invalid/missing count → treated as no additional clamp (legacy-safe).
+ * - Series REPEAT_COUNT is interpreted as total generated occurrences from the immutable series anchor date.
  *
  * ----------------------------------------------------------------------------
  * Pitfalls / gotchas
@@ -89,9 +89,9 @@ import javax.inject.Inject
  * - **Does not overwrite**:
  *   Existing planned meals are never modified. If a user edits an occurrence, it stays edited.
  *
- * - **REPEAT_COUNT interpretation is phase-1**:
- *   Current implementation treats REPEAT_COUNT as “N days from windowStart” (not N occurrences),
- *   because “occurrences” is ambiguous when multiple slot rules exist.
+ * - **REPEAT_COUNT semantics**:
+ *   REPEAT_COUNT means total target occurrences generated from series.effectiveStartDate,
+ *   not "N days" and not "restart from the currently opened planner date".
  *
  * - **Template name override**:
  *   nameOverride is derived from series.sourceMealId’s meal.nameOverride at expansion time.
@@ -118,8 +118,7 @@ import javax.inject.Inject
  * Future improvements (do NOT implement here without revisiting invariants)
  * ----------------------------------------------------------------------------
  *
- * - Define REPEAT_COUNT semantics precisely (count occurrences vs count days),
- *   and migrate existing series if behavior changes.
+ * - If explicit per-rule repeat semantics are ever needed, add a new persisted contract.
  * - Support per-occurrence override/cancellation rows and incorporate them into dedupe logic.
  * - Add trimming/normalization of customLabel consistently at write time to stabilize keys.
  */
@@ -159,21 +158,39 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
         val seriesStart = LocalDate.parse(series.effectiveStartDate)
         val seriesEnd: LocalDate? = series.effectiveEndDate?.let { LocalDate.parse(it) }
 
-        var windowStart = maxOf(requestedStart, seriesStart)
+        val windowStart = maxOf(requestedStart, seriesStart)
         var windowEnd = requestedEnd
         if (seriesEnd != null) windowEnd = minOf(windowEnd, seriesEnd)
 
         if (windowEnd.isBefore(windowStart)) return 0
 
-        // Further clamp by endCondition (UNTIL_DATE / REPEAT_COUNT / INDEFINITE)
-        windowEnd = applyEndConditionClamp(
-            endConditionType = series.endConditionType,
-            endConditionValue = series.endConditionValue,
-            windowStart = windowStart,
-            windowEnd = windowEnd
-        )
+        val allowedKeysInWindow: Set<Triple<String, MealSlot, String>>? = when (series.endConditionType) {
+            PlannedSeriesEndConditionType.INDEFINITE -> null
+
+            PlannedSeriesEndConditionType.UNTIL_DATE -> {
+                val until = series.endConditionValue?.let { LocalDate.parse(it) } ?: windowEnd
+                windowEnd = minOf(windowEnd, until)
+                null
+            }
+
+            PlannedSeriesEndConditionType.REPEAT_COUNT -> {
+                val repeatCount = series.endConditionValue?.toIntOrNull()
+                if (repeatCount == null || repeatCount <= 0) {
+                    null
+                } else {
+                    computeAllowedRepeatCountKeysInWindow(
+                        seriesStart = seriesStart,
+                        windowStart = windowStart,
+                        windowEnd = windowEnd,
+                        slotRules = slotRules,
+                        repeatCount = repeatCount
+                    )
+                }
+            }
+        }
 
         if (windowEnd.isBefore(windowStart)) return 0
+        if (allowedKeysInWindow != null && allowedKeysInWindow.isEmpty()) return 0
 
         // Load existing occurrences for dedupe (single DB hit)
         val existing = mealsRepo.getMealsForSeriesInRange(
@@ -200,8 +217,12 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
                 val dateIso = d.toString()
                 for (r in rulesForDay) {
                     val key = Triple(dateIso, r.slot, (r.customLabel ?: ""))
-                    if (!existingKeys.contains(key)) {
 
+                    if (allowedKeysInWindow != null && !allowedKeysInWindow.contains(key)) {
+                        continue
+                    }
+
+                    if (!existingKeys.contains(key)) {
                         // Create + copy template items ONLY for newly created meals.
                         // Transactional inside CreatePlannedMealFromSeriesTemplateUseCase for idempotency.
                         createPlannedMealFromTemplate(
@@ -225,32 +246,37 @@ class EnsureSeriesOccurrencesWithinHorizonUseCase @Inject constructor(
         return createdCount
     }
 
-    private fun applyEndConditionClamp(
-        endConditionType: PlannedSeriesEndConditionType,
-        endConditionValue: String?,
+    /**
+     * REPEAT_COUNT means the first [repeatCount] occurrence keys implied by the series rules,
+     * starting from the immutable [seriesStart].
+     *
+     * This avoids two bad behaviors:
+     * 1) treating repeat-count as "N days"
+     * 2) restarting the series from the currently opened planner date
+     */
+    private fun computeAllowedRepeatCountKeysInWindow(
+        seriesStart: LocalDate,
         windowStart: LocalDate,
-        windowEnd: LocalDate
-    ): LocalDate {
-        return when (endConditionType) {
-            PlannedSeriesEndConditionType.INDEFINITE -> windowEnd
+        windowEnd: LocalDate,
+        slotRules: List<PlannedSeriesSlotRuleEntity>,
+        repeatCount: Int
+    ): Set<Triple<String, MealSlot, String>> {
+        val allKeysFromAnchor = computeTargetKeysForWindow(
+            windowStart = seriesStart,
+            windowEnd = windowEnd,
+            slotRules = slotRules
+        )
 
-            PlannedSeriesEndConditionType.UNTIL_DATE -> {
-                val until = endConditionValue?.let { LocalDate.parse(it) } ?: windowEnd
-                minOf(windowEnd, until)
-            }
+        if (allKeysFromAnchor.isEmpty()) return emptySet()
 
-            PlannedSeriesEndConditionType.REPEAT_COUNT -> {
-                // Repeat N times in terms of OCCURRENCES is ambiguous when multiple slot rules exist.
-                // Phase 1 interpretation: cap by DAYS from windowStart (N days).
-                val nDays = endConditionValue?.toIntOrNull()
-                if (nDays == null || nDays <= 0) {
-                    windowEnd
-                } else {
-                    val cap = windowStart.plusDays((nDays - 1).toLong())
-                    minOf(windowEnd, cap)
-                }
+        return allKeysFromAnchor
+            .take(repeatCount)
+            .asSequence()
+            .filter { (dateIso, _, _) ->
+                val date = LocalDate.parse(dateIso)
+                !date.isBefore(windowStart) && !date.isAfter(windowEnd)
             }
-        }
+            .toSet()
     }
 }
 
@@ -340,6 +366,9 @@ internal fun computeTargetKeysForWindow(
  *   1) requested start/end
  *   2) series effectiveStart/effectiveEnd
  *   3) endConditionType/value
+ * - REPEAT_COUNT must remain anchored to series.effectiveStartDate.
+ * - REPEAT_COUNT means total occurrences implied by the series rules from the anchor date,
+ *   not days and not a per-window restart.
  * - Must use ISO weekday convention: LocalDate.dayOfWeek.value (1=Mon..7=Sun).
  * - Must use ISO date strings for membership: yyyy-MM-dd via LocalDate.toString().
  *

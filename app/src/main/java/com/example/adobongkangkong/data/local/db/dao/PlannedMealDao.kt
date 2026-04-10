@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
+import com.example.adobongkangkong.data.local.db.entity.PlannedOccurrenceStatus
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -39,17 +40,26 @@ interface PlannedMealDao {
         SELECT *
         FROM planned_meals
         WHERE date = :date
+          AND status = :activeStatus
         ORDER BY sortOrder ASC, id ASC
     """)
-    fun observeMealsForDate(date: String): Flow<List<PlannedMealEntity>>
+    fun observeMealsForDate(
+        date: String,
+        activeStatus: String = PlannedOccurrenceStatus.ACTIVE.name
+    ): Flow<List<PlannedMealEntity>>
 
     @Query("""
         SELECT *
         FROM planned_meals
         WHERE date BETWEEN :startDate AND :endDate
+          AND status = :activeStatus
         ORDER BY date ASC, sortOrder ASC, id ASC
     """)
-    fun observeMealsInRange(startDate: String, endDate: String): Flow<List<PlannedMealEntity>>
+    fun observeMealsInRange(
+        startDate: String,
+        endDate: String,
+        activeStatus: String = PlannedOccurrenceStatus.ACTIVE.name
+    ): Flow<List<PlannedMealEntity>>
 
     @Query("DELETE FROM planned_meals WHERE date = :date")
     suspend fun deleteMealsForDate(date: String)
@@ -57,8 +67,16 @@ interface PlannedMealDao {
     @Query("DELETE FROM planned_meals WHERE id = :mealId")
     suspend fun deleteMealById(mealId: Long)
 
-    @Query("SELECT COALESCE(MAX(sortOrder), -1) FROM planned_meals WHERE date = :date")
-    suspend fun getMaxSortOrderForDate(date: String): Int
+    @Query("""
+        SELECT COALESCE(MAX(sortOrder), -1)
+        FROM planned_meals
+        WHERE date = :date
+          AND status = :activeStatus
+    """)
+    suspend fun getMaxSortOrderForDate(
+        date: String,
+        activeStatus: String = PlannedOccurrenceStatus.ACTIVE.name
+    ): Int
 
     @Query("""
         SELECT *
