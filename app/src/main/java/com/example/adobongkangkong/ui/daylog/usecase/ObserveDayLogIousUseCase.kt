@@ -11,23 +11,24 @@ import javax.inject.Inject
  *
  * IMPORTANT:
  * - IOUs are day-based and MUST be driven by `dateIso`.
- * - IOUs have NO nutrition and do not affect totals.
+ * - IOUs do NOT affect totals.
+ * - IOUs may carry optional macro estimates for UI display only.
  */
 class ObserveDayLogIousUseCase @Inject constructor(
     private val ious: IouRepository
 ) {
 
-    /**
-     * @param dateIso ISO date string (yyyy-MM-dd) for the selected day.
-     * @return A stream of UI IOU rows for Day Log.
-     */
     operator fun invoke(dateIso: String): Flow<List<DayLogIouRow>> {
         return ious.observeForDate(dateIso)
             .map { entities ->
                 entities.map { e ->
                     DayLogIouRow(
                         iouId = e.id,
-                        description = e.description
+                        description = e.description,
+                        estimatedCaloriesKcal = e.estimatedCaloriesKcal,
+                        estimatedProteinG = e.estimatedProteinG,
+                        estimatedCarbsG = e.estimatedCarbsG,
+                        estimatedFatG = e.estimatedFatG
                     )
                 }
             }

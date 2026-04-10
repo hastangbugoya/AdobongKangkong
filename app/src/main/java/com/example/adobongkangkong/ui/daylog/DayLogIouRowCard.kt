@@ -23,12 +23,15 @@ import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.ui.daylog.model.DayLogIouRow
 import com.example.adobongkangkong.ui.theme.AppIconSize
+import kotlin.math.roundToInt
 
 @Composable
 fun DayLogIouRowCard(
     row: DayLogIouRow,
     onDelete: () -> Unit
 ) {
+    val macroLine = buildIouMacroLine(row)
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -58,6 +61,16 @@ fun DayLogIouRowCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (macroLine != null) {
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = macroLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             IconButton(onClick = onDelete) {
@@ -68,5 +81,25 @@ fun DayLogIouRowCard(
                 )
             }
         }
+    }
+}
+
+private fun buildIouMacroLine(row: DayLogIouRow): String? {
+    val parts = buildList {
+        row.estimatedCaloriesKcal?.let { add("${it.roundToInt()} kcal") }
+        row.estimatedProteinG?.let { add("${formatMacroGrams(it)} P") }
+        row.estimatedCarbsG?.let { add("${formatMacroGrams(it)} C") }
+        row.estimatedFatG?.let { add("${formatMacroGrams(it)} F") }
+    }
+
+    return parts.takeIf { it.isNotEmpty() }?.joinToString("  ")
+}
+
+private fun formatMacroGrams(value: Double): String {
+    val rounded = value.roundToInt()
+    return if (kotlin.math.abs(value - rounded.toDouble()) < 0.001) {
+        "${rounded}g"
+    } else {
+        "${((value * 10.0).roundToInt() / 10.0)}g"
     }
 }
