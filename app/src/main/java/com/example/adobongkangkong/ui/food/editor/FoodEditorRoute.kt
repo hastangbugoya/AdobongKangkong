@@ -202,9 +202,17 @@ fun FoodEditorRoute(
         onConfirmDiscardNutrientEditsAndRecompute = viewModel::confirmDiscardNutrientEditsAndRecompute,
         onDismissDiscardNutrientEditsDialog = viewModel::dismissDiscardNutrientEditsDialog,
 
-        // Store-price first-pass wiring
+        // Store price + store editor wiring
         storePriceStoreNames = storeNames,
-        onUpdateStorePrice = viewModel::updateStorePrice
+        onUpdateStorePrice = viewModel::updateStorePrice,
+        onOpenCreateStoreEditor = viewModel::openCreateStoreDialog,
+        onOpenEditStoreEditor = viewModel::openEditStoreDialog,
+        onDismissStoreEditor = viewModel::dismissStoreEditor,
+        onStoreEditorNameChange = viewModel::onStoreEditorNameChange,
+        onStoreEditorAddressChange = viewModel::onStoreEditorAddressChange,
+        onStoreEditorContactChange = viewModel::onStoreEditorContactChange,
+        onConfirmStoreEditor = viewModel::onStoreEditorConfirm,
+        onDeleteStoreEditor = viewModel::onStoreEditorDeleteConfirmed,
     )
 
     LaunchedEffect(mergePickedFoodId) {
@@ -269,9 +277,9 @@ fun FoodEditorRoute(
  * - Route simply forwards prompt/result callbacks between screen and ViewModel.
  * - Do not move nutrient backfill business logic into this route.
  *
- * Store-price flow:
+ * Store editor flow:
  * - Store names are loaded by the ViewModel and passed into the stateless screen.
- * - Store price update actions route back through the ViewModel.
+ * - Store create/edit/delete actions route back through the ViewModel.
  * - Keep DB/repository work out of the screen composable.
  *
  * Merge wiring:

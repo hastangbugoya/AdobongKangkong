@@ -1,10 +1,10 @@
 package com.example.adobongkangkong.ui.recipe
 
+import FoodCategoryUi
+import NutrientRowUi
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
-import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
-import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 
 data class RecipeIngredientUi(
     val foodId: Long,

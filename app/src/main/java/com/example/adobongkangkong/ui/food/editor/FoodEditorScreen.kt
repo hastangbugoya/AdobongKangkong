@@ -1,5 +1,10 @@
 package com.example.adobongkangkong.ui.food.editor
 
+import AssignedBarcodeUi
+import FoodEditorState
+import NutrientRowUi
+import NutrientSearchResultUi
+import UsdaNutrientInterpretationChoice
 import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
 import android.util.Log
@@ -219,9 +224,17 @@ fun FoodEditorScreen(
     // Optional dismiss action for needs-fix banner
     onDismissNeedsFixBanner: (() -> Unit)? = null,
 
-    // Store price shell UI
+    // Store price / store editor
     storePriceStoreNames: List<String> = emptyList(),
     onUpdateStorePrice: ((storeName: String, priceText: String) -> Unit)? = null,
+    onOpenCreateStoreEditor: (() -> Unit)? = null,
+    onOpenEditStoreEditor: ((storeName: String) -> Unit)? = null,
+    onDismissStoreEditor: (() -> Unit)? = null,
+    onStoreEditorNameChange: ((String) -> Unit)? = null,
+    onStoreEditorAddressChange: ((String) -> Unit)? = null,
+    onStoreEditorContactChange: ((String) -> Unit)? = null,
+    onConfirmStoreEditor: (() -> Unit)? = null,
+    onDeleteStoreEditor: (() -> Unit)? = null,
 
     onRecomputeDisplayedNutrients: () -> Unit,
     onConfirmDiscardNutrientEditsAndRecompute: () -> Unit,
@@ -238,6 +251,7 @@ fun FoodEditorScreen(
 
     var showStorePriceSheet by remember { mutableStateOf(false) }
     var storePriceExpanded by remember { mutableStateOf(false) }
+    var storeActionsExpanded by remember { mutableStateOf(false) }
     var selectedStoreName by rememberSaveable { mutableStateOf(storePriceStoreNames.firstOrNull().orEmpty()) }
     var storePriceInput by rememberSaveable { mutableStateOf("") }
 
@@ -257,6 +271,28 @@ fun FoodEditorScreen(
 
     if (selectedStoreName.isBlank() && storePriceStoreNames.isNotEmpty()) {
         selectedStoreName = storePriceStoreNames.first()
+    }
+
+    if (state.storeEditor != null &&
+        onDismissStoreEditor != null &&
+        onStoreEditorNameChange != null &&
+        onStoreEditorAddressChange != null &&
+        onStoreEditorContactChange != null &&
+        onConfirmStoreEditor != null
+    ) {
+        StoreEditDialog(
+            state = state.storeEditor,
+            onNameChange = onStoreEditorNameChange,
+            onAddressChange = onStoreEditorAddressChange,
+            onContactChange = onStoreEditorContactChange,
+            onDismiss = onDismissStoreEditor,
+            onConfirm = onConfirmStoreEditor,
+            onDelete = if (state.storeEditor.canDelete && onDeleteStoreEditor != null) {
+                onDeleteStoreEditor
+            } else {
+                null
+            }
+        )
     }
 
     if (state.barcodePickItems.isNotEmpty()) {
@@ -631,15 +667,15 @@ fun FoodEditorScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Barcode/package was adopted into this food."
+                        text = "Barcode/package was adopted into this food."
                     )
                     Text(
-                        "USDA item: ${pendingBackfillPrompt.candidateLabel}",
+                        text = "USDA item: ${pendingBackfillPrompt.candidateLabel}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "Only missing nutrients will be added. Existing nutrient values on this food will be kept."
+                        text = "Only missing nutrients will be added. Existing nutrient values on this food will be kept."
                     )
                 }
             },
@@ -723,36 +759,90 @@ fun FoodEditorScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                ExposedDropdownMenuBox(
-                    expanded = storePriceExpanded,
-                    onExpandedChange = { storePriceExpanded = !storePriceExpanded },
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    OutlinedTextField(
-                        value = selectedStoreName,
-                        onValueChange = {},
-                        readOnly = true,
-                        singleLine = true,
-                        label = { Text("Store") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = storePriceExpanded)
-                        },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                    )
-
-                    ExposedDropdownMenu(
+                    ExposedDropdownMenuBox(
                         expanded = storePriceExpanded,
-                        onDismissRequest = { storePriceExpanded = false }
+                        onExpandedChange = { storePriceExpanded = !storePriceExpanded },
+                        modifier = Modifier.weight(1f)
                     ) {
-                        storePriceStoreNames.forEach { storeName ->
+                        OutlinedTextField(
+                            value = selectedStoreName,
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            label = { Text("Store") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = storePriceExpanded)
+                            },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = storePriceExpanded,
+                            onDismissRequest = { storePriceExpanded = false }
+                        ) {
+                            storePriceStoreNames.forEach { storeName ->
+                                DropdownMenuItem(
+                                    text = { Text(storeName) },
+                                    onClick = {
+                                        selectedStoreName = storeName
+                                        storePriceExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    BoxWithConstraints {
+                        IconButton(
+                            onClick = { storeActionsExpanded = true }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                contentDescription = "Store actions",
+                                modifier = Modifier.size(AppIconSize.CardAction)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = storeActionsExpanded,
+                            onDismissRequest = { storeActionsExpanded = false }
+                        ) {
                             DropdownMenuItem(
-                                text = { Text(storeName) },
+                                text = { Text("New") },
                                 onClick = {
-                                    selectedStoreName = storeName
-                                    storePriceExpanded = false
+                                    storeActionsExpanded = false
+                                    onOpenCreateStoreEditor?.invoke()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                enabled = selectedStoreName.isNotBlank(),
+                                onClick = {
+                                    storeActionsExpanded = false
+                                    if (selectedStoreName.isNotBlank()) {
+                                        onOpenEditStoreEditor?.invoke(selectedStoreName)
+                                    }
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                enabled = selectedStoreName.isNotBlank(),
+                                onClick = {
+                                    storeActionsExpanded = false
+                                    if (selectedStoreName.isNotBlank()) {
+                                        onOpenEditStoreEditor?.invoke(selectedStoreName)
+                                    }
                                 }
                             )
                         }

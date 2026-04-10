@@ -1,5 +1,3 @@
-package com.example.adobongkangkong.ui.food.editor
-
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.importing.Decision
@@ -18,6 +16,11 @@ enum class GroundingMode {
 enum class UsdaNutrientInterpretationChoice {
     PER_100,
     PER_SERVING
+}
+
+enum class StoreEditorMode {
+    CREATE,
+    EDIT
 }
 
 data class NutrientRowUi(
@@ -69,6 +72,46 @@ data class UsdaBackfillMessageState(
     val insertedCount: Int,
     val skippedExistingCount: Int,
 )
+
+/**
+ * UI-only store editor state for the first-pass food-editor-managed store CRUD.
+ *
+ * Persistence contract for this pass:
+ * - Only `name` is real persisted data.
+ * - `previewAddress` and `previewContact` are dummy preview-only fields so we can
+ *   see what a future dedicated store editor may feel like.
+ * - Do not treat preview fields as saved data until the DB/schema explicitly adds them.
+ */
+data class StoreEditorState(
+    val mode: StoreEditorMode,
+    val storeId: Long? = null,
+    val originalName: String = "",
+    val name: String = "",
+    val previewAddress: String = "",
+    val previewContact: String = "",
+    val showDeleteConfirmation: Boolean = false,
+) {
+    val title: String
+        get() = when (mode) {
+            StoreEditorMode.CREATE -> "New store"
+            StoreEditorMode.EDIT -> "Edit store"
+        }
+
+    val confirmButtonLabel: String
+        get() = when (mode) {
+            StoreEditorMode.CREATE -> "Create"
+            StoreEditorMode.EDIT -> "Save"
+        }
+
+    val canDelete: Boolean
+        get() = mode == StoreEditorMode.EDIT && storeId != null
+
+    val trimmedName: String
+        get() = name.trim()
+
+    val canConfirm: Boolean
+        get() = trimmedName.isNotBlank()
+}
 
 /**
  * Explicit serving draft used by the new bulk-math editor flow.
@@ -185,6 +228,13 @@ data class FoodEditorState(
     val assignedBarcodes: List<AssignedBarcodeUi> = emptyList(),
     val barcodeActionMessage: String? = null,
     val barcodePackageEditor: BarcodePackageEditorState? = null,
+
+    /**
+     * Store editor state for first-pass store CRUD from the store-price sheet.
+     *
+     * Null means no editor is currently open.
+     */
+    val storeEditor: StoreEditorState? = null,
 
     val hasLoaded: Boolean = false,
 

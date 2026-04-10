@@ -35,6 +35,22 @@ package com.example.adobongkangkong.ui.food.editor
  * - No grams↔mL conversion without explicit density
  * - Exactly one row per nutrient id
  */
+import AssignedBarcodeUi
+import BarcodeCollisionDialogState
+import BarcodePackageEditorState
+import FoodCategoryUi
+import FoodEditorState
+import GroundingMode
+import NutrientDraftState
+import NutrientRowUi
+import NutrientSearchResultUi
+import NutritionEditorStatusState
+import PendingUsdaBackfillPromptState
+import PendingUsdaInterpretationPromptState
+import ServingDraftState
+import StoreEditorState
+import UsdaBackfillMessageState
+import UsdaNutrientInterpretationChoice
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -280,7 +296,7 @@ class FoodEditorViewModel @Inject constructor(
                     else -> BasisType.USDA_REPORTED_SERVING
                 }
 
-            val assignedBarcodes = if (foodId != null) {
+            val assignedBarcodes: List<AssignedBarcodeUi> = if (foodId != null) {
                 buildAssignedBarcodeUiList(foodId)
             } else {
                 emptyList()
@@ -2493,6 +2509,156 @@ class FoodEditorViewModel @Inject constructor(
             overrideServingUnit = entity.overrideServingUnit
         )
     }
+
+    // -------------------------------------------------------------------------
+    // STORE EDITOR (FIRST PASS - FOOD EDITOR OWNED)
+    // -------------------------------------------------------------------------
+
+    fun openCreateStoreDialog() {
+        update {
+            it.copy(
+                storeEditor = StoreEditorState(
+                    mode = StoreEditorMode.CREATE,
+                    name = "",
+                    previewAddress = "",
+                    previewContact = ""
+                )
+            )
+        }
+    }
+
+    fun openEditStoreDialog(storeName: String) {
+        val trimmed = storeName.trim()
+        if (trimmed.isBlank()) return
+
+        viewModelScope.launch {
+            val storeId = storeRepo.getStoreIdByName(trimmed)
+            if (storeId == null) {
+                update { it.copy(errorMessage = "Store not found: $trimmed") }
+                return@launch
+            }
+
+            update {
+                it.copy(
+                    storeEditor = StoreEditorState(
+                        mode = StoreEditorMode.EDIT,
+                        storeId = storeId,
+                        originalName = trimmed,
+                        name = trimmed,
+                        previewAddress = "",
+                        previewContact = ""
+                    )
+                )
+            }
+        }
+    }
+
+    fun dismissStoreEditor() {
+        update { it.copy(storeEditor = null) }
+    }
+
+    fun onStoreEditorNameChange(v: String) {
+        update { s ->
+            val editor = s.storeEditor ?: return@update s
+            s.copy(storeEditor = editor.copy(name = v))
+        }
+    }
+
+    fun onStoreEditorAddressChange(v: String) {
+        update { s ->
+            val editor = s.storeEditor ?: return@update s
+            s.copy(storeEditor = editor.copy(previewAddress = v))
+        }
+    }
+
+    fun onStoreEditorContactChange(v: String) {
+        update { s ->
+            val editor = s.storeEditor ?: return@update s
+            s.copy(storeEditor = editor.copy(previewContact = v))
+        }
+    }
+
+    fun onStoreEditorDeleteRequested() {
+        update { s ->
+            val editor = s.storeEditor ?: return@update s
+            s.copy(storeEditor = editor.copy(showDeleteConfirmation = true))
+        }
+    }
+
+    fun onStoreEditorDeleteConfirmed() {
+        val editor = _state.value.storeEditor ?: return
+        val storeId = editor.storeId ?: return
+
+        viewModelScope.launch {
+            try {
+                storeRepo.deleteStore(storeId)
+
+                refreshStoreNames()
+
+                update {
+                    it.copy(
+                        storeEditor = null,
+                        errorMessage = null,
+                        barcodeActionMessage = "Store deleted."
+                    )
+                }
+            } catch (t: Throwable) {
+                update {
+                    it.copy(errorMessage = t.message ?: "Failed to delete store.")
+                }
+            }
+        }
+    }
+
+    fun onStoreEditorConfirm() {
+        val editor = _state.value.storeEditor ?: return
+        val name = editor.name.trim()
+
+        if (name.isBlank()) {
+            update { it.copy(errorMessage = "Store name is required.") }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                when (editor.mode) {
+                    StoreEditorMode.CREATE -> {
+                        storeRepo.createStore(name)
+                    }
+
+                    StoreEditorMode.EDIT -> {
+                        val storeId = editor.storeId
+                            ?: throw IllegalStateException("Missing store id for edit.")
+
+                        storeRepo.renameStore(storeId, name)
+                    }
+                }
+
+                refreshStoreNames()
+
+                update {
+                    it.copy(
+                        storeEditor = null,
+                        errorMessage = null,
+                        barcodeActionMessage = when (editor.mode) {
+                            StoreEditorMode.CREATE -> "Store created."
+                            StoreEditorMode.EDIT -> "Store updated."
+                        }
+                    )
+                }
+
+            } catch (t: Throwable) {
+                update {
+                    it.copy(errorMessage = t.message ?: "Store operation failed.")
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshStoreNames() {
+        storeNamesFlow.value = storeRepo.getAllStoreNames()
+    }
+
 
     init {
         viewModelScope.launch {
