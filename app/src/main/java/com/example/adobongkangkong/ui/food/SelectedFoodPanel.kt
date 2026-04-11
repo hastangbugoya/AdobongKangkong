@@ -18,6 +18,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +76,14 @@ import kotlin.math.max
  * Callback rules:
  * - A direct edit in a visible field should emit one primary semantic callback.
  * - Unit/amount dialog apply paths still use the generic unit + amount callbacks.
+ *
+ * Pricing display rules:
+ * - Pricing is display-only here.
+ * - Caller supplies already-computed strings such as:
+ *   - "~ $0.55 / 100g"
+ *   - "~ $2.50 / serving"
+ *   - "~ $2.50 for this ingredient"
+ * - This composable does not do any price math.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,6 +107,14 @@ fun SelectedFoodPanel(
     isPrimaryEnabled: Boolean = true,
     onPrimaryAction: () -> Unit,
     modifier: Modifier = Modifier,
+
+    /**
+     * Optional display-only price strings supplied by caller.
+     */
+    normalizedPriceDisplay: String? = null,
+    servingPriceDisplay: String? = null,
+    ingredientCostDisplay: String? = null,
+
     extraContent: @Composable ColumnScope.() -> Unit = {}
 ) {
     val servingUnitIsMass = food.servingUnit.isMassUnit()
@@ -381,6 +398,64 @@ fun SelectedFoodPanel(
                 )
             }
             Spacer(Modifier.size(12.dp))
+        }
+
+        val hasAnyPriceDisplay =
+            !normalizedPriceDisplay.isNullOrBlank() ||
+                    !servingPriceDisplay.isNullOrBlank() ||
+                    !ingredientCostDisplay.isNullOrBlank()
+
+        if (hasAnyPriceDisplay) {
+            Spacer(Modifier.size(4.dp))
+            Surface(
+                tonalElevation = 1.dp,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Estimated price",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+
+                    normalizedPriceDisplay?.takeIf { it.isNotBlank() }?.let { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    servingPriceDisplay?.takeIf { it.isNotBlank() }?.let { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (
+                        !ingredientCostDisplay.isNullOrBlank() &&
+                        (!normalizedPriceDisplay.isNullOrBlank() || !servingPriceDisplay.isNullOrBlank())
+                    ) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                    }
+
+                    ingredientCostDisplay?.takeIf { it.isNotBlank() }?.let { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.size(8.dp))
         }
 
         extraContent()

@@ -1,4 +1,5 @@
 package com.example.adobongkangkong.ui.recipe
+
 // ⚠️ Default null servings to 1.0.
 // UI layer allows nullable servings during editing, but the domain draft
 // requires a non-null Double for nutrition scaling and planner expansion.
@@ -15,36 +16,37 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
-import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
+import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
+import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
 import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
+import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
+import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
 import com.example.adobongkangkong.domain.usecase.CreateRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveRecipeMacroPreviewUseCase
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Locale
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
-import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
-import com.example.adobongkangkong.domain.repository.NutrientRepository
-import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
-import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
-import kotlin.math.abs
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class RecipeBuilderViewModel @Inject constructor(
@@ -64,6 +66,7 @@ class RecipeBuilderViewModel @Inject constructor(
     private val servingsYieldFlow = MutableStateFlow(5.0)
     private val totalYieldGramsFlow = MutableStateFlow<Double?>(null)
     private val queryFlow = MutableStateFlow("")
+
     private val resultsFlow: StateFlow<List<Food>> =
         queryFlow
             .debounce(150)
@@ -85,6 +88,7 @@ class RecipeBuilderViewModel @Inject constructor(
                 SharingStarted.WhileSubscribed(5_000),
                 emptyList()
             )
+
     private var isEditingGrams: Boolean = false
 
     private val pickedFoodFlow = MutableStateFlow<Food?>(null)
@@ -92,6 +96,10 @@ class RecipeBuilderViewModel @Inject constructor(
     private val pickedServingsTextFlow = MutableStateFlow("1.0")
     private val pickedGramsTextFlow = MutableStateFlow("")
     private val ingredientsFlow = MutableStateFlow<List<RecipeIngredientUi>>(emptyList())
+
+    private val pickedNormalizedPriceDisplayFlow = MutableStateFlow<String?>(null)
+    private val pickedServingPriceDisplayFlow = MutableStateFlow<String?>(null)
+    private val pickedIngredientLineCostDisplayFlow = MutableStateFlow<String?>(null)
 
     private val favoriteFlow = MutableStateFlow(false)
     private val eatMoreFlow = MutableStateFlow(false)
@@ -108,6 +116,29 @@ class RecipeBuilderViewModel @Inject constructor(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
                 0.0
+            )
+
+    private val estimatedRecipeTotalCostFlow: StateFlow<Double?> =
+        ingredientsFlow
+            .map { lines ->
+                val known = lines.mapNotNull { it.estimatedLineCost }
+                if (known.isEmpty()) null else known.sum()
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                null
+            )
+
+    private val estimatedRecipeTotalCostDisplayFlow: StateFlow<String?> =
+        estimatedRecipeTotalCostFlow
+            .map { total ->
+                total?.let(::formatCurrencyEstimate)
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                null
             )
 
     private val isSavingFlow = MutableStateFlow(false)
@@ -140,6 +171,13 @@ class RecipeBuilderViewModel @Inject constructor(
     init {
         loadCategoriesForEditor()
     }
+
+    private data class IngredientPricePreview(
+        val normalizedDisplay: String?,
+        val servingDisplay: String?,
+        val lineCost: Double?,
+        val lineCostDisplay: String?
+    )
 
     /**
      * Returns grams for one CURRENT serving of this food.
@@ -192,6 +230,91 @@ class RecipeBuilderViewModel @Inject constructor(
         didAutoPrefillTotalYieldGrams = true
     }
 
+    private suspend fun buildIngredientPricePreview(
+        food: Food,
+        servings: Double
+    ): IngredientPricePreview {
+        val averagePer100g = foodRepo.getAveragePricePer100gForFood(food.id)
+        val averagePer100ml = foodRepo.getAveragePricePer100mlForFood(food.id)
+
+        val gramsPerServing = food.gramsPerCurrentServingResolved()
+        val millilitersPerServing = food.millilitersPerCurrentServingResolved()
+
+        val lineGrams = gramsPerServing?.let { (servings * it).coerceAtLeast(0.0) }
+        val lineMilliliters = millilitersPerServing?.let { (servings * it).coerceAtLeast(0.0) }
+
+        val normalizedDisplay = buildList {
+            if (averagePer100g != null) add(formatCurrencyEstimatePer100g(averagePer100g))
+            if (averagePer100ml != null) add(formatCurrencyEstimatePer100ml(averagePer100ml))
+        }.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+
+        val servingDisplay = buildList {
+            if (averagePer100g != null && gramsPerServing != null && gramsPerServing > 0.0) {
+                add(formatCurrencyEstimatePerServing(gramsPerServing / 100.0 * averagePer100g))
+            }
+            if (averagePer100ml != null && millilitersPerServing != null && millilitersPerServing > 0.0) {
+                add(formatCurrencyEstimatePerServing(millilitersPerServing / 100.0 * averagePer100ml))
+            }
+        }.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+
+        val lineCost = when {
+            averagePer100g != null && lineGrams != null && lineGrams > 0.0 ->
+                (lineGrams / 100.0) * averagePer100g
+
+            averagePer100ml != null && lineMilliliters != null && lineMilliliters > 0.0 ->
+                (lineMilliliters / 100.0) * averagePer100ml
+
+            else -> null
+        }
+
+        return IngredientPricePreview(
+            normalizedDisplay = normalizedDisplay,
+            servingDisplay = servingDisplay,
+            lineCost = lineCost,
+            lineCostDisplay = lineCost?.let(::formatCurrencyEstimateForIngredient)
+        )
+    }
+
+    private fun formatCurrencyEstimate(value: Double): String =
+        String.format(Locale.US, "~ $%.2f", value)
+
+    private fun formatCurrencyEstimatePer100g(value: Double): String =
+        String.format(Locale.US, "~ $%.2f / 100g", value)
+
+    private fun formatCurrencyEstimatePer100ml(value: Double): String =
+        String.format(Locale.US, "~ $%.2f / 100mL", value)
+
+    private fun formatCurrencyEstimatePerServing(value: Double): String =
+        String.format(Locale.US, "~ $%.2f / serving", value)
+
+    private fun formatCurrencyEstimateForIngredient(value: Double): String =
+        String.format(Locale.US, "~ $%.2f for this ingredient", value)
+
+    private fun refreshPickedPricePreview() {
+        val food = pickedFoodFlow.value
+        val servings = pickedServingsFlow.value
+
+        if (food == null || servings <= 0.0) {
+            pickedNormalizedPriceDisplayFlow.value = null
+            pickedServingPriceDisplayFlow.value = null
+            pickedIngredientLineCostDisplayFlow.value = null
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val preview = buildIngredientPricePreview(food = food, servings = servings)
+                pickedNormalizedPriceDisplayFlow.value = preview.normalizedDisplay
+                pickedServingPriceDisplayFlow.value = preview.servingDisplay
+                pickedIngredientLineCostDisplayFlow.value = preview.lineCostDisplay
+            } catch (_: Throwable) {
+                pickedNormalizedPriceDisplayFlow.value = null
+                pickedServingPriceDisplayFlow.value = null
+                pickedIngredientLineCostDisplayFlow.value = null
+            }
+        }
+    }
+
     private data class Left(
         val name: String,
         val servingsYield: Double,
@@ -205,7 +328,12 @@ class RecipeBuilderViewModel @Inject constructor(
         val pickedServings: Double,
         val pickedServingsText: String,
         val pickedGramsText: String,
-        val ingredients: List<RecipeIngredientUi>
+        val ingredients: List<RecipeIngredientUi>,
+        val pickedNormalizedPriceDisplay: String?,
+        val pickedServingPriceDisplay: String?,
+        val pickedIngredientLineCostDisplay: String?,
+        val estimatedRecipeTotalCost: Double?,
+        val estimatedRecipeTotalCostDisplay: String?
     )
 
     private data class RightB(
@@ -222,6 +350,11 @@ class RecipeBuilderViewModel @Inject constructor(
         val pickedServingsText: String,
         val pickedGramsText: String,
         val ingredients: List<RecipeIngredientUi>,
+        val pickedNormalizedPriceDisplay: String?,
+        val pickedServingPriceDisplay: String?,
+        val pickedIngredientLineCostDisplay: String?,
+        val estimatedRecipeTotalCost: Double?,
+        val estimatedRecipeTotalCostDisplay: String?,
         val preview: RecipeMacroPreview,
         val isSaving: Boolean,
         val error: String?,
@@ -281,13 +414,36 @@ class RecipeBuilderViewModel @Inject constructor(
                     pickedServingsFlow,
                     pickedServingsTextFlow,
                     pickedGramsTextFlow,
-                    ingredientsFlow
-                ) { s, sText, gText, ing ->
+                    ingredientsFlow,
+                    pickedNormalizedPriceDisplayFlow,
+                    pickedServingPriceDisplayFlow,
+                    pickedIngredientLineCostDisplayFlow,
+                    estimatedRecipeTotalCostFlow,
+                    estimatedRecipeTotalCostDisplayFlow
+                ) { arr: Array<Any?> ->
+                    val pickedServings = arr[0] as Double
+                    val pickedServingsText = arr[1] as String
+                    val pickedGramsText = arr[2] as String
+
+                    @Suppress("UNCHECKED_CAST")
+                    val ingredients = arr[3] as List<RecipeIngredientUi>
+
+                    val pickedNormalizedPriceDisplay = arr[4] as String?
+                    val pickedServingPriceDisplay = arr[5] as String?
+                    val pickedIngredientLineCostDisplay = arr[6] as String?
+                    val estimatedRecipeTotalCost = arr[7] as Double?
+                    val estimatedRecipeTotalCostDisplay = arr[8] as String?
+
                     RightA(
-                        pickedServings = s,
-                        pickedServingsText = sText,
-                        pickedGramsText = gText,
-                        ingredients = ing
+                        pickedServings = pickedServings,
+                        pickedServingsText = pickedServingsText,
+                        pickedGramsText = pickedGramsText,
+                        ingredients = ingredients,
+                        pickedNormalizedPriceDisplay = pickedNormalizedPriceDisplay,
+                        pickedServingPriceDisplay = pickedServingPriceDisplay,
+                        pickedIngredientLineCostDisplay = pickedIngredientLineCostDisplay,
+                        estimatedRecipeTotalCost = estimatedRecipeTotalCost,
+                        estimatedRecipeTotalCostDisplay = estimatedRecipeTotalCostDisplay
                     )
                 }
 
@@ -325,6 +481,11 @@ class RecipeBuilderViewModel @Inject constructor(
                         pickedServingsText = a.pickedServingsText,
                         pickedGramsText = a.pickedGramsText,
                         ingredients = a.ingredients,
+                        pickedNormalizedPriceDisplay = a.pickedNormalizedPriceDisplay,
+                        pickedServingPriceDisplay = a.pickedServingPriceDisplay,
+                        pickedIngredientLineCostDisplay = a.pickedIngredientLineCostDisplay,
+                        estimatedRecipeTotalCost = a.estimatedRecipeTotalCost,
+                        estimatedRecipeTotalCostDisplay = a.estimatedRecipeTotalCostDisplay,
                         preview = b.preview,
                         isSaving = b.isSaving,
                         error = b.error,
@@ -388,6 +549,9 @@ class RecipeBuilderViewModel @Inject constructor(
                     pickedServingsText = right.pickedServingsText,
                     pickedGramsText = right.pickedGramsText,
                     pickedGrams = pickedGrams,
+                    pickedNormalizedPriceDisplay = right.pickedNormalizedPriceDisplay,
+                    pickedServingPriceDisplay = right.pickedServingPriceDisplay,
+                    pickedIngredientLineCostDisplay = right.pickedIngredientLineCostDisplay,
                     ingredients = right.ingredients,
                     isSaving = right.isSaving,
                     errorMessage = right.error,
@@ -402,6 +566,8 @@ class RecipeBuilderViewModel @Inject constructor(
                     favorite = overlay.favorite,
                     eatMore = overlay.eatMore,
                     limit = overlay.limit,
+                    estimatedRecipeTotalCost = right.estimatedRecipeTotalCost,
+                    estimatedRecipeTotalCostDisplay = right.estimatedRecipeTotalCostDisplay,
                 )
             }.stateIn(
                 viewModelScope,
@@ -451,6 +617,7 @@ class RecipeBuilderViewModel @Inject constructor(
             }
         }
     }
+
     fun createCategory() {
         val rawName = newCategoryNameFlow.value.trim()
         if (rawName.isBlank()) {
@@ -496,7 +663,7 @@ class RecipeBuilderViewModel @Inject constructor(
     }
 
     private fun recomputeNutrientTally() {
-        Log.d("Meow","RecipeBuilderViewModel> recomputeNutrientTally > Ingredients count:${ingredientsFlow.value.size}")
+        Log.d("Meow", "RecipeBuilderViewModel> recomputeNutrientTally > Ingredients count:${ingredientsFlow.value.size}")
         viewModelScope.launch {
             val lines = ingredientsFlow.value
             if (lines.isEmpty()) {
@@ -507,7 +674,7 @@ class RecipeBuilderViewModel @Inject constructor(
             }
 
             lines.forEach {
-                Log.d("Meow","RecipeBuilderViewModel> recomputeNutrientTally> Ingredient: ${it.foodName}")
+                Log.d("Meow", "RecipeBuilderViewModel> recomputeNutrientTally> Ingredient: ${it.foodName}")
             }
 
             nutrientTallyLoadingFlow.value = true
@@ -536,7 +703,7 @@ class RecipeBuilderViewModel @Inject constructor(
                         if (abs(v) <= 0.0) continue
 
                         val nutrient = nutrientRepo.getByCode(key.value) ?: continue
-                        Log.d("Meow","RecipeBuilderViewModel> recomputeNutrientTally> adding ${nutrient.displayName}")
+                        Log.d("Meow", "RecipeBuilderViewModel> recomputeNutrientTally> adding ${nutrient.displayName}")
                         add(
                             NutrientRowUi(
                                 nutrientId = nutrient.id,
@@ -647,6 +814,7 @@ class RecipeBuilderViewModel @Inject constructor(
         if (raw.isBlank() || raw == ".") {
             pickedServingsFlow.value = 0.0
             pickedServingsTextFlow.value = "0"
+            refreshPickedPricePreview()
             return
         }
 
@@ -663,6 +831,7 @@ class RecipeBuilderViewModel @Inject constructor(
         raw.toDoubleOrNull()?.let { parsed ->
             pickedServingsFlow.value = max(0.0, parsed)
             syncPickedGramsTextFromServings()
+            refreshPickedPricePreview()
         }
     }
 
@@ -678,6 +847,7 @@ class RecipeBuilderViewModel @Inject constructor(
             pickedGramsTextFlow.value = ""
             pickedServingsFlow.value = 0.0
             pickedServingsTextFlow.value = "0"
+            refreshPickedPricePreview()
             return
         }
 
@@ -749,7 +919,10 @@ class RecipeBuilderViewModel @Inject constructor(
         val food = pickedFoodFlow.value ?: return
         val unit = pickedInputUnitFlow.value
 
-        if (amount == null || amount <= 0.0) return
+        if (amount == null || amount <= 0.0) {
+            refreshPickedPricePreview()
+            return
+        }
 
         val grams = computePickedInputGrams(food = food, amount = amount, unit = unit) ?: return
         isEditingGrams = true
@@ -766,6 +939,7 @@ class RecipeBuilderViewModel @Inject constructor(
         pickedServingsTextFlow.value = "1.0"
         syncPickedGramsTextFromServings()
         errorFlow.value = null
+        refreshPickedPricePreview()
     }
 
     fun clearPickedFood() {
@@ -773,6 +947,9 @@ class RecipeBuilderViewModel @Inject constructor(
         pickedServingsFlow.value = 1.0
         pickedServingsTextFlow.value = "1.0"
         pickedGramsTextFlow.value = ""
+        pickedNormalizedPriceDisplayFlow.value = null
+        pickedServingPriceDisplayFlow.value = null
+        pickedIngredientLineCostDisplayFlow.value = null
     }
 
     fun onPickedServingsChange(v: Double) {
@@ -780,6 +957,7 @@ class RecipeBuilderViewModel @Inject constructor(
         pickedServingsFlow.value = newVal
         pickedServingsTextFlow.value = newVal.toString()
         syncPickedGramsTextFromServings()
+        refreshPickedPricePreview()
     }
 
     fun onPickedGramsChange(grams: Double) {
@@ -790,6 +968,7 @@ class RecipeBuilderViewModel @Inject constructor(
         val servingsRaw = (grams / gramsPerServing).coerceAtLeast(0.0)
         pickedServingsFlow.value = servingsRaw
         pickedServingsTextFlow.value = formatTo2Decimals(servingsRaw)
+        refreshPickedPricePreview()
     }
 
     private fun formatTo2Decimals(value: Double): String {
@@ -810,86 +989,101 @@ class RecipeBuilderViewModel @Inject constructor(
         val food = pickedFoodFlow.value ?: return
         val servings = pickedServingsFlow.value
 
-        if (servings <= 0.0) {
-            errorFlow.value = "Ingredient amount must be > 0."
-            return
-        }
-
-        val gramsPerServing = food.gramsPerCurrentServingResolved()
-        val mlPerServing = food.millilitersPerCurrentServingResolved()
-
-        // ✅ NEW: allow if EITHER grams OR ml path exists
-        val hasNutritionPath = (gramsPerServing != null && gramsPerServing > 0.0) ||
-                (mlPerServing != null && mlPerServing > 0.0)
-
-        if (!hasNutritionPath) {
-            blockedFoodIdFlow.value = food.id
-            blockingSheetFlow.value = BlockingSheetModel(
-                title = "Missing recipe bridge",
-                message = "Add grams-per-serving or mL-per-serving to enable recipe conversion.",
-                primaryButtonText = "Edit food",
-                secondaryButtonText = "Dismiss",
-                onPrimary = {
-                    navigateToEditFoodIdFlow.value = food.id
-                    blockingSheetFlow.value = null
-                },
-                onSecondary = { dismissBlockingSheet() }
-            )
-            return
-        }
-
-        val gramsForLine: Double?
-        val isApproximateWeight: Boolean
-
-        if (gramsPerServing != null) {
-            gramsForLine = (servings * gramsPerServing).coerceAtLeast(0.0)
-            isApproximateWeight = false
-        } else {
-            // ✅ volume fallback for weight (approximate only)
-            gramsForLine = mlPerServing?.let { perServingMl ->
-                (servings * perServingMl).coerceAtLeast(0.0)
+        viewModelScope.launch {
+            if (servings <= 0.0) {
+                errorFlow.value = "Ingredient amount must be > 0."
+                return@launch
             }
-            isApproximateWeight = gramsForLine != null
-        }
 
-        val rawEntered = pickedInputAmountTextFlow.value.trim()
-        val enteredAmount: Double
-        val enteredUnitLabel: String
+            val gramsPerServing = food.gramsPerCurrentServingResolved()
+            val mlPerServing = food.millilitersPerCurrentServingResolved()
 
-        if (rawEntered.isNotBlank() && rawEntered != ".") {
-            enteredAmount = rawEntered.toDoubleOrNull() ?: servings
-            enteredUnitLabel = pickedInputUnitFlow.value.toString()
-        } else {
-            enteredAmount = servings
-            enteredUnitLabel = food.servingUnit.toString()
-        }
+            val hasNutritionPath =
+                (gramsPerServing != null && gramsPerServing > 0.0) ||
+                        (mlPerServing != null && mlPerServing > 0.0)
 
-        val next = ingredientsFlow.value.toMutableList()
-        next.add(
-            RecipeIngredientUi(
-                foodId = food.id,
-                foodName = food.name,
-                servings = servings,
-                servingUnitLabel = food.servingUnit.toString(),
-                grams = gramsForLine,
-                isApproximateWeight = isApproximateWeight,
-                enteredAmount = enteredAmount,
-                enteredUnitLabel = enteredUnitLabel
+            if (!hasNutritionPath) {
+                blockedFoodIdFlow.value = food.id
+                blockingSheetFlow.value = BlockingSheetModel(
+                    title = "Missing recipe bridge",
+                    message = "Add grams-per-serving or mL-per-serving to enable recipe conversion.",
+                    primaryButtonText = "Edit food",
+                    secondaryButtonText = "Dismiss",
+                    onPrimary = {
+                        navigateToEditFoodIdFlow.value = food.id
+                        blockingSheetFlow.value = null
+                    },
+                    onSecondary = { dismissBlockingSheet() }
+                )
+                return@launch
+            }
+
+            val gramsForLine: Double?
+            val millilitersForLine: Double?
+            val isApproximateWeight: Boolean
+
+            if (gramsPerServing != null) {
+                gramsForLine = (servings * gramsPerServing).coerceAtLeast(0.0)
+                millilitersForLine = mlPerServing?.let { (servings * it).coerceAtLeast(0.0) }
+                isApproximateWeight = false
+            } else {
+                gramsForLine = mlPerServing?.let { perServingMl ->
+                    (servings * perServingMl).coerceAtLeast(0.0)
+                }
+                millilitersForLine = mlPerServing?.let { (servings * it).coerceAtLeast(0.0) }
+                isApproximateWeight = gramsForLine != null
+            }
+
+            val rawEntered = pickedInputAmountTextFlow.value.trim()
+            val enteredAmount: Double
+            val enteredUnitLabel: String
+
+            if (rawEntered.isNotBlank() && rawEntered != ".") {
+                enteredAmount = rawEntered.toDoubleOrNull() ?: servings
+                enteredUnitLabel = pickedInputUnitFlow.value.toString()
+            } else {
+                enteredAmount = servings
+                enteredUnitLabel = food.servingUnit.toString()
+            }
+
+            val pricing = buildIngredientPricePreview(
+                food = food,
+                servings = servings
             )
-        )
 
-        ingredientsFlow.value = next
-        recomputeNutrientTally()
-        maybeAutoPrefillTotalYieldGramsFromIngredients()
-        markDirty()
+            val next = ingredientsFlow.value.toMutableList()
+            next.add(
+                RecipeIngredientUi(
+                    foodId = food.id,
+                    foodName = food.name,
+                    servings = servings,
+                    servingUnitLabel = food.servingUnit.toString(),
+                    grams = gramsForLine,
+                    milliliters = millilitersForLine,
+                    isApproximateWeight = isApproximateWeight,
+                    enteredAmount = enteredAmount,
+                    enteredUnitLabel = enteredUnitLabel,
+                    estimatedLineCost = pricing.lineCost,
+                    estimatedLineCostDisplay = pricing.lineCostDisplay
+                )
+            )
 
-        isEditingGrams = false
-        pickedFoodFlow.value = null
-        pickedServingsFlow.value = 1.0
-        pickedServingsTextFlow.value = "1.0"
-        pickedGramsTextFlow.value = ""
-        queryFlow.value = ""
-        errorFlow.value = null
+            ingredientsFlow.value = next
+            recomputeNutrientTally()
+            maybeAutoPrefillTotalYieldGramsFromIngredients()
+            markDirty()
+
+            isEditingGrams = false
+            pickedFoodFlow.value = null
+            pickedServingsFlow.value = 1.0
+            pickedServingsTextFlow.value = "1.0"
+            pickedGramsTextFlow.value = ""
+            queryFlow.value = ""
+            errorFlow.value = null
+            pickedNormalizedPriceDisplayFlow.value = null
+            pickedServingPriceDisplayFlow.value = null
+            pickedIngredientLineCostDisplayFlow.value = null
+        }
     }
 
     fun removeIngredientAt(index: Int) {
@@ -1001,6 +1195,7 @@ class RecipeBuilderViewModel @Inject constructor(
         pickedServingsFlow.value = newServings
         pickedServingsTextFlow.value = newServings.toString()
         syncPickedGramsTextFromServings()
+        refreshPickedPricePreview()
     }
 
     fun loadForEdit(foodId: Long?) {
@@ -1017,6 +1212,9 @@ class RecipeBuilderViewModel @Inject constructor(
         pickedServingsTextFlow.value = "1.0"
         pickedGramsTextFlow.value = ""
         queryFlow.value = ""
+        pickedNormalizedPriceDisplayFlow.value = null
+        pickedServingPriceDisplayFlow.value = null
+        pickedIngredientLineCostDisplayFlow.value = null
 
         viewModelScope.launch {
             val recipe = recipeRepo.getRecipeByFoodId(foodId) ?: return@launch
@@ -1051,15 +1249,26 @@ class RecipeBuilderViewModel @Inject constructor(
 
             ingredientsFlow.value = ingredients.map { line ->
                 val ingFood = foodById[line.ingredientFoodId]
+                if (ingFood == null) {
+                    return@map RecipeIngredientUi(
+                        foodId = line.ingredientFoodId,
+                        foodName = "Food ${line.ingredientFoodId}",
+                        servings = line.ingredientServings,
+                    )
+                }
 
-                val gramsPerServing = ingFood?.gramsPerCurrentServingResolved()
-                val mlPerServing = ingFood?.millilitersPerCurrentServingResolved()
+                val gramsPerServing = ingFood.gramsPerCurrentServingResolved()
+                val mlPerServing = ingFood.millilitersPerCurrentServingResolved()
                 val gramsForLine: Double?
+                val millilitersForLine: Double?
                 val isApproximateWeight: Boolean
 
                 if (gramsPerServing != null) {
                     gramsForLine = line.ingredientServings?.let { servings ->
                         (servings * gramsPerServing).coerceAtLeast(0.0)
+                    }
+                    millilitersForLine = line.ingredientServings?.let { servings ->
+                        mlPerServing?.let { (servings * it).coerceAtLeast(0.0) }
                     }
                     isApproximateWeight = false
                 } else {
@@ -1068,18 +1277,30 @@ class RecipeBuilderViewModel @Inject constructor(
                             (servings * perServingMl).coerceAtLeast(0.0)
                         }
                     }
+                    millilitersForLine = line.ingredientServings?.let { servings ->
+                        mlPerServing?.let { (servings * it).coerceAtLeast(0.0) }
+                    }
                     isApproximateWeight = gramsForLine != null
                 }
 
+                val pricing = buildIngredientPricePreview(
+                    food = ingFood,
+                    servings = line.ingredientServings ?: 0.0
+                )
+
                 RecipeIngredientUi(
                     foodId = line.ingredientFoodId,
-                    foodName = ingFood?.name ?: "Food ${line.ingredientFoodId}",
+                    foodName = ingFood.name,
                     servings = line.ingredientServings,
-                    servingUnitLabel = ingFood?.servingUnit?.toString(),
+                    servingUnitLabel = ingFood.servingUnit.toString(),
                     grams = gramsForLine,
-                    isApproximateWeight = isApproximateWeight
+                    milliliters = millilitersForLine,
+                    isApproximateWeight = isApproximateWeight,
+                    estimatedLineCost = pricing.lineCost,
+                    estimatedLineCostDisplay = pricing.lineCostDisplay
                 )
             }
+
             recomputeNutrientTally()
             if (totalYieldGramsFlow.value == null) {
                 maybeAutoPrefillTotalYieldGramsFromIngredients()

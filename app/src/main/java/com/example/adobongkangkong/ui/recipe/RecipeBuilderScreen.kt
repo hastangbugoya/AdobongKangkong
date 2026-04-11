@@ -35,8 +35,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -318,6 +316,7 @@ fun RecipeBuilderScreen(
 
                 Spacer(Modifier.height(16.dp))
             }
+
             item {
                 OutlinedTextField(
                     value = state.name,
@@ -369,9 +368,8 @@ fun RecipeBuilderScreen(
                 )
             }
 
-
-
             item { Spacer(Modifier.height(4.dp)) }
+
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -421,6 +419,7 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
+
             item {
                 val configuration = LocalConfiguration.current
                 val isTablet = configuration.screenWidthDp >= 600
@@ -434,6 +433,7 @@ fun RecipeBuilderScreen(
                     isTablet = isTablet
                 )
             }
+
             state.errorMessage?.let { err ->
                 item {
                     Text(
@@ -444,9 +444,11 @@ fun RecipeBuilderScreen(
                     TextButton(onClick = vm::clearError) { Text("Dismiss") }
                 }
             }
+
             item { Spacer(Modifier.height(4.dp)) }
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Ingredients", style = MaterialTheme.typography.titleMedium) }
+
             item {
                 if (state.ingredients.isEmpty()) {
                     Text("No ingredients yet.")
@@ -531,6 +533,15 @@ fun RecipeBuilderScreen(
                                                     maxLines = 1
                                                 )
                                             }
+
+                                            ing.estimatedLineCostDisplay?.let { display ->
+                                                Text(
+                                                    text = display,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
 
                                         IconButton(
@@ -556,8 +567,10 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
+
             item { Spacer(Modifier.height(4.dp)) }
             item { Text("Add ingredient", style = MaterialTheme.typography.titleMedium) }
+
             item {
                 OutlinedTextField(
                     value = state.query,
@@ -567,6 +580,7 @@ fun RecipeBuilderScreen(
                     singleLine = true
                 )
             }
+
             if (state.results.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -586,6 +600,7 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
+
             state.pickedFood?.let { pickedFood ->
                 item {
                     val gramsPerServingUnit = pickedFood.gramsPerServingUnitResolved()
@@ -642,7 +657,10 @@ fun RecipeBuilderScreen(
                             onPackage = { mult -> vm.onPackageClicked(mult) },
                             onEditFoodInEditor = { onEditFood(pickedFood.id) },
                             primaryButtonLabel = "Add ingredient",
-                            onPrimaryAction = vm::addPickedIngredient
+                            onPrimaryAction = vm::addPickedIngredient,
+                            normalizedPriceDisplay = state.pickedNormalizedPriceDisplay,
+                            servingPriceDisplay = state.pickedServingPriceDisplay,
+                            ingredientCostDisplay = state.pickedIngredientLineCostDisplay
                         )
                         Spacer(
                             modifier = Modifier
@@ -652,14 +670,17 @@ fun RecipeBuilderScreen(
                     }
                 }
             }
+
             item { Spacer(Modifier.height(8.dp)) }
             item { Text("Preview", style = MaterialTheme.typography.titleMedium) }
+
             item {
                 val servings = state.servingsYield
                 val noDivZero = servings > 0
 
                 fun fmt0(v: Double?) = if (v == null) "—" else "%,.0f".format(v)
                 fun fmt1(v: Double?) = if (v == null) "—" else "%,.1f".format(v)
+                fun fmtCurrency(v: Double?) = if (v == null) "—" else "~ $%,.2f".format(v)
                 fun perServing(total: Double): Double? =
                     if (noDivZero) total / servings else null
 
@@ -715,6 +736,14 @@ fun RecipeBuilderScreen(
                         fmt0(perServing(ingredientTotalGrams))
                     )
 
+                    state.estimatedRecipeTotalCostDisplay?.let {
+                        RowItem(
+                            "Estimated cost",
+                            it,
+                            fmtCurrency(perServing(state.estimatedRecipeTotalCost ?: 0.0))
+                        )
+                    }
+
                     RowItem(
                         "Calories (kcal)",
                         fmt0(state.preview.totalCalories),
@@ -742,6 +771,7 @@ fun RecipeBuilderScreen(
             }
 
             item { Spacer(Modifier.height(12.dp)) }
+
             item {
                 Text("Nutrient tally", style = MaterialTheme.typography.titleMedium)
 
@@ -778,6 +808,7 @@ fun RecipeBuilderScreen(
                 )
                 Text(state.toString(), style = MaterialTheme.typography.bodySmall)
             }
+
             item { Spacer(Modifier.height(16.dp)) }
         }
     }
