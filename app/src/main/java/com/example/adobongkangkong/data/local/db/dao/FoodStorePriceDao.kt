@@ -9,16 +9,18 @@ import com.example.adobongkangkong.data.local.db.entity.FoodStorePriceEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * DAO for food-store pricing.
+ * DAO for food-store normalized pricing.
  *
  * Current model:
  * - One row per (foodId, storeId)
- * - Represents the current best-known price for that food at that store
+ * - Represents the current best-known normalized pricing snapshot for that food at that store
+ * - Basis remains separate:
+ *   - pricePer100g
+ *   - pricePer100ml
  *
  * Design note:
- * - AVG queries are intentionally exposed now even though the current schema makes
- *   some of them trivial. This preserves a stable read contract if multi-row or
- *   historical pricing is added later.
+ * - AVG queries are still exposed, but now they must stay basis-specific.
+ * - Mass and volume prices must never be blended together.
  */
 @Dao
 interface FoodStorePriceDao {
@@ -55,91 +57,99 @@ interface FoodStorePriceDao {
         storeId: Long
     ): FoodStorePriceEntity?
 
-    /**
-     * Returns the average price of a food across all stores.
-     *
-     * Today:
-     * - One row per store, so this is the average of current known store prices.
-     */
     @Query(
         """
-        SELECT AVG(estimatedPrice)
+        SELECT AVG(pricePer100g)
         FROM food_store_prices
         WHERE foodId = :foodId
         """
     )
-    suspend fun getAveragePriceForFood(
+    suspend fun getAveragePricePer100gForFood(
         foodId: Long
     ): Double?
 
-    /**
-     * Observable version of average price across all stores for a food.
-     */
     @Query(
         """
-        SELECT AVG(estimatedPrice)
+        SELECT AVG(pricePer100g)
         FROM food_store_prices
         WHERE foodId = :foodId
         """
     )
-    fun observeAveragePriceForFood(
+    fun observeAveragePricePer100gForFood(
         foodId: Long
     ): Flow<Double?>
 
-    /**
-     * Returns the average price for a specific food-store pair.
-     *
-     * With the current unique (foodId, storeId) constraint, this is effectively
-     * the current stored price for that pair.
-     */
     @Query(
         """
-        SELECT AVG(estimatedPrice)
+        SELECT AVG(pricePer100ml)
+        FROM food_store_prices
+        WHERE foodId = :foodId
+        """
+    )
+    suspend fun getAveragePricePer100mlForFood(
+        foodId: Long
+    ): Double?
+
+    @Query(
+        """
+        SELECT AVG(pricePer100ml)
+        FROM food_store_prices
+        WHERE foodId = :foodId
+        """
+    )
+    fun observeAveragePricePer100mlForFood(
+        foodId: Long
+    ): Flow<Double?>
+
+    @Query(
+        """
+        SELECT AVG(pricePer100g)
         FROM food_store_prices
         WHERE foodId = :foodId
           AND storeId = :storeId
         """
     )
-    suspend fun getAveragePriceForFoodAtStore(
+    suspend fun getAveragePricePer100gForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Double?
 
-    /**
-     * Observable version of the current food-store pair price.
-     */
     @Query(
         """
-        SELECT AVG(estimatedPrice)
+        SELECT AVG(pricePer100g)
         FROM food_store_prices
         WHERE foodId = :foodId
           AND storeId = :storeId
         """
     )
-    fun observeAveragePriceForFoodAtStore(
+    fun observeAveragePricePer100gForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Flow<Double?>
+
+    @Query(
+        """
+        SELECT AVG(pricePer100ml)
+        FROM food_store_prices
+        WHERE foodId = :foodId
+          AND storeId = :storeId
+        """
+    )
+    suspend fun getAveragePricePer100mlForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Double?
+
+    @Query(
+        """
+        SELECT AVG(pricePer100ml)
+        FROM food_store_prices
+        WHERE foodId = :foodId
+          AND storeId = :storeId
+        """
+    )
+    fun observeAveragePricePer100mlForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Flow<Double?>
 }
-
-/**
- * =============================================================================
- * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
- * =============================================================================
- *
- * Why AVG methods exist now
- * - They preserve a stable DAO contract for future history/multi-row pricing.
- *
- * Current semantics
- * - One row per (foodId, storeId)
- * - One average across all stores for a food
- *
- * Future likely additions
- * - min/max price by food
- * - cheapest store for a food
- * - joins with StoreEntity for shopping/list summaries
- *
- * Guardrail
- * - If this table later becomes price history, review whether writes should still
- *   replace or should append.
- */

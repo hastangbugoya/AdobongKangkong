@@ -1,7 +1,6 @@
 // RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
-import NutrientRowUi
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -88,6 +87,7 @@ import com.example.adobongkangkong.ui.common.editoraction.EditorActionMenu
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import kotlinx.coroutines.delay
 
@@ -124,7 +124,7 @@ fun RecipeBuilderScreen(
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val listState = rememberLazyListState()
     val bringAddIntoView = remember { BringIntoViewRequester() }
-    val scope = rememberCoroutineScope()
+    rememberCoroutineScope()
 
     LaunchedEffect(state.pickedFood?.id) {
         if (state.pickedFood != null) {

@@ -107,7 +107,7 @@ fun DashboardScreen(
 
     val selectedDate = state.date
     val currentDate = state.currentDate
-    val isToday = selectedDate == currentDate
+    selectedDate == currentDate
 
     DisposableEffect(lifecycleOwner, vm) {
         val observer = LifecycleEventObserver { _, event ->

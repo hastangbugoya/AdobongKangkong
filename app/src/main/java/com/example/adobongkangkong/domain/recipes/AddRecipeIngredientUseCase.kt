@@ -90,7 +90,7 @@ class AddRecipeIngredientUseCase(
             is FoodUsageCheck.Blocked -> return Result.Blocked(check.message)
         }
 
-        val servings: Double = when (amountInput) {
+        when (amountInput) {
             is AmountInput.ByServings -> amountInput.servings
             is AmountInput.ByGrams -> {
                 val r = ServingAmountConverter.gramsToServings(

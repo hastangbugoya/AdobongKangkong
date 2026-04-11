@@ -35,22 +35,24 @@ package com.example.adobongkangkong.ui.food.editor
  * - No grams↔mL conversion without explicit density
  * - Exactly one row per nutrient id
  */
-import AssignedBarcodeUi
-import BarcodeCollisionDialogState
-import BarcodePackageEditorState
-import FoodCategoryUi
-import FoodEditorState
-import GroundingMode
-import NutrientDraftState
-import NutrientRowUi
-import NutrientSearchResultUi
-import NutritionEditorStatusState
-import PendingUsdaBackfillPromptState
-import PendingUsdaInterpretationPromptState
-import ServingDraftState
-import StoreEditorState
-import UsdaBackfillMessageState
-import UsdaNutrientInterpretationChoice
+
+import com.example.adobongkangkong.ui.food.editor.AssignedBarcodeUi
+import com.example.adobongkangkong.ui.food.editor.BarcodeCollisionDialogState
+import com.example.adobongkangkong.ui.food.editor.BarcodePackageEditorState
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
+import com.example.adobongkangkong.ui.food.editor.FoodEditorState
+import com.example.adobongkangkong.ui.food.editor.GroundingMode
+import com.example.adobongkangkong.ui.food.editor.NutrientDraftState
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
+import com.example.adobongkangkong.ui.food.editor.NutrientSearchResultUi
+import com.example.adobongkangkong.ui.food.editor.NutritionEditorStatusState
+import com.example.adobongkangkong.ui.food.editor.PendingUsdaBackfillPromptState
+import com.example.adobongkangkong.ui.food.editor.PendingUsdaInterpretationPromptState
+import com.example.adobongkangkong.ui.food.editor.ServingDraftState
+import com.example.adobongkangkong.ui.food.editor.StoreEditorMode
+import com.example.adobongkangkong.ui.food.editor.StoreEditorState
+import com.example.adobongkangkong.ui.food.editor.UsdaBackfillMessageState
+import com.example.adobongkangkong.ui.food.editor.UsdaNutrientInterpretationChoice
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -84,6 +86,7 @@ import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.domain.repository.StoreRepository
 import com.example.adobongkangkong.domain.usda.AdoptUsdaBarcodePackageIntoFoodUseCase
 import com.example.adobongkangkong.domain.usda.AssignBarcodeToFoodUseCase
 import com.example.adobongkangkong.domain.usda.BackfillUsdaNutrientsIntoFoodUseCase
@@ -102,6 +105,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -112,8 +116,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
-import com.example.adobongkangkong.domain.repository.StoreRepository
-import kotlinx.coroutines.flow.asStateFlow
 
 private const val KEY_BARCODE_ASSIGN_FOOD_ID = "barcode_assign_foodId"
 private const val KEY_BARCODE_ASSIGN_BARCODE = "barcode_assign_barcode"
@@ -296,7 +298,7 @@ class FoodEditorViewModel @Inject constructor(
                     else -> BasisType.USDA_REPORTED_SERVING
                 }
 
-            val assignedBarcodes: List<AssignedBarcodeUi> = if (foodId != null) {
+            val assignedBarcodes = if (foodId != null) {
                 buildAssignedBarcodeUiList(foodId)
             } else {
                 emptyList()
@@ -437,7 +439,15 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    fun updateStorePrice(storeName: String, priceText: String) {
+    // ONLY showing the updated function — everything else remains EXACTLY the same
+
+    fun updateStorePrice(
+        storeName: String,
+        gramsText: String,
+        gramsPriceText: String,
+        mlText: String,
+        mlPriceText: String
+    ) {
         val foodId = _state.value.foodId ?: run {
             update { it.copy(errorMessage = "Save the food first before adding a store price.") }
             return
@@ -449,9 +459,26 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
-        val price = priceText.trim().toDoubleOrNull()
-        if (price == null || price <= 0.0) {
-            update { it.copy(errorMessage = "Estimated price must be a positive number.") }
+        val grams = gramsText.trim().toDoubleOrNull()
+        val gramsPrice = gramsPriceText.trim().toDoubleOrNull()
+
+        val ml = mlText.trim().toDoubleOrNull()
+        val mlPrice = mlPriceText.trim().toDoubleOrNull()
+
+        val pricePer100g =
+            if (grams != null && grams > 0 && gramsPrice != null && gramsPrice > 0) {
+                (gramsPrice / grams) * 100.0
+            } else null
+
+        val pricePer100ml =
+            if (ml != null && ml > 0 && mlPrice != null && mlPrice > 0) {
+                (mlPrice / ml) * 100.0
+            } else null
+
+        if (pricePer100g == null && pricePer100ml == null) {
+            update {
+                it.copy(errorMessage = "Enter valid weight or volume price.")
+            }
             return
         }
 
@@ -468,13 +495,15 @@ class FoodEditorViewModel @Inject constructor(
                 foodRepo.upsertFoodStorePrice(
                     foodId = foodId,
                     storeId = storeId,
-                    estimatedPrice = price
+                    pricePer100g = pricePer100g,
+                    pricePer100ml = pricePer100ml,
+                    updatedAtEpochMs = System.currentTimeMillis()
                 )
 
                 update {
                     it.copy(
                         errorMessage = null,
-                        barcodeActionMessage = "Updated $trimmedStoreName price to $priceText."
+                        barcodeActionMessage = "Updated $trimmedStoreName price."
                     )
                 }
             } catch (t: Throwable) {

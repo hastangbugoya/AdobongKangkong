@@ -4,8 +4,6 @@ package com.example.adobongkangkong.ui.recipe
 // requires a non-null Double for nutrition scaling and planner expansion.
 // We intentionally default to 1.0 (NOT 0.0) to preserve recipe math integrity
 // and make unexpected null states visible in the UI.
-import FoodCategoryUi
-import NutrientRowUi
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -44,6 +42,8 @@ import kotlinx.coroutines.flow.flowOf
 import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
 import com.example.adobongkangkong.domain.repository.NutrientRepository
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
+import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import kotlin.math.abs
 
 @HiltViewModel

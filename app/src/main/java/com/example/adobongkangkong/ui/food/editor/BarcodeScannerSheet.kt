@@ -171,7 +171,7 @@ private fun BarcodeScannerPreview(
     modifier: Modifier,
     onBarcode: (String) -> Unit
 ) {
-    val context = LocalContext.current
+    LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     var handled by remember { mutableStateOf(false) }

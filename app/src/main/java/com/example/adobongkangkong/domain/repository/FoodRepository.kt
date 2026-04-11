@@ -23,12 +23,12 @@ interface FoodRepository {
      *
      * NOTE (soft delete refactor):
      * - This now performs a SOFT delete (default delete behavior).
-     * - Hard delete is available via [hardDeleteFoodIfUnused].
+     * - Hard delete is available via [hardDeleteFood].
      */
     suspend fun deleteFood(foodId: Long): Boolean
 
     // -------------------------
-    // New: delete APIs
+    // Delete APIs
     // -------------------------
 
     suspend fun softDeleteFood(foodId: Long)
@@ -42,20 +42,24 @@ interface FoodRepository {
     suspend fun getByStableId(stableId: String): Food?
 
     // -------------------------
-    // New: store pricing APIs
+    // Store pricing APIs
     // -------------------------
 
     /**
-     * Inserts or replaces the current best-known price for a food at a store.
+     * Inserts or replaces the current best-known normalized price for a food at a store.
      *
      * Current contract:
-     * - One active price row per (foodId, storeId)
-     * - Re-saving the same pair replaces the old value
+     * - One active pricing row per (foodId, storeId)
+     * - Re-saving the same pair replaces the old normalized snapshot
+     * - At least one normalized path must be present
+     * - Mass and volume remain separate
      */
     suspend fun upsertFoodStorePrice(
         foodId: Long,
         storeId: Long,
-        estimatedPrice: Double
+        pricePer100g: Double?,
+        pricePer100ml: Double?,
+        updatedAtEpochMs: Long
     ): Long
 
     /**
@@ -67,40 +71,67 @@ interface FoodRepository {
     )
 
     /**
-     * Returns the average price for a food across all stores.
+     * Returns the average normalized price per 100g for a food across all stores.
      *
      * Today:
-     * - One row per store, so this is the mean of current known store prices.
+     * - One row per store, so this is the mean of current known mass-based store estimates.
+     * - Stores without a mass-based estimate are ignored.
+     */
+    suspend fun getAveragePricePer100gForFood(foodId: Long): Double?
+
+    /**
+     * Observable version of average normalized price per 100g for a food across all stores.
+     */
+    fun observeAveragePricePer100gForFood(foodId: Long): Flow<Double?>
+
+    /**
+     * Returns the average normalized price per 100mL for a food across all stores.
      *
-     * Later:
-     * - If price history is added, this method can remain while repository logic
-     *   decides whether to average all rows or latest-per-store rows.
+     * Today:
+     * - One row per store, so this is the mean of current known volume-based store estimates.
+     * - Stores without a volume-based estimate are ignored.
      */
-    suspend fun getAveragePriceForFood(foodId: Long): Double?
+    suspend fun getAveragePricePer100mlForFood(foodId: Long): Double?
 
     /**
-     * Observable version of average price for a food across all stores.
+     * Observable version of average normalized price per 100mL for a food across all stores.
      */
-    fun observeAveragePriceForFood(foodId: Long): Flow<Double?>
+    fun observeAveragePricePer100mlForFood(foodId: Long): Flow<Double?>
 
     /**
-     * Returns the current price for a specific food-store pair.
+     * Returns the current normalized price per 100g for a specific food-store pair.
      *
      * Because the table currently enforces uniqueness on (foodId, storeId),
-     * this is effectively the current stored value for that relationship.
+     * this is effectively the current stored mass-based value for that relationship.
      */
-    suspend fun getAveragePriceForFoodAtStore(
+    suspend fun getAveragePricePer100gForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Double?
 
     /**
-     * Observable version of the current price for a specific food-store pair.
-     *
-     * Named "average" intentionally to preserve a stable contract if multi-row
-     * or historical pricing is introduced later.
+     * Observable version of the current normalized price per 100g for a specific food-store pair.
      */
-    fun observeAveragePriceForFoodAtStore(
+    fun observeAveragePricePer100gForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Flow<Double?>
+
+    /**
+     * Returns the current normalized price per 100mL for a specific food-store pair.
+     *
+     * Because the table currently enforces uniqueness on (foodId, storeId),
+     * this is effectively the current stored volume-based value for that relationship.
+     */
+    suspend fun getAveragePricePer100mlForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Double?
+
+    /**
+     * Observable version of the current normalized price per 100mL for a specific food-store pair.
+     */
+    fun observeAveragePricePer100mlForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Flow<Double?>

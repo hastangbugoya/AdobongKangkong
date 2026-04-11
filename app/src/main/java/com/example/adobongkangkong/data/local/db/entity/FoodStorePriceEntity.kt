@@ -6,20 +6,27 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Represents the relationship between a Food and a Store with an associated price.
+ * Represents the relationship between a Food and a Store with normalized pricing.
  *
  * Key design decisions:
  * - Price belongs to the relationship (food + store), not FoodEntity.
  * - Surrogate PK used for Room simplicity and future extensibility.
- * - Unique constraint on (foodId, storeId) ensures only one active price per pair.
+ * - Unique constraint on (foodId, storeId) ensures only one active pricing snapshot per pair.
  *
- * First-pass scope:
- * - Single "estimatedPrice" only.
- * - No price history yet.
- * - DAO will aggregate (AVG) if needed later.
+ * Current scope:
+ * - Persist normalized comparable estimates only.
+ * - Keep basis separate:
+ *   - pricePer100g for mass-based comparison
+ *   - pricePer100ml for volume-based comparison
+ * - No package history yet.
+ * - No grams↔mL guessing.
+ *
+ * Practical product rule:
+ * - User enters the package quantity and total price that is most useful to them.
+ * - App normalizes immediately and stores the normalized estimate for future use.
  *
  * Future-safe:
- * - Can later evolve into price history by adding timestamps or splitting table.
+ * - Can later evolve into price history by adding snapshot rows or splitting table.
  */
 @Entity(
     tableName = "food_store_prices",
@@ -58,13 +65,29 @@ data class FoodStorePriceEntity(
     val storeId: Long,
 
     /**
-     * Estimated price for this food at this store.
+     * Normalized estimated price per 100 grams.
      *
      * Rules:
-     * - Non-null: presence of row = price exists.
-     * - Use consistent currency at app level (not enforced here yet).
+     * - Nullable because a row may only have a volume-based estimate.
+     * - Must be positive when present.
+     * - App must not infer this from volume.
      */
-    val estimatedPrice: Double
+    val pricePer100g: Double?,
+
+    /**
+     * Normalized estimated price per 100 milliliters.
+     *
+     * Rules:
+     * - Nullable because a row may only have a mass-based estimate.
+     * - Must be positive when present.
+     * - App must not infer this from mass.
+     */
+    val pricePer100ml: Double?,
+
+    /**
+     * Timestamp of when this normalized pricing snapshot was last updated.
+     */
+    val updatedAtEpochMs: Long
 )
 
 /**
@@ -72,26 +95,34 @@ data class FoodStorePriceEntity(
  * FUTURE-YOU / FUTURE AI NOTES — DO NOT DELETE
  * =============================================================================
  *
- * Why no price history (yet)
- * - This table represents the "current best known price".
- * - Simpler queries and avoids premature complexity.
+ * Why normalized-only persistence
+ * - The app needs practical comparable estimates, not package-level retail history.
+ * - Package size used for entry is an input mechanism, not the persisted model.
  *
- * Future evolution paths
- * - Add effectiveDate / updatedAt column
- * - OR introduce FoodStorePriceHistoryEntity
- * - Keep this table as "latest snapshot" for fast reads
+ * Why keep g and mL separate
+ * - Mass and volume are not interchangeable without explicit density.
+ * - Mixing them would create misleading averages and invalid comparisons.
  *
  * Why unique (foodId, storeId)
  * - Prevents duplicate rows like:
  *     (chicken breast, Costco) x 3 entries
- * - Forces updates instead of inserts (upsert behavior)
+ * - Forces updates instead of parallel snapshots in this first pass.
+ *
+ * Future evolution paths
+ * - Add package metadata fields for UI audit/debug only
+ * - Add effectiveDate / updatedAt detail expansion
+ * - OR introduce FoodStorePriceHistoryEntity
+ * - Keep this table as latest snapshot for fast reads
  *
  * DAO implications
- * - Simple AVG queries can still work across rows (if later expanded)
- * - For now, each pair has only one row → AVG is trivial but future-proof
+ * - Averages must remain basis-specific:
+ *   - AVG(pricePer100g)
+ *   - AVG(pricePer100ml)
+ * - Do NOT collapse these into one blended "price".
  *
- * Important guardrail
- * - Do NOT move estimatedPrice to FoodEntity.
+ * Important guardrails
+ * - Do NOT move pricing fields to FoodEntity.
  * - Do NOT duplicate store info here.
- * - This table must remain the single source of truth for pricing relationships.
+ * - Do NOT guess grams from mL or mL from grams.
+ * - At least one normalized path should be present before saving a row.
  */

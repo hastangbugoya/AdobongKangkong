@@ -1,10 +1,5 @@
 package com.example.adobongkangkong.ui.food.editor
 
-import AssignedBarcodeUi
-import FoodEditorState
-import NutrientRowUi
-import NutrientSearchResultUi
-import UsdaNutrientInterpretationChoice
 import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
 import android.util.Log
@@ -226,7 +221,13 @@ fun FoodEditorScreen(
 
     // Store price / store editor
     storePriceStoreNames: List<String> = emptyList(),
-    onUpdateStorePrice: ((storeName: String, priceText: String) -> Unit)? = null,
+    onUpdateStorePrice: ((
+        storeName: String,
+        gramsText: String,
+        gramsPriceText: String,
+        mlText: String,
+        mlPriceText: String
+    ) -> Unit)? = null,
     onOpenCreateStoreEditor: (() -> Unit)? = null,
     onOpenEditStoreEditor: ((storeName: String) -> Unit)? = null,
     onDismissStoreEditor: (() -> Unit)? = null,
@@ -253,7 +254,10 @@ fun FoodEditorScreen(
     var storePriceExpanded by remember { mutableStateOf(false) }
     var storeActionsExpanded by remember { mutableStateOf(false) }
     var selectedStoreName by rememberSaveable { mutableStateOf(storePriceStoreNames.firstOrNull().orEmpty()) }
-    var storePriceInput by rememberSaveable { mutableStateOf("") }
+    var gramsInput by rememberSaveable { mutableStateOf("") }
+    var gramsPriceInput by rememberSaveable { mutableStateOf("") }
+    var mlInput by rememberSaveable { mutableStateOf("") }
+    var mlPriceInput by rememberSaveable { mutableStateOf("") }
 
     var actionMenuExpanded by remember { mutableStateOf(false) }
 
@@ -264,6 +268,17 @@ fun FoodEditorScreen(
             showExitDialog.value = true
         } else {
             onBack()
+        }
+    }
+
+    fun sanitizeDecimalInput(value: String): String {
+        val filtered = value.filter { it.isDigit() || it == '.' }
+        val firstDot = filtered.indexOf('.')
+        return if (firstDot == -1) {
+            filtered
+        } else {
+            filtered.substring(0, firstDot + 1) +
+                    filtered.substring(firstDot + 1).replace(".", "")
         }
     }
 
@@ -754,7 +769,7 @@ fun FoodEditorScreen(
                 )
 
                 Text(
-                    text = "Simple first pass. Pick a store, enter a price, then update.",
+                    text = "Enter a package quantity and total price. The app will normalize and save an approximate estimate.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -849,24 +864,78 @@ fun FoodEditorScreen(
                     }
                 }
 
+                HorizontalDivider()
+
+                Text(
+                    text = "Weight-based package",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
                 OutlinedTextField(
-                    value = storePriceInput,
+                    value = gramsInput,
                     onValueChange = { newValue ->
-                        storePriceInput = newValue.filter { it.isDigit() || it == '.' }
+                        gramsInput = sanitizeDecimalInput(newValue)
                     },
-                    label = { Text("Estimated price") },
+                    label = { Text("Quantity in grams") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = gramsPriceInput,
+                    onValueChange = { newValue ->
+                        gramsPriceInput = sanitizeDecimalInput(newValue)
+                    },
+                    label = { Text("Total price") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                HorizontalDivider()
+
+                Text(
+                    text = "Volume-based package",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                OutlinedTextField(
+                    value = mlInput,
+                    onValueChange = { newValue ->
+                        mlInput = sanitizeDecimalInput(newValue)
+                    },
+                    label = { Text("Quantity in mL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = mlPriceInput,
+                    onValueChange = { newValue ->
+                        mlPriceInput = sanitizeDecimalInput(newValue)
+                    },
+                    label = { Text("Total price") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = "Enter either path or both. The app will not convert grams and mL between each other.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 Button(
                     onClick = {
-                        onUpdateStorePrice?.invoke(selectedStoreName, storePriceInput)
+                        onUpdateStorePrice?.invoke(
+                            selectedStoreName,
+                            gramsInput,
+                            gramsPriceInput,
+                            mlInput,
+                            mlPriceInput
+                        )
                         showStorePriceSheet = false
                     },
-                    enabled = selectedStoreName.isNotBlank() &&
-                            storePriceInput.isNotBlank() &&
-                            onUpdateStorePrice != null,
+                    enabled = selectedStoreName.isNotBlank() && onUpdateStorePrice != null,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Update")

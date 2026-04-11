@@ -304,7 +304,9 @@ class UpdateLogEntryUseCaseTest {
         override suspend fun upsertFoodStorePrice(
             foodId: Long,
             storeId: Long,
-            estimatedPrice: Double
+            pricePer100g: Double?,
+            pricePer100ml: Double?,
+            updatedAtEpochMs: Long
         ): Long {
             throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
         }
@@ -313,22 +315,44 @@ class UpdateLogEntryUseCaseTest {
             throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
         }
 
-        override suspend fun getAveragePriceForFood(foodId: Long): Double? {
+        override suspend fun getAveragePricePer100gForFood(foodId: Long): Double? {
             throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
         }
 
-        override fun observeAveragePriceForFood(foodId: Long): Flow<Double?> {
+        override fun observeAveragePricePer100gForFood(foodId: Long): Flow<Double?> {
             throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
         }
 
-        override suspend fun getAveragePriceForFoodAtStore(
+        override suspend fun getAveragePricePer100mlForFood(foodId: Long): Double? {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override fun observeAveragePricePer100mlForFood(foodId: Long): Flow<Double?> {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override suspend fun getAveragePricePer100gForFoodAtStore(
             foodId: Long,
             storeId: Long
         ): Double? {
             throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
         }
 
-        override fun observeAveragePriceForFoodAtStore(
+        override fun observeAveragePricePer100gForFoodAtStore(
+            foodId: Long,
+            storeId: Long
+        ): Flow<Double?> {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override suspend fun getAveragePricePer100mlForFoodAtStore(
+            foodId: Long,
+            storeId: Long
+        ): Double? {
+            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override fun observeAveragePricePer100mlForFoodAtStore(
             foodId: Long,
             storeId: Long
         ): Flow<Double?> {

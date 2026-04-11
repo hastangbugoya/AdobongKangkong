@@ -55,6 +55,7 @@ object DatabaseModule {
             "nutri.db"
         )
             .addMigrations(NutriDatabase.MIGRATION_1_2)
+            .addMigrations(NutriDatabase.MIGRATION_2_3)
             .build()
     }
 

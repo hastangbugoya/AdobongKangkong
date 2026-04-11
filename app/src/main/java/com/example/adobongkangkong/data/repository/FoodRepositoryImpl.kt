@@ -47,7 +47,10 @@ class FoodRepositoryImpl @Inject constructor(
 
     override suspend fun upsert(food: Food): Long {
         val entity = food.toEntity()
-        Log.d("Meow","UPSERT > Food: ${food.name} >stableId=${entity.stableId} gtin=${entity.usdaGtinUpc} fdc=${entity.usdaFdcId} pub=${entity.usdaPublishedDate} mod=${entity.usdaModifiedDate}")
+        Log.d(
+            "Meow",
+            "UPSERT > Food: ${food.name} >stableId=${entity.stableId} gtin=${entity.usdaGtinUpc} fdc=${entity.usdaFdcId} pub=${entity.usdaPublishedDate} mod=${entity.usdaModifiedDate}"
+        )
 
         foodDao.upsert(entity)
 
@@ -133,20 +136,27 @@ class FoodRepositoryImpl @Inject constructor(
         return deletedCount
     }
 
-    // -------------------------
-    // 🔥 NEW: pricing
-    // -------------------------
-
     override suspend fun upsertFoodStorePrice(
         foodId: Long,
         storeId: Long,
-        estimatedPrice: Double
+        pricePer100g: Double?,
+        pricePer100ml: Double?,
+        updatedAtEpochMs: Long
     ): Long {
+        require(
+            (pricePer100g != null && pricePer100g > 0.0) ||
+                    (pricePer100ml != null && pricePer100ml > 0.0)
+        ) {
+            "At least one normalized store price must be present."
+        }
+
         return foodStorePriceDao.upsertFoodStorePrice(
             FoodStorePriceEntity(
                 foodId = foodId,
                 storeId = storeId,
-                estimatedPrice = estimatedPrice
+                pricePer100g = pricePer100g,
+                pricePer100ml = pricePer100ml,
+                updatedAtEpochMs = updatedAtEpochMs
             )
         )
     }
@@ -158,25 +168,47 @@ class FoodRepositoryImpl @Inject constructor(
         foodStorePriceDao.deleteByFoodIdAndStoreId(foodId, storeId)
     }
 
-    override suspend fun getAveragePriceForFood(foodId: Long): Double? {
-        return foodStorePriceDao.getAveragePriceForFood(foodId)
+    override suspend fun getAveragePricePer100gForFood(foodId: Long): Double? {
+        return foodStorePriceDao.getAveragePricePer100gForFood(foodId)
     }
 
-    override fun observeAveragePriceForFood(foodId: Long): Flow<Double?> {
-        return foodStorePriceDao.observeAveragePriceForFood(foodId)
+    override fun observeAveragePricePer100gForFood(foodId: Long): Flow<Double?> {
+        return foodStorePriceDao.observeAveragePricePer100gForFood(foodId)
     }
 
-    override suspend fun getAveragePriceForFoodAtStore(
+    override suspend fun getAveragePricePer100mlForFood(foodId: Long): Double? {
+        return foodStorePriceDao.getAveragePricePer100mlForFood(foodId)
+    }
+
+    override fun observeAveragePricePer100mlForFood(foodId: Long): Flow<Double?> {
+        return foodStorePriceDao.observeAveragePricePer100mlForFood(foodId)
+    }
+
+    override suspend fun getAveragePricePer100gForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Double? {
-        return foodStorePriceDao.getAveragePriceForFoodAtStore(foodId, storeId)
+        return foodStorePriceDao.getAveragePricePer100gForFoodAtStore(foodId, storeId)
     }
 
-    override fun observeAveragePriceForFoodAtStore(
+    override fun observeAveragePricePer100gForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Flow<Double?> {
-        return foodStorePriceDao.observeAveragePriceForFoodAtStore(foodId, storeId)
+        return foodStorePriceDao.observeAveragePricePer100gForFoodAtStore(foodId, storeId)
+    }
+
+    override suspend fun getAveragePricePer100mlForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Double? {
+        return foodStorePriceDao.getAveragePricePer100mlForFoodAtStore(foodId, storeId)
+    }
+
+    override fun observeAveragePricePer100mlForFoodAtStore(
+        foodId: Long,
+        storeId: Long
+    ): Flow<Double?> {
+        return foodStorePriceDao.observeAveragePricePer100mlForFoodAtStore(foodId, storeId)
     }
 }

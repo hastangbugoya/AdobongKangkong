@@ -120,11 +120,11 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         CalendarSuccessNutrientEntity::class,
         RecipeInstructionStepEntity::class,
 
-        // v2 additions
+        // Store pricing
         StoreEntity::class,
         FoodStorePriceEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -227,6 +227,102 @@ abstract class NutriDatabase : RoomDatabase() {
                 )
             }
         }
+
+        /**
+         * Migration 2 -> 3
+         *
+         * Changes:
+         * - adds nullable address to stores
+         * - replaces unitless food_store_prices.estimatedPrice with:
+         *   - pricePer100g
+         *   - pricePer100ml
+         *   - updatedAtEpochMs
+         *
+         * Important migration rule:
+         * - Existing estimatedPrice rows are intentionally NOT copied forward because they
+         *   do not encode whether the value was mass-based or volume-based.
+         * - Preserving them would create misleading normalized data.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    ALTER TABLE stores
+                    ADD COLUMN address TEXT
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS food_store_prices_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        foodId INTEGER NOT NULL,
+                        storeId INTEGER NOT NULL,
+                        pricePer100g REAL,
+                        pricePer100ml REAL,
+                        updatedAtEpochMs INTEGER NOT NULL,
+                        FOREIGN KEY(foodId) REFERENCES foods(id) ON DELETE CASCADE,
+                        FOREIGN KEY(storeId) REFERENCES stores(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_food_store_prices_new_foodId
+                    ON food_store_prices_new(foodId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_food_store_prices_new_storeId
+                    ON food_store_prices_new(storeId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_new_foodId_storeId
+                    ON food_store_prices_new(foodId, storeId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    DROP TABLE food_store_prices
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    ALTER TABLE food_store_prices_new
+                    RENAME TO food_store_prices
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_food_store_prices_foodId
+                    ON food_store_prices(foodId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS index_food_store_prices_storeId
+                    ON food_store_prices(storeId)
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_foodId_storeId
+                    ON food_store_prices(foodId, storeId)
+                    """.trimIndent()
+                )
+            }
+        }
     }
 }
 
@@ -247,6 +343,10 @@ abstract class NutriDatabase : RoomDatabase() {
  *   that contain real retained app data.
  *
  * Builder reminder
- * - Ensure the Room database builder registers MIGRATION_1_2 explicitly.
+ * - Ensure the Room database builder registers both MIGRATION_1_2 and MIGRATION_2_3 explicitly.
  * - Do not rely on destructive migration for long-term user data.
+ *
+ * Normalized pricing reminder
+ * - pricePer100g and pricePer100ml are separate concepts and must stay separate in queries.
+ * - Do not invent basis during migration from old unitless estimatedPrice rows.
  */

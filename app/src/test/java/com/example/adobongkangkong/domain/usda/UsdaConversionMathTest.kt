@@ -58,7 +58,7 @@ class UsdaConversionMathTest {
             "FAT_G" to 11.0
         )
 
-        perServing.forEach { (code, amtPerServing) ->
+        perServing.forEach { (_, amtPerServing) ->
             val per100g = amtPerServing * factor
             val perGram = per100g / 100.0
             val roundTrip = perGram * gramsPerServing

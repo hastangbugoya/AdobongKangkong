@@ -1353,7 +1353,7 @@ class QuickAddViewModel @Inject constructor(
     }
 
     fun confirmEnteredGramsPerServing() {
-        val pending = pendingResolveMass ?: return
+        pendingResolveMass ?: return
         val grams = gramsPerServingTextFlow.value.toDoubleOrNull()
             ?.takeIf { it > 0.0 } ?: return
 

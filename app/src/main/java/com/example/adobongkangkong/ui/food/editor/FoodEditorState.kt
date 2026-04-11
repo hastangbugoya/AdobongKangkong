@@ -1,3 +1,5 @@
+package com.example.adobongkangkong.ui.food.editor
+
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.importing.Decision

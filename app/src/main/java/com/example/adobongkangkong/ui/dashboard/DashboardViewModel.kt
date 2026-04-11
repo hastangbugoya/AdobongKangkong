@@ -324,7 +324,7 @@ class DashboardViewModel @Inject constructor(
         foodId: Long,
         result: CreateLogEntryUseCase.Result
     ) {
-        Log.d("Meow", "DashboardViewModel> handleLogResult foodId:${foodId} result:${result.toString()}")
+        Log.d("Meow", "DashboardViewModel> handleLogResult foodId:${foodId} result:$result")
         when (result) {
             is CreateLogEntryUseCase.Result.Success -> Unit
 

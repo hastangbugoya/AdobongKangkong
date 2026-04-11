@@ -40,9 +40,9 @@ fun CalendarDayCell(
     val shape = RoundedCornerShape(10.dp)
 
     val border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-    val bg = MaterialTheme.colorScheme.surfaceVariant
+    MaterialTheme.colorScheme.surfaceVariant
 
-    val today = LocalDate.now()
+    LocalDate.now()
 //    val isToday = cell.date == today
 
     val backgroundColor = when {

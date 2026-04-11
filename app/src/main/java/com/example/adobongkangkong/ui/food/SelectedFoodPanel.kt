@@ -438,7 +438,7 @@ private fun NumberField(
 
     LaunchedEffect(value) {
         val parsed = text.toDoubleOrNull()
-        val materiallyDifferent = parsed == null || kotlin.math.abs(parsed - value) > 0.000001
+        val materiallyDifferent = parsed == null || abs(parsed - value) > 0.000001
         if (!isFocused || materiallyDifferent) {
             text = value.clean()
         }
