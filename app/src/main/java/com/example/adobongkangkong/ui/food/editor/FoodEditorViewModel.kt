@@ -1225,11 +1225,7 @@ class FoodEditorViewModel @Inject constructor(
             servingsPerPackage = v,
             hasUnsavedChanges = true,
             isFoodMetadataDirty = true,
-            servingDraft = it.servingDraft.copy(servingsPerPackage = v),
-            nutritionEditorStatus = it.nutritionEditorStatus.copy(
-                isServingDirty = true,
-                hasPendingRecompute = true
-            )
+            servingDraft = it.servingDraft.copy(servingsPerPackage = v)
         )
     }
 

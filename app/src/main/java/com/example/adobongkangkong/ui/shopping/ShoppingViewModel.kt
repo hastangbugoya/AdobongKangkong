@@ -8,26 +8,38 @@ import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodNeedsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedRecipeShoppingRequirementsUseCase
-import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
-import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedRecipeShoppingRequirementsUseCase.RecipeIngredientRequirement
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedRecipeShoppingRequirementsUseCase.RecipeOccurrenceRequirement
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedRecipeShoppingRequirementsUseCase.RecipeTotalRequirement
+import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
+import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
+import com.example.adobongkangkong.domain.repository.FoodRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class ShoppingViewModel @Inject constructor(
     private val observeTotals: ObservePlannedFoodTotalsUseCase,
     private val observeNeeds: ObservePlannedFoodNeedsUseCase,
     private val observeRecipeShopping: ObservePlannedRecipeShoppingRequirementsUseCase,
-    private val foodGoalFlagsDao: FoodGoalFlagsDao
+    private val foodGoalFlagsDao: FoodGoalFlagsDao,
+    private val foodRepo: FoodRepository
 ) : ViewModel() {
 
     private val startDateFlow = MutableStateFlow(LocalDate.now())
@@ -35,7 +47,9 @@ class ShoppingViewModel @Inject constructor(
 
     private val daysTextFlow = MutableStateFlow("7")
 
-    fun setStartDate(d: LocalDate) { startDateFlow.value = d }
+    fun setStartDate(d: LocalDate) {
+        startDateFlow.value = d
+    }
 
     fun onDaysTextChanged(v: String) {
         daysTextFlow.value = v
@@ -55,21 +69,31 @@ class ShoppingViewModel @Inject constructor(
         combine(startDateFlow, daysFlow) { start, days -> start to days }
             .flatMapLatest { (start, days) -> observeRecipeShopping(start, days) }
             .map { result -> result.totalled.map { it.recipeFoodId }.toSet() }
+
     private val totalsUiFlow: Flow<List<ShoppingTotalRowUi>> =
         combine(
             combine(startDateFlow, daysFlow) { start, days -> start to days }
-                .flatMapLatest { (start, days) -> observeTotals(startDate = start, days = days) },
+                .flatMapLatest { (start, days) ->
+                    observeTotals(startDate = start, days = days)
+                },
             recipeFoodIdsFlow
         ) { totals, recipeIds ->
-
             totals
-                .filterNot { it.foodId in recipeIds } // 🔥 KEY FIX
+                .filterNot { it.foodId in recipeIds }
                 .sortedWith(
                     compareBy<PlannedFoodTotalNeed> { it.earliestNextPlannedDate ?: LocalDate.MAX }
                         .thenBy { it.foodName.lowercase() }
                         .thenBy { it.foodId }
                 )
-                .map { it.toUi() }
+        }.mapLatest { totals ->
+            totals.map { total ->
+                val avgPricePer100g = foodRepo.getAveragePricePer100gForFood(total.foodId)
+                val avgPricePer100ml = foodRepo.getAveragePricePer100mlForFood(total.foodId)
+                total.toUi(
+                    avgPricePer100g = avgPricePer100g,
+                    avgPricePer100ml = avgPricePer100ml
+                )
+            }
         }
 
     private val needsUiFlow: Flow<List<ShoppingNeedsGroupUi>> =
@@ -79,7 +103,7 @@ class ShoppingViewModel @Inject constructor(
             recipeFoodIdsFlow
         ) { list, recipeIds ->
             list
-                .filterNot { it.foodId in recipeIds } // 🔥 SAME RULE
+                .filterNot { it.foodId in recipeIds }
                 .toGroupedUi()
         }
 
@@ -102,7 +126,8 @@ class ShoppingViewModel @Inject constructor(
                     )
                     .map { total ->
                         total.toTotalledUi(
-                            nextDateText = earliestDateByRecipeFoodId[total.recipeFoodId]
+                            nextDateText = earliestDateByRecipeFoodId[total.recipeFoodId],
+                            foodRepo = foodRepo
                         )
                     }
             }
@@ -117,9 +142,8 @@ class ShoppingViewModel @Inject constructor(
                             .thenBy { it.recipeName.lowercase() }
                             .thenBy { it.recipeFoodId }
                     )
-                    .map { it.toOccurrenceUi() }
+                    .map { it.toOccurrenceUi(foodRepo = foodRepo) }
             }
-
 
     val state: StateFlow<ShoppingState> =
         combine(
@@ -136,14 +160,10 @@ class ShoppingViewModel @Inject constructor(
             )
         }
             .combine(recipeTotalledUiFlow) { base, recipeTotals ->
-                base.copy(
-                    recipeTotalledGroups = recipeTotals
-                )
+                base.copy(recipeTotalledGroups = recipeTotals)
             }
             .combine(recipeNotTotalledUiFlow) { base, recipeOccurrences ->
-                base.copy(
-                    recipeNotTotalledGroups = recipeOccurrences
-                )
+                base.copy(recipeNotTotalledGroups = recipeOccurrences)
             }
             .map { base ->
                 ShoppingState(
@@ -183,7 +203,10 @@ data class ShoppingTotalRowUi(
     val earliestNextPlannedDateText: String?,
     val gramsText: String?,
     val mlText: String?,
-    val unconvertedServingsText: String?
+    val unconvertedServingsText: String?,
+    val avgPricePer100gText: String?,
+    val avgPricePer100mlText: String?,
+    val estimatedCostText: String?
 )
 
 data class ShoppingNeedsRowUi(
@@ -203,7 +226,9 @@ data class ShoppingRecipeIngredientRowUi(
     val foodId: Long,
     val foodName: String,
     val amountText: String,
-    val duplicateIconRes: Int?
+    val duplicateIconRes: Int?,
+    val avgPriceText: String?,
+    val estimatedCostText: String?
 )
 
 data class ShoppingRecipeTotalGroupUi(
@@ -224,17 +249,27 @@ data class ShoppingRecipeOccurrenceGroupUi(
     val ingredients: List<ShoppingRecipeIngredientRowUi>
 )
 
-private fun PlannedFoodTotalNeed.toUi(): ShoppingTotalRowUi {
-    fun fmtDouble(v: Double): String =
-        if (v == v.roundToInt().toDouble()) v.roundToInt().toString() else "%.2f".format(v)
-
+private fun PlannedFoodTotalNeed.toUi(
+    avgPricePer100g: Double?,
+    avgPricePer100ml: Double?
+): ShoppingTotalRowUi {
     return ShoppingTotalRowUi(
         foodId = foodId,
         foodName = foodName,
         earliestNextPlannedDateText = formatShoppingDate(earliestNextPlannedDate),
-        gramsText = gramsTotal?.let { "g: ${fmtDouble(it)}" },
-        mlText = mlTotal?.let { "mL: ${fmtDouble(it)}" },
-        unconvertedServingsText = unconvertedServingsTotal?.let { "servings: ${fmtDouble(it)} (unconverted)" }
+        gramsText = gramsTotal?.let { "g: ${fmtShoppingDouble(it)}" },
+        mlText = mlTotal?.let { "mL: ${fmtShoppingDouble(it)}" },
+        unconvertedServingsText = unconvertedServingsTotal?.let {
+            "servings: ${fmtShoppingDouble(it)} (unconverted)"
+        },
+        avgPricePer100gText = avgPricePer100g?.let { "avg: ${formatCurrency(it)} /100g" },
+        avgPricePer100mlText = avgPricePer100ml?.let { "avg: ${formatCurrency(it)} /100mL" },
+        estimatedCostText = computeEstimatedCostText(
+            gramsTotal = gramsTotal,
+            mlTotal = mlTotal,
+            avgPricePer100g = avgPricePer100g,
+            avgPricePer100ml = avgPricePer100ml
+        )
     )
 }
 
@@ -272,8 +307,9 @@ private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
     )
 }
 
-private fun RecipeTotalRequirement.toTotalledUi(
-    nextDateText: String?
+private suspend fun RecipeTotalRequirement.toTotalledUi(
+    nextDateText: String?,
+    foodRepo: FoodRepository
 ): ShoppingRecipeTotalGroupUi {
     return ShoppingRecipeTotalGroupUi(
         recipeFoodId = recipeFoodId,
@@ -286,11 +322,13 @@ private fun RecipeTotalRequirement.toTotalledUi(
                 compareBy<RecipeIngredientRequirement> { it.foodName.lowercase() }
                     .thenBy { it.foodId }
             )
-            .map { it.toUi() }
+            .map { it.toUi(foodRepo) }
     )
 }
 
-private fun RecipeOccurrenceRequirement.toOccurrenceUi(): ShoppingRecipeOccurrenceGroupUi {
+private suspend fun RecipeOccurrenceRequirement.toOccurrenceUi(
+    foodRepo: FoodRepository
+): ShoppingRecipeOccurrenceGroupUi {
     return ShoppingRecipeOccurrenceGroupUi(
         recipeFoodId = recipeFoodId,
         recipeName = recipeName,
@@ -302,11 +340,16 @@ private fun RecipeOccurrenceRequirement.toOccurrenceUi(): ShoppingRecipeOccurren
                 compareBy<RecipeIngredientRequirement> { it.foodName.lowercase() }
                     .thenBy { it.foodId }
             )
-            .map { it.toUi() }
+            .map { it.toUi(foodRepo) }
     )
 }
 
-private fun RecipeIngredientRequirement.toUi(): ShoppingRecipeIngredientRowUi {
+private suspend fun RecipeIngredientRequirement.toUi(
+    foodRepo: FoodRepository
+): ShoppingRecipeIngredientRowUi {
+    val avgPricePer100g = foodRepo.getAveragePricePer100gForFood(foodId)
+    val avgPricePer100ml = foodRepo.getAveragePricePer100mlForFood(foodId)
+
     val amountText = when (source) {
         ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.SERVINGS ->
             "${fmtShoppingDouble(amountRequired)} servings"
@@ -314,12 +357,53 @@ private fun RecipeIngredientRequirement.toUi(): ShoppingRecipeIngredientRowUi {
         ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.GRAMS ->
             "${fmtShoppingDouble(amountRequired)} g"
     }
+
+    val avgPriceText = when {
+        avgPricePer100g != null ->
+            "avg: ${formatCurrency(avgPricePer100g)} /100g"
+
+        avgPricePer100ml != null ->
+            "avg: ${formatCurrency(avgPricePer100ml)} /100mL"
+
+        else -> null
+    }
+
+    val estimatedCostText = when {
+        source == ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.GRAMS &&
+                avgPricePer100g != null -> {
+            "est: ${formatCurrency((amountRequired / 100.0) * avgPricePer100g)}"
+        }
+
+        else -> null
+    }
+
     return ShoppingRecipeIngredientRowUi(
         foodId = foodId,
         foodName = foodName,
         amountText = amountText,
-        duplicateIconRes = if (isDuplicateAcrossRecipes) R.drawable.layers else null
+        duplicateIconRes = if (isDuplicateAcrossRecipes) R.drawable.layers else null,
+        avgPriceText = avgPriceText,
+        estimatedCostText = estimatedCostText
     )
+}
+
+private fun computeEstimatedCostText(
+    gramsTotal: Double?,
+    mlTotal: Double?,
+    avgPricePer100g: Double?,
+    avgPricePer100ml: Double?
+): String? {
+    val estimated = when {
+        gramsTotal != null && avgPricePer100g != null ->
+            (gramsTotal / 100.0) * avgPricePer100g
+
+        mlTotal != null && avgPricePer100ml != null ->
+            (mlTotal / 100.0) * avgPricePer100ml
+
+        else -> null
+    }
+
+    return estimated?.let { "est: ${formatCurrency(it)}" }
 }
 
 private fun fmtShoppingDouble(v: Double): String {
@@ -328,6 +412,10 @@ private fun fmtShoppingDouble(v: Double): String {
     } else {
         "%.2f".format(v)
     }
+}
+
+private fun formatCurrency(v: Double): String {
+    return "$" + "%.2f".format(v)
 }
 
 private fun formatShoppingDate(date: LocalDate?): String? {

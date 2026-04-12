@@ -154,7 +154,6 @@ private fun TotalledTab(
 
         items(foodRows, key = { "food_${it.foodId}" }) { row ->
             FoodBannerCardBackground(foodId = row.foodId) {
-                // CRITICAL: Card must be transparent or it will paint over the blur background.
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -196,6 +195,25 @@ private fun TotalledTab(
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
+                            row.avgPricePer100gText?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            row.avgPricePer100mlText?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            row.estimatedCostText?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                         FoodGoalFlagsStrip(flagsByFoodId[row.foodId])
                     }
@@ -222,7 +240,6 @@ private fun NotTotalledTab(
 
         items(foodGroups, key = { "food_${it.foodId}" }) { g ->
             FoodBannerCardBackground(foodId = g.foodId) {
-                // CRITICAL: Card must be transparent or it will paint over the blur background.
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -272,7 +289,6 @@ private fun RecipeTotalledCard(
     flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
 ) {
     FoodBannerCardBackground(foodId = group.recipeFoodId) {
-        // CRITICAL: Card must be transparent or it will paint over the blur background.
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -331,7 +347,6 @@ private fun RecipeOccurrenceCard(
     flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
 ) {
     FoodBannerCardBackground(foodId = group.recipeFoodId) {
-        // CRITICAL: Card must be transparent or it will paint over the blur background.
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -392,24 +407,43 @@ private fun RecipeIngredientRow(
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
+        Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = ingredient.foodName,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f, fill = false)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = ingredient.foodName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
 
-            if (ingredient.duplicateIconRes != null) {
-                Spacer(Modifier.padding(start = 6.dp))
-                Icon(
-                    painter = painterResource(ingredient.duplicateIconRes),
-                    contentDescription = "Ingredient appears in multiple recipes",
-                    modifier = Modifier
-                        .padding(start = 6.dp)
-                        .size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                if (ingredient.duplicateIconRes != null) {
+                    Spacer(Modifier.padding(start = 6.dp))
+                    Icon(
+                        painter = painterResource(ingredient.duplicateIconRes),
+                        contentDescription = "Ingredient appears in multiple recipes",
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            ingredient.avgPriceText?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            ingredient.estimatedCostText?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
