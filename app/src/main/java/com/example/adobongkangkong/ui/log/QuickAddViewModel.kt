@@ -146,6 +146,7 @@ class QuickAddViewModel @Inject constructor(
         MutableStateFlow<Map<MealSlot, List<QuickAddPlannedItemCandidate>>>(emptyMap())
     private val isTodayPlanLoadingFlow = MutableStateFlow(false)
     private var todayPlanJob: Job? = null
+    private var todayPlanDateIso: String? = null
 
     private data class PendingResolveMass(
         val food: Food,
@@ -265,6 +266,7 @@ class QuickAddViewModel @Inject constructor(
             isNutritionChoiceDialogOpenFlow.value = false
             nutritionChoiceMessageFlow.value = null
             isTodayPlanPickerOpenFlow.value = false
+            stopTodayPlanObservation()
 
             clearEditIdentityState()
 
@@ -1044,7 +1046,12 @@ class QuickAddViewModel @Inject constructor(
         selectedRecipeStableIdFlow.value = null
         selectedRecipeServingsYieldDefaultFlow.value = null
         selectedBatchIdFlow.value = null
+
         isTodayPlanPickerOpenFlow.value = false
+        todayPlanSectionsFlow.value = emptyMap()
+        isTodayPlanLoadingFlow.value = false
+        stopTodayPlanObservation()
+
         errorFlow.value = null
     }
 
@@ -1070,18 +1077,26 @@ class QuickAddViewModel @Inject constructor(
         inputUnitFlow.value = unit
     }
 
-    fun openTodayPlanPicker() {
+    fun openTodayPlanPicker(logDate: LocalDate) {
         if (modeFlow.value == QuickAddMode.EDIT) return
+
+        val requestedDateIso = logDate.toString()
 
         isTodayPlanPickerOpenFlow.value = true
         errorFlow.value = null
 
+        if (todayPlanDateIso != requestedDateIso) {
+            stopTodayPlanObservation()
+            todayPlanSectionsFlow.value = emptyMap()
+        }
+
         if (todayPlanJob != null) return
 
+        todayPlanDateIso = requestedDateIso
         isTodayPlanLoadingFlow.value = true
 
         todayPlanJob = viewModelScope.launch {
-            observeTodayPlannedItemsForQuickAddUseCase()
+            observeTodayPlannedItemsForQuickAddUseCase(requestedDateIso)
                 .collect { sections ->
                     todayPlanSectionsFlow.value = sections
                     isTodayPlanLoadingFlow.value = false
@@ -1091,6 +1106,12 @@ class QuickAddViewModel @Inject constructor(
 
     fun closeTodayPlanPicker() {
         isTodayPlanPickerOpenFlow.value = false
+    }
+
+    private fun stopTodayPlanObservation() {
+        todayPlanJob?.cancel()
+        todayPlanJob = null
+        todayPlanDateIso = null
     }
 
     fun onPlannedItemSelected(candidate: QuickAddPlannedItemCandidate) {
@@ -1144,7 +1165,7 @@ class QuickAddViewModel @Inject constructor(
         inputModeFlow.value = when {
             unit.asG != null -> InputMode.GRAMS
             unit == food.servingUnit -> InputMode.SERVING_UNIT
-            unit.asMl != null -> InputMode.GRAMS   // ✅ treat volume like grams (derived)
+            unit.asMl != null -> InputMode.GRAMS
             else -> InputMode.SERVING_UNIT
         }
     }

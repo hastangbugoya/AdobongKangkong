@@ -296,7 +296,7 @@ fun QuickAddBottomSheet(
                             }
 
                             TextButton(
-                                onClick = { vm.openTodayPlanPicker() },
+                                onClick = { vm.openTodayPlanPicker(logDate) },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Today Plan")

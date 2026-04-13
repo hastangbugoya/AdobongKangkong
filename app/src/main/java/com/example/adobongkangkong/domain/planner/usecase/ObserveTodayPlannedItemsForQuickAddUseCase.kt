@@ -5,18 +5,24 @@ import com.example.adobongkangkong.domain.planner.model.PlannedDay
 import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.time.LocalDate
 import javax.inject.Inject
 
+/**
+ * Observes planned items for the Quick Add picker for a specific ISO date.
+ *
+ * IMPORTANT:
+ * - Do not derive the picker date from LocalDate.now().
+ * - The picker must use the same target date the Quick Add sheet is opened for.
+ */
 class ObserveTodayPlannedItemsForQuickAddUseCase @Inject constructor(
     private val observePlannedDayUseCase: ObservePlannedDayUseCase,
     private val resolvePlannedItemToQuickAddCandidate: ResolvePlannedItemToQuickAddCandidateUseCase,
 ) {
 
-    operator fun invoke(): Flow<Map<MealSlot, List<QuickAddPlannedItemCandidate>>> {
-        val today = LocalDate.now().toString()
-
-        return observePlannedDayUseCase(today)
+    operator fun invoke(
+        dateIso: String
+    ): Flow<Map<MealSlot, List<QuickAddPlannedItemCandidate>>> {
+        return observePlannedDayUseCase(dateIso)
             .map { day -> mapDay(day) }
     }
 

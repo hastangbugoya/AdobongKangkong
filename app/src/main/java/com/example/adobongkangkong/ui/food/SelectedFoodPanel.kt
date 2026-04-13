@@ -279,7 +279,7 @@ fun SelectedFoodPanel(
         }
 
         if (showMillilitersField) {
-            val millilitersDefault = servings * (food.mlPerServingUnit ?: 0.0)
+            val millilitersDefault = servingUnitAmount * (food.mlPerServingUnit ?: 0.0)
             val displayedMilliliters =
                 if (inputUnit == ServingUnit.ML && inputAmount != null && inputAmount > 0.0) {
                     inputAmount
