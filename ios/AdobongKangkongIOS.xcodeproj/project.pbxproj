@@ -1,0 +1,464 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1A4AF6E86FF7B4BA26C7DF08 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F043ED095BA90239A77CB1B3 /* SettingsView.swift */; };
+		1D2799AB31D159F8B9F5EC47 /* USDAService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019B7777E7B10E8585CB5458 /* USDAService.swift */; };
+		3677929437B271F9459691F4 /* UsdaSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 531EA28B4EB30D80D8F1FE31 /* UsdaSearchView.swift */; };
+		53A00FB30EBE3C969D610A5C /* ShoppingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16072D81ACD6171016F65D6F /* ShoppingView.swift */; };
+		65C4E9EBCA50B74CCC46021A /* DayLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA9EBF4F332AAD6EA017834 /* DayLogView.swift */; };
+		6E22EEDA2A191B84F022C93C /* RecipeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271A47804C67ED8DE83D7830 /* RecipeEditorView.swift */; };
+		6FB1030128A631AE10297E42 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CD64D8BC55E2BBC8FAEF80 /* AppStore.swift */; };
+		8E1A87814D0A1E505EEA4C75 /* PlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F94EAB081519E9AA5D60C7 /* PlannerView.swift */; };
+		9A0F5185781A2E6321AB9534 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB43F8A34BA431EEC7253C3 /* DomainModels.swift */; };
+		A2F7ACC1DCC45372F3AA5742 /* AdobongKangkongIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F62788F97962FE716A5344A /* AdobongKangkongIOSApp.swift */; };
+		A44CEFB1255DFE22B2FC3028 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C5D076B0D3400D98CD2D128 /* Formatters.swift */; };
+		BEC862265845C3DF4DE8174C /* FoodEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613D9582176B73A8007045B8 /* FoodEditorView.swift */; };
+		C3297EA0EDB94F60186068EB /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3886EE5E3AF2AE4C637338 /* DashboardView.swift */; };
+		C5B6B40349CABF30B67F6DB5 /* FoodsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 315E6764C77B8752A8B5033A /* FoodsListView.swift */; };
+		D26A2508A5B6925388B6127D /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBB07F16F8449D2E83B022F4 /* RootTabView.swift */; };
+		F0B26009FBF3DD2622326E02 /* RecipesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB10B5C144362C5C69DDB64C /* RecipesView.swift */; };
+		FAC8DB30EE9EE5CD01F71969 /* DateExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8319AAC41CE0FE3CA746D610 /* DateExtensions.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		019B7777E7B10E8585CB5458 /* USDAService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USDAService.swift; sourceTree = "<group>"; };
+		16072D81ACD6171016F65D6F /* ShoppingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingView.swift; sourceTree = "<group>"; };
+		238F092DC3B34D8FAEA0121C /* AdobongKangkongIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AdobongKangkongIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		271A47804C67ED8DE83D7830 /* RecipeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeEditorView.swift; sourceTree = "<group>"; };
+		2C5D076B0D3400D98CD2D128 /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
+		315E6764C77B8752A8B5033A /* FoodsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodsListView.swift; sourceTree = "<group>"; };
+		531EA28B4EB30D80D8F1FE31 /* UsdaSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsdaSearchView.swift; sourceTree = "<group>"; };
+		613D9582176B73A8007045B8 /* FoodEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodEditorView.swift; sourceTree = "<group>"; };
+		69F94EAB081519E9AA5D60C7 /* PlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerView.swift; sourceTree = "<group>"; };
+		6FA9EBF4F332AAD6EA017834 /* DayLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayLogView.swift; sourceTree = "<group>"; };
+		7F62788F97962FE716A5344A /* AdobongKangkongIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdobongKangkongIOSApp.swift; sourceTree = "<group>"; };
+		8319AAC41CE0FE3CA746D610 /* DateExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtensions.swift; sourceTree = "<group>"; };
+		AB10B5C144362C5C69DDB64C /* RecipesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipesView.swift; sourceTree = "<group>"; };
+		BE3886EE5E3AF2AE4C637338 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		CCB43F8A34BA431EEC7253C3 /* DomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainModels.swift; sourceTree = "<group>"; };
+		F043ED095BA90239A77CB1B3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F5CD64D8BC55E2BBC8FAEF80 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		FBB07F16F8449D2E83B022F4 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0D703B5D798960FDDEFF4432 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				F043ED095BA90239A77CB1B3 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		127464661AF1FE1209042E9E /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				BF0F6FF23C9A72BBAC5C59BA /* Models */,
+				6DCD4D7D3CBBF7CAB2EE9F8C /* Services */,
+				276FE2782A4D7989BB0852B7 /* Support */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		13CA0A3DA6E5EAEAB8495F62 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				390263478647860CE172DAF7 /* Dashboard */,
+				CC1CA1B197505FD583AF3128 /* Foods */,
+				92FE8406B336B3163C6D5A03 /* Log */,
+				345025993ED0921A1080C0F7 /* Planner */,
+				61A56D922D1AA127505DE59D /* Recipes */,
+				0D703B5D798960FDDEFF4432 /* Settings */,
+				9B82F85F2523D34E0523A50D /* Shopping */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		276FE2782A4D7989BB0852B7 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				8319AAC41CE0FE3CA746D610 /* DateExtensions.swift */,
+				2C5D076B0D3400D98CD2D128 /* Formatters.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		345025993ED0921A1080C0F7 /* Planner */ = {
+			isa = PBXGroup;
+			children = (
+				69F94EAB081519E9AA5D60C7 /* PlannerView.swift */,
+			);
+			path = Planner;
+			sourceTree = "<group>";
+		};
+		390263478647860CE172DAF7 /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				BE3886EE5E3AF2AE4C637338 /* DashboardView.swift */,
+			);
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		4655523A0DA8099A079F525B /* AdobongKangkongIOS */ = {
+			isa = PBXGroup;
+			children = (
+				5C479AD84052C05804457253 /* App */,
+				127464661AF1FE1209042E9E /* Core */,
+				13CA0A3DA6E5EAEAB8495F62 /* Features */,
+			);
+			path = AdobongKangkongIOS;
+			sourceTree = "<group>";
+		};
+		5C479AD84052C05804457253 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7F62788F97962FE716A5344A /* AdobongKangkongIOSApp.swift */,
+				FBB07F16F8449D2E83B022F4 /* RootTabView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		61A56D922D1AA127505DE59D /* Recipes */ = {
+			isa = PBXGroup;
+			children = (
+				271A47804C67ED8DE83D7830 /* RecipeEditorView.swift */,
+				AB10B5C144362C5C69DDB64C /* RecipesView.swift */,
+			);
+			path = Recipes;
+			sourceTree = "<group>";
+		};
+		61A7F65AC2175A3B6355AFBA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				238F092DC3B34D8FAEA0121C /* AdobongKangkongIOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6DCD4D7D3CBBF7CAB2EE9F8C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F5CD64D8BC55E2BBC8FAEF80 /* AppStore.swift */,
+				019B7777E7B10E8585CB5458 /* USDAService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		92FE8406B336B3163C6D5A03 /* Log */ = {
+			isa = PBXGroup;
+			children = (
+				6FA9EBF4F332AAD6EA017834 /* DayLogView.swift */,
+			);
+			path = Log;
+			sourceTree = "<group>";
+		};
+		95B0817701A215D3BF35329F = {
+			isa = PBXGroup;
+			children = (
+				4655523A0DA8099A079F525B /* AdobongKangkongIOS */,
+				61A7F65AC2175A3B6355AFBA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9B82F85F2523D34E0523A50D /* Shopping */ = {
+			isa = PBXGroup;
+			children = (
+				16072D81ACD6171016F65D6F /* ShoppingView.swift */,
+			);
+			path = Shopping;
+			sourceTree = "<group>";
+		};
+		BF0F6FF23C9A72BBAC5C59BA /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				CCB43F8A34BA431EEC7253C3 /* DomainModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		CC1CA1B197505FD583AF3128 /* Foods */ = {
+			isa = PBXGroup;
+			children = (
+				613D9582176B73A8007045B8 /* FoodEditorView.swift */,
+				315E6764C77B8752A8B5033A /* FoodsListView.swift */,
+				531EA28B4EB30D80D8F1FE31 /* UsdaSearchView.swift */,
+			);
+			path = Foods;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		05C9BFEF1EC9F7F5AD178F71 /* AdobongKangkongIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 499C1129E88A51605C3F26CC /* Build configuration list for PBXNativeTarget "AdobongKangkongIOS" */;
+			buildPhases = (
+				900D3F5970B9C2E9CC1D04F9 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AdobongKangkongIOS;
+			packageProductDependencies = (
+			);
+			productName = AdobongKangkongIOS;
+			productReference = 238F092DC3B34D8FAEA0121C /* AdobongKangkongIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6E37FF0EA1BADB2411B0D6CC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = D3140EB70686F62BFAAC4BF2 /* Build configuration list for PBXProject "AdobongKangkongIOS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 95B0817701A215D3BF35329F;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 61A7F65AC2175A3B6355AFBA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				05C9BFEF1EC9F7F5AD178F71 /* AdobongKangkongIOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		900D3F5970B9C2E9CC1D04F9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A2F7ACC1DCC45372F3AA5742 /* AdobongKangkongIOSApp.swift in Sources */,
+				6FB1030128A631AE10297E42 /* AppStore.swift in Sources */,
+				C3297EA0EDB94F60186068EB /* DashboardView.swift in Sources */,
+				FAC8DB30EE9EE5CD01F71969 /* DateExtensions.swift in Sources */,
+				65C4E9EBCA50B74CCC46021A /* DayLogView.swift in Sources */,
+				9A0F5185781A2E6321AB9534 /* DomainModels.swift in Sources */,
+				BEC862265845C3DF4DE8174C /* FoodEditorView.swift in Sources */,
+				C5B6B40349CABF30B67F6DB5 /* FoodsListView.swift in Sources */,
+				A44CEFB1255DFE22B2FC3028 /* Formatters.swift in Sources */,
+				8E1A87814D0A1E505EEA4C75 /* PlannerView.swift in Sources */,
+				6E22EEDA2A191B84F022C93C /* RecipeEditorView.swift in Sources */,
+				F0B26009FBF3DD2622326E02 /* RecipesView.swift in Sources */,
+				D26A2508A5B6925388B6127D /* RootTabView.swift in Sources */,
+				1A4AF6E86FF7B4BA26C7DF08 /* SettingsView.swift in Sources */,
+				53A00FB30EBE3C969D610A5C /* ShoppingView.swift in Sources */,
+				1D2799AB31D159F8B9F5EC47 /* USDAService.swift in Sources */,
+				3677929437B271F9459691F4 /* UsdaSearchView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		19ABF5A0B748C0BA85B8B552 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.adobongkangkong.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		7AF7923A0E2FFD380A2A2C27 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = NO;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = AdobongKangkongIOS;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7B7296AE71E85635A89C3EDF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.adobongkangkong.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		EBEE5DA1766DC9FE64DAED65 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = NO;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = AdobongKangkongIOS;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		499C1129E88A51605C3F26CC /* Build configuration list for PBXNativeTarget "AdobongKangkongIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EBEE5DA1766DC9FE64DAED65 /* Debug */,
+				7AF7923A0E2FFD380A2A2C27 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D3140EB70686F62BFAAC4BF2 /* Build configuration list for PBXProject "AdobongKangkongIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7B7296AE71E85635A89C3EDF /* Debug */,
+				19ABF5A0B748C0BA85B8B552 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 6E37FF0EA1BADB2411B0D6CC /* Project object */;
+}
