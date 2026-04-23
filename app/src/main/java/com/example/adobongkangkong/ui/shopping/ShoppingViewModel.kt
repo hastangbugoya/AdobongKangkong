@@ -292,9 +292,9 @@ private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
             earliestDateText = formatShoppingDate(sortedRows.firstOrNull()?.date) ?: "",
             rows = sortedRows.map { r ->
                 ShoppingNeedsRowUi(
-                    dateText = formatShoppingDate(sortedRows.firstOrNull()?.date) ?: "",
-                    gramsText = r.grams?.toString() ?: "-",
-                    servingsText = r.servings?.toString() ?: "-"
+                    dateText = formatShoppingDate(r.date) ?: "",
+                    gramsText = r.grams?.let(::fmtShoppingDouble) ?: "-",
+                    servingsText = r.servings?.let(::fmtShoppingDouble) ?: "-"
                 )
             }
         )

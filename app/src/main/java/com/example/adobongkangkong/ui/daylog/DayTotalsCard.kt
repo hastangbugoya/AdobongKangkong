@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.domain.model.DailyNutritionTotals
 import com.example.adobongkangkong.domain.nutrition.NutrientCodes
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import kotlin.math.roundToInt
 
 @Composable
 fun DayTotalsCard(totals: DailyNutritionTotals) {
@@ -37,7 +38,7 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Calories", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.CALORIES_KCAL)])} kcal",
+                    "${formatWhole(totals.totalsByCode[NutrientKey(NutrientCodes.CALORIES_KCAL)])} kcal",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -45,7 +46,7 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Protein", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.PROTEIN_G)])} g",
+                    "${formatWhole(totals.totalsByCode[NutrientKey(NutrientCodes.PROTEIN_G)])} g",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -53,7 +54,7 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Carbs", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.CARBS_G)])} g",
+                    "${formatWhole(totals.totalsByCode[NutrientKey(NutrientCodes.CARBS_G)])} g",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -61,7 +62,7 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Fat", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "${format3(totals.totalsByCode[NutrientKey(NutrientCodes.FAT_G)])} g",
+                    "${formatWhole(totals.totalsByCode[NutrientKey(NutrientCodes.FAT_G)])} g",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -69,7 +70,7 @@ fun DayTotalsCard(totals: DailyNutritionTotals) {
     }
 }
 
-private fun format3(value: Double?): String {
+private fun formatWhole(value: Double?): String {
     val v = value ?: return "0"
-    return "%.3f".format(v)
+    return v.roundToInt().toString()
 }
