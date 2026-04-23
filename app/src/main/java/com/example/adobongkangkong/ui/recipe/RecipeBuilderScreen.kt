@@ -81,7 +81,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
-import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.transfer.RecipeBundleDto
 import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodDto
 import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodNutrientDto
@@ -665,7 +665,7 @@ fun RecipeBuilderScreen(
 
             state.pickedFood?.let { pickedFood ->
                 item {
-                    val gramsPerServingUnit = pickedFood.gramsPerServingUnitResolved()
+                    val gramsPerServing = pickedFood.gramsPerServingResolved()
                     var inputUnit by rememberSaveable(pickedFood.id) { mutableStateOf(ServingUnit.G) }
                     var inputAmount by rememberSaveable(pickedFood.id) { mutableStateOf<Double?>(null) }
 
@@ -674,12 +674,12 @@ fun RecipeBuilderScreen(
                     }
 
                     var gramsAmount by rememberSaveable(pickedFood.id) {
-                        mutableStateOf(gramsPerServingUnit?.let { g -> state.pickedServings * g })
+                        mutableStateOf(gramsPerServing?.let { g -> state.pickedServings * g })
                     }
 
-                    LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServingUnit) {
+                    LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServing) {
                         servingUnitAmount = state.pickedServings * pickedFood.servingSize
-                        gramsAmount = gramsPerServingUnit?.let { g -> state.pickedServings * g }
+                        gramsAmount = gramsPerServing?.let { g -> state.pickedServings * g }
                     }
 
                     val shape = RoundedCornerShape(16.dp)
