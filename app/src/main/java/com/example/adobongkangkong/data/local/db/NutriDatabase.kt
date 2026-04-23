@@ -124,7 +124,7 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         StoreEntity::class,
         FoodStorePriceEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -321,6 +321,22 @@ abstract class NutriDatabase : RoomDatabase() {
                     ON food_store_prices(foodId, storeId)
                     """.trimIndent()
                 )
+            }
+        }
+
+        /**
+         * Migration 3 -> 4
+         *
+         * Safety-test migration for validating:
+         * - backup correctness
+         * - Room migration wiring
+         * - restore correctness after a DB version bump
+         *
+         * This migration intentionally makes no schema changes.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // No-op migration for backup / DB bump / restore validation.
             }
         }
     }
