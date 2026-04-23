@@ -33,7 +33,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
@@ -92,9 +91,11 @@ import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.QuantityDisplayFormatter
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
+import com.example.adobongkangkong.ui.common.category.CategoryAssignmentSection
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.io.File
@@ -463,53 +464,22 @@ fun RecipeBuilderScreen(
             item { Spacer(Modifier.height(4.dp)) }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Categories",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    if (state.categories.isEmpty()) {
-                        Text(
-                            text = "No categories yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                CategoryAssignmentSection(
+                    title = "Categories",
+                    subtitle = "Create categories and assign them to this recipe.",
+                    categories = state.categories.map {
+                        FoodCategoryUi(
+                            id = it.id,
+                            name = it.name,
+                            isSystem = it.isSystem
                         )
-                    } else {
-                        state.categories.forEach { category ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = state.selectedCategoryIds.contains(category.id),
-                                    onCheckedChange = { checked ->
-                                        vm.onCategoryCheckedChange(category.id, checked)
-                                    }
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(category.name)
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = state.newCategoryName,
-                            onValueChange = vm::onNewCategoryNameChange,
-                            label = { Text("New category") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Button(onClick = vm::createCategory) {
-                            Text("Add")
-                        }
-                    }
-                }
+                    },
+                    selectedCategoryIds = state.selectedCategoryIds,
+                    newCategoryName = state.newCategoryName,
+                    onCategoryCheckedChange = vm::onCategoryCheckedChange,
+                    onNewCategoryNameChange = vm::onNewCategoryNameChange,
+                    onCreateCategory = vm::createCategory
+                )
             }
 
             item {
@@ -862,37 +832,37 @@ fun RecipeBuilderScreen(
                 }
             }
 
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    tonalElevation = 2.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Recipe transfer",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-
-                        Text(
-                            text = "Use the top-right action menu to email a recipe bundle attachment.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Text(
-                            text = "The attachment is generated from the saved recipe and handed off to the OS share/email app.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+//            item {
+//                Surface(
+//                    modifier = Modifier.fillMaxWidth(),
+//                    shape = RoundedCornerShape(16.dp),
+//                    tonalElevation = 2.dp
+//                ) {
+//                    Column(
+//                        modifier = Modifier
+//                            .fillMaxWidth()
+//                            .padding(16.dp),
+//                        verticalArrangement = Arrangement.spacedBy(8.dp)
+//                    ) {
+//                        Text(
+//                            text = "Recipe transfer",
+//                            style = MaterialTheme.typography.titleMedium
+//                        )
+//
+//                        Text(
+//                            text = "Use the top-right action menu to email a recipe bundle attachment.",
+//                            style = MaterialTheme.typography.bodySmall,
+//                            color = MaterialTheme.colorScheme.onSurfaceVariant
+//                        )
+//
+//                        Text(
+//                            text = "The attachment is generated from the saved recipe and handed off to the OS share/email app.",
+//                            style = MaterialTheme.typography.bodySmall,
+//                            color = MaterialTheme.colorScheme.onSurfaceVariant
+//                        )
+//                    }
+//                }
+//            }
 
             item { Spacer(Modifier.height(12.dp)) }
 

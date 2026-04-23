@@ -2,15 +2,12 @@ package com.example.adobongkangkong.ui.food.editor
 
 import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,7 +28,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,6 +66,7 @@ import com.example.adobongkangkong.domain.model.NutrientUnit
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.usda.model.CollisionReason
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
+import com.example.adobongkangkong.ui.common.category.CategoryAssignmentSection
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.theme.AppIconSize
 
@@ -117,12 +114,12 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  * - The screen does not decide nutrient logic; it only delegates confirmation/cancel actions.
  *
  * Category manager wiring:
- * - Assignment remains inline in the Categories section.
- * - Global category maintenance (rename/delete) is exposed through a simple dialog launched from this screen.
+ * - Assignment uses the shared [CategoryAssignmentSection].
+ * - Global category maintenance (rename/delete) stays screen-local through the dialog below.
  * - The dialog is UI-local; actual rename/delete behavior is delegated through callbacks.
  */
 @SuppressLint("UnusedBoxWithConstraintsScope")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodEditorScreen(
     state: FoodEditorState,
@@ -1386,68 +1383,25 @@ fun FoodEditorScreen(
                 }
 
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeader(
-                            title = "Categories",
-                            subtitle = "Create categories and assign them to this food."
-                        )
-
-                        if (state.categories.isEmpty()) {
-                            Text(
-                                text = "No categories yet.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                state.categories.forEach { category ->
-                                    val isSelected = state.selectedCategoryIds.contains(category.id)
-
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = {
-                                            onCategoryCheckedChange(category.id, !isSelected)
-                                        },
-                                        label = { Text(category.name) }
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                    CategoryAssignmentSection(
+                        title = "Categories",
+                        subtitle = "Create categories and assign them to this food.",
+                        categories = state.categories,
+                        selectedCategoryIds = state.selectedCategoryIds,
+                        newCategoryName = state.newCategoryName,
+                        onCategoryCheckedChange = onCategoryCheckedChange,
+                        onNewCategoryNameChange = onNewCategoryNameChange,
+                        onCreateCategory = onCreateCategory,
+                        onOpenManageCategories = if (
+                            onRenameCategory != null &&
+                            onDeleteCategory != null &&
+                            state.categories.isNotEmpty()
                         ) {
-                            OutlinedTextField(
-                                value = state.newCategoryName,
-                                onValueChange = onNewCategoryNameChange,
-                                label = { Text("New category") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = onCreateCategory) {
-                                Text("Add")
-                            }
+                            { showCategoryManagerDialog = true }
+                        } else {
+                            null
                         }
-
-                        if (onRenameCategory != null && onDeleteCategory != null && state.categories.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(
-                                    onClick = { showCategoryManagerDialog = true }
-                                ) {
-                                    Text("Manage categories")
-                                }
-                            }
-                        }
-                    }
+                    )
                 }
 
                 item {
@@ -1487,35 +1441,7 @@ fun FoodEditorScreen(
 
                 if (state.hasPendingRecompute) {
                     item(key = "recompute_warning") {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.employee_handbook),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(AppIconSize.CardAction)
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Serving changed",
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
-                                    Text(
-                                        text = "Nutrient values may be out of sync. Recompute to update per-serving values.",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
-                        }
+                        NeedsRecomputeBanner()
                     }
 
                     item(key = "recompute_button") {
@@ -1631,18 +1557,6 @@ fun FoodEditorScreen(
                         }
                     }
                 }
-
-//                Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : $state")
-
-                //----------------------SHOW STATE AT BOTTOM OF SCREEN----------
-//                item {
-//                    Text("State", style = MaterialTheme.typography.bodyMedium)
-//                    Text(
-//                        text = state.toString(),
-//                        style = MaterialTheme.typography.bodySmall,
-//                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-//                    )
-//                }
             }
         }
     }
@@ -1812,6 +1726,39 @@ private fun NeedsFixBannerRow(
                 TextButton(onClick = onDismiss, contentPadding = PaddingValues(0.dp)) {
                     Text("Dismiss")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NeedsRecomputeBanner() {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.employee_handbook),
+                contentDescription = null,
+                modifier = Modifier.size(AppIconSize.CardAction)
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Serving changed",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = "Nutrient values may be out of sync. Recompute to update per-serving values.",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
