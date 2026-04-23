@@ -1634,6 +1634,7 @@ fun FoodEditorScreen(
 
                 Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : $state")
 
+                //----------------------SHOW STATE AT BOTTOM OF SCREEN----------
 //                item {
 //                    Text("State", style = MaterialTheme.typography.bodyMedium)
 //                    Text(
