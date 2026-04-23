@@ -1632,7 +1632,7 @@ fun FoodEditorScreen(
                     }
                 }
 
-                Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : $state")
+//                Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : $state")
 
                 //----------------------SHOW STATE AT BOTTOM OF SCREEN----------
 //                item {

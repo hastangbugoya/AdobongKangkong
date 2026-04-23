@@ -355,7 +355,7 @@ class FoodEditorViewModel @Inject constructor(
                     aliases = r.nutrient.aliases,
                     unit = r.nutrient.unit,
                     category = r.nutrient.category,
-                    amount = displayAmount.toString()
+                    amount = displayAmount.roundForUi()
                 )
             }
 
@@ -1578,7 +1578,7 @@ class FoodEditorViewModel @Inject constructor(
             is RecomputeDisplayedNutrientsUseCase.Result.Success -> {
                 val recomputedRows = s.nutrientRows.map { row ->
                     val recomputed = result.nutrients[NutrientKey(row.code)]
-                    row.copy(amount = recomputed?.toString().orEmpty())
+                    row.copy(amount = recomputed?.roundForUi().orEmpty())
                 }
 
                 update {
@@ -1626,7 +1626,9 @@ class FoodEditorViewModel @Inject constructor(
 
     private fun sortNutrientRows(rows: List<NutrientRowUi>): List<NutrientRowUi> {
         return rows.sortedWith(
-            compareBy<NutrientRowUi> { EditorDefaultNutrients.rankFor(it.code) }
+            compareBy<NutrientRowUi> { !EditorDefaultNutrients.codes.contains(it.code) }
+                .thenBy { EditorDefaultNutrients.rankFor(it.code) }
+                .thenBy { if (EditorDefaultNutrients.codes.contains(it.code)) 0 else if (it.hasMeaningfulAmount()) 0 else 1 }
                 .thenBy { it.category.sortOrder }
                 .thenBy { it.name.lowercase() }
         )
@@ -2055,7 +2057,12 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     private fun Double.roundForUi(): String {
-        return "%,.2f".format(this).replace(",", "")
+        return "%.1f".format(this)
+    }
+
+    private fun NutrientRowUi.hasMeaningfulAmount(): Boolean {
+        val value = amount.trim().toDoubleOrNull() ?: return false
+        return value != 0.0
     }
 
     private fun isVolumeGrounded(servingUnit: ServingUnit, mlPerServingUnit: Double?): Boolean {
