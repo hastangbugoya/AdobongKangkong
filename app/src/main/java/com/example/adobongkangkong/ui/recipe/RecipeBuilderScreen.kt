@@ -1,7 +1,9 @@
-// RecipeBuilderScreen.kt
 package com.example.adobongkangkong.ui.recipe
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,6 +37,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -72,22 +77,31 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.isMassUnit
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
+import com.example.adobongkangkong.domain.transfer.RecipeBundleDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodNutrientDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleIngredientDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleRecipeDto
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.QuantityDisplayFormatter
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
-import com.example.adobongkangkong.ui.common.editoraction.EditorActionMenu
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
+import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.delay
+import org.json.JSONArray
+import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,11 +116,16 @@ fun RecipeBuilderScreen(
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+    val shareBundle by vm.shareRecipeBundleFlow.collectAsState()
 
     val ingredientTotalGrams by vm.ingredientTotalGrams.collectAsState()
 
+    val context = LocalContext.current
+
     val showExitDialog = rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showMockImportPreviewDialog by rememberSaveable { mutableStateOf(false) }
+    var showActionsMenu by rememberSaveable { mutableStateOf(false) }
 
     fun requestExit() {
         if (state.hasUnsavedChanges && !state.isSaving) {
@@ -158,6 +177,46 @@ fun RecipeBuilderScreen(
         vm.onEditFoodNavigationHandled()
     }
 
+    LaunchedEffect(shareBundle) {
+        val bundle = shareBundle ?: return@LaunchedEffect
+        try {
+            val exportFile = writeRecipeBundleToCache(
+                cacheDir = context.cacheDir,
+                bundle = bundle
+            )
+
+            val exportUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                exportFile
+            )
+
+            val emailIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_SUBJECT, "Recipe: ${bundle.recipe.name}")
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    "Attached is an AdobongKangkong recipe bundle.\n\nOpen the attachment in AdobongKangkong on another device to import it."
+                )
+                putExtra(Intent.EXTRA_STREAM, exportUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newRawUri("recipe_bundle", exportUri)
+            }
+
+            val chooser = Intent.createChooser(emailIntent, "Email recipe")
+            context.startActivity(chooser)
+        } catch (t: Throwable) {
+            val message = when (t) {
+                is ActivityNotFoundException -> "No email/share app available."
+                is IOException -> t.message ?: "Failed to write recipe attachment."
+                else -> t.message ?: "Failed to prepare recipe email."
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        } finally {
+            vm.onShareRecipeHandled()
+        }
+    }
+
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     state.blockingSheet?.let { sheetModel ->
         ModalBottomSheet(
@@ -187,11 +246,45 @@ fun RecipeBuilderScreen(
                     }
                 },
                 actions = {
-                    EditorActionMenu(
-                        showDelete = canDeleteRecipe,
-                        deleteLabel = "Delete recipe",
-                        onDelete = { showDeleteDialog = true }
-                    )
+                    Box {
+                        IconButton(onClick = { showActionsMenu = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.settings),
+                                contentDescription = "More actions"
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showActionsMenu,
+                            onDismissRequest = { showActionsMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Email recipe") },
+                                onClick = {
+                                    showActionsMenu = false
+                                    vm.onEmailRecipeClicked()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Open imported") },
+                                onClick = {
+                                    showActionsMenu = false
+                                    showMockImportPreviewDialog = true
+                                }
+                            )
+
+                            if (canDeleteRecipe) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Delete recipe") },
+                                    onClick = {
+                                        showActionsMenu = false
+                                        showDeleteDialog = true
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             )
         },
@@ -222,7 +315,6 @@ fun RecipeBuilderScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                val context = LocalContext.current
                 val bannerOwnerId = editFoodId
                 val canCaptureBanner = bannerOwnerId != null
 
@@ -304,7 +396,7 @@ fun RecipeBuilderScreen(
                         }
                     }
 
-                    if (canCaptureBanner) {
+                    if (!canCaptureBanner) {
                         Text(
                             text = "Save first to enable banner image.",
                             style = MaterialTheme.typography.labelSmall,
@@ -770,6 +862,38 @@ fun RecipeBuilderScreen(
                 }
             }
 
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Recipe transfer",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+
+                        Text(
+                            text = "Use the top-right action menu to email a recipe bundle attachment.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Text(
+                            text = "The attachment is generated from the saved recipe and handed off to the OS share/email app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             item { Spacer(Modifier.height(12.dp)) }
 
             item {
@@ -800,17 +924,28 @@ fun RecipeBuilderScreen(
                 }
             }
 
-            item {
-                Text("State", style = MaterialTheme.typography.bodyMedium)
-                Divider(
-                    modifier = Modifier.padding(start = 0.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                )
-                Text(state.toString(), style = MaterialTheme.typography.bodySmall)
-            }
-
             item { Spacer(Modifier.height(16.dp)) }
         }
+    }
+
+    if (showMockImportPreviewDialog) {
+        AlertDialog(
+            onDismissRequest = { showMockImportPreviewDialog = false },
+            title = { Text("Mock import preview") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Recipe import preview UI is still mock-only.")
+                    Text("Email export is now wired to generate a real attachment and hand it to the OS share flow.")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showMockImportPreviewDialog = false }
+                ) {
+                    Text("OK")
+                }
+            }
+        )
     }
 
     if (showExitDialog.value) {
@@ -924,3 +1059,86 @@ private fun String?.toServingUnitOrNull(): ServingUnit? {
         unit.display.equals(label, ignoreCase = true)
     }
 }
+
+private fun writeRecipeBundleToCache(
+    cacheDir: File,
+    bundle: RecipeBundleDto
+): File {
+    val exportDir = File(cacheDir, "recipe_exports").apply { mkdirs() }
+    val fileName = buildRecipeBundleFileName(bundle.recipe.name)
+    val file = File(exportDir, fileName)
+    file.writeText(bundle.toJsonString(), Charsets.UTF_8)
+    return file
+}
+
+private fun buildRecipeBundleFileName(recipeName: String): String {
+    val safeStem = recipeName
+        .trim()
+        .replace(Regex("[^A-Za-z0-9 _-]"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .ifBlank { "Recipe" }
+
+    return "$safeStem.akrecipe"
+}
+
+private fun RecipeBundleDto.toJsonString(): String =
+    toJsonObject().toString(2)
+
+private fun RecipeBundleDto.toJsonObject(): JSONObject =
+    JSONObject().apply {
+        put("schemaVersion", schemaVersion)
+        put("exportedAtEpochMs", exportedAtEpochMs)
+        put("recipe", recipe.toJsonObject())
+        put("ingredients", JSONArray().apply {
+            ingredients.forEach { put(it.toJsonObject()) }
+        })
+        put("foods", JSONArray().apply {
+            foods.forEach { put(it.toJsonObject()) }
+        })
+    }
+
+private fun RecipeBundleRecipeDto.toJsonObject(): JSONObject =
+    JSONObject().apply {
+        put("stableId", stableId)
+        put("name", name)
+        put("servingsYield", servingsYield)
+        put("totalYieldGrams", totalYieldGrams)
+    }
+
+private fun RecipeBundleIngredientDto.toJsonObject(): JSONObject =
+    JSONObject().apply {
+        put("foodStableId", foodStableId)
+        put("ingredientServings", ingredientServings)
+    }
+
+private fun RecipeBundleFoodDto.toJsonObject(): JSONObject =
+    JSONObject().apply {
+        put("stableId", stableId)
+        put("name", name)
+        put("brand", brand)
+        put("servingSize", servingSize)
+        put("servingUnit", servingUnit)
+        put("gramsPerServingUnit", gramsPerServingUnit)
+        put("mlPerServingUnit", mlPerServingUnit)
+        put("servingsPerPackage", servingsPerPackage)
+        put("isRecipe", isRecipe)
+        put("isLowSodium", isLowSodium)
+        put("usdaFdcId", usdaFdcId)
+        put("usdaGtinUpc", usdaGtinUpc)
+        put("usdaPublishedDate", usdaPublishedDate)
+        put("usdaModifiedDate", usdaModifiedDate)
+        put("usdaServingSize", usdaServingSize)
+        put("usdaServingUnit", usdaServingUnit)
+        put("householdServingText", householdServingText)
+        put("canonicalNutrientBasis", canonicalNutrientBasis?.name)
+        put("nutrients", JSONArray().apply {
+            nutrients.forEach { put(it.toJsonObject()) }
+        })
+    }
+
+private fun RecipeBundleFoodNutrientDto.toJsonObject(): JSONObject =
+    JSONObject().apply {
+        put("code", code)
+        put("amount", amount)
+    }

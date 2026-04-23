@@ -24,7 +24,9 @@ import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.domain.transfer.RecipeBundleDto
 import com.example.adobongkangkong.domain.usecase.CreateRecipeUseCase
+import com.example.adobongkangkong.domain.usecase.ExportRecipeBundleUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveRecipeMacroPreviewUseCase
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
@@ -53,6 +55,7 @@ class RecipeBuilderViewModel @Inject constructor(
     private val foodRepo: FoodRepository,
     private val recipeRepo: RecipeRepository,
     private val createRecipe: CreateRecipeUseCase,
+    private val exportRecipeBundle: ExportRecipeBundleUseCase,
     private val flagsRepository: FoodGoalFlagsRepository,
     private val foodCategoryRepo: FoodCategoryRepository,
     private val computeRecipeNutrition: ComputeRecipeNutritionForSnapshotUseCase,
@@ -81,7 +84,7 @@ class RecipeBuilderViewModel @Inject constructor(
             }
             .catch { t: Throwable ->
                 errorFlow.value = t.message ?: "Search failed."
-                emit(emptyList<Food>())
+                emit(emptyList())
             }
             .stateIn(
                 viewModelScope,
@@ -108,6 +111,9 @@ class RecipeBuilderViewModel @Inject constructor(
     private val categoriesFlow = MutableStateFlow<List<FoodCategoryUi>>(emptyList())
     private val selectedCategoryIdsFlow = MutableStateFlow<Set<Long>>(emptySet())
     private val newCategoryNameFlow = MutableStateFlow("")
+
+    private val shareRecipeBundleFlowMutable = MutableStateFlow<RecipeBundleDto?>(null)
+    val shareRecipeBundleFlow: StateFlow<RecipeBundleDto?> = shareRecipeBundleFlowMutable
 
     val ingredientTotalGrams: StateFlow<Double> =
         ingredientsFlow
@@ -656,6 +662,31 @@ class RecipeBuilderViewModel @Inject constructor(
     fun onLimitChange(v: Boolean) {
         limitFlow.value = v
         markDirty()
+    }
+
+    fun onEmailRecipeClicked() {
+        val foodId = editFoodId
+        if (foodId == null) {
+            errorFlow.value = "Save recipe before exporting."
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val bundle = exportRecipeBundle(foodId)
+                if (bundle == null) {
+                    errorFlow.value = "Failed to export recipe."
+                    return@launch
+                }
+                shareRecipeBundleFlowMutable.value = bundle
+            } catch (t: Throwable) {
+                errorFlow.value = t.message ?: "Export failed."
+            }
+        }
+    }
+
+    fun onShareRecipeHandled() {
+        shareRecipeBundleFlowMutable.value = null
     }
 
     private fun markDirty() {
@@ -1311,6 +1342,7 @@ class RecipeBuilderViewModel @Inject constructor(
         }
     }
 }
+
 /** 2025-02-05
  * ViewModel for creating and editing recipes.
  *
@@ -1355,6 +1387,16 @@ class RecipeBuilderViewModel @Inject constructor(
  * - ❌ Forgetting to persist flags after create
  * - ❌ Assuming recipes have a separate flag model
  * - ❌ Treating recipes differently from foods for goal flags
+ * - ❌ Launching Android intents from the ViewModel
+ *
+ * ## Recipe export
+ * - Recipe email export is triggered from the ViewModel but handled by the UI layer.
+ * - This ViewModel emits a one-shot [RecipeBundleDto] through [shareRecipeBundleFlow].
+ * - The Compose screen is responsible for:
+ *   - serializing the bundle,
+ *   - writing the file,
+ *   - creating the content URI,
+ *   - and launching the OS share/email intent.
  *
  * When in doubt: **recipes ARE foods** — follow the food path.
  */

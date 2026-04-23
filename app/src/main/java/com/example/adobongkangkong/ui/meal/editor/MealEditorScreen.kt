@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.meal.editor
 
 import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -13,11 +14,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -46,7 +49,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -82,6 +84,7 @@ fun MealEditorScreen(
     extraActions: (@Composable () -> Unit)? = null
 ) {
     val state = contract.state.collectAsState().value
+    var showDiscardChangesDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.errorMessage) {
@@ -92,6 +95,19 @@ fun MealEditorScreen(
     val expandedRows = remember { mutableStateMapOf<String, Boolean>() }
     var previousLineIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var hasInitializedRows by remember { mutableStateOf(false) }
+
+    fun requestBack() {
+        if (state.isSaving) return
+        if (state.isDirty) {
+            showDiscardChangesDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler {
+        requestBack()
+    }
 
     LaunchedEffect(Unit) {
         snapshotFlow { state.items.map { it.lineId } }
@@ -123,12 +139,40 @@ fun MealEditorScreen(
         MealEditorMode.TEMPLATE -> "Edit Meal Template"
     }
 
+    if (showDiscardChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardChangesDialog = false },
+            title = { Text("Discard changes?") },
+            text = {
+                Text("You have unsaved changes. Leave this screen and discard them?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardChangesDialog = false
+                        contract.discardChanges()
+                        onBack()
+                    }
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDiscardChangesDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = ::requestBack) {
                         Icon(
                             painter = painterResource(R.drawable.angle_circle_left),
                             contentDescription = "Back"
@@ -137,20 +181,6 @@ fun MealEditorScreen(
                 },
                 actions = {
                     extraActions?.invoke()
-                    if (state.isSaving) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(end = 12.dp)
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.height(18.dp))
-                        }
-                    }
-                    Button(
-                        onClick = { contract.save() },
-                        enabled = state.canSave && !state.isSaving
-                    ) {
-                        Text("Save")
-                    }
                 }
             )
         },
@@ -164,6 +194,35 @@ fun MealEditorScreen(
                     )
                 }
             )
+        },
+        bottomBar = {
+            Surface(
+                tonalElevation = 3.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+
+                    Button(
+                        onClick = { contract.save() },
+                        enabled = state.canSave && !state.isSaving,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Save")
+                    }
+                }
+            }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
@@ -208,7 +267,10 @@ fun MealEditorScreen(
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                contentPadding = PaddingValues(
+                    top = 8.dp,
+                    bottom = 104.dp
+                )
             ) {
                 itemsIndexed(
                     items = state.items,
@@ -228,7 +290,7 @@ fun MealEditorScreen(
                         onMoveDown = if (index < state.items.lastIndex) ({ contract.moveItem(index, index + 1) }) else null
                     )
                 }
-                item { Spacer(modifier = Modifier.height(84.dp)) }
+                item { Spacer(modifier = Modifier.height(12.dp)) }
             }
         }
     }
@@ -297,7 +359,6 @@ private fun MealEditorBannerSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(20.dp))
                 .aspectRatio(3f / 1f)
         ) {
             if (bmp != null) {
