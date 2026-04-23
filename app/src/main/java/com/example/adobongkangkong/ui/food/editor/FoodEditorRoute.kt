@@ -124,6 +124,9 @@ fun FoodEditorRoute(
         onCategoryCheckedChange = viewModel::onCategoryCheckedChange,
         onNewCategoryNameChange = viewModel::onNewCategoryNameChange,
         onCreateCategory = viewModel::createCategory,
+        onRenameCategory = viewModel::renameCategory,
+        onDeleteCategory = viewModel::deleteCategory,
+
         onToggleFavorite = viewModel::onFavoriteChange,
         onToggleEatMore = viewModel::onEatMoreChange,
         onToggleLimit = viewModel::onLimitChange,
@@ -281,6 +284,10 @@ fun FoodEditorRoute(
  * - Store names are loaded by the ViewModel and passed into the stateless screen.
  * - Store create/edit/delete actions route back through the ViewModel.
  * - Keep DB/repository work out of the screen composable.
+ *
+ * Category manager flow:
+ * - Category rename/delete is routed through the FoodEditorViewModel.
+ * - Screen owns local popup UI only; repository/data work stays in the ViewModel.
  *
  * Merge wiring:
  * - Keep merge completion bridge at route level.

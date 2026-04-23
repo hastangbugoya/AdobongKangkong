@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -42,9 +42,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -59,10 +62,11 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
 import com.example.adobongkangkong.ui.camera.generateBlurDerivative
+import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +77,8 @@ fun FoodsListScreen(
     onCreateFood: () -> Unit,
     onCreateRecipe: () -> Unit,
     onHeaderLongPress: () -> Unit = {},
+    onRenameCategory: ((Long, String) -> Unit)? = null,
+    onDeleteCategory: ((Long) -> Unit)? = null,
     /**
      * Optional picker-mode callback.
      *
@@ -89,6 +95,12 @@ fun FoodsListScreen(
     val favoritesOnly by vm.favoritesOnly.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
+    var actionMenuExpanded by remember { mutableStateOf(false) }
+    var showCategoryManagerDialog by rememberSaveable { mutableStateOf(false) }
+    var categoryBeingEditedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var categoryEditText by rememberSaveable { mutableStateOf("") }
+    var categoryPendingDelete by rememberSaveable { mutableStateOf<Long?>(null) }
+
     LaunchedEffect(initialFavoritesOnly) {
         vm.setFavoritesOnly(initialFavoritesOnly)
     }
@@ -100,6 +112,82 @@ fun FoodsListScreen(
         return state.rows.indexOfFirst { row ->
             row.name.trim().firstOrNull()?.uppercaseChar() == target
         }.takeIf { it >= 0 }
+    }
+
+    if (showCategoryManagerDialog && onRenameCategory != null && onDeleteCategory != null) {
+        FoodsCategoryManagerDialog(
+            categories = state.categories.map {
+                FoodCategoryUi(
+                    id = it.id,
+                    name = it.name,
+                    isSystem = it.isSystem
+                )
+            },
+            editingCategoryId = categoryBeingEditedId,
+            editText = categoryEditText,
+            onEditTextChange = { categoryEditText = it },
+            onStartEdit = { category ->
+                categoryBeingEditedId = category.id
+                categoryEditText = category.name
+            },
+            onCancelEdit = {
+                categoryBeingEditedId = null
+                categoryEditText = ""
+            },
+            onConfirmEdit = { categoryId ->
+                onRenameCategory(categoryId, categoryEditText)
+                categoryBeingEditedId = null
+                categoryEditText = ""
+            },
+            onRequestDelete = { category ->
+                categoryPendingDelete = category.id
+            },
+            onDismiss = {
+                showCategoryManagerDialog = false
+                categoryBeingEditedId = null
+                categoryEditText = ""
+            }
+        )
+    }
+
+    categoryPendingDelete?.let { categoryId ->
+        val category = state.categories.firstOrNull { it.id == categoryId }
+        if (category != null && onDeleteCategory != null) {
+            AlertDialog(
+                onDismissRequest = { categoryPendingDelete = null },
+                title = { Text("Delete category?") },
+                text = {
+                    Text(
+                        "Delete category \"${category.name}\"?\n\n" +
+                                "This removes the category itself and removes it from foods and recipes that use it."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDeleteCategory(categoryId)
+                            categoryPendingDelete = null
+                            if (state.selectedCategoryId == categoryId) {
+                                vm.onSelectedCategoryChange(null)
+                            }
+                            if (categoryBeingEditedId == categoryId) {
+                                categoryBeingEditedId = null
+                                categoryEditText = ""
+                            }
+                        }
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { categoryPendingDelete = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        } else if (category == null) {
+            categoryPendingDelete = null
+        }
     }
 
     Scaffold(
@@ -123,19 +211,43 @@ fun FoodsListScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            when (state.filter) {
-                                FoodsFilter.FOODS_ONLY -> onCreateFood()
-                                FoodsFilter.RECIPES_ONLY -> onCreateRecipe()
-                                FoodsFilter.ALL -> onCreateFood()
+                    Box {
+                        IconButton(
+                            onClick = { actionMenuExpanded = true }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                contentDescription = "More actions",
+                                modifier = Modifier.size(AppIconSize.CardAction)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = actionMenuExpanded,
+                            onDismissRequest = { actionMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Add") },
+                                onClick = {
+                                    actionMenuExpanded = false
+                                    when (state.filter) {
+                                        FoodsFilter.FOODS_ONLY -> onCreateFood()
+                                        FoodsFilter.RECIPES_ONLY -> onCreateRecipe()
+                                        FoodsFilter.ALL -> onCreateFood()
+                                    }
+                                }
+                            )
+
+                            if (onRenameCategory != null && onDeleteCategory != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Manage categories") },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        showCategoryManagerDialog = true
+                                    }
+                                )
                             }
                         }
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.add),
-                            contentDescription = "Add"
-                        )
                     }
                 }
             )
@@ -166,11 +278,6 @@ fun FoodsListScreen(
                             Icon(
                                 painter = painterResource(R.drawable.cross_small),
                                 contentDescription = "Clear search",
-//                                tint = if (query.isNotBlank()) {
-//                                    LocalContentColor.current
-//                                } else {
-//                                    LocalContentColor.current.copy(alpha = 0.38f)
-//                                }
                             )
                         }
                     }
@@ -251,10 +358,6 @@ fun FoodsListScreen(
                         )
                         HorizontalDivider()
                     }
-
-//                    item {
-//                        Text(state.toString(), style = MaterialTheme.typography.bodySmall)
-//                    }
                 }
             }
 
@@ -278,6 +381,97 @@ fun FoodsListScreen(
     LaunchedEffect(state.sort.key, state.sort.direction, favoritesOnly) {
         listState.scrollToItem(0)
     }
+}
+
+@Composable
+private fun FoodsCategoryManagerDialog(
+    categories: List<FoodCategoryUi>,
+    editingCategoryId: Long?,
+    editText: String,
+    onEditTextChange: (String) -> Unit,
+    onStartEdit: (FoodCategoryUi) -> Unit,
+    onCancelEdit: () -> Unit,
+    onConfirmEdit: (Long) -> Unit,
+    onRequestDelete: (FoodCategoryUi) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Manage categories") },
+        text = {
+            if (categories.isEmpty()) {
+                Text("No categories yet.")
+            } else {
+                LazyColumn {
+                    items(categories, key = { it.id }) { category ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (editingCategoryId == category.id) {
+                                OutlinedTextField(
+                                    value = editText,
+                                    onValueChange = onEditTextChange,
+                                    label = { Text("Category name") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(onClick = onCancelEdit) {
+                                        Text("Cancel")
+                                    }
+                                    TextButton(
+                                        onClick = { onConfirmEdit(category.id) },
+                                        enabled = editText.trim().isNotBlank()
+                                    ) {
+                                        Text("Save")
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = category.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    TextButton(
+                                        onClick = { onStartEdit(category) }
+                                    ) {
+                                        Text("Rename")
+                                    }
+
+                                    TextButton(
+                                        onClick = { onRequestDelete(category) },
+                                        enabled = !category.isSystem
+                                    ) {
+                                        Text("Delete")
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        },
+        dismissButton = {}
+    )
 }
 
 @Composable
@@ -317,7 +511,7 @@ private fun FoodsSortRow(
     onSortKey: (FoodSortKey) -> Unit,
     onToggleDirection: () -> Unit,
 ) {
-    val expanded = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val expanded = remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),

@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,13 +25,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -113,9 +115,14 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  * - When [state.pendingUsdaBackfillPrompt] is non-null, this screen offers a follow-up prompt:
  *   "Fill missing nutrients from USDA?"
  * - The screen does not decide nutrient logic; it only delegates confirmation/cancel actions.
+ *
+ * Category manager wiring:
+ * - Assignment remains inline in the Categories section.
+ * - Global category maintenance (rename/delete) is exposed through a simple dialog launched from this screen.
+ * - The dialog is UI-local; actual rename/delete behavior is delegated through callbacks.
  */
 @SuppressLint("UnusedBoxWithConstraintsScope")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FoodEditorScreen(
     state: FoodEditorState,
@@ -143,6 +150,8 @@ fun FoodEditorScreen(
     onCategoryCheckedChange: (Long, Boolean) -> Unit,
     onNewCategoryNameChange: (String) -> Unit,
     onCreateCategory: () -> Unit,
+    onRenameCategory: ((Long, String) -> Unit)? = null,
+    onDeleteCategory: ((Long) -> Unit)? = null,
 
     // Flags
     onToggleFavorite: (Boolean) -> Unit,
@@ -261,6 +270,11 @@ fun FoodEditorScreen(
 
     var actionMenuExpanded by remember { mutableStateOf(false) }
 
+    var showCategoryManagerDialog by rememberSaveable { mutableStateOf(false) }
+    var categoryBeingEditedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var categoryEditText by rememberSaveable { mutableStateOf("") }
+    var categoryPendingDelete by rememberSaveable { mutableStateOf<Long?>(null) }
+
     val multiplePackages = state.assignedBarcodes.size > 1
 
     fun requestExit() {
@@ -288,7 +302,8 @@ fun FoodEditorScreen(
         selectedStoreName = storePriceStoreNames.first()
     }
 
-    if (state.storeEditor != null &&
+    if (
+        state.storeEditor != null &&
         onDismissStoreEditor != null &&
         onStoreEditorNameChange != null &&
         onStoreEditorAddressChange != null &&
@@ -308,6 +323,73 @@ fun FoodEditorScreen(
                 null
             }
         )
+    }
+
+    if (showCategoryManagerDialog) {
+        CategoryManagerDialog(
+            categories = state.categories,
+            editingCategoryId = categoryBeingEditedId,
+            editText = categoryEditText,
+            onEditTextChange = { categoryEditText = it },
+            onStartEdit = { category ->
+                categoryBeingEditedId = category.id
+                categoryEditText = category.name
+            },
+            onCancelEdit = {
+                categoryBeingEditedId = null
+                categoryEditText = ""
+            },
+            onConfirmEdit = { categoryId ->
+                onRenameCategory?.invoke(categoryId, categoryEditText)
+                categoryBeingEditedId = null
+                categoryEditText = ""
+            },
+            onRequestDelete = { category ->
+                categoryPendingDelete = category.id
+            },
+            onDismiss = {
+                showCategoryManagerDialog = false
+                categoryBeingEditedId = null
+                categoryEditText = ""
+            }
+        )
+    }
+
+    categoryPendingDelete?.let { categoryId ->
+        val category = state.categories.firstOrNull { it.id == categoryId }
+        if (category != null) {
+            AlertDialog(
+                onDismissRequest = { categoryPendingDelete = null },
+                title = { Text("Delete category?") },
+                text = {
+                    Text(
+                        "Delete category \"${category.name}\"?\n\n" +
+                                "This removes the category itself and removes it from foods and recipes that use it."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDeleteCategory?.invoke(categoryId)
+                            categoryPendingDelete = null
+                            if (categoryBeingEditedId == categoryId) {
+                                categoryBeingEditedId = null
+                                categoryEditText = ""
+                            }
+                        }
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { categoryPendingDelete = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        } else {
+            categoryPendingDelete = null
+        }
     }
 
     if (state.barcodePickItems.isNotEmpty()) {
@@ -999,6 +1081,16 @@ fun FoodEditorScreen(
                                     }
                                 )
                             }
+
+                            if (onRenameCategory != null && onDeleteCategory != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Manage categories") },
+                                    onClick = {
+                                        actionMenuExpanded = false
+                                        showCategoryManagerDialog = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1307,19 +1399,21 @@ fun FoodEditorScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            state.categories.forEach { category ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = state.selectedCategoryIds.contains(category.id),
-                                        onCheckedChange = { checked ->
-                                            onCategoryCheckedChange(category.id, checked)
-                                        }
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                state.categories.forEach { category ->
+                                    val isSelected = state.selectedCategoryIds.contains(category.id)
+
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            onCategoryCheckedChange(category.id, !isSelected)
+                                        },
+                                        label = { Text(category.name) }
                                     )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(category.name)
                                 }
                             }
                         }
@@ -1338,6 +1432,19 @@ fun FoodEditorScreen(
                             Spacer(Modifier.width(8.dp))
                             Button(onClick = onCreateCategory) {
                                 Text("Add")
+                            }
+                        }
+
+                        if (onRenameCategory != null && onDeleteCategory != null && state.categories.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { showCategoryManagerDialog = true }
+                                ) {
+                                    Text("Manage categories")
+                                }
                             }
                         }
                     }
@@ -1527,14 +1634,14 @@ fun FoodEditorScreen(
 
                 Log.d("Meow", "FoodEditorScreen state dump: ${state.name} : $state")
 
-                item {
-                    Text("State", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        text = state.toString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+//                item {
+//                    Text("State", style = MaterialTheme.typography.bodyMedium)
+//                    Text(
+//                        text = state.toString(),
+//                        style = MaterialTheme.typography.bodySmall,
+//                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+//                    )
+//                }
             }
         }
     }
@@ -1577,6 +1684,97 @@ fun FoodEditorScreen(
             onDismiss = onDismissAliasSheet
         )
     }
+}
+
+@Composable
+private fun CategoryManagerDialog(
+    categories: List<FoodCategoryUi>,
+    editingCategoryId: Long?,
+    editText: String,
+    onEditTextChange: (String) -> Unit,
+    onStartEdit: (FoodCategoryUi) -> Unit,
+    onCancelEdit: () -> Unit,
+    onConfirmEdit: (Long) -> Unit,
+    onRequestDelete: (FoodCategoryUi) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Manage categories") },
+        text = {
+            if (categories.isEmpty()) {
+                Text("No categories yet.")
+            } else {
+                LazyColumn {
+                    items(categories, key = { it.id }) { category ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (editingCategoryId == category.id) {
+                                OutlinedTextField(
+                                    value = editText,
+                                    onValueChange = onEditTextChange,
+                                    label = { Text("Category name") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(onClick = onCancelEdit) {
+                                        Text("Cancel")
+                                    }
+                                    TextButton(
+                                        onClick = { onConfirmEdit(category.id) },
+                                        enabled = editText.trim().isNotBlank()
+                                    ) {
+                                        Text("Save")
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = category.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    TextButton(
+                                        onClick = { onStartEdit(category) }
+                                    ) {
+                                        Text("Rename")
+                                    }
+
+                                    TextButton(
+                                        onClick = { onRequestDelete(category) },
+                                        enabled = !category.isSystem
+                                    ) {
+                                        Text("Delete")
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        },
+        dismissButton = {}
+    )
 }
 
 @Composable

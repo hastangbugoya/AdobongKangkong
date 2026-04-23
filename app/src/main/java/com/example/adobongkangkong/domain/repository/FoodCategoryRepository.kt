@@ -20,6 +20,10 @@ interface FoodCategoryRepository {
 
     suspend fun getOrCreateByName(name: String): FoodCategory
 
+    suspend fun renameCategory(categoryId: Long, newName: String): FoodCategory
+
+    suspend fun deleteCategory(categoryId: Long)
+
     suspend fun replaceForFood(foodId: Long, categoryIds: Set<Long>)
 
     suspend fun replaceForRecipe(recipeId: Long, categoryIds: Set<Long>)

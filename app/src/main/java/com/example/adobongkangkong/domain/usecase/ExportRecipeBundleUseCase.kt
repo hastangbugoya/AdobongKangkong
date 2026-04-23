@@ -1,8 +1,15 @@
 package com.example.adobongkangkong.domain.usecase
 
+import com.example.adobongkangkong.data.local.db.entity.BasisType
+import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
-import com.example.adobongkangkong.domain.transfer.*
+import com.example.adobongkangkong.domain.transfer.RecipeBundleDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodNutrientBasis
+import com.example.adobongkangkong.domain.transfer.RecipeBundleFoodNutrientDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleIngredientDto
+import com.example.adobongkangkong.domain.transfer.RecipeBundleRecipeDto
 import javax.inject.Inject
 
 /**
@@ -18,17 +25,14 @@ import javax.inject.Inject
  * - Never throws on missing ingredient food
  * - Skips unresolved foods gracefully
  * - Never exposes DB IDs
- *
- * ## v1 limitations
- * - Nutrients not included yet (added in next iteration)
  */
 class ExportRecipeBundleUseCase @Inject constructor(
     private val recipeRepo: RecipeRepository,
-    private val foodRepo: FoodRepository
+    private val foodRepo: FoodRepository,
+    private val foodNutrientRepo: FoodNutrientRepository
 ) {
 
     suspend operator fun invoke(recipeFoodId: Long): RecipeBundleDto? {
-
         val header = recipeRepo.getRecipeByFoodId(recipeFoodId)
             ?: return null
 
@@ -37,7 +41,6 @@ class ExportRecipeBundleUseCase @Inject constructor(
 
         val ingredients = recipeRepo.getIngredients(header.recipeId)
 
-        // Build ingredient DTOs (safe)
         val ingredientDtos = ingredients.mapNotNull { line ->
             val food = foodRepo.getById(line.ingredientFoodId) ?: return@mapNotNull null
 
@@ -47,7 +50,6 @@ class ExportRecipeBundleUseCase @Inject constructor(
             )
         }
 
-        // Collect all unique foods (recipe + ingredients)
         val foodIds = buildSet {
             add(header.foodId)
             ingredients.forEach { add(it.ingredientFoodId) }
@@ -57,6 +59,20 @@ class ExportRecipeBundleUseCase @Inject constructor(
 
         for (id in foodIds) {
             val food = foodRepo.getById(id) ?: continue
+            val nutrientRows = foodNutrientRepo.getForFood(id)
+
+            val canonicalNutrientBasis = when (nutrientRows.firstOrNull()?.basisType) {
+                BasisType.PER_100G -> RecipeBundleFoodNutrientBasis.PER_100G
+                BasisType.PER_100ML -> RecipeBundleFoodNutrientBasis.PER_100ML
+                BasisType.USDA_REPORTED_SERVING, null -> null
+            }
+
+            val nutrientDtos = nutrientRows.map { row ->
+                RecipeBundleFoodNutrientDto(
+                    code = row.nutrient.code,
+                    amount = row.amount
+                )
+            }
 
             foodDtos.add(
                 RecipeBundleFoodDto(
@@ -77,8 +93,8 @@ class ExportRecipeBundleUseCase @Inject constructor(
                     usdaServingSize = food.usdaServingSize,
                     usdaServingUnit = food.usdaServingUnit?.name,
                     householdServingText = food.householdServingText,
-                    canonicalNutrientBasis = null, // v1: skip nutrients
-                    nutrients = emptyList()
+                    canonicalNutrientBasis = canonicalNutrientBasis,
+                    nutrients = nutrientDtos
                 )
             )
         }

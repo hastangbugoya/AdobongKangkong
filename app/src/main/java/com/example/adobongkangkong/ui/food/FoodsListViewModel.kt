@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -79,6 +80,12 @@ import kotlin.math.roundToInt
  * - no per-row recipe lookup in the ViewModel
  * - no N+1 repository calls during filtering
  * - category filtering remains a simple foodId membership check for both foods and recipes
+ *
+ * Category management:
+ * - Foods list can also act as a global category maintenance entry point.
+ * - Rename/delete operations are delegated to [FoodCategoryRepository].
+ * - Category chips refresh automatically through [foodCategoryRepository.observeAll].
+ * - If the currently selected category is deleted, this ViewModel clears the selection.
  */
 @HiltViewModel
 class FoodsListViewModel @Inject constructor(
@@ -440,6 +447,24 @@ class FoodsListViewModel @Inject constructor(
 
     fun onSortDirectionChange(dir: SortDirection) {
         sortFlow.value = sortFlow.value.copy(direction = dir)
+    }
+
+    fun renameCategory(categoryId: Long, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) return
+
+        viewModelScope.launch {
+            foodCategoryRepository.renameCategory(categoryId, trimmed)
+        }
+    }
+
+    fun deleteCategory(categoryId: Long) {
+        viewModelScope.launch {
+            foodCategoryRepository.deleteCategory(categoryId)
+            if (selectedCategoryIdFlow.value == categoryId) {
+                selectedCategoryIdFlow.value = null
+            }
+        }
     }
 
     private fun caloriesPerServingText(

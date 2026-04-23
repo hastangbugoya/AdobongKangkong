@@ -514,6 +514,70 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
+    fun renameCategory(categoryId: Long, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) {
+            update { it.copy(errorMessage = "Category name is required.") }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val updated = foodCategoryRepo.renameCategory(categoryId, trimmed)
+
+                update { s ->
+                    s.copy(
+                        categories = s.categories.map {
+                            if (it.id == categoryId) it.copy(name = updated.name)
+                            else it
+                        }.sortedBy { it.name.lowercase() },
+                        errorMessage = null
+                    )
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to rename category.") }
+            }
+        }
+    }
+
+    fun deleteCategory(categoryId: Long) {
+        viewModelScope.launch {
+            try {
+                foodCategoryRepo.deleteCategory(categoryId)
+
+                update { s ->
+                    s.copy(
+                        categories = s.categories.filterNot { it.id == categoryId },
+                        selectedCategoryIds = s.selectedCategoryIds - categoryId,
+                        errorMessage = null
+                    )
+                }
+            } catch (t: Throwable) {
+                update { it.copy(errorMessage = t.message ?: "Failed to delete category.") }
+            }
+        }
+    }
+
+    fun refreshCategories() {
+        viewModelScope.launch {
+            val all = foodCategoryRepo.getAll()
+
+            update { s ->
+                s.copy(
+                    categories = all
+                        .sortedBy { it.name.lowercase() }
+                        .map {
+                            FoodCategoryUi(
+                                id = it.id,
+                                name = it.name,
+                                isSystem = it.isSystem
+                            )
+                        }
+                )
+            }
+        }
+    }
+
     private fun computeServingResolution(state: FoodEditorState): ServingResolution? {
         val size = state.servingSize.toDoubleOrNull() ?: return null
 

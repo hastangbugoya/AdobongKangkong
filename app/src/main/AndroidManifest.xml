@@ -22,9 +22,25 @@
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.AdobongKangkong">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Recipe import: allow app to appear in "Open with" for shared/opened files -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <!-- Common file-opening paths -->
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+
+                <!-- Broad fallback so unknown custom extension files can still resolve -->
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
 

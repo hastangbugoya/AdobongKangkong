@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,6 +24,7 @@ import com.example.adobongkangkong.ui.dashboard.DashboardScreen
 import com.example.adobongkangkong.ui.daylog.DayLogScreen
 import com.example.adobongkangkong.ui.debug.MeowLogScreen
 import com.example.adobongkangkong.ui.food.FoodsListScreen
+import com.example.adobongkangkong.ui.food.FoodsListViewModel
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
@@ -228,6 +230,8 @@ fun AppNavHost(
         }
 
         composable(route = NavRoutes.Foods.list) {
+            val vm: FoodsListViewModel = hiltViewModel()
+
             FoodsListScreen(
                 onBack = { navController.popBackStack() },
                 onEditFood = { foodId ->
@@ -244,7 +248,10 @@ fun AppNavHost(
                 },
                 onHeaderLongPress = {
                     navController.navigate(NavRoutes.Usda.search)
-                }
+                },
+                onRenameCategory = vm::renameCategory,
+                onDeleteCategory = vm::deleteCategory,
+                vm = vm
             )
         }
 
@@ -253,6 +260,7 @@ fun AppNavHost(
             val initialFilter = previousEntry
                 ?.savedStateHandle
                 ?.get<String>(KEY_FOOD_PICK_INITIAL_FILTER)
+            val vm: FoodsListViewModel = hiltViewModel()
 
             FoodsListScreen(
                 onBack = { navController.popBackStack() },
@@ -263,6 +271,8 @@ fun AppNavHost(
                 onHeaderLongPress = {
                     navController.navigate(NavRoutes.Usda.search)
                 },
+                onRenameCategory = vm::renameCategory,
+                onDeleteCategory = vm::deleteCategory,
                 onPickFood = { foodId ->
                     val pickMode = previousEntry?.savedStateHandle?.get<String>(KEY_FOOD_PICK_MODE)
 
@@ -276,7 +286,8 @@ fun AppNavHost(
                     previousEntry?.savedStateHandle?.set(KEY_FOOD_PICK_INITIAL_FILTER, null)
                     navController.popBackStack()
                 },
-                initialFavoritesOnly = initialFilter == FOOD_PICK_INITIAL_FILTER_FAVORITES
+                initialFavoritesOnly = initialFilter == FOOD_PICK_INITIAL_FILTER_FAVORITES,
+                vm = vm
             )
         }
 
@@ -291,6 +302,7 @@ fun AppNavHost(
             )
         ) { entry ->
             val barcode = entry.arguments?.getString("barcode").orEmpty()
+            val vm: FoodsListViewModel = hiltViewModel()
 
             FoodsListScreen(
                 onBack = { navController.popBackStack() },
@@ -305,7 +317,10 @@ fun AppNavHost(
                 onCreateRecipe = { },
                 onHeaderLongPress = {
                     navController.navigate(NavRoutes.Usda.search)
-                }
+                },
+                onRenameCategory = vm::renameCategory,
+                onDeleteCategory = vm::deleteCategory,
+                vm = vm
             )
         }
 
@@ -403,8 +418,6 @@ fun AppNavHost(
                 bannerCaptureController = bannerCaptureController
             )
         }
-
-// (file unchanged ABOVE)
 
         composable(
             route = NavRoutes.Recipes.builder,
@@ -591,7 +604,7 @@ fun AppNavHost(
             val bannerStorage = com.example.adobongkangkong.feature.camera.FoodImageStorage(context)
 
             val vm: com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel =
-                androidx.hilt.navigation.compose.hiltViewModel()
+                hiltViewModel()
 
             androidx.compose.runtime.LaunchedEffect(templateId) {
                 if (templateId > 0L) vm.setTemplateId(templateId)
@@ -647,7 +660,7 @@ fun AppNavHost(
 
         composable(route = NavRoutes.Planner.templateEditorNew) { backStackEntry ->
             val vm: com.example.adobongkangkong.ui.templates.MealTemplateEditorViewModel =
-                androidx.hilt.navigation.compose.hiltViewModel()
+                hiltViewModel()
 
             val pickedFoodId = backStackEntry.savedStateHandle.getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
             androidx.compose.runtime.LaunchedEffect(pickedFoodId) {
@@ -682,7 +695,7 @@ fun AppNavHost(
             val mealId = backStackEntry.arguments?.getLong("mealId") ?: 0L
 
             val vm: com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel =
-                androidx.hilt.navigation.compose.hiltViewModel()
+                hiltViewModel()
 
             androidx.compose.runtime.LaunchedEffect(mealId) {
                 if (mealId > 0L) vm.setMealId(mealId)
@@ -734,7 +747,7 @@ fun AppNavHost(
             val templateId = templateIdArg.takeIf { it > 0L }
 
             val vm: com.example.adobongkangkong.ui.planner.PlannedMealEditorViewModel =
-                androidx.hilt.navigation.compose.hiltViewModel()
+                hiltViewModel()
 
             androidx.compose.runtime.LaunchedEffect(vm) {
                 vm.effects.collect { effect ->

@@ -61,6 +61,35 @@ class FoodCategoryRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun renameCategory(categoryId: Long, newName: String): FoodCategory {
+        val normalized = newName.trim()
+        require(normalized.isNotBlank()) { "Category name is required." }
+
+        val existing = dao.getById(categoryId)
+            ?: throw IllegalArgumentException("Category not found.")
+
+        dao.findByNameExcludingId(normalized, categoryId)?.let {
+            throw IllegalArgumentException("Category already exists.")
+        }
+
+        dao.updateCategoryName(categoryId, normalized)
+
+        return existing.copy(name = normalized).toDomain()
+    }
+
+    override suspend fun deleteCategory(categoryId: Long) {
+        val existing = dao.getById(categoryId)
+            ?: throw IllegalArgumentException("Category not found.")
+
+        if (existing.isSystem) {
+            throw IllegalArgumentException("System categories cannot be deleted.")
+        }
+
+        dao.deleteCrossRefsForCategory(categoryId)
+        dao.deleteRecipeCrossRefsForCategory(categoryId)
+        dao.deleteCategoryById(categoryId)
+    }
+
     override suspend fun replaceForFood(foodId: Long, categoryIds: Set<Long>) {
         dao.deleteCrossRefsForFood(foodId)
         if (categoryIds.isEmpty()) return

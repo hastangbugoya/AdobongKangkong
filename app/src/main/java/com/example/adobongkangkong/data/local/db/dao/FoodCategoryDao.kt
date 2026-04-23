@@ -93,14 +93,47 @@ interface FoodCategoryDao {
     )
     suspend fun findByName(name: String): FoodCategoryEntity?
 
+    @Query(
+        """
+        SELECT *
+        FROM food_categories
+        WHERE lower(name) = lower(:name)
+          AND id != :excludeId
+        LIMIT 1
+        """
+    )
+    suspend fun findByNameExcludingId(name: String, excludeId: Long): FoodCategoryEntity?
+
+    @Query(
+        """
+        SELECT *
+        FROM food_categories
+        WHERE id = :categoryId
+        LIMIT 1
+        """
+    )
+    suspend fun getById(categoryId: Long): FoodCategoryEntity?
+
     @Query("SELECT COALESCE(MAX(sortOrder), -1) FROM food_categories")
     suspend fun getMaxSortOrder(): Int
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertCategory(entity: FoodCategoryEntity): Long
 
+    @Query(
+        """
+        UPDATE food_categories
+        SET name = :name
+        WHERE id = :categoryId
+        """
+    )
+    suspend fun updateCategoryName(categoryId: Long, name: String)
+
     @Query("DELETE FROM food_category_cross_refs WHERE foodId = :foodId")
     suspend fun deleteCrossRefsForFood(foodId: Long)
+
+    @Query("DELETE FROM food_category_cross_refs WHERE categoryId = :categoryId")
+    suspend fun deleteCrossRefsForCategory(categoryId: Long)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCrossRefs(entities: List<FoodCategoryCrossRefEntity>)
@@ -108,6 +141,12 @@ interface FoodCategoryDao {
     @Query("DELETE FROM recipe_category_cross_refs WHERE recipeId = :recipeId")
     suspend fun deleteCrossRefsForRecipe(recipeId: Long)
 
+    @Query("DELETE FROM recipe_category_cross_refs WHERE categoryId = :categoryId")
+    suspend fun deleteRecipeCrossRefsForCategory(categoryId: Long)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertRecipeCrossRefs(entities: List<RecipeCategoryCrossRefEntity>)
+
+    @Query("DELETE FROM food_categories WHERE id = :categoryId")
+    suspend fun deleteCategoryById(categoryId: Long)
 }
