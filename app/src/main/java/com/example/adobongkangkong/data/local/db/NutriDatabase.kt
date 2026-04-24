@@ -124,7 +124,7 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         StoreEntity::class,
         FoodStorePriceEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -337,6 +337,26 @@ abstract class NutriDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // No-op migration for backup / DB bump / restore validation.
+            }
+        }
+
+        /**
+         * Migration 4 -> 5
+         *
+         * Adds:
+         * - recipes.notes
+         *
+         * This is an additive nullable TEXT column.
+         * Existing recipe rows keep null notes by default.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    ALTER TABLE recipes
+                    ADD COLUMN notes TEXT
+                    """.trimIndent()
+                )
             }
         }
     }

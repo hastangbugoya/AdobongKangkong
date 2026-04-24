@@ -39,6 +39,15 @@ data class RecipeEntity(
     val totalYieldGrams: Double? = null,
 
     /**
+     * Optional notes for the recipe.
+     *
+     * - User-entered free text
+     * - Not used for computation
+     * - Safe to be null for all existing rows
+     */
+    val notes: String? = null,
+
+    /**
      * Soft delete flag.
      *
      * - Default recipe delete should set this to true and hide the recipe from
