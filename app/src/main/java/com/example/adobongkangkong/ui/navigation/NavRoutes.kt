@@ -1,22 +1,19 @@
 package com.example.adobongkangkong.ui.navigation
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 
 object NavRoutes {
 
     object Dashboard {
         private const val BASE = "dashboard"
-        private const val ARG_DATE = "date" // yyyy-MM-dd
+        private const val ARG_DATE = "date"
 
-        // Route pattern supports optional query
         const val route: String = "$BASE?$ARG_DATE={$ARG_DATE}"
 
         fun dashboard(date: LocalDate? = null): String {
-            return if (date == null) {
-                BASE
-            } else {
-                "$BASE?$ARG_DATE=${date}"
-            }
+            return if (date == null) BASE else "$BASE?$ARG_DATE=${date}"
         }
     }
 
@@ -26,46 +23,51 @@ object NavRoutes {
 
     object DayLog {
         private const val BASE = "dayLog"
-        private const val ARG_DATE = "date" // yyyy-MM-dd
+        private const val ARG_DATE = "date"
 
         const val route: String = "$BASE/{$ARG_DATE}"
 
-        fun dayLog(date: LocalDate): String {
-            return "$BASE/${date}"
-        }
+        fun dayLog(date: LocalDate): String = "$BASE/${date}"
     }
 
     object QuickAdd {
         private const val BASE = "quickAdd"
-        private const val ARG_DATE = "date" // yyyy-MM-dd
+        private const val ARG_DATE = "date"
 
         const val route: String = "$BASE/{$ARG_DATE}"
 
-        fun quickAdd(date: LocalDate): String {
-            return "$BASE/${date}"
-        }
+        fun quickAdd(date: LocalDate): String = "$BASE/${date}"
     }
 
     object Foods {
         const val list: String = "foods"
 
-        // Food picker mode (returns a selected foodId to the caller via SavedStateHandle)
         const val pickFood: String = "foods/pickFood"
 
         const val pickBarcode: String = "foods/pickBarcode?barcode={barcode}"
-        fun pickBarcode(barcode: String): String = "foods/pickBarcode?barcode=$barcode"
+        fun pickBarcode(barcode: String): String = "foods/pickBarcode?barcode=${barcode.urlEncode()}"
 
         const val edit: String = "foods/edit/{foodId}?barcode={barcode}"
         fun edit(foodId: Long, barcode: String? = null): String {
-            val b = barcode.orEmpty()
-            return "foods/edit/$foodId?barcode=$b"
+            return "foods/edit/$foodId?barcode=${barcode.orEmpty().urlEncode()}"
         }
 
-        const val new: String = "foods/new?name={name}&barcode={barcode}"
-        fun new(prefillName: String? = null, prefillBarcode: String? = null): String {
-            val n = prefillName.orEmpty()
-            val b = prefillBarcode.orEmpty()
-            return "foods/new?name=$n&barcode=$b"
+        const val RETURN_DEFAULT = "default"
+        const val RETURN_DASHBOARD_QUICK_ADD = "dashboardQuickAdd"
+        const val RETURN_DAY_LOG_QUICK_ADD = "dayLogQuickAdd"
+        const val RETURN_QUICK_ADD_ROUTE = "quickAddRoute"
+
+        const val new: String = "foods/new?name={name}&barcode={barcode}&returnTarget={returnTarget}"
+
+        fun new(
+            prefillName: String? = null,
+            prefillBarcode: String? = null,
+            returnTarget: String = RETURN_DEFAULT
+        ): String {
+            return "foods/new" +
+                    "?name=${prefillName.orEmpty().urlEncode()}" +
+                    "&barcode=${prefillBarcode.orEmpty().urlEncode()}" +
+                    "&returnTarget=${returnTarget.urlEncode()}"
         }
     }
 
@@ -90,9 +92,6 @@ object NavRoutes {
     }
 
     object Planner {
-        private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
-        private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
-
         const val plannerDay = "planner/{dateIso}"
         fun plannerDay(dateIso: String): String = "planner/$dateIso"
 
@@ -105,12 +104,12 @@ object NavRoutes {
         private const val ARG_TEMPLATE_ID_FOR_NEW = "templateId"
         const val plannedMealEditorNew: String =
             "planner/mealEditor/new/{$ARG_DATE_ISO}?$ARG_SLOT={$ARG_SLOT}&$ARG_TEMPLATE_ID_FOR_NEW={$ARG_TEMPLATE_ID_FOR_NEW}"
+
         fun plannedMealEditorNew(dateIso: String, slot: String, templateId: Long? = null): String {
             val template = templateId?.toString().orEmpty()
             return "planner/mealEditor/new/$dateIso?$ARG_SLOT=$slot&$ARG_TEMPLATE_ID_FOR_NEW=$template"
         }
 
-        // Template Picker
         const val templatePicker: String = "planner/templatePicker/{$ARG_DATE_ISO}?$ARG_SLOT={$ARG_SLOT}"
         fun templatePicker(dateIso: String, slot: String = ""): String =
             "planner/templatePicker/$dateIso?$ARG_SLOT=$slot"
@@ -126,15 +125,16 @@ object NavRoutes {
 
     object Shopping {
         private const val BASE = "shopping"
-        private const val ARG_START = "start" // yyyy-MM-dd
-        private const val ARG_DAYS = "days"   // Int
+        private const val ARG_START = "start"
+        private const val ARG_DAYS = "days"
 
-        // Pattern
         const val route: String = "$BASE?$ARG_START={$ARG_START}&$ARG_DAYS={$ARG_DAYS}"
 
-        // Builder
         fun shopping(startDate: LocalDate, days: Int = 7): String {
             return "$BASE?$ARG_START=${startDate}&$ARG_DAYS=$days"
         }
     }
 }
+
+private fun String.urlEncode(): String =
+    URLEncoder.encode(this, StandardCharsets.UTF_8.toString())

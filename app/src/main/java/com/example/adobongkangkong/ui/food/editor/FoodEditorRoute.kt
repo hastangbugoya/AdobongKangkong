@@ -25,7 +25,7 @@ fun FoodEditorRoute(
     bannerRefreshTick: Int,
     mergePickedFoodId: Long? = null,
     onBack: () -> Unit,
-    onDone: () -> Unit,
+    onDone: (Long) -> Unit,
     onAssignBarcodeToExisting: (String) -> Unit = {},
     onOpenMergeFoodPicker: (Long) -> Unit = {},
     onMergePickedConsumed: () -> Unit = {},
@@ -61,7 +61,11 @@ fun FoodEditorRoute(
         didApplyInitialBarcode.value = true
 
         if (foodId == null) {
-            viewModel.onBarcodeScanned(code)
+            snapshotFlow { state.hasLoaded }
+                .filter { it }
+                .first()
+
+            viewModel.setPendingBarcodeFromQuickAdd(code)
         } else {
             snapshotFlow { state.foodId }
                 .filter { it == foodId }
@@ -132,7 +136,9 @@ fun FoodEditorRoute(
         onToggleLimit = viewModel::onLimitChange,
 
         onSave = {
-            viewModel.save { _ -> onDone() }
+            viewModel.save { savedFoodId ->
+                onDone(savedFoodId)
+            }
         },
 
         aliasSheetNutrientName = aliasName,
@@ -205,7 +211,6 @@ fun FoodEditorRoute(
         onConfirmDiscardNutrientEditsAndRecompute = viewModel::confirmDiscardNutrientEditsAndRecompute,
         onDismissDiscardNutrientEditsDialog = viewModel::dismissDiscardNutrientEditsDialog,
 
-        // Store price + store editor wiring
         storePriceStoreNames = storeNames,
         onUpdateStorePrice = viewModel::updateStorePrice,
         onOpenCreateStoreEditor = viewModel::openCreateStoreDialog,
@@ -216,6 +221,7 @@ fun FoodEditorRoute(
         onStoreEditorContactChange = viewModel::onStoreEditorContactChange,
         onConfirmStoreEditor = viewModel::onStoreEditorConfirm,
         onDeleteStoreEditor = viewModel::onStoreEditorDeleteConfirmed,
+        onUseScannedBarcodeForCurrentNewFood = viewModel::useScannedBarcodeForCurrentNewFood,
     )
 
     LaunchedEffect(mergePickedFoodId) {

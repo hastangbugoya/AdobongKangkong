@@ -70,6 +70,22 @@ fun AppNavHost(
             }
         }
 
+        fun completeNewFoodReturn(returnTarget: String, savedFoodId: Long) {
+            when (returnTarget) {
+                NavRoutes.Foods.RETURN_DASHBOARD_QUICK_ADD,
+                NavRoutes.Foods.RETURN_DAY_LOG_QUICK_ADD,
+                NavRoutes.Foods.RETURN_QUICK_ADD_ROUTE -> {
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(KEY_FOOD_PICK_FOOD_ID, savedFoodId)
+
+                    navController.popBackStack()
+                }
+
+                else -> closeFoodEditor()
+            }
+        }
+
         composable(
             route = NavRoutes.Shopping.route,
             arguments = listOf(
@@ -122,7 +138,9 @@ fun AppNavHost(
                 initialDate = initialDate,
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
                 onCreateRecipe = { navController.navigate(NavRoutes.Recipes.route) },
-                onCreateFood = { prefillName -> navController.navigate(NavRoutes.Foods.new(prefillName)) },
+                onCreateFood = { prefillName ->
+                    navController.navigate(NavRoutes.Foods.new(prefillName))
+                },
                 onOpenFoods = { navController.navigate(NavRoutes.Foods.list) },
                 onOpenCalendar = { navController.navigate(NavRoutes.Calendar.route) },
                 onOpenDayLog = { date -> navController.navigate(NavRoutes.DayLog.dayLog(date)) },
@@ -130,7 +148,13 @@ fun AppNavHost(
                 onOpenPlanner = { navController.navigate(NavRoutes.Planner.plannerDay(LocalDate.now().toString())) },
                 onOpenBackup = { navController.navigate("backup") },
                 onCreateFoodWithBarcode = { barcode ->
-                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                    navController.navigate(
+                        NavRoutes.Foods.new(
+                            prefillName = null,
+                            prefillBarcode = barcode,
+                            returnTarget = NavRoutes.Foods.RETURN_DASHBOARD_QUICK_ADD
+                        )
+                    )
                 },
                 onOpenQuickAddFavorites = {
                     entry.savedStateHandle[KEY_FOOD_PICK_INITIAL_FILTER] = FOOD_PICK_INITIAL_FILTER_FAVORITES
@@ -181,10 +205,21 @@ fun AppNavHost(
                 date = date,
                 onBack = { navController.popBackStack() },
                 onCreateFood = { prefillName ->
-                    navController.navigate(NavRoutes.Foods.new(prefillName = prefillName))
+                    navController.navigate(
+                        NavRoutes.Foods.new(
+                            prefillName = prefillName,
+                            returnTarget = NavRoutes.Foods.RETURN_DAY_LOG_QUICK_ADD
+                        )
+                    )
                 },
                 onCreateFoodWithBarcode = { barcode ->
-                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                    navController.navigate(
+                        NavRoutes.Foods.new(
+                            prefillName = null,
+                            prefillBarcode = barcode,
+                            returnTarget = NavRoutes.Foods.RETURN_DAY_LOG_QUICK_ADD
+                        )
+                    )
                 },
                 onOpenFoodEditor = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
@@ -212,10 +247,21 @@ fun AppNavHost(
             QuickAddBottomSheet(
                 onDismiss = { navController.popBackStack() },
                 onCreateFood = { prefillName ->
-                    navController.navigate(NavRoutes.Foods.new(prefillName = prefillName))
+                    navController.navigate(
+                        NavRoutes.Foods.new(
+                            prefillName = prefillName,
+                            returnTarget = NavRoutes.Foods.RETURN_QUICK_ADD_ROUTE
+                        )
+                    )
                 },
                 onCreateFoodWithBarcode = { barcode ->
-                    navController.navigate(NavRoutes.Foods.new(prefillName = null, prefillBarcode = barcode))
+                    navController.navigate(
+                        NavRoutes.Foods.new(
+                            prefillName = null,
+                            prefillBarcode = barcode,
+                            returnTarget = NavRoutes.Foods.RETURN_QUICK_ADD_ROUTE
+                        )
+                    )
                 },
                 onOpenFoodEditor = { foodId ->
                     navController.navigate(NavRoutes.Foods.edit(foodId))
@@ -337,6 +383,7 @@ fun AppNavHost(
         ) { entry ->
             val foodId = entry.arguments!!.getLong("foodId")
             val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
+
             Log.d(
                 "Meow",
                 "NAV -> Foods.edit destination. foodId=$foodId initialBarcode=$initialBarcode route=${entry.destination.route}"
@@ -383,19 +430,32 @@ fun AppNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = ""
+                },
+                navArgument("returnTarget") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = NavRoutes.Foods.RETURN_DEFAULT
                 }
             )
         ) { entry ->
             val initialName = entry.arguments?.getString("name").orEmpty().ifBlank { null }
             val initialBarcode = entry.arguments?.getString("barcode").orEmpty().ifBlank { null }
-            Log.d("Meow", "NAV -> Foods.new destination. initialName=$initialName initialBarcode=$initialBarcode route=${entry.destination.route}")
+            val returnTarget = entry.arguments
+                ?.getString("returnTarget")
+                .orEmpty()
+                .ifBlank { NavRoutes.Foods.RETURN_DEFAULT }
+
+            Log.d(
+                "Meow",
+                "NAV -> Foods.new destination. initialName=$initialName initialBarcode=$initialBarcode returnTarget=$returnTarget route=${entry.destination.route}"
+            )
 
             FoodEditorRoute(
                 foodId = null,
                 initialName = initialName,
                 initialBarcode = initialBarcode,
                 onBack = { navController.popBackStack() },
-                onDone = { closeFoodEditor() },
+                onDone = { savedFoodId -> completeNewFoodReturn(returnTarget, savedFoodId) },
                 onAssignBarcodeToExisting = { barcode ->
                     navController.navigate(NavRoutes.Foods.pickBarcode(barcode))
                 },

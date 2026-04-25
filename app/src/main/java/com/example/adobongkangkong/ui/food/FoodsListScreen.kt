@@ -285,7 +285,12 @@ fun FoodsListScreen(
 
                 Spacer(Modifier.height(10.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     FilterChip(
                         selected = state.filter == FoodsFilter.ALL,
                         onClick = { vm.onFilterChange(FoodsFilter.ALL) },

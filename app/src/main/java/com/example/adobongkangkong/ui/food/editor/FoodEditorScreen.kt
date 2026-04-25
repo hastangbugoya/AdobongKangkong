@@ -193,6 +193,7 @@ fun FoodEditorScreen(
     onBarcodeFallbackAssignExisting: () -> Unit,
     onBarcodeFallbackCreateNameChange: (String) -> Unit,
     onBarcodeFallbackCreateMinimal: () -> Unit,
+    onUseScannedBarcodeForCurrentNewFood: () -> Unit,
     onConfirmBarcodeRemap: (Boolean) -> Unit,
     onBarcodeFallbackOpenAssignedFood: (Long) -> Unit,
     onOpenFoodEditor: (Long) -> Unit,
@@ -481,6 +482,7 @@ fun FoodEditorScreen(
     if (state.isBarcodeFallbackOpen) {
         val alreadyAssignedFoodId = state.barcodeAlreadyAssignedFoodId
         val conflict = alreadyAssignedFoodId != null
+        val isNewFood = state.foodId == null
 
         AlertDialog(
             onDismissRequest = onDismissBarcodeFallback,
@@ -488,8 +490,13 @@ fun FoodEditorScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val msg = state.barcodeFallbackMessage
-                        ?: if (conflict) "This barcode is already assigned in your database."
-                        else "This barcode could not be resolved from USDA."
+                        ?: if (conflict) {
+                            "This barcode is already assigned in your database."
+                        } else if (isNewFood) {
+                            "USDA did not find a matching food for this barcode. You can still attach it to the food you are editing."
+                        } else {
+                            "This barcode could not be resolved from USDA."
+                        }
                     Text(msg)
 
                     if (state.scannedBarcode.isNotBlank()) {
@@ -500,38 +507,58 @@ fun FoodEditorScreen(
                         )
                     }
 
-                    HorizontalDivider()
+                    if (!conflict && isNewFood) {
+                        HorizontalDivider()
+                        Text(
+                            text = "Use this barcode for this new food?",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "It will be assigned when you save the food.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else if (!conflict) {
+                        HorizontalDivider()
 
-                    Text(
-                        "Create minimal food (name required):",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedTextField(
-                        value = state.barcodeFallbackCreateName,
-                        onValueChange = onBarcodeFallbackCreateNameChange,
-                        label = { Text("Food name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !conflict
-                    )
+                        Text(
+                            "Create minimal food (name required):",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        OutlinedTextField(
+                            value = state.barcodeFallbackCreateName,
+                            onValueChange = onBarcodeFallbackCreateNameChange,
+                            label = { Text("Food name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = { alreadyAssignedFoodId?.let(onOpenFoodEditor) },
-                        enabled = conflict
-                    ) { Text("Open food") }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        TextButton(
+                            onClick = { alreadyAssignedFoodId?.let(onOpenFoodEditor) }
+                        ) {
+                            Text("Assign to existing")
+                        }
 
-                    TextButton(
-                        onClick = onBarcodeFallbackAssignExisting,
-                        enabled = !conflict
-                    ) { Text("Assign to existing") }
+                        Button(
+                            onClick = onBarcodeFallbackAssignExisting
+                        ) {
+                            Text("Use barcode")
+                        }
+                    }
 
-                    Button(
-                        onClick = onBarcodeFallbackCreateMinimal,
-                        enabled = !conflict && state.barcodeFallbackCreateName.trim().isNotBlank()
-                    ) { Text("Create") }
+                    Spacer(modifier = Modifier.height(24.dp)) // 👈 THIS is the key
+
                 }
             },
             dismissButton = {
@@ -1338,6 +1365,11 @@ fun FoodEditorScreen(
                                     HorizontalDivider()
                                 }
                             }
+                        } else if (state.scannedBarcode.isNotBlank()) {
+                            PendingBarcodeNotice(
+                                barcode = state.scannedBarcode,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         } else {
                             Text(
                                 text = "Scan a barcode to search USDA or start barcode-based import.",
@@ -1353,7 +1385,7 @@ fun FoodEditorScreen(
                             Text(addBarcodeLabel)
                         }
 
-                        if (state.scannedBarcode.isNotBlank()) {
+                        if (isExistingFood && state.scannedBarcode.isNotBlank()) {
                             Text(
                                 text = "Scanned: ${state.scannedBarcode}",
                                 style = MaterialTheme.typography.bodySmall,
@@ -2202,6 +2234,42 @@ private fun FoodEditorBottomBar(
             ) {
                 Text(if (isSaving) "Saving…" else "Save")
             }
+        }
+    }
+}
+
+@Composable
+private fun PendingBarcodeNotice(
+    barcode: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        tonalElevation = 0.dp,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Pending barcode",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = barcode,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "This barcode will be assigned when you save this food.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }

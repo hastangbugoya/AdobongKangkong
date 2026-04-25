@@ -203,6 +203,7 @@ class FoodEditorViewModel @Inject constructor(
 
     private var pendingRemapBarcode: String? = null
     private var pendingRemapTargetFoodId: Long? = null
+    private var pendingBarcodeFromQuickAdd: String? = null
 
     @OptIn(FlowPreview::class)
     private val nutrientResultsFlow =
@@ -1012,6 +1013,56 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
+    fun useScannedBarcodeForCurrentNewFood() {
+        val cleaned = _state.value.scannedBarcode.trim()
+        if (cleaned.isBlank()) return
+
+        pendingBarcodeFromQuickAdd = cleaned
+
+        update {
+            it.copy(
+                scannedBarcode = cleaned,
+                isBarcodeScannerOpen = false,
+                isBarcodeFallbackOpen = false,
+                barcodeFallbackMessage = null,
+                barcodeFallbackCreateName = "",
+                barcodeAlreadyAssignedFoodId = null,
+                barcodePickItems = emptyList(),
+                pendingUsdaSearchJson = null,
+                pendingUsdaInterpretationPrompt = null,
+                pendingUsdaBackfillPrompt = null,
+                barcodeCollisionDialog = null,
+                errorMessage = null,
+                hasUnsavedChanges = true,
+                isFoodMetadataDirty = true
+            )
+        }
+    }
+
+    fun setPendingBarcodeFromQuickAdd(barcode: String) {
+        val cleaned = barcode.trim()
+        if (cleaned.isBlank()) return
+
+        pendingBarcodeFromQuickAdd = cleaned
+
+        update {
+            it.copy(
+                scannedBarcode = cleaned,
+                isBarcodeScannerOpen = false,
+                isBarcodeFallbackOpen = false,
+                barcodeFallbackMessage = null,
+                barcodeFallbackCreateName = "",
+                barcodeAlreadyAssignedFoodId = null,
+                barcodePickItems = emptyList(),
+                pendingUsdaSearchJson = null,
+                pendingUsdaInterpretationPrompt = null,
+                pendingUsdaBackfillPrompt = null,
+                barcodeCollisionDialog = null,
+                errorMessage = null
+            )
+        }
+    }
+
     fun onResolveBarcodeCollision(action: BarcodeCollisionAction) {
         when (action) {
             BarcodeCollisionAction.Cancel -> dismissBarcodeCollision()
@@ -1040,12 +1091,20 @@ class FoodEditorViewModel @Inject constructor(
     }
 
     fun dismissBarcodeFallback() {
+        pendingBarcodeFromQuickAdd = null
+
         update {
             it.copy(
                 isBarcodeFallbackOpen = false,
                 barcodeFallbackMessage = null,
                 barcodeFallbackCreateName = "",
-                barcodeAlreadyAssignedFoodId = null
+                barcodeAlreadyAssignedFoodId = null,
+                scannedBarcode = "",
+                barcodePickItems = emptyList(),
+                pendingUsdaSearchJson = null,
+                pendingUsdaInterpretationPrompt = null,
+                pendingUsdaBackfillPrompt = null,
+                barcodeCollisionDialog = null
             )
         }
     }
@@ -1790,6 +1849,45 @@ class FoodEditorViewModel @Inject constructor(
                     } else {
                         saveFoodMetadata(food)
                     }
+
+                // ✅ NEW: attach pending barcode from Quicklog
+                pendingBarcodeFromQuickAdd?.let { barcode ->
+                    val now = System.currentTimeMillis()
+
+                    val existing = foodBarcodeRepo.getByBarcode(barcode)
+
+                    if (existing == null || existing.foodId == savedId) {
+                        foodBarcodeRepo.upsertAndTouch(
+                            entity = FoodBarcodeEntity(
+                                barcode = barcode,
+                                foodId = savedId,
+                                source = BarcodeMappingSource.USER_ASSIGNED,
+                                usdaFdcId = null,
+                                usdaPublishedDateIso = null,
+                                assignedAtEpochMs = now,
+                                lastSeenAtEpochMs = now
+                            ),
+                            nowEpochMs = now
+                        )
+                    } else {
+                        // fallback to existing remap logic if collision
+                        update {
+                            it.copy(
+                                barcodeRemapDialog = BarcodeRemapDialogState(
+                                    barcode = barcode,
+                                    fromFoodId = existing.foodId,
+                                    toFoodId = savedId,
+                                    fromSource = existing.source
+                                )
+                            )
+                        }
+
+                        pendingRemapBarcode = barcode
+                        pendingRemapTargetFoodId = savedId
+                    }
+
+                    pendingBarcodeFromQuickAdd = null
+                }
 
                 flagsRepo.setFlags(
                     foodId = savedId,
