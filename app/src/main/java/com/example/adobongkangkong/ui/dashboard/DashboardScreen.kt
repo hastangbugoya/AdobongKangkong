@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -450,7 +451,7 @@ private fun DashboardBottomActionBar(
         ) {
             IconButton(
                 onClick = onOpenFoods,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).size(56.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.list),
@@ -459,7 +460,7 @@ private fun DashboardBottomActionBar(
             }
             IconButton(
                 onClick = onQuickAdd,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).size(56.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.add),
@@ -468,7 +469,7 @@ private fun DashboardBottomActionBar(
             }
             IconButton(
                 onClick = onOpenCalendar,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).size(56.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.calendar_days),
