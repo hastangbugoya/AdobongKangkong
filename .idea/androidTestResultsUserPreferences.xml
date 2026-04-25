@@ -50,6 +50,8 @@
               <option name="preferredColumnWidths">
                 <map>
                   <entry key="Duration" value="90" />
+                  <entry key="Google Pixel 7a" value="120" />
+                  <entry key="Pixel_6_Pro_API_34" value="120" />
                   <entry key="Tests" value="360" />
                   <entry key="motorola moto g play - 2024" value="120" />
                 </map>

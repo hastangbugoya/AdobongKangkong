@@ -1,6 +1,6 @@
 package com.example.adobongkangkong.di
 
-import com.example.adobongkangkong.data.settings.InMemoryUserPreferencesRepository
+import com.example.adobongkangkong.data.settings.DataStoreUserPreferencesRepository
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import dagger.Binds
 import dagger.Module
@@ -15,6 +15,6 @@ abstract class SettingsModule {
     @Binds
     @Singleton
     abstract fun bindUserPreferencesRepository(
-        impl: InMemoryUserPreferencesRepository
+        impl: DataStoreUserPreferencesRepository
     ): UserPreferencesRepository
 }

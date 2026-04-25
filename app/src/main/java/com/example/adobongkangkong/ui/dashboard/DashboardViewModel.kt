@@ -9,13 +9,18 @@ import com.example.adobongkangkong.domain.debug.DebugResetUseCase
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.logging.CreateLogEntryUseCase
+import com.example.adobongkangkong.domain.model.MacroTotals
 import com.example.adobongkangkong.domain.model.TargetDraft
-import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.model.TargetEdit
+import com.example.adobongkangkong.domain.model.TodayLogItem
+import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ResetPlannerDataUseCase
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
+import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
+import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionSnapshotJsonUseCase
+import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.RollingNutritionAverages
 import com.example.adobongkangkong.domain.trend.model.RollingNutritionStats
 import com.example.adobongkangkong.domain.trend.usecase.ObserveDashboardNutrientCardsUseCase
@@ -30,7 +35,6 @@ import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
 import com.example.adobongkangkong.domain.usecase.UpsertUserNutrientTargetUseCase
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
-import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObserveDashboardPinOptionsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -48,9 +52,6 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
-import com.example.adobongkangkong.domain.model.MacroTotals
-import com.example.adobongkangkong.domain.model.TodayLogItem
-import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionSnapshotJsonUseCase
 
 /**
  * Dashboard screen state holder.
@@ -96,6 +97,7 @@ class DashboardViewModel @Inject constructor(
     private val observeDashboardNutrientCardsUseCase: ObserveDashboardNutrientCardsUseCase,
 
     private val userPinnedNutrientRepository: UserPinnedNutrientRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val setPinnedDashboardNutrientsUseCase: SetPinnedDashboardNutrientsUseCase,
     private val upsertUserNutrientTargetUseCase: UpsertUserNutrientTargetUseCase,
 
@@ -114,6 +116,12 @@ class DashboardViewModel @Inject constructor(
 
     val selectedDate: StateFlow<LocalDate> =
         selectedDateFlow.asStateFlow()
+
+    val privacyLockEnabled: StateFlow<Boolean> =
+        userPreferencesRepository.privacyLockEnabled
+
+    val privacyLockTimeoutMinutes: StateFlow<Int?> =
+        userPreferencesRepository.privacyLockTimeoutMinutes
 
     private val zoneId = ZoneId.systemDefault()
 
@@ -186,6 +194,14 @@ class DashboardViewModel @Inject constructor(
 
     fun onScreenResumed() {
         currentDateFlow.value = LocalDate.now()
+    }
+
+    fun setPrivacyLockEnabled(enabled: Boolean) {
+        userPreferencesRepository.setPrivacyLockEnabled(enabled)
+    }
+
+    fun setPrivacyLockTimeoutMinutes(minutes: Int?) {
+        userPreferencesRepository.setPrivacyLockTimeoutMinutes(minutes)
     }
 
     fun buildSharedSnapshotJson() {

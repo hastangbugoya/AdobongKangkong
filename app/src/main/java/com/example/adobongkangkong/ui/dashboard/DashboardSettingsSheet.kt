@@ -54,6 +54,20 @@ enum class DashboardDebugResetScope(
     AFTER_SELECTED_DATE("After selected date")
 }
 
+private data class PrivacyLockTimingOption(
+    val label: String,
+    val minutes: Int?
+)
+
+private val PrivacyLockTimingOptions = listOf(
+    PrivacyLockTimingOption("When phone locks", null),
+    PrivacyLockTimingOption("Immediately when app backgrounds", 0),
+    PrivacyLockTimingOption("After 1 minute", 1),
+    PrivacyLockTimingOption("After 5 minutes", 5),
+    PrivacyLockTimingOption("After 15 minutes", 15),
+    PrivacyLockTimingOption("After 30 minutes", 30)
+)
+
 @Composable
 fun DashboardSettingsSheet(
     pinnedKeys: List<NutrientKey>,
@@ -62,6 +76,10 @@ fun DashboardSettingsSheet(
     onDismiss: () -> Unit,
     pinOptions: List<DashboardPinOption>,
     nutrientPreferences: List<UserNutrientPreference>,
+    privacyLockEnabled: Boolean,
+    privacyLockTimeoutMinutes: Int?,
+    onPrivacyLockEnabledChange: (Boolean) -> Unit,
+    onPrivacyLockTimeoutMinutesChange: (Int?) -> Unit,
     onApplyPins: (slot0: String?, slot1: String?) -> Unit,
     onPinnedChange: (NutrientKey, Boolean) -> Unit,
     onCriticalChange: (NutrientKey, Boolean) -> Unit,
@@ -92,6 +110,35 @@ fun DashboardSettingsSheet(
     ) {
         Text("Dashboard Settings", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
+
+        // ---------------- Privacy ----------------
+
+        Text("Privacy", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        ListItem(
+            headlineContent = { Text("App privacy lock") },
+            supportingContent = {
+                Text("Require biometrics or device screen lock. This does not encrypt the database.")
+            },
+            trailingContent = {
+                Switch(
+                    checked = privacyLockEnabled,
+                    onCheckedChange = onPrivacyLockEnabledChange
+                )
+            }
+        )
+        HorizontalDivider()
+
+        if (privacyLockEnabled) {
+            PrivacyLockTimingDropdown(
+                selectedMinutes = privacyLockTimeoutMinutes,
+                onSelect = onPrivacyLockTimeoutMinutesChange
+            )
+            HorizontalDivider()
+        }
+
+        Spacer(Modifier.height(20.dp))
 
         // ---------------- Nutrient preferences ----------------
 
@@ -389,18 +436,56 @@ fun DashboardSettingsSheet(
                 Text("Run Debug Reset")
             }
         }
+    }
+}
 
-//        Spacer(Modifier.height(16.dp))
-//
-//        Button(
-//            onClick = {
-//                onDismiss()
-//                onOpenPlanner()
-//            },
-//            modifier = Modifier.fillMaxWidth()
-//        ) {
-//            Text("Meal Planner")
-//        }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PrivacyLockTimingDropdown(
+    selectedMinutes: Int?,
+    onSelect: (Int?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = PrivacyLockTimingOptions
+        .firstOrNull { it.minutes == selectedMinutes }
+        ?.label
+        ?: "When phone locks"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = { },
+            readOnly = true,
+            label = { Text("Lock timing") },
+            supportingText = {
+                Text("Timeout options lock even if the phone stays unlocked.")
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .padding(top = 8.dp, bottom = 8.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            PrivacyLockTimingOptions.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onSelect(option.minutes)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 

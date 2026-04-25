@@ -12,4 +12,28 @@ interface UserPreferencesRepository {
 
     /** Whether the app should be locked to portrait orientation. */
     val lockPortrait: StateFlow<Boolean>
+
+    /**
+     * Whether the optional app privacy lock is enabled.
+     *
+     * This only gates app UI with biometric/device credential unlock.
+     * It does not encrypt the database or store biometric data.
+     */
+    val privacyLockEnabled: StateFlow<Boolean>
+
+    /**
+     * Privacy lock timeout in minutes.
+     *
+     * Values:
+     * - null = lock only when the phone/device locks
+     * - 0 = lock immediately when the app backgrounds
+     * - positive value = lock after that many minutes in background
+     */
+    val privacyLockTimeoutMinutes: StateFlow<Int?>
+
+    /** Enables or disables the optional app privacy lock. */
+    fun setPrivacyLockEnabled(enabled: Boolean)
+
+    /** Sets the optional privacy lock timeout policy. */
+    fun setPrivacyLockTimeoutMinutes(minutes: Int?)
 }

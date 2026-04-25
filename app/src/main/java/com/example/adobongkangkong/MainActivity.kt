@@ -1,17 +1,25 @@
 package com.example.adobongkangkong
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -28,61 +36,157 @@ import java.io.InputStreamReader
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
-    @Inject
-    lateinit var userPreferences: UserPreferencesRepository
-    @Inject
-    lateinit var parseRecipeBundleUseCase: ParseRecipeBundleUseCase
-    @Inject
-    lateinit var importRecipeBundleUseCase: ImportRecipeBundleUseCase
+    @Inject lateinit var userPreferences: UserPreferencesRepository
+    @Inject lateinit var parseRecipeBundleUseCase: ParseRecipeBundleUseCase
+    @Inject lateinit var importRecipeBundleUseCase: ImportRecipeBundleUseCase
+
+    private val appLockManager = AppLockManager()
+
+    private var privacyLockEnabled by mutableStateOf(false)
+    private var privacyLockTimeoutMinutes: Int? by mutableStateOf(null)
+    private var isAuthenticatedForCurrentSession by mutableStateOf(true)
+
+    private var biometricPromptShowing = false
+    private var lastBackgroundTimeMs: Long = 0L
+    private var appWasStartedWhenScreenTurnedOff = false
+    private var skipNextUnlockPromptAfterDeviceUnlock = false
+
+    private val screenLockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!privacyLockEnabled) return
+
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    appWasStartedWhenScreenTurnedOff =
+                        lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+
+                    Log.d(
+                        "AK_LOCK",
+                        "Screen off → lock. appWasStarted=$appWasStartedWhenScreenTurnedOff"
+                    )
+
+                    appLockManager.lock()
+                    isAuthenticatedForCurrentSession = false
+                }
+
+                Intent.ACTION_USER_PRESENT -> {
+                    if (appWasStartedWhenScreenTurnedOff) {
+                        Log.d("AK_LOCK", "User present after foreground screen lock → skip next app unlock")
+                        skipNextUnlockPromptAfterDeviceUnlock = true
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        registerScreenLockReceiver()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 userPreferences.lockPortrait.collect { locked ->
                     requestedOrientation =
-                        if (locked) {
-                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                        } else {
-                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        }
+                        if (locked) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
             }
         }
 
-        // 🔽 Handle cold start intent
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                userPreferences.privacyLockEnabled.collect { enabled ->
+                    privacyLockEnabled = enabled
+
+                    if (!enabled) {
+                        appLockManager.unlock()
+                        isAuthenticatedForCurrentSession = true
+                    }
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                userPreferences.privacyLockTimeoutMinutes.collect { timeoutMinutes ->
+                    privacyLockTimeoutMinutes = timeoutMinutes
+                }
+            }
+        }
+
         handleIncomingIntent(intent)
 
         setContent {
             AdobongKangkongTheme {
-                MainScreen()
+                if (privacyLockEnabled && !isAuthenticatedForCurrentSession) {
+                    Text("App locked")
+                } else {
+                    MainScreen()
+                }
             }
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+
+        if (!privacyLockEnabled) return
+
+        lastBackgroundTimeMs = SystemClock.elapsedRealtime()
+
+        if (privacyLockTimeoutMinutes == 0) {
+            Log.d("AK_LOCK", "Immediate lock on background")
+            appLockManager.lock()
+            isAuthenticatedForCurrentSession = false
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (!privacyLockEnabled) return
+
+        if (skipNextUnlockPromptAfterDeviceUnlock && appLockManager.isLocked) {
+            Log.d("AK_LOCK", "Skipping app unlock after device unlock")
+            skipNextUnlockPromptAfterDeviceUnlock = false
+            appWasStartedWhenScreenTurnedOff = false
+            appLockManager.unlock()
+            isAuthenticatedForCurrentSession = true
+            return
+        }
+
+        val timeout = privacyLockTimeoutMinutes
+
+        if (timeout != null && timeout > 0) {
+            val elapsedMs = SystemClock.elapsedRealtime() - lastBackgroundTimeMs
+            val timeoutMs = timeout * 60_000L
+
+            if (elapsedMs >= timeoutMs) {
+                Log.d("AK_LOCK", "Timeout reached → lock")
+                appLockManager.lock()
+                isAuthenticatedForCurrentSession = false
+            }
+        }
+
+        if (appLockManager.isLocked) {
+            isAuthenticatedForCurrentSession = false
+            maybeShowPrivacyUnlockPrompt()
+        }
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(screenLockReceiver)
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-
-        // 🔽 Handle when app is already running
         handleIncomingIntent(intent)
     }
 
-    /**
-     * Handles incoming intents for recipe import.
-     *
-     * Supported:
-     * - ACTION_VIEW
-     * - content:// URIs
-     *
-     * This stage:
-     * - extracts URI
-     * - reads file safely
-     * - passes raw JSON string to next stage (not yet implemented)
-     */
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
 
@@ -90,42 +194,17 @@ class MainActivity : ComponentActivity() {
         val data: Uri? = intent.data
 
         if (action == Intent.ACTION_VIEW && data != null) {
-            Log.d("AK_IMPORT", "Received ACTION_VIEW with URI: $data")
-
             lifecycleScope.launch {
-                val content = readTextFromUriSafe(data)
-
-                if (content == null) {
-                    Log.e("AK_IMPORT", "Failed to read file from URI")
-                    return@launch
-                }
-
-                Log.d("AK_IMPORT", "File read success, size=${content.length}")
-
-                // 🔜 NEXT STAGE:
-                // Pass this JSON string into parser + import pipeline
-                // e.g. importRecipeFromJson(content)
-
-                // TEMP placeholder
+                val content = readTextFromUriSafe(data) ?: return@launch
                 val parseResult = parseRecipeBundleUseCase.execute(content)
 
-                when (parseResult) {
-                    is ParseRecipeBundleUseCase.Result.Success -> {
-                        val importResult = importRecipeBundleUseCase.execute(parseResult.bundle)
-                        // show toast
-                    }
-                    is ParseRecipeBundleUseCase.Result.Failure -> {
-                        // show error toast
-                    }
+                if (parseResult is ParseRecipeBundleUseCase.Result.Success) {
+                    importRecipeBundleUseCase.execute(parseResult.bundle)
                 }
             }
         }
     }
 
-    /**
-     * Safely reads text from content URI.
-     * Never throws — returns null on failure.
-     */
     private suspend fun readTextFromUriSafe(uri: Uri): String? {
         return withContext(Dispatchers.IO) {
             try {
@@ -140,32 +219,81 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("AK_IMPORT", "Error reading URI: ${e.message}", e)
+                Log.e("AK_IMPORT", "Error reading URI", e)
                 null
             }
         }
     }
 
-    /**
-     * Temporary hook until parser + import use case is implemented.
-     */
-    private fun onRecipeFileLoaded(json: String) {
-        Log.d("AK_IMPORT", "Raw JSON received (preview): ${json.take(200)}")
+    private fun registerScreenLockReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenLockReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(screenLockReceiver, filter)
+        }
+    }
+
+    private fun maybeShowPrivacyUnlockPrompt() {
+        if (!privacyLockEnabled || !appLockManager.isLocked || biometricPromptShowing) return
+
+        val authenticators =
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+
+        if (
+            BiometricManager.from(this).canAuthenticate(authenticators) !=
+            BiometricManager.BIOMETRIC_SUCCESS
+        ) {
+            return
+        }
+
+        biometricPromptShowing = true
+
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    biometricPromptShowing = false
+                    appLockManager.unlock()
+                    isAuthenticatedForCurrentSession = true
+                }
+
+                override fun onAuthenticationError(code: Int, err: CharSequence) {
+                    biometricPromptShowing = false
+                    isAuthenticatedForCurrentSession = false
+                }
+
+                override fun onAuthenticationFailed() {
+                    isAuthenticatedForCurrentSession = false
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock app")
+            .setSubtitle("Verify to continue")
+            .setAllowedAuthenticators(authenticators)
+            .build()
+
+        prompt.authenticate(promptInfo)
     }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
+private class AppLockManager {
+    var isLocked = false
+        private set
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    AdobongKangkongTheme {
-        Greeting("Android")
+    fun lock() {
+        isLocked = true
+    }
+
+    fun unlock() {
+        isLocked = false
     }
 }

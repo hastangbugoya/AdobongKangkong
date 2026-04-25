@@ -214,6 +214,8 @@ fun DashboardScreen(
             onDismissRequest = { vm.onDismissSettingsSheet() },
             sheetState = settingsSheetState
         ) {
+            val privacyLockEnabled by vm.privacyLockEnabled.collectAsState()
+            val privacyLockTimeoutMinutes by vm.privacyLockTimeoutMinutes.collectAsState()
             DashboardSettingsSheet(
                 pinnedKeys = state.pinnedKeys,
                 monitoredCards = state.nutrientCards,
@@ -246,6 +248,10 @@ fun DashboardScreen(
                 onDebugReset = vm::runDebugReset,
                 onBuildSharedSnapshotJson = vm::buildSharedSnapshotJson,
                 onResetPlannerData = vm::resetPlannerData,
+                privacyLockEnabled = privacyLockEnabled,
+                onPrivacyLockEnabledChange = vm::setPrivacyLockEnabled,
+                privacyLockTimeoutMinutes = privacyLockTimeoutMinutes,
+                onPrivacyLockTimeoutMinutesChange = vm::setPrivacyLockTimeoutMinutes,
             )
         }
     }
