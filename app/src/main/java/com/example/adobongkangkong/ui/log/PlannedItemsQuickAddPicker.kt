@@ -1,15 +1,19 @@
 package com.example.adobongkangkong.ui.log
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.motionEventSpy
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
@@ -19,9 +23,12 @@ fun PlannedItemsQuickAddPicker(
     sections: Map<MealSlot, List<QuickAddPlannedItemCandidate>>,
     onItemSelected: (QuickAddPlannedItemCandidate) -> Unit
 ) {
-
+    Text("Planned items for the day",
+        modifier = Modifier.padding(4.dp)
+            .fillMaxWidth(),
+        style = MaterialTheme.typography.titleMedium
+    )
     LazyColumn {
-
         sections.forEach { (slot, itemsForSlot) ->
 
             item {
@@ -31,7 +38,6 @@ fun PlannedItemsQuickAddPicker(
                     modifier = Modifier.padding(12.dp)
                 )
             }
-
             items(itemsForSlot) { item ->
 
                 Column(
