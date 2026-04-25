@@ -97,7 +97,8 @@ fun QuickAddBottomSheet(
     initialPlannedItemCandidate: QuickAddPlannedItemCandidate? = null,
     editingLogId: Long? = null,
     pickedFoodId: Long? = null,
-    vm: QuickAddViewModel = hiltViewModel()
+    onPickedFoodConsumed: () -> Unit = {},
+    vm: QuickAddViewModel = hiltViewModel(),
 ) {
     val focus = LocalFocusManager.current
     val state by vm.state.collectAsState()
@@ -122,6 +123,7 @@ fun QuickAddBottomSheet(
     LaunchedEffect(pickedFoodId) {
         pickedFoodId?.let {
             vm.onPickedFoodId(it)
+            onPickedFoodConsumed()   // 👈 THIS WAS MISSING
             sheetState.show()
         }
     }

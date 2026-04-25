@@ -46,7 +46,9 @@ fun DayLogScreen(
     onOpenFoodEditor: (Long) -> Unit = {},
     onOpenQuickAddFavorites: () -> Unit = {},
     onDelete: ((Long) -> Unit)? = null,
-    vm: DayLogViewModel = hiltViewModel()
+    vm: DayLogViewModel = hiltViewModel(),
+    pickedQuickAddFoodId: Long? = null,
+    onPickedQuickAddFoodConsumed: () -> Unit = {},
 ) {
     val entries by vm.entries.collectAsState()
     val ious by vm.ious.collectAsState()
@@ -82,7 +84,9 @@ fun DayLogScreen(
             onOpenFoodEditor = onOpenFoodEditor,
             onOpenFavorites = onOpenQuickAddFavorites,
             logDate = date,
-            editingLogId = editingLogId
+            editingLogId = editingLogId,
+            pickedFoodId = pickedQuickAddFoodId,
+            onPickedFoodConsumed = onPickedQuickAddFoodConsumed
         )
     }
 

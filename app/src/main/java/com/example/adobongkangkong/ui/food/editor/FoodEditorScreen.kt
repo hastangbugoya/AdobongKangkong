@@ -545,13 +545,15 @@ fun FoodEditorScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         TextButton(
-                            onClick = { alreadyAssignedFoodId?.let(onOpenFoodEditor) }
+                            onClick = onBarcodeFallbackAssignExisting,
+                            enabled = !conflict
                         ) {
                             Text("Assign to existing")
                         }
 
                         Button(
-                            onClick = onBarcodeFallbackAssignExisting
+                            onClick = onUseScannedBarcodeForCurrentNewFood,
+                            enabled = !conflict && isNewFood
                         ) {
                             Text("Use barcode")
                         }
