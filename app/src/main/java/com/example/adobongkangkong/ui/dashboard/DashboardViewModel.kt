@@ -123,6 +123,18 @@ class DashboardViewModel @Inject constructor(
     val privacyLockTimeoutMinutes: StateFlow<Int?> =
         userPreferencesRepository.privacyLockTimeoutMinutes
 
+    val mealRemindersEnabled: StateFlow<Boolean> =
+        userPreferencesRepository.mealRemindersEnabled
+
+    val mealReminderStartMinutes: StateFlow<Int> =
+        userPreferencesRepository.mealReminderStartMinutes
+
+    val mealReminderIntervalMinutes: StateFlow<Int> =
+        userPreferencesRepository.mealReminderIntervalMinutes
+
+    val mealReminderEndMinutes: StateFlow<Int> =
+        userPreferencesRepository.mealReminderEndMinutes
+
     private val zoneId = ZoneId.systemDefault()
 
     private val currentDateFlow = MutableStateFlow(LocalDate.now())
@@ -202,6 +214,22 @@ class DashboardViewModel @Inject constructor(
 
     fun setPrivacyLockTimeoutMinutes(minutes: Int?) {
         userPreferencesRepository.setPrivacyLockTimeoutMinutes(minutes)
+    }
+
+    fun setMealRemindersEnabled(enabled: Boolean) {
+        userPreferencesRepository.setMealRemindersEnabled(enabled)
+    }
+
+    fun setMealReminderStartMinutes(minutes: Int) {
+        userPreferencesRepository.setMealReminderStartMinutes(minutes)
+    }
+
+    fun setMealReminderIntervalMinutes(minutes: Int) {
+        userPreferencesRepository.setMealReminderIntervalMinutes(minutes)
+    }
+
+    fun setMealReminderEndMinutes(minutes: Int) {
+        userPreferencesRepository.setMealReminderEndMinutes(minutes)
     }
 
     fun buildSharedSnapshotJson() {

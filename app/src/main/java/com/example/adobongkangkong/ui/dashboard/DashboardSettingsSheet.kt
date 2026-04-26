@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -30,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.BuildConfig
 import com.example.adobongkangkong.domain.model.TargetDraft
@@ -100,7 +102,15 @@ fun DashboardSettingsSheet(
         scope: DashboardDebugResetScope
     ) -> Unit,
     onBuildSharedSnapshotJson: () -> Unit,
-    onResetPlannerData: () -> Unit
+    onResetPlannerData: () -> Unit,
+    mealRemindersEnabled: Boolean,
+    mealReminderStartMinutes: Int,
+    mealReminderIntervalMinutes: Int,
+    mealReminderEndMinutes: Int,
+    onMealRemindersEnabledChange: (Boolean) -> Unit,
+    onMealReminderStartMinutesChange: (Int) -> Unit,
+    onMealReminderIntervalMinutesChange: (Int) -> Unit,
+    onMealReminderEndMinutesChange: (Int) -> Unit,
 ) {
     Column(
         Modifier
@@ -110,8 +120,6 @@ fun DashboardSettingsSheet(
     ) {
         Text("Dashboard Settings", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
-
-        // ---------------- Privacy ----------------
 
         Text("Privacy", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -140,7 +148,56 @@ fun DashboardSettingsSheet(
 
         Spacer(Modifier.height(20.dp))
 
-        // ---------------- Nutrient preferences ----------------
+        Text("Meal logging reminders", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        ListItem(
+            headlineContent = { Text("Remind me to log meals") },
+            supportingContent = {
+                Text("Gentle notifications during the day. Timing is approximate.")
+            },
+            trailingContent = {
+                Switch(
+                    checked = mealRemindersEnabled,
+                    onCheckedChange = onMealRemindersEnabledChange
+                )
+            }
+        )
+
+        if (mealRemindersEnabled) {
+            Spacer(Modifier.height(8.dp))
+
+            ReminderTimeField(
+                label = "Start time",
+                minutesFromMidnight = mealReminderStartMinutes,
+                onMinutesChange = onMealReminderStartMinutesChange
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            ReminderIntervalField(
+                intervalMinutes = mealReminderIntervalMinutes,
+                onIntervalMinutesChange = onMealReminderIntervalMinutesChange
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            ReminderTimeField(
+                label = "End time",
+                minutesFromMidnight = mealReminderEndMinutes,
+                onMinutesChange = onMealReminderEndMinutesChange
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "Example: ${formatReminderPreview(mealReminderStartMinutes, mealReminderIntervalMinutes, mealReminderEndMinutes)}",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        HorizontalDivider()
+        Spacer(Modifier.height(20.dp))
 
         Text("Pinned nutrients (2)", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -192,8 +249,6 @@ fun DashboardSettingsSheet(
         }
 
         Spacer(Modifier.height(20.dp))
-
-        // ---------------- Targets ----------------
 
         targetDraft?.let { draft ->
             Text("Targets (min / target / max)", style = MaterialTheme.typography.titleMedium)
@@ -277,11 +332,10 @@ fun DashboardSettingsSheet(
             )
             HorizontalDivider()
         }
+
         Text("DEBUG targetDraft = ${targetDraft != null}")
 
         Spacer(Modifier.height(20.dp))
-
-        // ---------------- Data ----------------
 
         Text("Data", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -439,6 +493,88 @@ fun DashboardSettingsSheet(
     }
 }
 
+@Composable
+private fun ReminderTimeField(
+    label: String,
+    minutesFromMidnight: Int,
+    onMinutesChange: (Int) -> Unit
+) {
+    var text by remember(minutesFromMidnight) {
+        mutableStateOf(formatMinutesAsTime(minutesFromMidnight))
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { value ->
+            text = value
+            parseTimeToMinutes(value)?.let(onMinutesChange)
+        },
+        label = { Text(label) },
+        supportingText = { Text("Use HH:mm, example 08:00 or 21:00") },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun ReminderIntervalField(
+    intervalMinutes: Int,
+    onIntervalMinutesChange: (Int) -> Unit
+) {
+    var text by remember(intervalMinutes) {
+        mutableStateOf(intervalMinutes.toString())
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { value ->
+            text = value.filter { it.isDigit() }
+            text.toIntOrNull()?.let(onIntervalMinutesChange)
+        },
+        label = { Text("Interval minutes") },
+        supportingText = { Text("Example: 180 = every 3 hours") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+private fun formatMinutesAsTime(minutes: Int): String {
+    val safeMinutes = minutes.coerceIn(0, 23 * 60 + 59)
+    val hour = safeMinutes / 60
+    val minute = safeMinutes % 60
+    return "%02d:%02d".format(hour, minute)
+}
+
+private fun parseTimeToMinutes(value: String): Int? {
+    val parts = value.trim().split(":")
+    if (parts.size != 2) return null
+
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+
+    if (hour !in 0..23) return null
+    if (minute !in 0..59) return null
+
+    return hour * 60 + minute
+}
+
+private fun formatReminderPreview(
+    startMinutes: Int,
+    intervalMinutes: Int,
+    endMinutes: Int
+): String {
+    if (intervalMinutes <= 0 || endMinutes <= startMinutes) return "invalid schedule"
+
+    val times = mutableListOf<String>()
+    var current = startMinutes
+
+    while (current <= endMinutes && times.size < 8) {
+        times += formatMinutesAsTime(current)
+        current += intervalMinutes
+    }
+
+    return times.joinToString(", ")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PrivacyLockTimingDropdown(
@@ -571,7 +707,7 @@ private fun PinDropdown(
     ) {
         OutlinedTextField(
             value = selectedLabel,
-            onValueChange = { /* read-only */ },
+            onValueChange = { },
             readOnly = true,
             label = { Text(title) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },

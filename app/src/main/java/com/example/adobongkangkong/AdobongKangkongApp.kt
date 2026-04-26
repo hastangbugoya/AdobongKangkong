@@ -1,24 +1,20 @@
 package com.example.adobongkangkong
 
 import android.app.Application
+import android.os.Build
+import androidx.core.app.ActivityCompat.requestPermissions
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.example.adobongkangkong.core.log.MeowLog
-import com.example.adobongkangkong.data.local.db.seed.SeedStoresUseCase
+import com.example.adobongkangkong.notification.MealReminderNotificationHelper
 import com.example.adobongkangkong.work.OrphanFoodMediaCleanupScheduler
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
 class AdobongKangkongApp : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
-
-    // 🔥 Inject seeder
-//    @Inject lateinit var seedStoresUseCase: SeedStoresUseCase
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -28,12 +24,12 @@ class AdobongKangkongApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        OrphanFoodMediaCleanupScheduler.schedule(this)
         MeowLog.init(this)
 
-        // 🔥 Run store seeding (non-blocking)
-//        CoroutineScope(Dispatchers.IO).launch {
-//            seedStoresUseCase()
-//        }
+
+
+        MealReminderNotificationHelper.createNotificationChannel(this)
+
+        OrphanFoodMediaCleanupScheduler.schedule(this)
     }
 }

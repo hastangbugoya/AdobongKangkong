@@ -1,5 +1,6 @@
 package com.example.adobongkangkong
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -27,8 +29,10 @@ import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.transfer.ImportRecipeBundleUseCase
 import com.example.adobongkangkong.domain.transfer.ParseRecipeBundleUseCase
 import com.example.adobongkangkong.ui.theme.AdobongKangkongTheme
+import com.example.adobongkangkong.work.MealReminderScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -92,6 +96,40 @@ class MainActivity : FragmentActivity() {
                     requestedOrientation =
                         if (locked) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                         else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                1001
+            )
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    userPreferences.mealRemindersEnabled,
+                    userPreferences.mealReminderStartMinutes,
+                    userPreferences.mealReminderIntervalMinutes,
+                    userPreferences.mealReminderEndMinutes
+                ) { enabled, startMinutes, intervalMinutes, endMinutes ->
+                    MealReminderSettings(
+                        enabled = enabled,
+                        startMinutes = startMinutes,
+                        intervalMinutes = intervalMinutes,
+                        endMinutes = endMinutes
+                    )
+                }.collect { settings ->
+                    MealReminderScheduler.reschedule(
+                        context = applicationContext,
+                        enabled = settings.enabled,
+                        startMinutes = settings.startMinutes,
+                        intervalMinutes = settings.intervalMinutes,
+                        endMinutes = settings.endMinutes
+                    )
                 }
             }
         }
@@ -284,6 +322,13 @@ class MainActivity : FragmentActivity() {
         prompt.authenticate(promptInfo)
     }
 }
+
+private data class MealReminderSettings(
+    val enabled: Boolean,
+    val startMinutes: Int,
+    val intervalMinutes: Int,
+    val endMinutes: Int
+)
 
 private class AppLockManager {
     var isLocked = false

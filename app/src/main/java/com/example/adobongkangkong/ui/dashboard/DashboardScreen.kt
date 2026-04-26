@@ -35,7 +35,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -108,7 +107,6 @@ fun DashboardScreen(
 
     val selectedDate = state.date
     val currentDate = state.currentDate
-    selectedDate == currentDate
 
     DisposableEffect(lifecycleOwner, vm) {
         val observer = LifecycleEventObserver { _, event ->
@@ -217,6 +215,12 @@ fun DashboardScreen(
         ) {
             val privacyLockEnabled by vm.privacyLockEnabled.collectAsState()
             val privacyLockTimeoutMinutes by vm.privacyLockTimeoutMinutes.collectAsState()
+
+            val mealRemindersEnabled by vm.mealRemindersEnabled.collectAsState()
+            val mealReminderStartMinutes by vm.mealReminderStartMinutes.collectAsState()
+            val mealReminderIntervalMinutes by vm.mealReminderIntervalMinutes.collectAsState()
+            val mealReminderEndMinutes by vm.mealReminderEndMinutes.collectAsState()
+
             DashboardSettingsSheet(
                 pinnedKeys = state.pinnedKeys,
                 monitoredCards = state.nutrientCards,
@@ -253,6 +257,14 @@ fun DashboardScreen(
                 onPrivacyLockEnabledChange = vm::setPrivacyLockEnabled,
                 privacyLockTimeoutMinutes = privacyLockTimeoutMinutes,
                 onPrivacyLockTimeoutMinutesChange = vm::setPrivacyLockTimeoutMinutes,
+                mealRemindersEnabled = mealRemindersEnabled,
+                mealReminderStartMinutes = mealReminderStartMinutes,
+                mealReminderIntervalMinutes = mealReminderIntervalMinutes,
+                mealReminderEndMinutes = mealReminderEndMinutes,
+                onMealRemindersEnabledChange = vm::setMealRemindersEnabled,
+                onMealReminderStartMinutesChange = vm::setMealReminderStartMinutes,
+                onMealReminderIntervalMinutesChange = vm::setMealReminderIntervalMinutes,
+                onMealReminderEndMinutesChange = vm::setMealReminderEndMinutes
             )
         }
     }

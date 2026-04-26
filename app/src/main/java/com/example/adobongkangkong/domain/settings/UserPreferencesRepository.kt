@@ -31,6 +31,28 @@ interface UserPreferencesRepository {
      */
     val privacyLockTimeoutMinutes: StateFlow<Int?>
 
+    // 🔔 Meal Reminder Preferences
+
+    val mealRemindersEnabled: StateFlow<Boolean>
+
+    val mealReminderStartMinutes: StateFlow<Int>
+
+    val mealReminderIntervalMinutes: StateFlow<Int>
+
+    val mealReminderEndMinutes: StateFlow<Int>
+
+    /** Enables or disables meal reminders. */
+    fun setMealRemindersEnabled(enabled: Boolean)
+
+    /** Start time (minutes from midnight). */
+    fun setMealReminderStartMinutes(minutes: Int)
+
+    /** Interval in minutes between reminders. */
+    fun setMealReminderIntervalMinutes(minutes: Int)
+
+    /** End time (minutes from midnight). */
+    fun setMealReminderEndMinutes(minutes: Int)
+
     /** Enables or disables the optional app privacy lock. */
     fun setPrivacyLockEnabled(enabled: Boolean)
 
