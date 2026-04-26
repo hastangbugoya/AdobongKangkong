@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
+import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodNeedsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedFoodTotalsUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ObservePlannedRecipeShoppingRequirementsUseCase
@@ -44,8 +45,9 @@ class ShoppingViewModel @Inject constructor(
 
     private val startDateFlow = MutableStateFlow(LocalDate.now())
     private val daysFlow = MutableStateFlow(7)
-
     private val daysTextFlow = MutableStateFlow("7")
+    private val checkedFoodIdsFlow = MutableStateFlow<Set<Long>>(emptySet())
+    private val unitModeFlow = MutableStateFlow(ShoppingUnitMode.METRIC)
 
     fun setStartDate(d: LocalDate) {
         startDateFlow.value = d
@@ -59,6 +61,21 @@ class ShoppingViewModel @Inject constructor(
         }
     }
 
+    fun onSimpleItemCheckedChanged(foodId: Long, isChecked: Boolean) {
+        checkedFoodIdsFlow.value = if (isChecked) {
+            checkedFoodIdsFlow.value + foodId
+        } else {
+            checkedFoodIdsFlow.value - foodId
+        }
+    }
+
+    fun onShoppingUnitModeChanged(mode: ShoppingUnitMode) {
+        unitModeFlow.value = mode
+    }
+
+    private val shoppingWindowFlow: Flow<Pair<LocalDate, Int>> =
+        combine(startDateFlow, daysFlow) { start, days -> start to days }
+
     private val flagsByFoodIdFlow: Flow<Map<Long, FoodGoalFlagsEntity>> =
         foodGoalFlagsDao
             .observeAll()
@@ -66,16 +83,163 @@ class ShoppingViewModel @Inject constructor(
             .distinctUntilChanged()
 
     private val recipeFoodIdsFlow: Flow<Set<Long>> =
-        combine(startDateFlow, daysFlow) { start, days -> start to days }
+        shoppingWindowFlow
             .flatMapLatest { (start, days) -> observeRecipeShopping(start, days) }
             .map { result -> result.totalled.map { it.recipeFoodId }.toSet() }
 
+    private val simpleItemsFlow: Flow<List<ShoppingListItemUi>> =
+        combine(
+            shoppingWindowFlow.flatMapLatest { (start, days) ->
+                observeTotals(startDate = start, days = days)
+            },
+            shoppingWindowFlow.flatMapLatest { (start, days) ->
+                observeRecipeShopping(startDate = start, days = days)
+            },
+            checkedFoodIdsFlow,
+            unitModeFlow
+        ) { totals, recipeShopping, checkedFoodIds, unitMode ->
+            SimpleShoppingProjectionInputs(
+                totals = totals,
+                recipeShopping = recipeShopping,
+                checkedFoodIds = checkedFoodIds,
+                unitMode = unitMode
+            )
+        }.mapLatest { input ->
+            val foodCache = mutableMapOf<Long, Food?>()
+
+            suspend fun getFoodCached(foodId: Long): Food? {
+                return foodCache.getOrPut(foodId) {
+                    foodRepo.getById(foodId)
+                }
+            }
+
+            suspend fun convertServingsToBase(
+                foodId: Long,
+                servings: Double
+            ): Pair<Double?, Double?> {
+                val food = getFoodCached(foodId) ?: return null to null
+
+                val gramsPerServing =
+                    food.gramsPerServingUnit?.let { it * food.servingSize }
+
+                val mlPerServing =
+                    food.mlPerServingUnit?.let { it * food.servingSize }
+
+                return when {
+                    gramsPerServing != null -> (servings * gramsPerServing) to null
+                    mlPerServing != null -> null to (servings * mlPerServing)
+                    else -> null to null
+                }
+            }
+
+            val recipeFoodIds = input.recipeShopping.totalled.map { it.recipeFoodId }.toSet()
+
+            val recipeEarliestDateByRecipeFoodId: Map<Long, LocalDate?> =
+                input.recipeShopping.notTotalled
+                    .groupBy { it.recipeFoodId }
+                    .mapValues { (_, rows) ->
+                        rows.mapNotNull { row ->
+                            runCatching { LocalDate.parse(row.dateIso) }.getOrNull()
+                        }.minOrNull()
+                    }
+
+            val aggregatesByFoodId = linkedMapOf<Long, ShoppingListAggregate>()
+
+            input.totals
+                .filterNot { it.foodId in recipeFoodIds }
+                .forEach { total ->
+                    val existing = aggregatesByFoodId[total.foodId]
+                    val servings = total.unconvertedServingsTotal ?: 0.0
+
+                    val (convertedGrams, convertedMl) =
+                        if (servings > 0.0) {
+                            convertServingsToBase(total.foodId, servings)
+                        } else {
+                            null to null
+                        }
+
+                    val addedGrams =
+                        (total.gramsTotal ?: 0.0) + (convertedGrams ?: 0.0)
+
+                    val addedMl =
+                        (total.mlTotal ?: 0.0) + (convertedMl ?: 0.0)
+
+                    aggregatesByFoodId[total.foodId] = ShoppingListAggregate(
+                        foodId = total.foodId,
+                        foodName = existing?.foodName ?: total.foodName,
+                        earliestDate = minDate(existing?.earliestDate, total.earliestNextPlannedDate),
+                        gramsTotal = (existing?.gramsTotal ?: 0.0) + addedGrams,
+                        mlTotal = (existing?.mlTotal ?: 0.0) + addedMl,
+                        servingsTotal = existing?.servingsTotal ?: 0.0
+                    )
+                }
+
+            input.recipeShopping.totalled.forEach { recipeTotal ->
+                val recipeEarliestDate = recipeEarliestDateByRecipeFoodId[recipeTotal.recipeFoodId]
+
+                recipeTotal.ingredients.forEach { ingredient ->
+                    val existing = aggregatesByFoodId[ingredient.foodId]
+
+                    val (convertedGrams, convertedMl) =
+                        if (ingredient.source == ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.SERVINGS) {
+                            convertServingsToBase(ingredient.foodId, ingredient.amountRequired)
+                        } else {
+                            null to null
+                        }
+
+                    val addedGrams =
+                        if (ingredient.source == ObservePlannedRecipeShoppingRequirementsUseCase.IngredientQuantitySource.GRAMS) {
+                            ingredient.amountRequired
+                        } else {
+                            convertedGrams ?: 0.0
+                        }
+
+                    val addedMl = convertedMl ?: 0.0
+
+                    aggregatesByFoodId[ingredient.foodId] = ShoppingListAggregate(
+                        foodId = ingredient.foodId,
+                        foodName = existing?.foodName ?: ingredient.foodName,
+                        earliestDate = minDate(existing?.earliestDate, recipeEarliestDate),
+                        gramsTotal = (existing?.gramsTotal ?: 0.0) + addedGrams,
+                        mlTotal = (existing?.mlTotal ?: 0.0) + addedMl,
+                        servingsTotal = existing?.servingsTotal ?: 0.0
+                    )
+                }
+            }
+
+            aggregatesByFoodId
+                .values
+                .map { aggregate ->
+                    val avgPricePer100g = foodRepo.getAveragePricePer100gForFood(aggregate.foodId)
+                    val avgPricePer100ml = foodRepo.getAveragePricePer100mlForFood(aggregate.foodId)
+
+                    ShoppingListItemUi(
+                        foodId = aggregate.foodId,
+                        name = aggregate.foodName,
+                        amountText = aggregate.toAmountText(input.unitMode),
+                        firstNeededDateText = formatSimpleShoppingDate(aggregate.earliestDate),
+                        estimatedCostText = computeEstimatedCostText(
+                            gramsTotal = aggregate.gramsTotal.takeIf { it > 0.0 },
+                            mlTotal = aggregate.mlTotal.takeIf { it > 0.0 },
+                            avgPricePer100g = avgPricePer100g,
+                            avgPricePer100ml = avgPricePer100ml
+                        )?.removePrefix("est: "),
+                        isChecked = aggregate.foodId in input.checkedFoodIds
+                    )
+                }
+                .sortedWith(
+                    compareBy<ShoppingListItemUi> { it.isChecked }
+                        .thenBy { aggregatesByFoodId[it.foodId]?.earliestDate ?: LocalDate.MAX }
+                        .thenBy { it.name.lowercase() }
+                        .thenBy { it.foodId }
+                )
+        }
+
     private val totalsUiFlow: Flow<List<ShoppingTotalRowUi>> =
         combine(
-            combine(startDateFlow, daysFlow) { start, days -> start to days }
-                .flatMapLatest { (start, days) ->
-                    observeTotals(startDate = start, days = days)
-                },
+            shoppingWindowFlow.flatMapLatest { (start, days) ->
+                observeTotals(startDate = start, days = days)
+            },
             recipeFoodIdsFlow
         ) { totals, recipeIds ->
             totals
@@ -98,8 +262,9 @@ class ShoppingViewModel @Inject constructor(
 
     private val needsUiFlow: Flow<List<ShoppingNeedsGroupUi>> =
         combine(
-            combine(startDateFlow, daysFlow) { start, days -> start to days }
-                .flatMapLatest { (start, days) -> observeNeeds(startDate = start, days = days) },
+            shoppingWindowFlow.flatMapLatest { (start, days) ->
+                observeNeeds(startDate = start, days = days)
+            },
             recipeFoodIdsFlow
         ) { list, recipeIds ->
             list
@@ -108,7 +273,7 @@ class ShoppingViewModel @Inject constructor(
         }
 
     private val recipeTotalledUiFlow: Flow<List<ShoppingRecipeTotalGroupUi>> =
-        combine(startDateFlow, daysFlow) { start, days -> start to days }
+        shoppingWindowFlow
             .flatMapLatest { (start, days) -> observeRecipeShopping(startDate = start, days = days) }
             .mapLatest { result ->
                 val earliestDateByRecipeFoodId: Map<Long, String> =
@@ -133,7 +298,7 @@ class ShoppingViewModel @Inject constructor(
             }
 
     private val recipeNotTotalledUiFlow: Flow<List<ShoppingRecipeOccurrenceGroupUi>> =
-        combine(startDateFlow, daysFlow) { start, days -> start to days }
+        shoppingWindowFlow
             .flatMapLatest { (start, days) -> observeRecipeShopping(startDate = start, days = days) }
             .mapLatest { result ->
                 result.notTotalled
@@ -150,15 +315,20 @@ class ShoppingViewModel @Inject constructor(
             daysTextFlow,
             totalsUiFlow,
             needsUiFlow,
-            flagsByFoodIdFlow
-        ) { daysText, totals, groups, flags ->
+            flagsByFoodIdFlow,
+            simpleItemsFlow
+        ) { daysText, totals, groups, flags, simpleItems ->
             BaseShoppingState(
                 daysText = daysText,
                 totalledRows = totals,
                 notTotalledGroups = groups,
-                flagsByFoodId = flags
+                flagsByFoodId = flags,
+                simpleItems = simpleItems
             )
         }
+            .combine(unitModeFlow) { base, unitMode ->
+                base.copy(unitMode = unitMode)
+            }
             .combine(recipeTotalledUiFlow) { base, recipeTotals ->
                 base.copy(recipeTotalledGroups = recipeTotals)
             }
@@ -172,12 +342,26 @@ class ShoppingViewModel @Inject constructor(
                     notTotalledGroups = base.notTotalledGroups,
                     recipeTotalledGroups = base.recipeTotalledGroups,
                     recipeNotTotalledGroups = base.recipeNotTotalledGroups,
-                    flagsByFoodId = base.flagsByFoodId
+                    flagsByFoodId = base.flagsByFoodId,
+                    simpleItems = base.simpleItems,
+                    unitMode = base.unitMode
                 )
             }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ShoppingState())
 }
+
+enum class ShoppingUnitMode {
+    METRIC,
+    GROCERY
+}
+
+private data class SimpleShoppingProjectionInputs(
+    val totals: List<PlannedFoodTotalNeed>,
+    val recipeShopping: ObservePlannedRecipeShoppingRequirementsUseCase.Result,
+    val checkedFoodIds: Set<Long>,
+    val unitMode: ShoppingUnitMode
+)
 
 private data class BaseShoppingState(
     val daysText: String,
@@ -185,7 +369,9 @@ private data class BaseShoppingState(
     val notTotalledGroups: List<ShoppingNeedsGroupUi>,
     val recipeTotalledGroups: List<ShoppingRecipeTotalGroupUi> = emptyList(),
     val recipeNotTotalledGroups: List<ShoppingRecipeOccurrenceGroupUi> = emptyList(),
-    val flagsByFoodId: Map<Long, FoodGoalFlagsEntity>
+    val flagsByFoodId: Map<Long, FoodGoalFlagsEntity>,
+    val simpleItems: List<ShoppingListItemUi> = emptyList(),
+    val unitMode: ShoppingUnitMode = ShoppingUnitMode.METRIC
 )
 
 data class ShoppingState(
@@ -194,7 +380,18 @@ data class ShoppingState(
     val notTotalledGroups: List<ShoppingNeedsGroupUi> = emptyList(),
     val recipeTotalledGroups: List<ShoppingRecipeTotalGroupUi> = emptyList(),
     val recipeNotTotalledGroups: List<ShoppingRecipeOccurrenceGroupUi> = emptyList(),
-    val flagsByFoodId: Map<Long, FoodGoalFlagsEntity> = emptyMap()
+    val flagsByFoodId: Map<Long, FoodGoalFlagsEntity> = emptyMap(),
+    val simpleItems: List<ShoppingListItemUi> = emptyList(),
+    val unitMode: ShoppingUnitMode = ShoppingUnitMode.METRIC
+)
+
+data class ShoppingListItemUi(
+    val foodId: Long,
+    val name: String,
+    val amountText: String?,
+    val firstNeededDateText: String?,
+    val estimatedCostText: String?,
+    val isChecked: Boolean
 )
 
 data class ShoppingTotalRowUi(
@@ -249,6 +446,23 @@ data class ShoppingRecipeOccurrenceGroupUi(
     val ingredients: List<ShoppingRecipeIngredientRowUi>
 )
 
+private data class ShoppingListAggregate(
+    val foodId: Long,
+    val foodName: String,
+    val earliestDate: LocalDate?,
+    val gramsTotal: Double,
+    val mlTotal: Double,
+    val servingsTotal: Double
+) {
+    fun toAmountText(unitMode: ShoppingUnitMode): String? {
+        return when {
+            gramsTotal > 0.0 -> formatShoppingGrams(gramsTotal, unitMode)
+            mlTotal > 0.0 -> "${fmtShoppingDouble(mlTotal)} mL"
+            else -> null
+        }
+    }
+}
+
 private fun PlannedFoodTotalNeed.toUi(
     avgPricePer100g: Double?,
     avgPricePer100ml: Double?
@@ -273,12 +487,6 @@ private fun PlannedFoodTotalNeed.toUi(
     )
 }
 
-/**
- * Prompt rules:
- * - Group by foodId
- * - Groups ordered by earliest date ASC
- * - Within group: rows ordered by date ASC
- */
 private fun List<PlannedFoodNeed>.toGroupedUi(): List<ShoppingNeedsGroupUi> {
     val grouped = this.groupBy { it.foodId }
 
@@ -406,6 +614,24 @@ private fun computeEstimatedCostText(
     return estimated?.let { "est: ${formatCurrency(it)}" }
 }
 
+private fun formatShoppingGrams(
+    grams: Double,
+    unitMode: ShoppingUnitMode
+): String {
+    return when (unitMode) {
+        ShoppingUnitMode.METRIC -> "${fmtShoppingDouble(grams)} g"
+        ShoppingUnitMode.GROCERY -> "${fmtShoppingPounds(grams / GRAMS_PER_POUND)} lb"
+    }
+}
+
+private fun fmtShoppingPounds(pounds: Double): String {
+    return when {
+        pounds >= 10.0 -> pounds.roundToInt().toString()
+        pounds >= 1.0 -> "%.1f".format(pounds)
+        else -> "%.2f".format(pounds)
+    }
+}
+
 private fun fmtShoppingDouble(v: Double): String {
     return if (v == v.roundToInt().toDouble()) {
         v.roundToInt().toString()
@@ -425,7 +651,24 @@ private fun formatShoppingDate(date: LocalDate?): String? {
     return if (date == LocalDate.now()) "$base • Today" else base
 }
 
+private fun formatSimpleShoppingDate(date: LocalDate?): String? {
+    if (date == null) return null
+    if (date == LocalDate.now()) return "Today"
+    return date.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()))
+}
+
 private fun formatShoppingDateFromIso(dateIso: String): String {
     val parsedDate = runCatching { LocalDate.parse(dateIso) }.getOrNull()
     return formatShoppingDate(parsedDate) ?: dateIso
 }
+
+private fun minDate(a: LocalDate?, b: LocalDate?): LocalDate? {
+    return when {
+        a == null -> b
+        b == null -> a
+        a <= b -> a
+        else -> b
+    }
+}
+
+private const val GRAMS_PER_POUND = 453.59237
