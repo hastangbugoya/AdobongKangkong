@@ -16,6 +16,7 @@ import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodNeed
 import com.example.adobongkangkong.domain.planner.usecase.PlannedFoodTotalNeed
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.example.adobongkangkong.core.log.MeowLog
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -105,6 +106,7 @@ class ShoppingViewModel @Inject constructor(
                 unitMode = unitMode
             )
         }.mapLatest { input ->
+            MeowLog.d("ShoppingVM", "Build start totals=${input.totals.size} recipes=${input.recipeShopping.totalled.size}")
             val foodCache = mutableMapOf<Long, Food?>()
 
             suspend fun getFoodCached(foodId: Long): Food? {
@@ -206,7 +208,6 @@ class ShoppingViewModel @Inject constructor(
                     )
                 }
             }
-
             aggregatesByFoodId
                 .values
                 .map { aggregate ->

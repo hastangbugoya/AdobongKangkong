@@ -765,7 +765,9 @@ class PlannedMealEditorViewModel @Inject constructor(
         return if (value % 1.0 == 0.0) {
             value.toLong().toString()
         } else {
-            value.toString()
+            String.format(Locale.US, "%.2f", value)
+                .trimEnd('0')
+                .trimEnd('.')
         }
     }
 
