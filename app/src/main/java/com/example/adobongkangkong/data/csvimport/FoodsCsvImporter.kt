@@ -4,6 +4,7 @@ import android.content.res.AssetManager
 import android.util.Log
 import androidx.room.withTransaction
 import com.example.adobongkangkong.BuildConfig
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
@@ -348,7 +349,7 @@ class FoodsCsvImporter @Inject constructor(
         skipIfFoodsExist: Boolean = true
     ): Report = withContext(Dispatchers.IO) {
 
-        Log.d("Meow", "START importFromAssets(assetFileName='$assetFileName', skipIfFoodsExist=$skipIfFoodsExist)")
+        MeowLog.d("START importFromAssets(assetFileName='$assetFileName', skipIfFoodsExist=$skipIfFoodsExist)")
 
         try {
             val foodDao = db.foodDao()
@@ -361,7 +362,7 @@ class FoodsCsvImporter @Inject constructor(
                 val count = foodDao.countFoods()
                 Log.d(TAG, "skipIfFoodsExist=true; foods table count=$count")
                 if (count > 0) {
-                    Log.d(TAG, "SKIP import because foods already exist (count=$count)")
+                    MeowLog.d("SKIP import because foods already exist (count=$count)")
                     return@withContext Report(
                         runId = -1L,
                         foodsInserted = 0,
@@ -379,7 +380,7 @@ class FoodsCsvImporter @Inject constructor(
             val totalRows = (lines.size - 1).coerceAtLeast(0)
             val startedAt = System.currentTimeMillis()
 
-            Log.d(TAG, "Read lines: totalLines=${lines.size} (dataRows=$totalRows)")
+            MeowLog.d("FoodsCsvImporter> CSV loaded totalLines=${lines.size} dataRows=$totalRows")
             Log.d(TAG, "First line (header raw)='${lines.firstOrNull() ?: "<EMPTY>"}'")
             Log.d(TAG, "First data line='${lines.getOrNull(1) ?: "<NONE>"}'")
 
@@ -433,9 +434,8 @@ class FoodsCsvImporter @Inject constructor(
             val header = CsvParser.parseLine(lines.first())
             val headerIndex = buildHeaderIndexNormalized(header)
 
-            Log.d(TAG, "Parsed header columns=${header.size}")
             Log.d(TAG, "Header normalized keys=${headerIndex.keys}")
-
+            MeowLog.d("FoodsCsvImporter> Header parsed columns=${header.size}")
             // 1) Upsert nutrients for any headers we recognize
             val nutrientDefsByHeader = CsvNutrientCatalog.defs.associateBy { normalizeHeader(it.csvHeader) }
 
@@ -448,9 +448,7 @@ class FoodsCsvImporter @Inject constructor(
                     category = NutrientCategory.fromDb(def.categoryDbValue)
                 )
             }
-
-            Log.d(TAG, "Recognized nutrients from header: nutrientsToUpsert=${nutrientsToUpsert.size}")
-
+            MeowLog.d("FoodsCsvImporter> Nutrients recognized count=${nutrientsToUpsert.size}")
             nutrientDao.upsertAll(nutrientsToUpsert)
             Log.d(TAG, "Upserted nutrients: count=${nutrientsToUpsert.size}")
 
@@ -500,7 +498,6 @@ class FoodsCsvImporter @Inject constructor(
 
             for (i in 1 until lines.size) {
                 Log.d("Meow", lines[i])
-
                 val row = CsvParser.parseLine(lines[i])
 
                 val name = cellNormalized(row, headerIndex, "food")?.trim().orEmpty()
@@ -678,10 +675,9 @@ class FoodsCsvImporter @Inject constructor(
                     rows = foodNutrients.subList(nutrientStartIndex, foodNutrients.size)
                 )
             }
-
-            Log.d(
-                TAG,
-                "Parsed rows done: foods.size=${foods.size}, foodNutrients.size=${foodNutrients.size}, skipped=$skipped, warnMissingGrams=$warnMissingGrams, warnDuplicateCuResolved=$warnDuplicateCuResolved, issues.size=${issues.size}"
+            MeowLog.d(
+                "FoodsCsvImporter> Parsed rows " +
+                        "foods=${foods.size} nutrients=${foodNutrients.size} skipped=$skipped warnings=$warnMissingGrams"
             )
 
             if (warnMissingGrams > 0) {
@@ -700,9 +696,7 @@ class FoodsCsvImporter @Inject constructor(
             }
 
             val finishedAt = System.currentTimeMillis()
-
-            Log.d(TAG, "DB write starting: upsertAll foods=${foods.size}, foodNutrients=${foodNutrients.size}")
-
+            MeowLog.d("FoodsCsvImporter> DB write START foods=${foods.size} nutrients=${foodNutrients.size}")
             db.withTransaction {
                 foodDao.upsertAll(foods)
                 foodNutrientDao.upsertAll(foodNutrients)
@@ -749,10 +743,10 @@ class FoodsCsvImporter @Inject constructor(
                     )
                 )
             }
-
-            Log.d(
-                TAG,
-                "DONE runId=$runId foodsInserted=${foods.size} nutrientsInserted=${nutrientsToUpsert.size} foodNutrientsInserted=${foodNutrients.size} skipped=$skipped warningCount=$warnMissingGrams errorCount=$errorCount"
+            MeowLog.d(
+                "FoodsCsvImporter> SUCCESS runId=$runId " +
+                        "foods=${foods.size} nutrients=${nutrientsToUpsert.size} " +
+                        "foodNutrients=${foodNutrients.size} skipped=$skipped warnings=$warnMissingGrams errors=$errorCount"
             )
 
             Report(
@@ -766,7 +760,10 @@ class FoodsCsvImporter @Inject constructor(
                 notes = notes
             )
         } catch (t: Throwable) {
-            Log.e(TAG, "FAILED importFromAssets(assetFileName='$assetFileName')", t)
+            MeowLog.e(
+                "FoodsCsvImporter> FAILED file=$assetFileName",
+                t
+            )
             throw t
         }
     }
