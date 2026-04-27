@@ -1,6 +1,9 @@
 package com.example.adobongkangkong.ui.dashboard
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -47,14 +50,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
@@ -93,6 +99,7 @@ fun DashboardScreen(
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -248,6 +255,9 @@ fun DashboardScreen(
                     )
                 },
                 onOpenMeowLogs = onOpenMeowLogs,
+                onSendMeowLogs = {
+                    shareMeowLogs(context)
+                },
                 onOpenPlanner = onOpenPlanner,
                 onOpenBackup = onOpenBackup,
                 onDebugReset = vm::runDebugReset,
@@ -443,6 +453,56 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+}
+
+private fun shareMeowLogs(context: Context) {
+    MeowLog.d("DashboardScreen> shareMeowLogs START")
+
+    val file = MeowLog.getLogFile(context)
+
+    if (!file.exists()) {
+        MeowLog.d("DashboardScreen> shareMeowLogs no log file found path=${file.absolutePath}")
+        Toast.makeText(context, "No Meow Logs found.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    if (file.length() <= 0L) {
+        MeowLog.d("DashboardScreen> shareMeowLogs log file is empty path=${file.absolutePath}")
+        Toast.makeText(context, "Meow Logs are empty.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        MeowLog.d(
+            "DashboardScreen> shareMeowLogs uri created " +
+                    "path=${file.absolutePath} size=${file.length()} uri=$uri"
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "AdobongKangkong Meow Logs")
+            putExtra(Intent.EXTRA_TEXT, "Attached are the AdobongKangkong Meow Logs.")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Send Meow Logs"))
+
+        MeowLog.d("DashboardScreen> shareMeowLogs chooser launched")
+    } catch (t: Throwable) {
+        MeowLog.e("DashboardScreen> shareMeowLogs FAILED", t)
+        Toast.makeText(
+            context,
+            t.message ?: "Unable to send Meow Logs.",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }
 

@@ -95,6 +95,7 @@ fun DashboardSettingsSheet(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onOpenMeowLogs: () -> Unit,
+    onSendMeowLogs: () -> Unit,
     onOpenPlanner: () -> Unit,
     onOpenBackup: () -> Unit,
     onDebugReset: (
@@ -374,11 +375,23 @@ fun DashboardSettingsSheet(
         Button(
             onClick = {
                 onDismiss()
+                onSendMeowLogs()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Send Meow Logs")
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Button(
+            onClick = {
+                onDismiss()
                 onOpenMeowLogs()
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Meow Logs")
+            Text("Open Meow Logs")
         }
 
         Spacer(Modifier.height(12.dp))
