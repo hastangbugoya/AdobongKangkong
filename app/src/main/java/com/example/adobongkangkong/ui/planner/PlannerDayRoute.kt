@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.planner
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -8,11 +9,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
+import com.example.adobongkangkong.domain.planner.model.PlannedMeal
 import com.example.adobongkangkong.domain.planner.model.QuickAddPlannedItemCandidate
+import com.example.adobongkangkong.domain.usecase.share.CreatePlannedMealIcsFileUseCase
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import java.time.LocalDate
+import java.time.LocalTime
 
 @Composable
 fun PlannerDayRoute(
@@ -48,6 +53,9 @@ fun PlannerDayRoute(
     }
 
     val context = LocalContext.current
+    val createIcs = remember {
+        CreatePlannedMealIcsFileUseCase(context.applicationContext)
+    }
 
     var quickAddCandidate by remember {
         mutableStateOf<QuickAddPlannedItemCandidate?>(null)
@@ -97,6 +105,15 @@ fun PlannerDayRoute(
                     onOpenPlannedMealEditor(event.mealId)
                 }
 
+                is PlannerDayEvent.ShareMealInvite -> {
+                    shareMealInvite(
+                        mealId = event.mealId,
+                        viewModel = viewModel,
+                        createIcs = createIcs,
+                        context = context
+                    )
+                }
+
                 else -> viewModel.onEvent(event)
             }
         }
@@ -111,5 +128,85 @@ fun PlannerDayRoute(
             logDate = date,
             initialPlannedItemCandidate = quickAddCandidate,
         )
+    }
+}
+
+private fun shareMealInvite(
+    mealId: Long,
+    viewModel: PlannerDayViewModel,
+    createIcs: CreatePlannedMealIcsFileUseCase,
+    context: android.content.Context
+) {
+    val state = viewModel.state.value
+
+    val meal = state.day
+        ?.mealsBySlot
+        ?.values
+        ?.flatten()
+        ?.firstOrNull { it.id == mealId }
+
+    if (meal == null) {
+        Toast.makeText(context, "Meal not found.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
+
+        val notes = if (meal.items.isEmpty()) {
+            "Planned meal from AdobongKangkong."
+        } else {
+            buildString {
+                appendLine("Planned meal from AdobongKangkong.")
+                appendLine()
+                appendLine("Items:")
+                meal.items.forEach {
+                    val name = it.title ?: "Item"
+                    appendLine("- $name")
+                }
+            }
+        }
+
+        val file = createIcs(
+            CreatePlannedMealIcsFileUseCase.Input(
+                date = state.date,
+                title = title,
+                notes = notes,
+                startLocalTime = defaultTime(meal.slot)
+            )
+        )
+
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/calendar"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            putExtra(Intent.EXTRA_TEXT, notes)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Share calendar invite"))
+
+    } catch (t: Throwable) {
+        Toast.makeText(
+            context,
+            t.message ?: "Failed to share invite.",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+private fun defaultTime(slot: MealSlot): LocalTime {
+    return when (slot) {
+        MealSlot.BREAKFAST -> LocalTime.of(8, 0)
+        MealSlot.LUNCH -> LocalTime.of(12, 0)
+        MealSlot.DINNER -> LocalTime.of(18, 0)
+        MealSlot.SNACK -> LocalTime.of(15, 0)
+        MealSlot.CUSTOM -> LocalTime.of(12, 0)
     }
 }

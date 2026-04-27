@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.data.usda
 
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.usda.api.UsdaFoodsApi
 import javax.inject.Inject
 
@@ -9,10 +10,12 @@ class UsdaFoodsSearchServiceImpl @Inject constructor(
 
     override suspend fun searchByBarcode(gtinUpc: String): String {
         // USDA supports structured queries like: gtinUpc:009800895007
+        MeowLog.d("UsdaFoodsSearchServiceImpl>searchByBarcode>$gtinUpc")
         return api.foodsSearch(
             query = "gtinUpc:${gtinUpc.trim()}",
             pageSize = 5
         )
+
     }
 
     override suspend fun searchByKeywords(
@@ -21,7 +24,7 @@ class UsdaFoodsSearchServiceImpl @Inject constructor(
         pageNumber: Int
     ): String {
         val cleaned = query.trim()
-
+        MeowLog.d("UsdaFoodsSearchServiceImpl>searchByKeywords>$query")
         return api.foodsSearch(
             query = cleaned,
             pageSize = pageSize,

@@ -196,7 +196,8 @@ fun PlannerDayScreen(
                             onDuplicateMeal = { mealId -> onEvent(PlannerDayEvent.DuplicateMeal(mealId)) },
                             onLogMeal = { mealId -> onEvent(PlannerDayEvent.LogMeal(mealId)) },
                             onLogItem = { itemId -> onEvent(PlannerDayEvent.LogPlannedItem(itemId)) },
-                            onSaveMealAsTemplate = { mealId -> onEvent(PlannerDayEvent.SaveMealAsTemplate(mealId)) }
+                            onSaveMealAsTemplate = { mealId -> onEvent(PlannerDayEvent.SaveMealAsTemplate(mealId)) },
+                            onShareMealInvite = { mealId -> onEvent(PlannerDayEvent.ShareMealInvite(mealId)) }
                         )
                     }
                 }
@@ -809,7 +810,8 @@ private fun PlannedMealCard(
     onDuplicateMeal: (Long) -> Unit,
     onLogMeal: (Long) -> Unit,
     onLogItem: (Long) -> Unit,
-    onSaveMealAsTemplate: (Long) -> Unit
+    onSaveMealAsTemplate: (Long) -> Unit,
+    onShareMealInvite: (Long) -> Unit,
 ) {
     val title = meal.title?.takeIf { it.isNotBlank() } ?: meal.slot.display
     var showActionsMenu by remember(meal.id) { mutableStateOf(false) }
@@ -880,6 +882,13 @@ private fun PlannedMealCard(
                             onClick = {
                                 showActionsMenu = false
                                 onLogMeal(meal.id)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Share / Invite") },
+                            onClick = {
+                                showActionsMenu = false
+                                onShareMealInvite(meal.id)
                             }
                         )
                     }

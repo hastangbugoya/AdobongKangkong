@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.adobongkangkong.MainActivity
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.core.log.MeowLog
 
 object MealReminderNotificationHelper {
 
@@ -19,6 +20,8 @@ object MealReminderNotificationHelper {
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            MeowLog.d("Creating notification channel: $CHANNEL_ID")
+
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
@@ -27,15 +30,25 @@ object MealReminderNotificationHelper {
                 description = CHANNEL_DESCRIPTION
             }
 
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val manager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
             manager.createNotificationChannel(channel)
+
+            MeowLog.d("Notification channel created successfully")
+        } else {
+            MeowLog.d("Skipping channel creation (SDK < O)")
         }
     }
 
     fun buildNotification(context: Context): Notification {
+        MeowLog.d("Building meal reminder notification")
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
+
+        MeowLog.d("Intent created for MainActivity")
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -44,20 +57,34 @@ object MealReminderNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // replace later if needed
-            .setContentTitle("Meal Reminder")
+        MeowLog.d("PendingIntent created")
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("AK Reminder")
             .setContentText("Have any meals to log?")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
+
+        MeowLog.d("Notification built successfully")
+
+        return notification
     }
 
     fun showNotification(context: Context) {
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        MeowLog.d("Showing meal reminder notification")
+
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
         val notification = buildNotification(context)
 
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        val notificationId = System.currentTimeMillis().toInt()
+
+        manager.notify(notificationId, notification)
+
+        MeowLog.d("Notification shown (id=$notificationId)")
     }
 }

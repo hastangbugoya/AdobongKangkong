@@ -414,6 +414,9 @@ class PlannerDayViewModel @Inject constructor(
                     )
                 }
             }
+
+            is PlannerDayEvent.ShareMealInvite -> Unit
+
         }
     }
 

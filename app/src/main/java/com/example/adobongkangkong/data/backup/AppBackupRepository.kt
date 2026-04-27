@@ -4,6 +4,7 @@ import android.net.Uri
 import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.domain.backup.AppBackupUseCase
 import javax.inject.Inject
+import com.example.adobongkangkong.core.log.MeowLog
 
 interface BackupRepository {
     suspend fun exportBackup(outputUri: Uri)
@@ -16,6 +17,7 @@ class AppBackupRepository @Inject constructor(
 ) : BackupRepository {
 
     override suspend fun exportBackup(outputUri: Uri) {
+        MeowLog.d("AppBackupRepository>exportBackup>$outputUri")
         useCase.exportToZip(
             outputUri = outputUri,
             beforeCopy = {
@@ -27,9 +29,11 @@ class AppBackupRepository @Inject constructor(
                 }
             }
         )
+        MeowLog.d("AppBackupRepository>exportBackup>$outputUri>DONE")
     }
 
     override suspend fun importBackup(inputUri: Uri) {
+        MeowLog.d("AppBackupRepository>importBackup>$inputUri")
         useCase.restoreFromZip(
             inputUri = inputUri,
             beforeRestore = {
@@ -41,5 +45,6 @@ class AppBackupRepository @Inject constructor(
                 // (BackupViewModel already marks needsRestart = true)
             }
         )
+        MeowLog.d("AppBackupRepository>importBackup>$inputUri>DONE")
     }
 }
