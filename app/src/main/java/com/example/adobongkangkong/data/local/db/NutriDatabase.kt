@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.db.dao.CalendarSuccessNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.DebugResetDao
 import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
@@ -115,12 +116,8 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         FoodCategoryEntity::class,
         FoodCategoryCrossRefEntity::class,
         RecipeCategoryCrossRefEntity::class,
-
-        // Existing schema
         CalendarSuccessNutrientEntity::class,
         RecipeInstructionStepEntity::class,
-
-        // Store pricing
         StoreEntity::class,
         FoodStorePriceEntity::class
     ],
@@ -164,67 +161,85 @@ abstract class NutriDatabase : RoomDatabase() {
     companion object {
 
         /**
+         * Migration Logging Rationale
+         *
+         * DB migrations are high-risk because they run before most UI recovery paths exist
+         * and often only execute once per installed user database. MeowLogs here make upgrade
+         * failures diagnosable from a user-sent log file.
+         *
+         * Rule:
+         * - Log START before schema work.
+         * - Log SUCCESS after all schema work completes.
+         * - Log FAILED with stacktrace, then rethrow so Room correctly aborts the open.
+         */
+
+        /**
          * Migration 1 -> 2
          *
          * Adds:
          * - stores
          * - food_store_prices
-         *
-         * This is an additive migration only.
-         * No existing table or persisted column identifiers are renamed here.
          */
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 1→2 START")
 
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS stores (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        name TEXT NOT NULL
+                try {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS stores (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            name TEXT NOT NULL
+                        )
+                        """.trimIndent()
                     )
-                    """.trimIndent()
-                )
 
-                db.execSQL(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS index_stores_name
-                    ON stores(name)
-                    """.trimIndent()
-                )
-
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS food_store_prices (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        foodId INTEGER NOT NULL,
-                        storeId INTEGER NOT NULL,
-                        estimatedPrice REAL NOT NULL,
-                        FOREIGN KEY(foodId) REFERENCES foods(id) ON DELETE CASCADE,
-                        FOREIGN KEY(storeId) REFERENCES stores(id) ON DELETE CASCADE
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_stores_name
+                        ON stores(name)
+                        """.trimIndent()
                     )
-                    """.trimIndent()
-                )
 
-                db.execSQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS index_food_store_prices_foodId
-                    ON food_store_prices(foodId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS food_store_prices (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            foodId INTEGER NOT NULL,
+                            storeId INTEGER NOT NULL,
+                            estimatedPrice REAL NOT NULL,
+                            FOREIGN KEY(foodId) REFERENCES foods(id) ON DELETE CASCADE,
+                            FOREIGN KEY(storeId) REFERENCES stores(id) ON DELETE CASCADE
+                        )
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS index_food_store_prices_storeId
-                    ON food_store_prices(storeId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_food_store_prices_foodId
+                        ON food_store_prices(foodId)
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_foodId_storeId
-                    ON food_store_prices(foodId, storeId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_food_store_prices_storeId
+                        ON food_store_prices(storeId)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_foodId_storeId
+                        ON food_store_prices(foodId, storeId)
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 1→2 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 1→2 FAILED", t)
+                    throw t
+                }
             }
         }
 
@@ -238,89 +253,96 @@ abstract class NutriDatabase : RoomDatabase() {
          *   - pricePer100ml
          *   - updatedAtEpochMs
          *
-         * Important migration rule:
-         * - Existing estimatedPrice rows are intentionally NOT copied forward because they
-         *   do not encode whether the value was mass-based or volume-based.
-         * - Preserving them would create misleading normalized data.
+         * Existing estimatedPrice rows are intentionally NOT copied forward because they
+         * do not encode whether the value was mass-based or volume-based.
          */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    """
-                    ALTER TABLE stores
-                    ADD COLUMN address TEXT
-                    """.trimIndent()
-                )
+                MeowLog.d("DB> MIGRATION 2→3 START")
 
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS food_store_prices_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        foodId INTEGER NOT NULL,
-                        storeId INTEGER NOT NULL,
-                        pricePer100g REAL,
-                        pricePer100ml REAL,
-                        updatedAtEpochMs INTEGER NOT NULL,
-                        FOREIGN KEY(foodId) REFERENCES foods(id) ON DELETE CASCADE,
-                        FOREIGN KEY(storeId) REFERENCES stores(id) ON DELETE CASCADE
+                try {
+                    db.execSQL(
+                        """
+                        ALTER TABLE stores
+                        ADD COLUMN address TEXT
+                        """.trimIndent()
                     )
-                    """.trimIndent()
-                )
 
-                db.execSQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS index_food_store_prices_new_foodId
-                    ON food_store_prices_new(foodId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS food_store_prices_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            foodId INTEGER NOT NULL,
+                            storeId INTEGER NOT NULL,
+                            pricePer100g REAL,
+                            pricePer100ml REAL,
+                            updatedAtEpochMs INTEGER NOT NULL,
+                            FOREIGN KEY(foodId) REFERENCES foods(id) ON DELETE CASCADE,
+                            FOREIGN KEY(storeId) REFERENCES stores(id) ON DELETE CASCADE
+                        )
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS index_food_store_prices_new_storeId
-                    ON food_store_prices_new(storeId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_food_store_prices_new_foodId
+                        ON food_store_prices_new(foodId)
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_new_foodId_storeId
-                    ON food_store_prices_new(foodId, storeId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_food_store_prices_new_storeId
+                        ON food_store_prices_new(storeId)
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    DROP TABLE food_store_prices
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_new_foodId_storeId
+                        ON food_store_prices_new(foodId, storeId)
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    ALTER TABLE food_store_prices_new
-                    RENAME TO food_store_prices
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        DROP TABLE food_store_prices
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS index_food_store_prices_foodId
-                    ON food_store_prices(foodId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        ALTER TABLE food_store_prices_new
+                        RENAME TO food_store_prices
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS index_food_store_prices_storeId
-                    ON food_store_prices(storeId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_food_store_prices_foodId
+                        ON food_store_prices(foodId)
+                        """.trimIndent()
+                    )
 
-                db.execSQL(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_foodId_storeId
-                    ON food_store_prices(foodId, storeId)
-                    """.trimIndent()
-                )
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_food_store_prices_storeId
+                        ON food_store_prices(storeId)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_food_store_prices_foodId_storeId
+                        ON food_store_prices(foodId, storeId)
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 2→3 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 2→3 FAILED", t)
+                    throw t
+                }
             }
         }
 
@@ -336,7 +358,14 @@ abstract class NutriDatabase : RoomDatabase() {
          */
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // No-op migration for backup / DB bump / restore validation.
+                MeowLog.d("DB> MIGRATION 3→4 START (NO-OP)")
+
+                try {
+                    MeowLog.d("DB> MIGRATION 3→4 SUCCESS (NO-OP)")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 3→4 FAILED", t)
+                    throw t
+                }
             }
         }
 
@@ -351,12 +380,21 @@ abstract class NutriDatabase : RoomDatabase() {
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    """
-                    ALTER TABLE recipes
-                    ADD COLUMN notes TEXT
-                    """.trimIndent()
-                )
+                MeowLog.d("DB> MIGRATION 4→5 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        ALTER TABLE recipes
+                        ADD COLUMN notes TEXT
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 4→5 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 4→5 FAILED", t)
+                    throw t
+                }
             }
         }
     }
@@ -379,7 +417,7 @@ abstract class NutriDatabase : RoomDatabase() {
  *   that contain real retained app data.
  *
  * Builder reminder
- * - Ensure the Room database builder registers both MIGRATION_1_2 and MIGRATION_2_3 explicitly.
+ * - Ensure the Room database builder registers all migrations explicitly.
  * - Do not rely on destructive migration for long-term user data.
  *
  * Normalized pricing reminder
