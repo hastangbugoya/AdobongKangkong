@@ -1,6 +1,6 @@
 package com.example.adobongkangkong.domain.transfer
 
-import android.util.Log
+import com.example.adobongkangkong.core.log.MeowLog
 import kotlinx.serialization.json.*
 import javax.inject.Inject
 
@@ -11,10 +11,6 @@ import javax.inject.Inject
  * ALWAYS returns a structured result.
  */
 class ParseRecipeBundleUseCase @Inject constructor() {
-
-    companion object {
-        private const val TAG = "AK_IMPORT_PARSE"
-    }
 
     sealed class Result {
         data class Success(val bundle: RecipeBundleDto) : Result()
@@ -31,28 +27,48 @@ class ParseRecipeBundleUseCase @Inject constructor() {
     }
 
     fun execute(rawJson: String): Result {
+        MeowLog.d("ParseRecipeBundle> START size=${rawJson.length}")
+
         val root = try {
             Json.parseToJsonElement(rawJson).jsonObject
         } catch (e: Exception) {
-            Log.e(TAG, "Malformed JSON", e)
+            MeowLog.e("ParseRecipeBundle> MALFORMED_JSON", e)
             return Result.Failure(Reason.MALFORMED_JSON, e.message)
         }
 
         val schemaVersion = root["schemaVersion"]?.jsonPrimitive?.intOrNull
-            ?: return Result.Failure(Reason.MISSING_REQUIRED_FIELDS, "Missing schemaVersion")
+        if (schemaVersion == null) {
+            MeowLog.d("ParseRecipeBundle> FAIL missing schemaVersion")
+            return Result.Failure(Reason.MISSING_REQUIRED_FIELDS, "Missing schemaVersion")
+        }
+
+        MeowLog.d("ParseRecipeBundle> schemaVersion=$schemaVersion")
 
         if (schemaVersion != RecipeBundleDto.SCHEMA_VERSION_1) {
+            MeowLog.d("ParseRecipeBundle> FAIL unsupported schemaVersion=$schemaVersion")
             return Result.Failure(Reason.UNSUPPORTED_SCHEMA, "schemaVersion=$schemaVersion")
         }
 
         val exportedAt = root["exportedAtEpochMs"]?.jsonPrimitive?.longOrNull
-            ?: return Result.Failure(Reason.MISSING_REQUIRED_FIELDS, "Missing exportedAtEpochMs")
+        if (exportedAt == null) {
+            MeowLog.d("ParseRecipeBundle> FAIL missing exportedAtEpochMs")
+            return Result.Failure(Reason.MISSING_REQUIRED_FIELDS, "Missing exportedAtEpochMs")
+        }
 
         val recipe = parseRecipe(root["recipe"])
-            ?: return Result.Failure(Reason.MISSING_REQUIRED_FIELDS, "Invalid recipe")
+        if (recipe == null) {
+            MeowLog.d("ParseRecipeBundle> FAIL invalid recipe")
+            return Result.Failure(Reason.MISSING_REQUIRED_FIELDS, "Invalid recipe")
+        }
 
         val ingredients = parseIngredients(root["ingredients"])
         val foods = parseFoods(root["foods"])
+
+        MeowLog.d(
+            "ParseRecipeBundle> SUCCESS " +
+                    "recipe=${recipe.name} " +
+                    "ingredients=${ingredients.size} foods=${foods.size}"
+        )
 
         return Result.Success(
             RecipeBundleDto(
@@ -85,7 +101,7 @@ class ParseRecipeBundleUseCase @Inject constructor() {
     private fun parseIngredients(element: JsonElement?): List<RecipeBundleIngredientDto> {
         val arr = element?.jsonArray ?: return emptyList()
 
-        return arr.mapNotNull { item ->
+        val result = arr.mapNotNull { item ->
             val obj = item.jsonObject
 
             val foodStableId = obj["foodStableId"]?.jsonPrimitive?.contentOrNull
@@ -98,12 +114,15 @@ class ParseRecipeBundleUseCase @Inject constructor() {
                 ingredientServings = servings
             )
         }
+
+        MeowLog.d("ParseRecipeBundle> parsed ingredients count=${result.size}")
+        return result
     }
 
     private fun parseFoods(element: JsonElement?): List<RecipeBundleFoodDto> {
         val arr = element?.jsonArray ?: return emptyList()
 
-        return arr.mapNotNull { item ->
+        val result = arr.mapNotNull { item ->
             val obj = item.jsonObject
 
             val stableId = obj["stableId"]?.jsonPrimitive?.contentOrNull
@@ -152,6 +171,9 @@ class ParseRecipeBundleUseCase @Inject constructor() {
                 nutrients = nutrients
             )
         }
+
+        MeowLog.d("ParseRecipeBundle> parsed foods count=${result.size}")
+        return result
     }
 
     private fun parseNutrients(element: JsonElement?): List<RecipeBundleFoodNutrientDto> {

@@ -8,7 +8,7 @@ import android.content.res.AssetFileDescriptor
 import android.database.Cursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import android.util.Log
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedLogExportJsonUseCase
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionGoalProfileJsonUseCase
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionMonthSnapshotJsonUseCase
@@ -24,6 +24,32 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
+/**
+ * SharedSnapshotProvider
+ *
+ * Provides JSON snapshots (daily, monthly, goals, logs) via ContentProvider.
+ *
+ * 🧠 Logging Rationale (VERY IMPORTANT)
+ *
+ * This class sits at a **cross-app boundary**:
+ * - Called externally via ContentResolver
+ * - No direct UI feedback if something fails
+ * - Failures often appear as:
+ *   - "file not found"
+ *   - "null cursor"
+ *   - silent failure in consuming app
+ *
+ * Therefore:
+ * - MeowLogs are added at **entry, routing, generation, and file write boundaries**
+ * - Logs include:
+ *   - URI + match code
+ *   - resolved date/month
+ *   - output file path + size
+ * - Errors MUST log stacktrace because caller cannot see them
+ *
+ * Goal:
+ * 👉 Make cross-app failures debuggable using MeowLogs alone
+ */
 class SharedSnapshotProvider : ContentProvider() {
 
     companion object {
@@ -49,7 +75,6 @@ class SharedSnapshotProvider : ContentProvider() {
             addURI(AUTHORITY, "$SNAPSHOT_MONTH_PATH_PREFIX/*", SNAPSHOT_MONTH_BY_MONTH)
 
             addURI(AUTHORITY, LOGS_PATH, LOGS_RECENT)
-
             addURI(AUTHORITY, "$GOALS_PATH_PREFIX/current", GOALS_CURRENT)
         }
     }
@@ -68,187 +93,182 @@ class SharedSnapshotProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
         val context = context ?: return null
 
+        MeowLog.d("SharedSnapshotProvider> openFile START uri=$uri")
+
         try {
             val match = uriMatcher.match(uri)
             val path = uri.path.orEmpty().trimStart('/')
 
-            Log.d(
-                "SharedSnapshotProvider",
-                "openFile uri=$uri authority=${uri.authority} path=$path match=$match"
+            MeowLog.d(
+                "SharedSnapshotProvider> routing " +
+                        "authority=${uri.authority} path=$path match=$match"
             )
 
             val (json, fileName) = when {
                 match == SNAPSHOT_LATEST || match == SNAPSHOT_BY_DATE -> {
                     val targetDate = resolveTargetDate(uri)
-                    val json = buildSnapshotJson(
-                        context = context,
-                        date = targetDate
-                    )
+                    MeowLog.d("SharedSnapshotProvider> building daily snapshot date=$targetDate")
+
+                    val json = buildSnapshotJson(context, targetDate)
                     json to "shared_snapshot_${targetDate}.json"
                 }
 
                 match == SNAPSHOT_MONTH_LATEST || match == SNAPSHOT_MONTH_BY_MONTH -> {
                     val targetMonth = resolveTargetMonth(uri)
-                    val json = buildMonthSnapshotJson(
-                        context = context,
-                        month = targetMonth
-                    )
+                    MeowLog.d("SharedSnapshotProvider> building monthly snapshot month=$targetMonth")
+
+                    val json = buildMonthSnapshotJson(context, targetMonth)
                     json to "shared_snapshot_month_${targetMonth}.json"
                 }
 
                 match == GOALS_CURRENT || path == "$GOALS_PATH_PREFIX/current" -> {
+                    MeowLog.d("SharedSnapshotProvider> building goals snapshot")
+
                     val json = buildGoalsJson(context)
                     json to "shared_nutrition_goals_current.json"
                 }
 
                 match == LOGS_RECENT || path == LOGS_PATH -> {
+                    MeowLog.d("SharedSnapshotProvider> building logs snapshot")
+
                     val json = buildLogsJson(context)
                     json to "shared_logs.json"
                 }
 
-                path == "$SNAPSHOT_PATH_PREFIX/latest" || path.startsWith("$SNAPSHOT_PATH_PREFIX/") -> {
-                    val targetDate = resolveTargetDate(uri)
-                    val json = buildSnapshotJson(
-                        context = context,
-                        date = targetDate
-                    )
-                    json to "shared_snapshot_${targetDate}.json"
+                else -> {
+                    MeowLog.d("SharedSnapshotProvider> FAIL unknown uri=$uri")
+                    throw IllegalArgumentException("Unknown URI: $uri")
                 }
-
-                path == "$SNAPSHOT_MONTH_PATH_PREFIX/latest" || path.startsWith("$SNAPSHOT_MONTH_PATH_PREFIX/") -> {
-                    val targetMonth = resolveTargetMonth(uri)
-                    val json = buildMonthSnapshotJson(
-                        context = context,
-                        month = targetMonth
-                    )
-                    json to "shared_snapshot_month_${targetMonth}.json"
-                }
-
-                else -> throw IllegalArgumentException("Unknown URI: $uri")
             }
 
             val file = File(context.cacheDir, fileName)
             FileOutputStream(file).use { it.write(json.toByteArray()) }
 
-            return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            MeowLog.d(
+                "SharedSnapshotProvider> file written " +
+                        "path=${file.absolutePath} size=${file.length()}"
+            )
+
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+
+            MeowLog.d("SharedSnapshotProvider> SUCCESS uri=$uri file=$fileName")
+
+            return pfd
+
         } catch (e: Exception) {
-            Log.e("SharedSnapshotProvider", "Failed to build snapshot for $uri", e)
+            MeowLog.e("SharedSnapshotProvider> FAILED uri=$uri", e)
             throw e
         }
     }
 
     private fun resolveTargetDate(uri: Uri): LocalDate {
-        return when (uriMatcher.match(uri)) {
+        val result = when (uriMatcher.match(uri)) {
             SNAPSHOT_LATEST -> LocalDate.now()
 
             SNAPSHOT_BY_DATE -> {
                 val lastSegment = uri.lastPathSegment
                     ?: throw IllegalArgumentException("Missing snapshot date in URI: $uri")
 
-                if (lastSegment == "latest") {
-                    LocalDate.now()
-                } else {
-                    try {
-                        LocalDate.parse(lastSegment)
-                    } catch (e: Exception) {
-                        throw IllegalArgumentException("Invalid snapshot date in URI: $uri", e)
-                    }
-                }
+                if (lastSegment == "latest") LocalDate.now()
+                else LocalDate.parse(lastSegment)
             }
 
             else -> throw IllegalArgumentException("Unknown URI: $uri")
         }
+
+        MeowLog.d("SharedSnapshotProvider> resolved date=$result")
+        return result
     }
 
     private fun resolveTargetMonth(uri: Uri): YearMonth {
-        return when (uriMatcher.match(uri)) {
+        val result = when (uriMatcher.match(uri)) {
             SNAPSHOT_MONTH_LATEST -> YearMonth.now()
 
             SNAPSHOT_MONTH_BY_MONTH -> {
                 val lastSegment = uri.lastPathSegment
                     ?: throw IllegalArgumentException("Missing snapshot month in URI: $uri")
 
-                if (lastSegment == "latest") {
-                    YearMonth.now()
-                } else {
-                    try {
-                        YearMonth.parse(lastSegment)
-                    } catch (e: Exception) {
-                        throw IllegalArgumentException("Invalid snapshot month in URI: $uri", e)
-                    }
-                }
+                if (lastSegment == "latest") YearMonth.now()
+                else YearMonth.parse(lastSegment)
             }
 
             else -> throw IllegalArgumentException("Unknown URI: $uri")
         }
+
+        MeowLog.d("SharedSnapshotProvider> resolved month=$result")
+        return result
     }
 
-    private fun buildSnapshotJson(
-        context: Context,
-        date: LocalDate
-    ): String {
+    private fun buildSnapshotJson(context: Context, date: LocalDate): String {
+        MeowLog.d("SharedSnapshotProvider> buildSnapshotJson START date=$date")
+
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             SharedSnapshotProviderEntryPoint::class.java
         )
 
-        return runBlocking {
+        val result = runBlocking {
             entryPoint
                 .buildSharedNutritionSnapshotJsonUseCase()
-                .invoke(
-                    date = date,
-                    zoneId = ZoneId.systemDefault()
-                )
+                .invoke(date = date, zoneId = ZoneId.systemDefault())
         }
+
+        MeowLog.d("SharedSnapshotProvider> buildSnapshotJson SUCCESS length=${result.length}")
+        return result
     }
 
-    private fun buildMonthSnapshotJson(
-        context: Context,
-        month: YearMonth
-    ): String {
+    private fun buildMonthSnapshotJson(context: Context, month: YearMonth): String {
+        MeowLog.d("SharedSnapshotProvider> buildMonthSnapshotJson START month=$month")
+
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             SharedSnapshotProviderEntryPoint::class.java
         )
 
-        return runBlocking {
+        val result = runBlocking {
             entryPoint
                 .buildSharedNutritionMonthSnapshotJsonUseCase()
-                .invoke(
-                    month = month,
-                    zoneId = ZoneId.systemDefault()
-                )
+                .invoke(month = month, zoneId = ZoneId.systemDefault())
         }
+
+        MeowLog.d("SharedSnapshotProvider> buildMonthSnapshotJson SUCCESS length=${result.length}")
+        return result
     }
 
-    private fun buildGoalsJson(
-        context: Context
-    ): String {
+    private fun buildGoalsJson(context: Context): String {
+        MeowLog.d("SharedSnapshotProvider> buildGoalsJson START")
+
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             SharedSnapshotProviderEntryPoint::class.java
         )
 
-        return runBlocking {
+        val result = runBlocking {
             entryPoint
                 .buildSharedNutritionGoalProfileJsonUseCase()
                 .invoke()
         }
+
+        MeowLog.d("SharedSnapshotProvider> buildGoalsJson SUCCESS length=${result.length}")
+        return result
     }
 
-    private fun buildLogsJson(
-        context: Context
-    ): String {
+    private fun buildLogsJson(context: Context): String {
+        MeowLog.d("SharedSnapshotProvider> buildLogsJson START")
+
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             SharedSnapshotProviderEntryPoint::class.java
         )
 
-        return runBlocking {
+        val result = runBlocking {
             entryPoint
                 .buildSharedLogExportJsonUseCase()
                 .invoke()
         }
+
+        MeowLog.d("SharedSnapshotProvider> buildLogsJson SUCCESS length=${result.length}")
+        return result
     }
 
     override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? {
@@ -256,27 +276,7 @@ class SharedSnapshotProvider : ContentProvider() {
         return AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
     }
 
-    override fun getType(uri: Uri): String {
-        val match = uriMatcher.match(uri)
-        val path = uri.path.orEmpty().trimStart('/')
-
-        return when {
-            match == SNAPSHOT_LATEST ||
-                    match == SNAPSHOT_BY_DATE ||
-                    match == SNAPSHOT_MONTH_LATEST ||
-                    match == SNAPSHOT_MONTH_BY_MONTH ||
-                    match == LOGS_RECENT ||
-                    match == GOALS_CURRENT ||
-                    path == LOGS_PATH ||
-                    path == "$GOALS_PATH_PREFIX/current" ||
-                    path == "$SNAPSHOT_PATH_PREFIX/latest" ||
-                    path.startsWith("$SNAPSHOT_PATH_PREFIX/") ||
-                    path == "$SNAPSHOT_MONTH_PATH_PREFIX/latest" ||
-                    path.startsWith("$SNAPSHOT_MONTH_PATH_PREFIX/") -> "application/json"
-
-            else -> throw IllegalArgumentException("Unknown URI: $uri")
-        }
-    }
+    override fun getType(uri: Uri): String = "application/json"
 
     override fun query(
         uri: Uri,
@@ -287,17 +287,6 @@ class SharedSnapshotProvider : ContentProvider() {
     ): Cursor? = null
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null
-
-    override fun delete(
-        uri: Uri,
-        selection: String?,
-        selectionArgs: Array<out String>?
-    ): Int = 0
-
-    override fun update(
-        uri: Uri,
-        values: ContentValues?,
-        selection: String?,
-        selectionArgs: Array<out String>?
-    ): Int = 0
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
 }

@@ -1,6 +1,6 @@
 package com.example.adobongkangkong.domain.transfer
 
-import android.util.Log
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.db.entity.BasisType
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodNutrientRow
@@ -19,10 +19,6 @@ class ImportRecipeBundleUseCase @Inject constructor(
     private val saveFoodWithNutrients: SaveFoodWithNutrientsUseCase,
     private val createRecipeUseCase: CreateRecipeUseCase
 ) {
-
-    companion object {
-        private const val TAG = "AK_IMPORT"
-    }
 
     sealed class Result {
         data class Success(
@@ -51,6 +47,8 @@ class ImportRecipeBundleUseCase @Inject constructor(
     }
 
     suspend fun execute(bundle: RecipeBundleDto): Result {
+        MeowLog.d("ImportRecipeBundle> START recipe=${bundle.recipe.name}")
+
         return try {
             val recipeStableId = bundle.recipe.stableId
 
@@ -58,8 +56,8 @@ class ImportRecipeBundleUseCase @Inject constructor(
             val createdFoodIds = mutableListOf<Long>()
             val unresolvedFoods = mutableListOf<String>()
 
-            // Import only non-recipe foods.
-            // The actual recipe backing food is created later by CreateRecipeUseCase.
+            MeowLog.d("ImportRecipeBundle> processing foods count=${bundle.foods.size}")
+
             for (foodDto in bundle.foods) {
                 if (foodDto.stableId == recipeStableId || foodDto.isRecipe) {
                     continue
@@ -76,6 +74,7 @@ class ImportRecipeBundleUseCase @Inject constructor(
 
                 if (food == null) {
                     unresolvedFoods.add(foodDto.stableId)
+                    MeowLog.d("ImportRecipeBundle> WARN unresolved food=${foodDto.stableId}")
                     continue
                 }
 
@@ -83,6 +82,11 @@ class ImportRecipeBundleUseCase @Inject constructor(
                 stableIdToFoodId[foodDto.stableId] = newId
                 createdFoodIds.add(newId)
             }
+
+            MeowLog.d(
+                "ImportRecipeBundle> foods processed " +
+                        "created=${createdFoodIds.size} unresolved=${unresolvedFoods.size}"
+            )
 
             val resolvedIngredients = mutableListOf<RecipeIngredientDraft>()
             val unresolvedIngredients = mutableListOf<String>()
@@ -104,11 +108,19 @@ class ImportRecipeBundleUseCase @Inject constructor(
                 )
             }
 
+            MeowLog.d(
+                "ImportRecipeBundle> ingredients processed " +
+                        "resolved=${resolvedIngredients.size} unresolved=${unresolvedIngredients.size}"
+            )
+
             val missingRatio =
                 if (bundle.ingredients.isEmpty()) 0.0
                 else unresolvedIngredients.size.toDouble() / bundle.ingredients.size
 
+            MeowLog.d("ImportRecipeBundle> missingRatio=$missingRatio")
+
             if (missingRatio > 0.5) {
+                MeowLog.d("ImportRecipeBundle> FAIL too many missing ingredients")
                 return Result.Failure(
                     Reason.TOO_MANY_MISSING_INGREDIENTS,
                     "More than 50% ingredients unresolved"
@@ -122,32 +134,45 @@ class ImportRecipeBundleUseCase @Inject constructor(
                 ingredients = resolvedIngredients
             )
 
+            MeowLog.d("ImportRecipeBundle> creating recipe")
+
             val recipeId = try {
                 createRecipeUseCase(recipeDraft)
             } catch (e: Exception) {
-                Log.e(TAG, "Recipe creation failed", e)
+                MeowLog.e("ImportRecipeBundle> recipe creation FAILED", e)
                 null
             }
 
             if (recipeId == null) {
+                MeowLog.d("ImportRecipeBundle> FAIL recipeId null")
                 return Result.Failure(
                     Reason.RECIPE_CREATION_FAILED,
                     "Failed to create recipe"
                 )
             }
 
-            return if (unresolvedFoods.isEmpty() && unresolvedIngredients.isEmpty()) {
-                Result.Success(createdFoodIds, recipeId)
-            } else {
-                Result.PartialSuccess(
-                    createdFoodIds = createdFoodIds,
-                    recipeId = recipeId,
-                    unresolvedFoods = unresolvedFoods,
-                    unresolvedIngredients = unresolvedIngredients
-                )
-            }
+            val result =
+                if (unresolvedFoods.isEmpty() && unresolvedIngredients.isEmpty()) {
+                    MeowLog.d("ImportRecipeBundle> SUCCESS full")
+                    Result.Success(createdFoodIds, recipeId)
+                } else {
+                    MeowLog.d(
+                        "ImportRecipeBundle> SUCCESS partial " +
+                                "unresolvedFoods=${unresolvedFoods.size} " +
+                                "unresolvedIngredients=${unresolvedIngredients.size}"
+                    )
+                    Result.PartialSuccess(
+                        createdFoodIds = createdFoodIds,
+                        recipeId = recipeId,
+                        unresolvedFoods = unresolvedFoods,
+                        unresolvedIngredients = unresolvedIngredients
+                    )
+                }
+
+            result
+
         } catch (e: Exception) {
-            Log.e(TAG, "Import failed", e)
+            MeowLog.e("ImportRecipeBundle> FAILED", e)
             Result.Failure(Reason.INTERNAL_ERROR, e.message)
         }
     }
@@ -173,7 +198,7 @@ class ImportRecipeBundleUseCase @Inject constructor(
             val nutrient = nutrientRepository.getByCode(dtoNutrient.code)
 
             if (nutrient == null) {
-                Log.e(TAG, "Unknown nutrient code=${dtoNutrient.code}")
+                MeowLog.d("ImportRecipeBundle> WARN unknown nutrient=${dtoNutrient.code}")
                 continue
             }
 
@@ -213,7 +238,7 @@ class ImportRecipeBundleUseCase @Inject constructor(
                 householdServingText = dto.householdServingText
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Food mapping failed", e)
+            MeowLog.e("ImportRecipeBundle> Food mapping FAILED ${dto.name}", e)
             null
         }
     }

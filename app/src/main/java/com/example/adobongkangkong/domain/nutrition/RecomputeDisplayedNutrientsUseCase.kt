@@ -14,7 +14,7 @@ import javax.inject.Inject
  * - per-serving nutrient map
  * - computation status
  */
-class RecomputeDisplayedNutrientsUseCase @Inject constructor() {
+class  RecomputeDisplayedNutrientsUseCase @Inject constructor() {
 
     fun execute(
         canonicalNutrients: Map<NutrientKey, Double>,
