@@ -61,6 +61,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
+import com.example.adobongkangkong.ui.calendar.MonthHeader
 import com.example.adobongkangkong.ui.camera.generateBlurDerivative
 import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
@@ -362,6 +363,7 @@ fun FoodsListScreen(
                             }
                         )
                         HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
