@@ -2,6 +2,7 @@ package com.example.adobongkangkong.core.util
 
 import android.content.Context
 import android.content.Intent
+import com.example.adobongkangkong.core.log.MeowLog
 import kotlin.system.exitProcess
 
 fun restartApp(context: Context) {
@@ -13,7 +14,7 @@ fun restartApp(context: Context) {
                             Intent.FLAG_ACTIVITY_CLEAR_TASK
                 )
             }
-
+    MeowLog.d("restartApp>$intent")
     context.startActivity(intent)
     exitProcess(0)
 }

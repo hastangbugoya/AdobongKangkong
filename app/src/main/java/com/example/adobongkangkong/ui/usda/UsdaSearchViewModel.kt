@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.usda
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.domain.usda.ImportUsdaFoodFromSearchJsonUseCase
 import com.example.adobongkangkong.domain.usda.SearchUsdaFoodsByKeywordsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +45,7 @@ class UsdaSearchViewModel @Inject constructor(
 
     fun search(pageSize: Int = 20) {
         val query = stateFlow.value.query.trim()
+        MeowLog.e("UsdaSearchViewModel>search>query=$query pageSize=$pageSize")
         if (query.isBlank()) {
             stateFlow.value = stateFlow.value.copy(
                 errorMessage = "Enter USDA search keywords."
@@ -108,11 +110,13 @@ class UsdaSearchViewModel @Inject constructor(
                     lastSearchedQuery = query,
                     pageNumber = 1
                 )
+                MeowLog.e("UsdaSearchViewModel>search>q=$query e=${t.message}")
             }
         }
     }
 
     fun importSelected(fdcId: Long) {
+        MeowLog.e("UsdaSearchViewModel>importSelected>fdcId=$fdcId")
         val searchJson = lastSearchJson
         if (searchJson.isNullOrBlank()) {
             snackbarFlow.value = "USDA search data is unavailable."
@@ -155,6 +159,7 @@ class UsdaSearchViewModel @Inject constructor(
                     isImporting = false,
                     errorMessage = t.message ?: "USDA import failed."
                 )
+                MeowLog.e("UsdaSearchViewModel>importSelected>e=${t.message}")
             }
         }
     }

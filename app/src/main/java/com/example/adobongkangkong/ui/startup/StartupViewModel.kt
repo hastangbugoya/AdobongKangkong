@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.startup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.prefs.FirstRunPrefs
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.usecase.EnsureNutrientCatalogSeededUseCase
@@ -24,6 +25,8 @@ class StartupViewModel @Inject constructor(
     val state: StateFlow<StartupUiState> = _state
 
     fun start() {
+        MeowLog.d("StartupViewModel> START")
+
         viewModelScope.launch {
             try {
                 _state.value = StartupUiState(
@@ -31,8 +34,12 @@ class StartupViewModel @Inject constructor(
                     message = "Preparing database…"
                 )
 
+                MeowLog.d("StartupViewModel> ensureNutrientCatalogSeeded START")
                 ensureNutrientCatalogSeeded()
+                MeowLog.d("StartupViewModel> ensureNutrientCatalogSeeded SUCCESS")
+
                 val hasFoods = !foodRepository.isFoodsEmpty()
+                MeowLog.d("StartupViewModel> hasFoods=$hasFoods")
 
                 if (!hasFoods) {
                     _state.value = StartupUiState(
@@ -40,12 +47,19 @@ class StartupViewModel @Inject constructor(
                         message = "Importing foods…"
                     )
 
+                    MeowLog.d("StartupViewModel> importFoodsCsv START")
+
                     importFoodsCsv(
                         assetFileName = "foods.csv",
                         skipIfFoodsExist = true
                     )
 
+                    MeowLog.d("StartupViewModel> importFoodsCsv SUCCESS")
+
                     prefs.setImportDone(true)
+                    MeowLog.d("StartupViewModel> prefs.setImportDone SUCCESS")
+                } else {
+                    MeowLog.d("StartupViewModel> import skipped (foods already exist)")
                 }
 
                 _state.value = StartupUiState(
@@ -53,7 +67,11 @@ class StartupViewModel @Inject constructor(
                     isDone = true,
                     message = "Ready"
                 )
+
+                MeowLog.d("StartupViewModel> SUCCESS")
             } catch (t: Throwable) {
+                MeowLog.e("StartupViewModel> FAILED", t)
+
                 _state.value = StartupUiState(
                     isWorking = false,
                     error = t.message ?: "Startup failed"
@@ -63,7 +81,12 @@ class StartupViewModel @Inject constructor(
     }
 
     fun retry() {
-        if (state.value.isWorking) return
+        if (state.value.isWorking) {
+            MeowLog.d("StartupViewModel> retry ignored (already working)")
+            return
+        }
+
+        MeowLog.d("StartupViewModel> retry triggered")
         start()
     }
 }
