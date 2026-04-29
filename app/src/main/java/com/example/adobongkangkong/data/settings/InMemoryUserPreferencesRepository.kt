@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 
 /**
  * In-memory implementation used during development.
@@ -37,6 +38,12 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     private val _mealReminderEndMinutes = MutableStateFlow(21 * 60)
     override val mealReminderEndMinutes: StateFlow<Int> = _mealReminderEndMinutes
 
+    private val _mealReminderIntensity =
+        MutableStateFlow(MealReminderIntensity.GENTLE)
+
+    override val mealReminderIntensity: StateFlow<MealReminderIntensity> =
+        _mealReminderIntensity
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled
     }
@@ -59,5 +66,9 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     override fun setMealReminderEndMinutes(minutes: Int) {
         _mealReminderEndMinutes.value = minutes.coerceIn(0, 23 * 60 + 59)
+    }
+
+    override fun setMealReminderIntensity(intensity: MealReminderIntensity) {
+        _mealReminderIntensity.value = intensity
     }
 }

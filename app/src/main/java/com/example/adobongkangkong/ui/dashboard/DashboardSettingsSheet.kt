@@ -39,6 +39,7 @@ import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 
 enum class DashboardDebugResetDomain(
     val displayName: String
@@ -112,6 +113,8 @@ fun DashboardSettingsSheet(
     onMealReminderStartMinutesChange: (Int) -> Unit,
     onMealReminderIntervalMinutesChange: (Int) -> Unit,
     onMealReminderEndMinutesChange: (Int) -> Unit,
+    mealReminderIntensity: MealReminderIntensity,
+    onMealReminderIntensityChange: (MealReminderIntensity) -> Unit,
 ) {
     Column(
         Modifier
@@ -194,6 +197,13 @@ fun DashboardSettingsSheet(
             Text(
                 text = "Example: ${formatReminderPreview(mealReminderStartMinutes, mealReminderIntervalMinutes, mealReminderEndMinutes)}",
                 style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            ReminderIntensityDropdown(
+                selected = mealReminderIntensity,
+                onSelect = onMealReminderIntensityChange
             )
         }
 
@@ -548,6 +558,65 @@ private fun ReminderIntervalField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderIntensityDropdown(
+    selected: MealReminderIntensity,
+    onSelect: (MealReminderIntensity) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val selectedLabel = when (selected) {
+        MealReminderIntensity.SILENT -> "Silent"
+        MealReminderIntensity.GENTLE -> "Gentle"
+        MealReminderIntensity.NORMAL -> "Normal"
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Reminder intensity") },
+            supportingText = {
+                Text("Silent = no buzz, Gentle = short buzz, Normal = system default.")
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            MealReminderIntensity.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            when (option) {
+                                MealReminderIntensity.SILENT -> "Silent"
+                                MealReminderIntensity.GENTLE -> "Gentle"
+                                MealReminderIntensity.NORMAL -> "Normal"
+                            }
+                        )
+                    },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 private fun formatMinutesAsTime(minutes: Int): String {

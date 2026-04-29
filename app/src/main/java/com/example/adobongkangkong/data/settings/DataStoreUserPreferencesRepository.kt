@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -112,6 +114,22 @@ class DataStoreUserPreferencesRepository @Inject constructor(
                 initialValue = DEFAULT_MEAL_REMINDER_END_MINUTES
             )
 
+    override val mealReminderIntensity: StateFlow<MealReminderIntensity> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[MEAL_REMINDER_INTENSITY_KEY]
+                    ?.let { raw ->
+                        runCatching { MealReminderIntensity.valueOf(raw) }.getOrNull()
+                    }
+                    ?: MealReminderIntensity.GENTLE
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = MealReminderIntensity.GENTLE
+            )
+
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         scope.launch {
             context.userPreferencesDataStore.edit { preferences ->
@@ -164,6 +182,14 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    override fun setMealReminderIntensity(intensity: MealReminderIntensity) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[MEAL_REMINDER_INTENSITY_KEY] = intensity.name
+            }
+        }
+    }
+
     private companion object {
         const val DEFAULT_MEAL_REMINDER_START_MINUTES = 8 * 60
         const val DEFAULT_MEAL_REMINDER_INTERVAL_MINUTES = 3 * 60
@@ -177,5 +203,6 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         val MEAL_REMINDER_START_MINUTES_KEY = intPreferencesKey("meal_reminder_start_minutes")
         val MEAL_REMINDER_INTERVAL_MINUTES_KEY = intPreferencesKey("meal_reminder_interval_minutes")
         val MEAL_REMINDER_END_MINUTES_KEY = intPreferencesKey("meal_reminder_end_minutes")
+        val MEAL_REMINDER_INTENSITY_KEY = stringPreferencesKey("meal_reminder_intensity")
     }
 }

@@ -52,6 +52,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 
 /**
  * Dashboard screen state holder.
@@ -134,6 +135,9 @@ class DashboardViewModel @Inject constructor(
 
     val mealReminderEndMinutes: StateFlow<Int> =
         userPreferencesRepository.mealReminderEndMinutes
+
+    val mealReminderIntensity: StateFlow<MealReminderIntensity> =
+        userPreferencesRepository.mealReminderIntensity
 
     private val zoneId = ZoneId.systemDefault()
 
@@ -230,6 +234,10 @@ class DashboardViewModel @Inject constructor(
 
     fun setMealReminderEndMinutes(minutes: Int) {
         userPreferencesRepository.setMealReminderEndMinutes(minutes)
+    }
+
+    fun setMealReminderIntensity(intensity: MealReminderIntensity) {
+        userPreferencesRepository.setMealReminderIntensity(intensity)
     }
 
     fun buildSharedSnapshotJson() {
