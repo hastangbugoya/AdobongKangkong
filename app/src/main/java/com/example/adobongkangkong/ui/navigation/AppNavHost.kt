@@ -200,7 +200,9 @@ fun AppNavHost(
         ) { entry ->
             val dateIso = entry.arguments!!.getString("date")!!
             val date = LocalDate.parse(dateIso)
-
+            val pickedQuickAddFoodId by entry.savedStateHandle
+                .getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
+                .collectAsState()
             DayLogScreen(
                 date = date,
                 onBack = { navController.popBackStack() },
@@ -227,6 +229,10 @@ fun AppNavHost(
                 onOpenQuickAddFavorites = {
                     entry.savedStateHandle[KEY_FOOD_PICK_INITIAL_FILTER] = FOOD_PICK_INITIAL_FILTER_FAVORITES
                     navController.navigate(NavRoutes.Foods.pickFood)
+                },
+                pickedQuickAddFoodId = pickedQuickAddFoodId,
+                onPickedQuickAddFoodConsumed = {
+                    entry.savedStateHandle[KEY_FOOD_PICK_FOOD_ID] = null
                 }
             )
         }
