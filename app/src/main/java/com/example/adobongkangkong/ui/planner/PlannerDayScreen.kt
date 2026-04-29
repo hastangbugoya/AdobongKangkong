@@ -136,7 +136,7 @@ fun PlannerDayScreen(
 
             item {
                 val dayTotals = s.dayMacroTotals
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(0.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -155,7 +155,7 @@ fun PlannerDayScreen(
 
             if (s.errorMessage != null) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(0.dp)) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text("Couldn’t load plan", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
@@ -324,7 +324,7 @@ private fun buildLoggedBannerText(
 private fun EmptySlotCard(
     onAdd: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(0.dp) ){
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Nothing planned.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))
@@ -817,6 +817,7 @@ private fun PlannedMealCard(
     var showActionsMenu by remember(meal.id) { mutableStateOf(false) }
 
     Card(
+        shape = RoundedCornerShape(0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpenMeal(meal.id) }

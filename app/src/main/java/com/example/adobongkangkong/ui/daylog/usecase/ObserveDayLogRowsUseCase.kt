@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.daylog.usecase
 
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
@@ -11,48 +12,50 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
-/**
- * Observes Day Log rows for a single ISO day (yyyy-MM-dd).
- *
- * IMPORTANT:
- * - This use case is day-based and MUST be driven by `logDateIso`.
- * - It must NOT use timestamp bounds for day membership.
- *
- * Performance note:
- * - This use case enriches observed log rows with banner ids using additional DAO lookups.
- * - That enrichment must stay off the main thread to avoid jank / blank-screen stalls when
- *   opening Day Log.
- */
 class ObserveDayLogRowsUseCase @Inject constructor(
     private val logRepository: LogRepository,
     private val foods: FoodDao,
+    private val recipes: RecipeDao,
     private val recipeBatches: RecipeBatchDao
 ) {
-
-    /**
-     * @param dateIso ISO date string (yyyy-MM-dd) for the selected day.
-     * @return A stream of UI rows for Day Log, containing only entries whose `logDateIso == dateIso`.
-     */
     operator fun invoke(dateIso: String): Flow<List<DayLogRow>> {
         return logRepository.observeDay(dateIso)
             .map { logs ->
                 val stableIds = logs.mapNotNull { it.foodStableId }.distinct()
+
                 val stableIdToFoodId: Map<String, Long?> =
-                    stableIds.associateWith { stableId -> foods.getIdByStableId(stableId) }
+                    stableIds.associateWith { stableId ->
+                        foods.getIdByStableId(stableId)
+                    }
+
+                val stableIdToRecipeFoodId: Map<String, Long?> =
+                    stableIds.associateWith { stableId ->
+                        val recipeId = recipes.getIdByStableId(stableId)
+                            ?: return@associateWith null
+
+                        recipes.getById(recipeId)?.foodId
+                    }
 
                 val batchIds = logs.mapNotNull { it.recipeBatchId }.distinct()
+
                 val batchIdToFoodId: Map<Long, Long> =
-                    if (batchIds.isEmpty()) emptyMap()
-                    else recipeBatches.getByIds(batchIds).associate { b -> b.id to b.batchFoodId }
+                    if (batchIds.isEmpty()) {
+                        emptyMap()
+                    } else {
+                        recipeBatches.getByIds(batchIds)
+                            .associate { batch -> batch.id to batch.batchFoodId }
+                    }
 
                 logs.map { log ->
                     val n = log.nutrients
 
-                    val bannerFoodId: Long? = when {
-                        log.recipeBatchId != null -> batchIdToFoodId[log.recipeBatchId]
-                        log.foodStableId != null -> stableIdToFoodId[log.foodStableId]
-                        else -> null
-                    }
+                    val bannerFoodId =
+                        log.recipeBatchId?.let { batchId ->
+                            batchIdToFoodId[batchId]
+                        } ?: log.foodStableId?.let { stableId ->
+                            stableIdToFoodId[stableId]
+                                ?: stableIdToRecipeFoodId[stableId]
+                        }
 
                     DayLogRow(
                         logId = log.id,

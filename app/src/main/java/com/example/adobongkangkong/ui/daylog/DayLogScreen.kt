@@ -2,7 +2,9 @@ package com.example.adobongkangkong.ui.daylog
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -168,7 +170,7 @@ fun DayLogScreen(
                     item(key = "slot_header_${section.key}") {
                         Text(
                             text = section.title,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
                             modifier = Modifier.padding(vertical = 10.dp)
                         )
                     }
@@ -189,8 +191,8 @@ fun DayLogScreen(
                             },
                             onDelete = { delete(row.logId) }
                         )
-
-                        HorizontalDivider()
+                        Spacer(Modifier.height(4.dp))
+//                        HorizontalDivider()
                     }
                 }
 
