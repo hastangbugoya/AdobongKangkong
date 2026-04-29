@@ -1,17 +1,12 @@
 package com.example.adobongkangkong.data.settings
 
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * In-memory implementation used during development.
- *
- * Later this will be replaced with a DataStore-backed version
- * without changing the rest of the app.
- */
 @Singleton
 class InMemoryUserPreferencesRepository @Inject constructor() :
     UserPreferencesRepository {
@@ -36,6 +31,17 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     private val _mealReminderEndMinutes = MutableStateFlow(21 * 60)
     override val mealReminderEndMinutes: StateFlow<Int> = _mealReminderEndMinutes
+
+    // ✅ FIX: proper backing state
+    private val _mealReminderIntensity =
+        MutableStateFlow(MealReminderIntensity.GENTLE)
+
+    override val mealReminderIntensity: StateFlow<MealReminderIntensity> =
+        _mealReminderIntensity
+
+    override fun setMealReminderIntensity(intensity: MealReminderIntensity) {
+        _mealReminderIntensity.value = intensity
+    }
 
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled

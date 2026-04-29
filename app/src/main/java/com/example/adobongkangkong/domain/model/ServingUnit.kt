@@ -2,115 +2,118 @@ package com.example.adobongkangkong.domain.model
 
 /**
  * NOTE ON AMBIGUOUS VOLUME UNITS:
- * - We keep volume units fully-qualified where they commonly vary by locale (e.g., cup variants).
- * - We intentionally omit the US customary cup (~236.588 mL). For nutrition/label math we standardize on CUP_US = 240 mL.
+ * - We keep volume units fully-qualified where they commonly vary by locale.
+ * - We intentionally omit the US customary cup (~236.588 mL). For nutrition/label math
+ *   we standardize on CUP_US = 240 mL.
  *
  * Deterministic conversion fields:
- * - asMl: mL per 1 unit (for volume-like units only)
- * - asG: grams per 1 unit (for mass-like units only)
+ * - asMl: built-in mL conversion per 1 unit, when the unit has a conventional volume conversion.
+ * - asG: built-in grams conversion per 1 unit, when the unit has a conventional mass conversion.
  *
- * Units that are container-ish / subjective / count-ish should keep both null.
+ * Important:
+ * - asMl/asG describe a built-in conversion, not the only valid way a food may be grounded.
+ * - Example: CUP_US has asMl=240, but a solid food like rice may still be grams-grounded
+ *   as "1 cup = 180 g".
  *
- * RCCUP POLICY (locked in):
- * - Rice cooker cup remains explicitly grounded / ambiguous.
- * - Even though a rice cooker cup often implies a real-world volume, AK should not treat it as
- *   deterministically mL-grounded by default.
- * - Rationale: rice nutrition/label workflows in AK are primarily grams-based, and assuming a fixed
- *   mL grounding for rc cup would create misleading confidence for serving-based nutrition math.
+ * Bridge policy:
+ * - LOCKED_MASS: true physical mass unit; user does not need manual gram bridge.
+ * - LOCKED_VOLUME: true physical volume unit; user does not need manual mL bridge.
+ * - FLEXIBLE: household/container/serving unit; user may provide grams and/or mL grounding.
+ *
+ * RCCUP POLICY:
+ * - Rice cooker cup remains FLEXIBLE.
+ * - Even though it often implies a real-world volume, AK should not force it to mL by default.
+ * - Rice nutrition workflows are usually grams-based.
  */
 enum class ServingUnit(
     val display: String,
     val asMl: Double? = null,
-    val asG: Double? = null
+    val asG: Double? = null,
+    val bridgePolicy: ServingUnitBridgePolicy
 ) {
     // ----------------
-    // Mass (asG)
+    // Physical mass units
     // ----------------
-    MG("mg", asG = 0.001),
-    G("g", asG = 1.0),
-    KG("kg", asG = 1000.0),
-    OZ("oz", asG = 28.349523125),
-    LB("lb", asG = 453.59237),
+    MG("mg", asG = 0.001, bridgePolicy = ServingUnitBridgePolicy.LOCKED_MASS),
+    G("g", asG = 1.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_MASS),
+    KG("kg", asG = 1000.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_MASS),
+    OZ("oz", asG = 28.349523125, bridgePolicy = ServingUnitBridgePolicy.LOCKED_MASS),
+    LB("lb", asG = 453.59237, bridgePolicy = ServingUnitBridgePolicy.LOCKED_MASS),
 
     // ----------------
-    // Metric volume (asMl)
+    // Physical metric volume units
     // ----------------
-    ML("ml", asMl = 1.0),
-    L("L", asMl = 1000.0),
+    ML("ml", asMl = 1.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    L("L", asMl = 1000.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
 
     // ----------------
-    // US (nutrition-standard) volume set
-    // Internally consistent: 1 cup = 240 mL, 1 fl oz = 30 mL
+    // Household / label volume units
+    // These have conventional mL conversions, but are FLEXIBLE because solids are often
+    // measured with them and should be allowed to use grams-per-unit.
     // ----------------
-    TSP_US("tsp (US)", asMl = 5.0),
-    TBSP_US("tbsp (US)", asMl = 15.0),
-    FL_OZ_US("fl oz (US)", asMl = 30.0),
-    CUP_US("cup (US)", asMl = 240.0),
-    PINT_US("pt (US)", asMl = 480.0),
-    QUART_US("qt (US)", asMl = 960.0),
-    GALLON_US("gal (US)", asMl = 3840.0),
+    TSP_US("tsp (US)", asMl = 5.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    TBSP_US("tbsp (US)", asMl = 15.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    FL_OZ_US("fl oz (US)", asMl = 30.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    CUP_US("cup (US)", asMl = 240.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    PINT_US("pt (US)", asMl = 480.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    QUART_US("qt (US)", asMl = 960.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    GALLON_US("gal (US)", asMl = 3840.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
 
-    // Cup variants (explicit)
-    CUP_METRIC("cup (metric)", asMl = 250.0),
-    CUP_JP("cup (JP)", asMl = 200.0),
+    CUP_METRIC("cup (metric)", asMl = 250.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    CUP_JP("cup (JP)", asMl = 200.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
 
-    // Imperial / UK volume set (exact)
-    FL_OZ_IMP("fl oz (imp)", asMl = 28.4130625),
-    PINT_IMP("pt (imp)", asMl = 568.26125),
-    QUART_IMP("qt (imp)", asMl = 1136.5225),
-    GALLON_IMP("gal (imp)", asMl = 4546.09),
+    FL_OZ_IMP("fl oz (imp)", asMl = 28.4130625, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    PINT_IMP("pt (imp)", asMl = 568.26125, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    QUART_IMP("qt (imp)", asMl = 1136.5225, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
+    GALLON_IMP("gal (imp)", asMl = 4546.09, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME),
 
     // ----------------
-    // Legacy / custom / container-ish units (no deterministic conversion)
+    // Container / subjective / count units
     // ----------------
-    BUNCH("bch"),
-    BOX("box"),
-    SCOOP("scoop"),
-    BAG("bag"),
-    PACKET("pkt"),
-    CAN("can"),
-    PIECE("pc"),
-    SLICE("slice"),
-    PACK("pack"),
-    BOTTLE("bottle"),
-    JAR("jar"),
-    SERVING("serving"),
-    STICK("stick"),
-    OTHER("other"),
-    BATCH("batch"),
-    // Rice cooker cup intentionally stays ambiguous / explicitly grounded.
-    RCCUP("rc cup"),
+    BUNCH("bch", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    BOX("box", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    SCOOP("scoop", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    BAG("bag", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    PACKET("pkt", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    CAN("can", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    PIECE("pc", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    SLICE("slice", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    PACK("pack", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    BOTTLE("bottle", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    JAR("jar", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    SERVING("serving", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    STICK("stick", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    OTHER("other", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    BATCH("batch", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
+    RCCUP("rc cup", bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
 
-    /**
-     * Legacy aliases kept for backward compatibility.
-     * Prefer the fully-qualified units above for new code/data.
-     */
     @Deprecated("Use TSP_US (or a fully-qualified tsp) instead.")
-    TSP("tsp", asMl = 5.0),
+    TSP("tsp", asMl = 5.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
 
     @Deprecated("Use TBSP_US (or a fully-qualified tbsp) instead.")
-    TBSP("tbsp", asMl = 15.0),
+    TBSP("tbsp", asMl = 15.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
 
     @Deprecated("Use CUP_US / CUP_METRIC / CUP_JP instead.")
-    CUP("cup", asMl = 240.0),
+    CUP("cup", asMl = 240.0, bridgePolicy = ServingUnitBridgePolicy.FLEXIBLE),
 
     @Deprecated("Use QUART_US / QUART_IMP instead.")
-    QUART("qt", asMl = 960.0);
+    QUART("qt", asMl = 960.0, bridgePolicy = ServingUnitBridgePolicy.LOCKED_VOLUME);
 
     companion object
 }
 
+enum class ServingUnitBridgePolicy {
+    LOCKED_MASS,
+    LOCKED_VOLUME,
+    FLEXIBLE
+}
+
 /**
- * Grounding model for serving units.
+ * Backward-compatible grounding kind.
  *
- * MASS:
- * - unit is inherently gram-resolvable
- *
- * VOLUME:
- * - unit is inherently mL-resolvable
- *
- * FLEXIBLE:
- * - unit is container-ish / subjective and requires explicit user grounding
+ * Important:
+ * - This now reflects bridge policy, not merely asG/asMl availability.
+ * - A unit may have asMl and still be FLEXIBLE, such as CUP_US or TBSP_US.
  */
 enum class ServingUnitGroundingKind {
     MASS,
@@ -119,77 +122,39 @@ enum class ServingUnitGroundingKind {
 }
 
 fun ServingUnit.groundingKind(): ServingUnitGroundingKind {
-    return when {
-        asG != null -> ServingUnitGroundingKind.MASS
-        asMl != null -> ServingUnitGroundingKind.VOLUME
-        else -> ServingUnitGroundingKind.FLEXIBLE
+    return when (bridgePolicy) {
+        ServingUnitBridgePolicy.LOCKED_MASS -> ServingUnitGroundingKind.MASS
+        ServingUnitBridgePolicy.LOCKED_VOLUME -> ServingUnitGroundingKind.VOLUME
+        ServingUnitBridgePolicy.FLEXIBLE -> ServingUnitGroundingKind.FLEXIBLE
     }
 }
 
 fun ServingUnit.canResolveToGramsDeterministically(): Boolean {
-    return groundingKind() == ServingUnitGroundingKind.MASS
+    return asG != null
 }
 
 fun ServingUnit.canResolveToMlDeterministically(): Boolean {
-    return groundingKind() == ServingUnitGroundingKind.VOLUME
+    return asMl != null
 }
 
 fun ServingUnit.requiresExplicitGrounding(): Boolean {
-    return groundingKind() == ServingUnitGroundingKind.FLEXIBLE
+    return bridgePolicy == ServingUnitBridgePolicy.FLEXIBLE && asG == null && asMl == null
 }
 
-/**
- * Policy helper:
- * even if a unit is already mass/volume grounded by nature, the editor may still
- * allow the user to enter explicit grounding values for override/precision.
- */
+fun ServingUnit.allowsManualGramBridge(): Boolean {
+    return bridgePolicy != ServingUnitBridgePolicy.LOCKED_MASS
+}
+
+fun ServingUnit.allowsManualMlBridge(): Boolean {
+    return bridgePolicy != ServingUnitBridgePolicy.LOCKED_VOLUME
+}
+
 fun ServingUnit.shouldAllowExplicitGroundingOverride(): Boolean {
-    return when (this) {
-        ServingUnit.TSP_US,
-        ServingUnit.TBSP_US,
-        ServingUnit.FL_OZ_US,
-        ServingUnit.CUP_US,
-        ServingUnit.PINT_US,
-        ServingUnit.QUART_US,
-        ServingUnit.GALLON_US,
-        ServingUnit.CUP_METRIC,
-        ServingUnit.CUP_JP,
-        ServingUnit.FL_OZ_IMP,
-        ServingUnit.PINT_IMP,
-        ServingUnit.QUART_IMP,
-        ServingUnit.GALLON_IMP,
-        ServingUnit.RCCUP,
-        ServingUnit.TSP,
-        ServingUnit.TBSP,
-        ServingUnit.CUP,
-        ServingUnit.QUART,
-        ServingUnit.CAN,
-        ServingUnit.BOTTLE,
-        ServingUnit.JAR,
-        ServingUnit.SERVING,
-        ServingUnit.OTHER -> true
-
-        else -> false
-    }
+    return bridgePolicy == ServingUnitBridgePolicy.FLEXIBLE
 }
 
-/**
- * Backward-compatibility shim.
- *
- * Historically this mixed together:
- * - "unit needs explicit grounding"
- * - "unit should allow manual override"
- *
- * That caused volume units like TBSP/CUP to be treated too much like SERVING/JAR.
- *
- * Keep this temporarily so old call sites compile, but migrate call sites to:
- * - requiresExplicitGrounding()
- * - canResolveToMlDeterministically()
- * - canResolveToGramsDeterministically()
- * - shouldAllowExplicitGroundingOverride()
- */
 @Deprecated(
-    message = "Use requiresExplicitGrounding()/canResolveToMlDeterministically()/canResolveToGramsDeterministically()/shouldAllowExplicitGroundingOverride() instead."
+    message = "Use bridgePolicy/allowsManualGramBridge()/allowsManualMlBridge()/requiresExplicitGrounding() instead."
 )
 fun ServingUnit.isAmbiguousForGrounding(): Boolean {
     return requiresExplicitGrounding()

@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 
 private val Context.userPreferencesDataStore by preferencesDataStore(
     name = "user_preferences"
@@ -34,6 +36,8 @@ class DataStoreUserPreferencesRepository @Inject constructor(
 ) : UserPreferencesRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val MEAL_REMINDER_INTENSITY_KEY = stringPreferencesKey("meal_reminder_intensity")
 
     override val lockPortrait: StateFlow<Boolean> =
         context.userPreferencesDataStore.data
@@ -177,5 +181,26 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         val MEAL_REMINDER_START_MINUTES_KEY = intPreferencesKey("meal_reminder_start_minutes")
         val MEAL_REMINDER_INTERVAL_MINUTES_KEY = intPreferencesKey("meal_reminder_interval_minutes")
         val MEAL_REMINDER_END_MINUTES_KEY = intPreferencesKey("meal_reminder_end_minutes")
+    }
+
+    override val mealReminderIntensity: StateFlow<MealReminderIntensity> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[MEAL_REMINDER_INTENSITY_KEY]
+                    ?.let { raw -> runCatching { MealReminderIntensity.valueOf(raw) }.getOrNull() }
+                    ?: MealReminderIntensity.GENTLE
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = MealReminderIntensity.GENTLE
+            )
+
+    override fun setMealReminderIntensity(intensity: MealReminderIntensity) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[MEAL_REMINDER_INTENSITY_KEY] = intensity.name
+            }
+        }
     }
 }

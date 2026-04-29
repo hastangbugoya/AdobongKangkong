@@ -227,6 +227,7 @@ fun DashboardScreen(
             val mealReminderStartMinutes by vm.mealReminderStartMinutes.collectAsState()
             val mealReminderIntervalMinutes by vm.mealReminderIntervalMinutes.collectAsState()
             val mealReminderEndMinutes by vm.mealReminderEndMinutes.collectAsState()
+            val mealReminderIntensity by vm.mealReminderIntensity.collectAsState()
 
             DashboardSettingsSheet(
                 pinnedKeys = state.pinnedKeys,
@@ -274,7 +275,9 @@ fun DashboardScreen(
                 onMealRemindersEnabledChange = vm::setMealRemindersEnabled,
                 onMealReminderStartMinutesChange = vm::setMealReminderStartMinutes,
                 onMealReminderIntervalMinutesChange = vm::setMealReminderIntervalMinutes,
-                onMealReminderEndMinutesChange = vm::setMealReminderEndMinutes
+                onMealReminderEndMinutesChange = vm::setMealReminderEndMinutes,
+                mealReminderIntensity = mealReminderIntensity,
+                onMealReminderIntensityChange = vm::setMealReminderIntensity,
             )
         }
     }

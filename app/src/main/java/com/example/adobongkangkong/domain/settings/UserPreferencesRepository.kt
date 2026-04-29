@@ -41,6 +41,10 @@ interface UserPreferencesRepository {
 
     val mealReminderEndMinutes: StateFlow<Int>
 
+    val mealReminderIntensity: StateFlow<MealReminderIntensity>
+
+    fun setMealReminderIntensity(intensity: MealReminderIntensity)
+
     /** Enables or disables meal reminders. */
     fun setMealRemindersEnabled(enabled: Boolean)
 
@@ -58,4 +62,10 @@ interface UserPreferencesRepository {
 
     /** Sets the optional privacy lock timeout policy. */
     fun setPrivacyLockTimeoutMinutes(minutes: Int?)
+}
+
+enum class MealReminderIntensity {
+    SILENT,
+    GENTLE,
+    NORMAL
 }

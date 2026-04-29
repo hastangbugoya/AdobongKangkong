@@ -69,6 +69,8 @@ import com.example.adobongkangkong.ui.camera.BannerCaptureController
 import com.example.adobongkangkong.ui.common.category.CategoryAssignmentSection
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
 import com.example.adobongkangkong.ui.theme.AppIconSize
+import com.example.adobongkangkong.domain.model.allowsManualGramBridge
+import com.example.adobongkangkong.domain.model.allowsManualMlBridge
 
 /**
  * FoodEditorScreen (stateless)
@@ -88,13 +90,13 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  *   - and, when needed, grams/mL backing shown in the Serving section
  *
  * Serving bridge visibility rule:
- * - Deterministic units already carry their own conversion basis through [ServingUnit.asG] / [ServingUnit.asMl].
- * - Therefore:
- *   - hide manual grams-per-unit input when the selected serving unit has built-in mass grounding
- *   - hide manual mL-per-unit input when the selected serving unit has built-in volume grounding
- *   - hide BOTH bridge inputs when the selected serving unit is already deterministic
- * - Manual bridge inputs are only shown for units that are not already deterministic.
- * - This prevents the user from entering values the domain layer intentionally ignores for units like lb, oz, g, mL, or L.
+ * - ServingUnit.asG / asMl describe built-in conversions, not the only valid grounding path.
+ * - The editor follows ServingUnit bridge policy:
+ *   - locked mass units hide grams-per-unit input
+ *   - locked volume units hide mL-per-unit input
+ *   - flexible units may show both grams/unit and mL/unit
+ * - This lets foods like rice, coffee grounds, and peanuts use cup/tbsp as serving units
+ *   while still being grams-grounded.
  *
  * USDA interpretation prompt:
  * - When [state.pendingUsdaInterpretationPrompt] is non-null, the app does not yet assume whether
@@ -2019,9 +2021,8 @@ private fun ServingSection(
             )
         }
 
-        val isDeterministicUnit = servingUnit.asG != null || servingUnit.asMl != null
-        val showGramsBridge = !isDeterministicUnit
-        val showMlBridge = !isDeterministicUnit
+        val showGramsBridge = servingUnit.allowsManualGramBridge()
+        val showMlBridge = servingUnit.allowsManualMlBridge()
 
         val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
         val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }

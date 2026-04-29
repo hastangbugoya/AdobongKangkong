@@ -5,6 +5,8 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.example.adobongkangkong.core.log.MeowLog
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
@@ -18,19 +20,35 @@ object MealReminderScheduler {
     const val KEY_START_MINUTES = "start_minutes"
     const val KEY_INTERVAL_MINUTES = "interval_minutes"
     const val KEY_END_MINUTES = "end_minutes"
+    const val KEY_INTENSITY = "intensity"
 
     fun reschedule(
         context: Context,
         enabled: Boolean,
         startMinutes: Int,
         intervalMinutes: Int,
-        endMinutes: Int
+        endMinutes: Int,
+        intensity: MealReminderIntensity = MealReminderIntensity.GENTLE
     ) {
+        MeowLog.d(
+            "MealReminderScheduler> reschedule START " +
+                    "enabled=$enabled start=$startMinutes interval=$intervalMinutes end=$endMinutes intensity=$intensity"
+        )
+
         cancel(context)
 
-        if (!enabled) return
-        if (intervalMinutes <= 0) return
-        if (endMinutes <= startMinutes) return
+        if (!enabled) {
+            MeowLog.d("MealReminderScheduler> reschedule skipped disabled")
+            return
+        }
+        if (intervalMinutes <= 0) {
+            MeowLog.d("MealReminderScheduler> reschedule skipped invalid interval=$intervalMinutes")
+            return
+        }
+        if (endMinutes <= startMinutes) {
+            MeowLog.d("MealReminderScheduler> reschedule skipped invalid window start=$startMinutes end=$endMinutes")
+            return
+        }
 
         val delayMinutes = calculateDelayUntilNextReminder(
             startMinutes = startMinutes,
@@ -45,7 +63,8 @@ object MealReminderScheduler {
                     KEY_ENABLED to enabled,
                     KEY_START_MINUTES to startMinutes,
                     KEY_INTERVAL_MINUTES to intervalMinutes,
-                    KEY_END_MINUTES to endMinutes
+                    KEY_END_MINUTES to endMinutes,
+                    KEY_INTENSITY to intensity.name
                 )
             )
             .build()
@@ -55,9 +74,12 @@ object MealReminderScheduler {
             ExistingWorkPolicy.REPLACE,
             request
         )
+
+        MeowLog.d("MealReminderScheduler> reschedule SUCCESS delayMinutes=$delayMinutes intensity=$intensity")
     }
 
     fun cancel(context: Context) {
+        MeowLog.d("MealReminderScheduler> cancel")
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
     }
 
@@ -87,8 +109,9 @@ object MealReminderScheduler {
     }
 
     private fun minutesToLocalTime(minutes: Int): LocalTime {
-        val hour = minutes / 60
-        val minute = minutes % 60
+        val safeMinutes = minutes.coerceIn(0, 23 * 60 + 59)
+        val hour = safeMinutes / 60
+        val minute = safeMinutes % 60
         return LocalTime.of(hour, minute)
     }
 }
