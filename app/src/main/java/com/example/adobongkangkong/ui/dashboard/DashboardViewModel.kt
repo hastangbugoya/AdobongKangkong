@@ -53,6 +53,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
+import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
+import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
+import com.example.adobongkangkong.domain.trend.usecase.ObserveDashboardNutrientHistoryUseCase
+import com.example.adobongkangkong.domain.trend.usecase.ObserveNutrientHistoryUseCase
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * Dashboard screen state holder.
@@ -106,7 +111,10 @@ class DashboardViewModel @Inject constructor(
     private val resetPlannerDataUseCase: ResetPlannerDataUseCase,
 
     private val application: Application,
-    private val buildSharedNutritionSnapshotJsonUseCase: BuildSharedNutritionSnapshotJsonUseCase
+    private val buildSharedNutritionSnapshotJsonUseCase: BuildSharedNutritionSnapshotJsonUseCase,
+
+    private val observeNutrientHistoryUseCase: ObserveNutrientHistoryUseCase,
+    private val observeDashboardNutrientHistoryUseCase: ObserveDashboardNutrientHistoryUseCase,
 ) : ViewModel() {
 
     private val _snackbar = MutableStateFlow<String?>(null)
@@ -198,6 +206,54 @@ class DashboardViewModel @Inject constructor(
                     ),
                     okStreaks = emptyList()
                 )
+            )
+
+    private val selectedNutrientHistoryCodeFlow = MutableStateFlow<String?>(null)
+    private val dashboardHistoryOpenFlow = MutableStateFlow(false)
+
+    val selectedNutrientHistory: StateFlow<List<NutrientHistoryEntry>?> =
+        combine(
+            selectedNutrientHistoryCodeFlow,
+            selectedDateFlow
+        ) { code, date -> code to date }
+            .flatMapLatest { (code, date) ->
+                if (code == null) {
+                    flowOf(null)
+                } else {
+                    observeNutrientHistoryUseCase(
+                        nutrientCode = code,
+                        endDate = date,
+                        days = 10,
+                        zoneId = zoneId
+                    ).map { it }
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                null
+            )
+
+    val dashboardNutrientHistory: StateFlow<DashboardNutrientHistory?> =
+        combine(
+            dashboardHistoryOpenFlow,
+            selectedDateFlow
+        ) { isOpen, date -> isOpen to date }
+            .flatMapLatest { (isOpen, date) ->
+                if (!isOpen) {
+                    flowOf(null)
+                } else {
+                    observeDashboardNutrientHistoryUseCase(
+                        endDate = date,
+                        days = 10,
+                        zoneId = zoneId
+                    ).map { it }
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                null
             )
 
     fun setRollingDays(days: Int) {
@@ -791,6 +847,22 @@ class DashboardViewModel @Inject constructor(
     }
 
     // endregion
+
+    fun openNutrientHistory(code: String) {
+        selectedNutrientHistoryCodeFlow.value = code.trim().uppercase()
+    }
+
+    fun dismissNutrientHistory() {
+        selectedNutrientHistoryCodeFlow.value = null
+    }
+
+    fun openDashboardHistory() {
+        dashboardHistoryOpenFlow.value = true
+    }
+
+    fun dismissDashboardHistory() {
+        dashboardHistoryOpenFlow.value = false
+    }
 
     init {
         viewModelScope.launch { bootstrapDomain() }

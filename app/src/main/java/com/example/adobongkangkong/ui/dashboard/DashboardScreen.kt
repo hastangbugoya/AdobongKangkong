@@ -75,6 +75,8 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
+import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
+import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,6 +102,10 @@ fun DashboardScreen(
     val state by vm.state.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+
+    var selectedHistoryCard by remember { mutableStateOf<DashboardNutrientCard?>(null) }
+    val selectedNutrientHistory by vm.selectedNutrientHistory.collectAsState()
+    val dashboardNutrientHistory by vm.dashboardNutrientHistory.collectAsState()
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -305,6 +311,30 @@ fun DashboardScreen(
         }
     }
 
+    selectedHistoryCard?.let { card ->
+        selectedNutrientHistory?.let { history ->
+            ModalBottomSheet(
+                onDismissRequest = {
+                    selectedHistoryCard = null
+                    vm.dismissNutrientHistory()
+                }
+            ) {
+                NutrientHistorySheet(
+                    card = card,
+                    entries = history
+                )
+            }
+        }
+    }
+
+    dashboardNutrientHistory?.let { history ->
+        ModalBottomSheet(
+            onDismissRequest = vm::dismissDashboardHistory
+        ) {
+            DashboardNutrientHistorySheet(history = history)
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -423,7 +453,13 @@ fun DashboardScreen(
                 items = state.nutrientCards,
                 key = { it.code }
             ) { card ->
-                DashboardNutrientCardRow(card)
+                DashboardNutrientCardRow(
+                    card = card,
+                    onLongPress = {
+                        selectedHistoryCard = card
+                        vm.openNutrientHistory(card.code)
+                    }
+                )
             }
 
             item {
@@ -445,7 +481,9 @@ fun DashboardScreen(
                         text = summaryText,
                         style = MaterialTheme.typography.titleMedium
                     )
-
+                    TextButton(onClick = vm::openDashboardHistory) {
+                        Text("History")
+                    }
                     IconButton(
                         onClick = { onOpenDayLog(state.date) }
                     ) {
@@ -587,7 +625,8 @@ internal fun Double.round2(): String = "%,.2f".format(this).trimEnd('0').trimEnd
 
 @Composable
 private fun DashboardNutrientCardRow(
-    card: DashboardNutrientCard
+    card: DashboardNutrientCard,
+    onLongPress: () -> Unit = {}
 ) {
     val unit = card.unit.orEmpty()
     val display = remember(card) { card.toDisplay(unit) }
@@ -596,6 +635,10 @@ private fun DashboardNutrientCardRow(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
+            .combinedClickable(
+                onClick = {},
+                onLongClick = onLongPress
+            )
     ) {
         Row(
             Modifier.fillMaxWidth(),
@@ -671,6 +714,108 @@ private fun DashboardNutrientCardRow(
             )
         }
     }
+}
+
+@Composable
+private fun NutrientHistorySheet(
+    card: DashboardNutrientCard,
+    entries: List<NutrientHistoryEntry>
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Text("${card.displayName} history", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(12.dp))
+
+        entries.forEach { entry ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(formatHistoryDate(entry.date), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = formatNullableAmount(entry.amount, entry.unit),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (entry.amount == null)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                )
+            }
+            HorizontalDivider()
+        }
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun DashboardNutrientHistorySheet(
+    history: DashboardNutrientHistory
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Text("Dashboard history", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(12.dp))
+
+        history.rows.forEach { row ->
+            Text(
+                text = formatHistoryDate(row.date),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            history.columns.forEach { column ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(column.displayName, style = MaterialTheme.typography.bodyMedium)
+                    val amount = row.valuesByCode[column.code]
+                    Text(
+                        text = formatNullableAmount(
+                            amount = amount,
+                            unit = column.unit
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (amount == null)
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        else
+                            MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+private fun formatNullableAmount(
+    amount: Double?,
+    unit: String?
+): String {
+    return amount?.let {
+        "${it.round1()} ${unit.orEmpty()}".trim()
+    } ?: "No data"
+}
+
+private fun formatHistoryDate(date: LocalDate): String {
+    return date.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()))
 }
 
 private data class NutrientCardDisplay(
