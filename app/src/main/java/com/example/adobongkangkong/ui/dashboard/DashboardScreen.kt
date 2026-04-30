@@ -727,6 +727,13 @@ private fun NutrientHistorySheet(
             .padding(16.dp)
     ) {
         Text("${card.displayName} history", style = MaterialTheme.typography.titleLarge)
+
+        Text(
+            text = formatGoalText(card),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         Spacer(Modifier.height(12.dp))
 
         entries.forEach { entry ->
@@ -766,10 +773,37 @@ private fun DashboardNutrientHistorySheet(
         Spacer(Modifier.height(12.dp))
 
         history.rows.forEach { row ->
-            Text(
-                text = formatHistoryDate(row.date),
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatHistoryDate(row.date),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+
+                val icon = when (row.status) {
+                    TargetStatus.OK -> R.drawable.check_circle__1_
+                    TargetStatus.LOW,
+                    TargetStatus.HIGH -> R.drawable.exclamation
+                    TargetStatus.NO_TARGET -> R.drawable.empty_set
+                }
+
+                val tint = when (row.status) {
+                    TargetStatus.OK -> EatMoreGreen
+                    TargetStatus.LOW,
+                    TargetStatus.HIGH -> LimitRed
+                    TargetStatus.NO_TARGET -> LocalContentColor.current
+                }
+
+                Icon(
+                    painter = painterResource(icon),
+                    contentDescription = row.status.name,
+                    tint = tint,
+                    modifier = Modifier.size(AppIconSize.Inline)
+                )
+            }
 
             Spacer(Modifier.height(6.dp))
 
@@ -803,6 +837,32 @@ private fun DashboardNutrientHistorySheet(
 
         Spacer(Modifier.height(16.dp))
     }
+}
+
+private fun formatGoalText(card: DashboardNutrientCard): String {
+    val unit = card.unit.orEmpty()
+
+    return when {
+        card.minPerDay != null && card.maxPerDay != null -> {
+            "Goal: ${card.minPerDay.round1()}–${card.maxPerDay.round1()} $unit"
+        }
+
+        card.minPerDay != null -> {
+            "Goal: at least ${card.minPerDay.round1()} $unit"
+        }
+
+        card.maxPerDay != null -> {
+            "Goal: at most ${card.maxPerDay.round1()} $unit"
+        }
+
+        card.targetPerDay != null -> {
+            "Goal: ${card.targetPerDay.round1()} $unit"
+        }
+
+        else -> {
+            "No goal set"
+        }
+    }.trim()
 }
 
 private fun formatNullableAmount(

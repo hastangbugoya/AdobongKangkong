@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.trend.usecase
 
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.usecase.ObserveDailyNutritionTotalsUseCase
 import java.time.LocalDate
 import java.time.ZoneId
@@ -22,7 +23,8 @@ data class DashboardNutrientHistoryColumn(
 
 data class DashboardNutrientHistoryRow(
     val date: LocalDate,
-    val valuesByCode: Map<String, Double?>
+    val valuesByCode: Map<String, Double?>,
+    val status: TargetStatus
 )
 
 class ObserveDashboardNutrientHistoryUseCase @Inject constructor(
@@ -75,7 +77,11 @@ class ObserveDashboardNutrientHistoryUseCase @Inject constructor(
 
                 DashboardNutrientHistoryRow(
                     date = date,
-                    valuesByCode = valuesByCode
+                    valuesByCode = valuesByCode,
+                    status = evaluateRowStatus(
+                        specs = specs,
+                        valuesByCode = valuesByCode
+                    )
                 )
             }
 
@@ -84,5 +90,55 @@ class ObserveDashboardNutrientHistoryUseCase @Inject constructor(
                 rows = rows
             )
         }
+    }
+
+    private fun evaluateRowStatus(
+        specs: List<com.example.adobongkangkong.domain.trend.model.DashboardNutrientSpec>,
+        valuesByCode: Map<String, Double?>
+    ): TargetStatus {
+        var hasAnyTarget = false
+
+        for (spec in specs) {
+            val value = valuesByCode[spec.code] ?: continue
+
+            val status = evaluateStatus(
+                consumed = value,
+                min = spec.minPerDay,
+                target = spec.targetPerDay,
+                max = spec.maxPerDay
+            )
+
+            when (status) {
+                TargetStatus.LOW,
+                TargetStatus.HIGH -> return status
+
+                TargetStatus.OK -> hasAnyTarget = true
+                TargetStatus.NO_TARGET -> Unit
+            }
+        }
+
+        return if (hasAnyTarget) TargetStatus.OK else TargetStatus.NO_TARGET
+    }
+
+    private fun evaluateStatus(
+        consumed: Double,
+        min: Double?,
+        target: Double?,
+        max: Double?
+    ): TargetStatus {
+        if (min == null && target == null && max == null) {
+            return TargetStatus.NO_TARGET
+        }
+
+        if (min != null && consumed < min) return TargetStatus.LOW
+        if (max != null && consumed > max) return TargetStatus.HIGH
+
+        if (min != null || max != null) return TargetStatus.OK
+
+        if (target != null) {
+            return if (consumed < target) TargetStatus.LOW else TargetStatus.OK
+        }
+
+        return TargetStatus.NO_TARGET
     }
 }
