@@ -1370,7 +1370,8 @@ fun FoodEditorScreen(
                         } else if (state.scannedBarcode.isNotBlank()) {
                             PendingBarcodeNotice(
                                 barcode = state.scannedBarcode,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                onOpenBarcodeScanner = onOpenBarcodeScanner,
                             )
                         } else {
                             Text(
@@ -2244,6 +2245,7 @@ private fun FoodEditorBottomBar(
 private fun PendingBarcodeNotice(
     barcode: String,
     modifier: Modifier = Modifier,
+    onOpenBarcodeScanner: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -2277,7 +2279,7 @@ private fun PendingBarcodeNotice(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
                 OutlinedButton(
-                    onClick = onScanBarcodeClick // you already have this
+                    onClick = onOpenBarcodeScanner
                 ) {
                     Text("Rescan barcode")
                 }
