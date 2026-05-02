@@ -9,7 +9,7 @@ import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 
 enum class InputMode {
     SERVINGS,
-    SERVING_UNIT,   // tbsp / cup / ml etc
+    SERVING_UNIT,
     GRAMS
 }
 
@@ -17,6 +17,12 @@ enum class QuickAddMode {
     CREATE,
     EDIT
 }
+
+data class QuickAddNutrientCaution(
+    val label: String,
+    val amountText: String,
+    val message: String
+)
 
 data class QuickAddState(
     val query: String = "",
@@ -28,30 +34,24 @@ data class QuickAddState(
 
     val selectedFood: Food? = null,
 
-    // canonical stepper amount (servings UI)
     val servings: Double = 1.0,
-
-    // Derived: serving-equivalent computed from grams when possible
     val servingsEquivalent: Double? = null,
 
-    // User input for "Amount (UNIT)"
     val inputUnit: ServingUnit = ServingUnit.G,
     val inputAmount: Double? = null,
 
-    // derived UI values
     val servingUnitAmount: Double? = null,
     val gramsAmount: Double? = null,
 
     val inputMode: InputMode = InputMode.SERVINGS,
 
-    // Recipe batch context (only relevant if selectedFood.isRecipe == true)
+    val nutrientCautions: List<QuickAddNutrientCaution> = emptyList(),
+
     val batches: List<BatchSummary> = emptyList(),
     val selectedBatchId: Long? = null,
 
-    // Optional categorization for Day Log grouping (not required to log)
     val mealSlot: MealSlot? = null,
 
-    // Create-batch dialog
     val yieldGramsText: String = "",
     val servingsYieldText: String = "",
     val isCreateBatchDialogOpen: Boolean = false,
@@ -62,17 +62,14 @@ data class QuickAddState(
     val isResolveMassDialogOpen: Boolean = false,
     val gramsPerServingText: String = "",
 
-    // nutrition choice for edit mode
     val isNutritionChoiceDialogOpen: Boolean = false,
     val nutritionChoiceMessage: String? = null,
 
-    // Barcode scan UI state
     val isScannerOpen: Boolean = false,
     val foundBarcodeDialogFood: Food? = null,
     val foundBarcodeDialogBarcode: String? = null,
     val notFoundBarcodeDialogBarcode: String? = null,
 
-    // IOU (planner narrative placeholder)
     val isIouDialogOpen: Boolean = false,
     val iouDescription: String = "",
     val iouCaloriesText: String = "",
@@ -82,7 +79,6 @@ data class QuickAddState(
     val isSavingIou: Boolean = false,
     val iouErrorMessage: String? = null,
 
-    // log planner items
     val isTodayPlanPickerOpen: Boolean = false,
     val todayPlanSections: Map<MealSlot, List<QuickAddPlannedItemCandidate>> = emptyMap(),
     val isTodayPlanLoading: Boolean = false

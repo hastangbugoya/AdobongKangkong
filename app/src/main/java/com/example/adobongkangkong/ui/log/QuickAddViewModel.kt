@@ -50,6 +50,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
+import kotlinx.coroutines.flow.flow
 
 /**
  * Quick Add view model for both creating and editing log entries.
@@ -98,6 +101,17 @@ class QuickAddViewModel @Inject constructor(
 
     private val queryFlow = MutableStateFlow("")
     private val selectedFoodFlow = MutableStateFlow<Food?>(null)
+
+    private val selectedFoodSnapshotFlow =
+        selectedFoodFlow.flatMapLatest { food ->
+            if (food == null) {
+                flowOf<FoodNutritionSnapshot?>(null)
+            } else {
+                flow<FoodNutritionSnapshot?> {
+                    emit(snapshotRepo.getSnapshot(food.id))
+                }
+            }
+        }
 
     private val modeFlow = MutableStateFlow(QuickAddMode.CREATE)
     private val editingLogIdFlow = MutableStateFlow<Long?>(null)
@@ -589,6 +603,7 @@ class QuickAddViewModel @Inject constructor(
         val query: String,
         val results: List<FoodListItemUiModel>,
         val selected: Food?,
+        val selectedSnapshot: FoodNutritionSnapshot?,
         val servings: Double,
         val mealSlot: MealSlot?,
         val inputMode: InputMode,
@@ -640,10 +655,12 @@ class QuickAddViewModel @Inject constructor(
     )
 
     val state: StateFlow<QuickAddState> = run {
+
         data class CoreA(
             val query: String,
             val results: List<FoodListItemUiModel>,
             val selected: Food?,
+            val selectedSnapshot: FoodNutritionSnapshot?,
             val servings: Double,
             val mealSlot: MealSlot?,
             val mode: QuickAddMode,
@@ -661,6 +678,7 @@ class QuickAddViewModel @Inject constructor(
             val query: String,
             val results: List<FoodListItemUiModel>,
             val selected: Food?,
+            val selectedSnapshot: FoodNutritionSnapshot?,
             val servings: Double
         )
 
@@ -676,12 +694,14 @@ class QuickAddViewModel @Inject constructor(
                 queryFlow,
                 resultsUiFlow,
                 selectedFoodFlow,
+                selectedFoodSnapshotFlow,
                 servingsFlow
-            ) { query, results, selected, servings ->
+            ) { query, results, selected, selectedSnapshot, servings ->
                 CoreALeft(
                     query = query,
                     results = results,
                     selected = selected,
+                    selectedSnapshot = selectedSnapshot,
                     servings = servings
                 )
             },
@@ -703,6 +723,7 @@ class QuickAddViewModel @Inject constructor(
                 query = left.query,
                 results = left.results,
                 selected = left.selected,
+                selectedSnapshot = left.selectedSnapshot,
                 servings = left.servings,
                 mealSlot = right.mealSlot,
                 mode = right.mode,
@@ -724,6 +745,7 @@ class QuickAddViewModel @Inject constructor(
                 query = a.query,
                 results = a.results,
                 selected = a.selected,
+                selectedSnapshot = a.selectedSnapshot,
                 servings = a.servings,
                 mealSlot = a.mealSlot,
                 inputMode = b.inputMode,
@@ -885,6 +907,11 @@ class QuickAddViewModel @Inject constructor(
                     }
                 }
 
+                val nutrientCautions = buildNutrientCautions(
+                    snapshot = core.selectedSnapshot,
+                    gramsAmount = gramsAmount
+                )
+
                 QuickAddState(
                     query = core.query,
                     results = core.results,
@@ -899,6 +926,7 @@ class QuickAddViewModel @Inject constructor(
                     servingUnitAmount = servingUnitAmount,
                     gramsAmount = gramsAmount,
                     inputMode = core.inputMode,
+                    nutrientCautions = nutrientCautions,
 
                     batches = recipe.batches,
                     selectedBatchId = recipe.selectedBatchId,
@@ -1710,5 +1738,43 @@ class QuickAddViewModel @Inject constructor(
                 isSavingFlow.value = false
             }
         }
+    }
+
+    private fun buildNutrientCautions(
+        snapshot: FoodNutritionSnapshot?,
+        gramsAmount: Double?
+    ): List<QuickAddNutrientCaution> {
+        val grams = gramsAmount?.takeIf { it > 0.0 } ?: return emptyList()
+        val perGram = snapshot?.nutrientsPerGram ?: return emptyList()
+
+        val sodiumMg = perGram[NutrientKey.SODIUM_MG] * grams
+        val sugarsG = perGram[NutrientKey.SUGARS_G] * grams
+
+        return buildList {
+            if (sodiumMg > QUICK_ADD_SODIUM_CAUTION_MG) {
+                add(
+                    QuickAddNutrientCaution(
+                        label = "Sodium",
+                        amountText = "${formatCompact(sodiumMg)} mg",
+                        message = "Use caution: this entry has about ${formatCompact(sodiumMg)} mg sodium."
+                    )
+                )
+            }
+
+            if (sugarsG > QUICK_ADD_SUGAR_CAUTION_G) {
+                add(
+                    QuickAddNutrientCaution(
+                        label = "Total sugars",
+                        amountText = "${formatCompact(sugarsG)} g",
+                        message = "Use caution: this entry has about ${formatCompact(sugarsG)} g total sugars."
+                    )
+                )
+            }
+        }
+    }
+
+    private companion object {
+        private const val QUICK_ADD_SODIUM_CAUTION_MG = 600.0
+        private const val QUICK_ADD_SUGAR_CAUTION_G = 15.0
     }
 }

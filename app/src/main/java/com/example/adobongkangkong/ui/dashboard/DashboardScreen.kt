@@ -97,6 +97,7 @@ fun DashboardScreen(
     onOpenBackup: () -> Unit,
     onCreateFoodWithBarcode: (String) -> Unit,
     onOpenQuickAddFavorites: () -> Unit = {},
+    onOpenProductCheck: () -> Unit = {},
     pickedQuickAddFoodId: Long? = null,
     onPickedQuickAddFoodConsumed: () -> Unit = {},
     showBackButton: Boolean = false,
@@ -305,6 +306,7 @@ fun DashboardScreen(
             onOpenFavorites = {
                 onOpenQuickAddFavorites()
             },
+            onOpenProductCheck = onOpenProductCheck,
             logDate = state.date,
             pickedFoodId = pickedQuickAddFoodId
         )

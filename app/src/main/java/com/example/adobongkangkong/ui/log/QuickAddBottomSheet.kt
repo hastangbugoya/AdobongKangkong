@@ -83,6 +83,11 @@ import java.util.Locale
  * - only amount and meal slot are editable,
  * - save updates the existing row instead of inserting a new one.
  *
+ * Product Check entry:
+ * - kept separate from existing barcode logging behavior,
+ * - opened from the Quick Add header icon,
+ * - intended for USDA scan/evaluate only flow with no automatic persistence.
+ *
  * @param onOpenFoodEditor Navigate to the food editor for the given food id.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,6 +98,7 @@ fun QuickAddBottomSheet(
     onCreateFoodWithBarcode: (String) -> Unit = {},
     onOpenFoodEditor: (foodId: Long) -> Unit = {},
     onOpenFavorites: () -> Unit = {},
+    onOpenProductCheck: () -> Unit = {},
     logDate: LocalDate,
     initialPlannedItemCandidate: QuickAddPlannedItemCandidate? = null,
     editingLogId: Long? = null,
@@ -123,7 +129,7 @@ fun QuickAddBottomSheet(
     LaunchedEffect(pickedFoodId) {
         pickedFoodId?.let {
             vm.onPickedFoodId(it)
-            onPickedFoodConsumed()   // 👈 THIS WAS MISSING
+            onPickedFoodConsumed()
             sheetState.show()
         }
     }
@@ -235,10 +241,31 @@ fun QuickAddBottomSheet(
                 .padding(16.dp)
                 .navigationBarsPadding()
         ) {
-            Text(
-                if (state.mode == QuickAddMode.EDIT) "Edit Log" else "Quick Add",
-                style = MaterialTheme.typography.titleLarge
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (state.mode == QuickAddMode.EDIT) "Edit Log" else "Quick Add",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (state.mode == QuickAddMode.CREATE) {
+                    IconButton(
+                        onClick = {
+                            focus.clearFocus()
+                            onOpenProductCheck()
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.magnifying_glass_wave),
+                            contentDescription = "Check product"
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
             Text("${logDate.format(formatter)}", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(12.dp))
@@ -502,6 +529,12 @@ fun QuickAddBottomSheet(
                             isPrimaryEnabled = isPrimaryEnabled,
                             onPrimaryAction = { vm.save(onDone = onDismiss, logDate = logDate) },
                             extraContent = {
+                                if (state.nutrientCautions.isNotEmpty()) {
+                                    QuickAddNutrientCautions(
+                                        cautions = state.nutrientCautions
+                                    )
+                                }
+
                                 if (state.isIdentityLocked) {
                                     Spacer(Modifier.height(8.dp))
                                     Text(
@@ -645,6 +678,25 @@ fun QuickAddBottomSheet(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun QuickAddNutrientCautions(
+    cautions: List<QuickAddNutrientCaution>
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        cautions.forEach { caution ->
+            Text(
+                text = caution.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 

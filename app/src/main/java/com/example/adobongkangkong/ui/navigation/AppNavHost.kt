@@ -28,6 +28,7 @@ import com.example.adobongkangkong.ui.food.FoodsListViewModel
 import com.example.adobongkangkong.ui.food.editor.FoodEditorRoute
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
+import com.example.adobongkangkong.ui.productcheck.ProductCheckScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
@@ -68,6 +69,20 @@ fun AppNavHost(
                     launchSingleTop = true
                 }
             }
+        }
+
+        composable(NavRoutes.ProductCheck.route) {
+            ProductCheckScreen(
+                onBack = { navController.popBackStack() },
+                onImportFoodWithBarcode = { barcode ->
+                    navController.navigate(
+                        NavRoutes.Foods.new(
+                            prefillName = null,
+                            prefillBarcode = barcode
+                        )
+                    )
+                }
+            )
         }
 
         fun completeNewFoodReturn(returnTarget: String, savedFoodId: Long) {
@@ -166,6 +181,9 @@ fun AppNavHost(
                 },
                 showBackButton = showBackButton,
                 onBack = { navController.popBackStack() },
+                onOpenProductCheck = {
+                    navController.navigate(NavRoutes.ProductCheck.route)
+                },
             )
         }
 
@@ -203,6 +221,7 @@ fun AppNavHost(
             val pickedQuickAddFoodId by entry.savedStateHandle
                 .getStateFlow<Long?>(KEY_FOOD_PICK_FOOD_ID, null)
                 .collectAsState()
+
             DayLogScreen(
                 date = date,
                 onBack = { navController.popBackStack() },
@@ -233,7 +252,10 @@ fun AppNavHost(
                 pickedQuickAddFoodId = pickedQuickAddFoodId,
                 onPickedQuickAddFoodConsumed = {
                     entry.savedStateHandle[KEY_FOOD_PICK_FOOD_ID] = null
-                }
+                },
+                onOpenProductCheck = {
+                    navController.navigate(NavRoutes.ProductCheck.route)
+                },
             )
         }
 
@@ -259,6 +281,9 @@ fun AppNavHost(
                             returnTarget = NavRoutes.Foods.RETURN_QUICK_ADD_ROUTE
                         )
                     )
+                },
+                onOpenProductCheck = {
+                    navController.navigate(NavRoutes.ProductCheck.route)
                 },
                 onCreateFoodWithBarcode = { barcode ->
                     navController.navigate(

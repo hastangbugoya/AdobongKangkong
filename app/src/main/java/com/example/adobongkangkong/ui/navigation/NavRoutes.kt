@@ -17,6 +17,10 @@ object NavRoutes {
         }
     }
 
+    object ProductCheck {
+        const val route: String = "productCheck"
+    }
+
     object Calendar {
         const val route: String = "calendar"
     }
