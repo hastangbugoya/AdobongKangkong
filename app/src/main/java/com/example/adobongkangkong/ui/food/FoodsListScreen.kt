@@ -228,14 +228,18 @@ fun FoodsListScreen(
                             onDismissRequest = { actionMenuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Add") },
+                                text = { Text("Add food") },
                                 onClick = {
                                     actionMenuExpanded = false
-                                    when (state.filter) {
-                                        FoodsFilter.FOODS_ONLY -> onCreateFood()
-                                        FoodsFilter.RECIPES_ONLY -> onCreateRecipe()
-                                        FoodsFilter.ALL -> onCreateFood()
-                                    }
+                                    onCreateFood()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Add recipe") },
+                                onClick = {
+                                    actionMenuExpanded = false
+                                    onCreateRecipe()
                                 }
                             )
 

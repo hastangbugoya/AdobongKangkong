@@ -2213,6 +2213,12 @@ class FoodEditorViewModel @Inject constructor(
         val cleaned = barcode.trim()
         if (cleaned.isBlank()) return
 
+        update {
+            it.copy(
+                scannedBarcode = cleaned // always overwrite
+            )
+        }
+
         Log.d("Meow", "FoodEditor> onBarcodeScanned raw='$barcode' cleaned='$cleaned'")
         Log.d("Meow", "FoodEditor> barcode lookup START barcode='$cleaned'")
 

@@ -2257,21 +2257,39 @@ private fun PendingBarcodeNotice(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = "Pending barcode",
-                style = MaterialTheme.typography.titleSmall
-            )
+            Text("Pending barcode")
+
             Text(
                 text = barcode,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                style = MaterialTheme.typography.bodyLarge
             )
+
+            Spacer(Modifier.height(4.dp))
+
             Text(
-                text = "This barcode will be assigned when you save this food.",
+                text = "⚠️ Not verified. Try rescanning to confirm.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.error
             )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                OutlinedButton(
+                    onClick = onScanBarcodeClick // you already have this
+                ) {
+                    Text("Rescan barcode")
+                }
+
+                TextButton(
+                    onClick = {
+                        // no-op → just continue
+                    }
+                ) {
+                    Text("Continue anyway")
+                }
+            }
         }
     }
 }

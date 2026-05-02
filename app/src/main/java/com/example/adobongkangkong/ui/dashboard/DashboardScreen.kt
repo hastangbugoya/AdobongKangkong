@@ -6,13 +6,17 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -63,6 +67,8 @@ import com.example.adobongkangkong.R
 import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
+import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.theme.AppIconSize
@@ -75,8 +81,6 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
-import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
-import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +113,7 @@ fun DashboardScreen(
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarMsg by vm.snackbar.collectAsState()
@@ -317,7 +322,8 @@ fun DashboardScreen(
                 onDismissRequest = {
                     selectedHistoryCard = null
                     vm.dismissNutrientHistory()
-                }
+                },
+                sheetState = historySheetState
             ) {
                 NutrientHistorySheet(
                     card = card,
@@ -329,7 +335,8 @@ fun DashboardScreen(
 
     dashboardNutrientHistory?.let { history ->
         ModalBottomSheet(
-            onDismissRequest = vm::dismissDashboardHistory
+            onDismissRequest = vm::dismissDashboardHistory,
+            sheetState = historySheetState
         ) {
             DashboardNutrientHistorySheet(history = history)
         }
@@ -736,6 +743,13 @@ private fun NutrientHistorySheet(
 
         Spacer(Modifier.height(12.dp))
 
+        MiniNutrientBarSparkline(
+            entries = entries,
+            card = card
+        )
+
+        Spacer(Modifier.height(12.dp))
+
         entries.forEach { entry ->
             Row(
                 modifier = Modifier
@@ -758,6 +772,111 @@ private fun NutrientHistorySheet(
 
         Spacer(Modifier.height(16.dp))
     }
+}
+
+@Composable
+private fun MiniNutrientBarSparkline(
+    entries: List<NutrientHistoryEntry>,
+    card: DashboardNutrientCard
+) {
+    val values = entries.mapNotNull { it.amount }
+
+    val goalValue = when {
+        card.targetPerDay != null -> card.targetPerDay
+        card.maxPerDay != null -> card.maxPerDay
+        card.minPerDay != null -> card.minPerDay
+        else -> null
+    }
+
+    val maxValue = listOfNotNull(
+        values.maxOrNull(),
+        goalValue
+    ).maxOrNull()?.takeIf { it > 0.0 } ?: 1.0
+
+    val goalFraction = goalValue?.let {
+        (it / maxValue).coerceIn(0.0, 1.0).toFloat()
+    }
+
+    val goalLineColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            entries.reversed().forEach { entry ->
+                val value = entry.amount
+
+                val heightFraction = if (value == null) {
+                    0.08f
+                } else {
+                    (value / maxValue).coerceIn(0.08, 1.0).toFloat()
+                }
+
+                val color = when {
+                    value == null -> {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                    }
+
+                    isProblemBar(value = value, card = card) -> {
+                        LimitRed.copy(alpha = 0.55f)
+                    }
+
+                    else -> {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(heightFraction)
+                        .background(
+                            color = color,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                topStart = 4.dp,
+                                topEnd = 4.dp
+                            )
+                        )
+                )
+            }
+        }
+
+        if (goalFraction != null) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val y = size.height * (1f - goalFraction)
+                drawLine(
+                    color = goalLineColor,
+                    start = androidx.compose.ui.geometry.Offset(0f, y),
+                    end = androidx.compose.ui.geometry.Offset(size.width, y),
+                    strokeWidth = 2.dp.toPx()
+                )
+            }
+        }
+    }
+}
+
+private fun isProblemBar(
+    value: Double,
+    card: DashboardNutrientCard
+): Boolean {
+    val min = card.minPerDay
+    val max = card.maxPerDay
+    val target = card.targetPerDay
+
+    if (min != null && value < min) return true
+    if (max != null && value > max) return true
+
+    if (min == null && max == null && target != null && value < target) {
+        return true
+    }
+
+    return false
 }
 
 @Composable
