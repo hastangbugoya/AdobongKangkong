@@ -49,7 +49,8 @@ data class MealEditorUiState(
     val mealMacroPreview: MacroPreview? = null,
     val mealEffectiveQuantityText: String? = null,
     val criticalNutrientTotals: List<CriticalNutrientPreview> = emptyList(),
-    val hasUnknownCriticalNutrients: Boolean = false
+    val hasUnknownCriticalNutrients: Boolean = false,
+    val nutritionCautions: List<com.example.adobongkangkong.ui.planner.PlannerNutritionCautionUi> = emptyList(),
 ) {
     data class Item(
         val lineId: String,

@@ -43,9 +43,11 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - Product Check sugar: 10 g per serving
  * - Quick Add sodium: 600 mg per logged entry
  * - Quick Add sugar: 15 g per logged entry
+ * - Planner Day sodium: 2300 mg per planned day
+ * - Planner Day total sugar: 36 g per planned day
  *
  * ============================================================
- * FOR FUTURE AI / DEV ASSISTANTS
+ * FOR FUTURE DEV
  * ============================================================
  *
  * Do NOT move these settings to Room.
@@ -206,6 +208,30 @@ class DataStoreUserPreferencesRepository @Inject constructor(
                 initialValue = DEFAULT_QUICK_ADD_SUGAR_CAUTION_G
             )
 
+    override val plannerDailySodiumLimitMg: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[PLANNER_DAILY_SODIUM_LIMIT_MG_KEY]
+                    ?: DEFAULT_PLANNER_DAILY_SODIUM_LIMIT_MG
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_PLANNER_DAILY_SODIUM_LIMIT_MG
+            )
+
+    override val plannerDailySugarLimitG: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[PLANNER_DAILY_SUGAR_LIMIT_G_KEY]
+                    ?: DEFAULT_PLANNER_DAILY_SUGAR_LIMIT_G
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_PLANNER_DAILY_SUGAR_LIMIT_G
+            )
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         scope.launch {
             context.userPreferencesDataStore.edit { preferences ->
@@ -302,6 +328,24 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    override fun setPlannerDailySodiumLimitMg(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[PLANNER_DAILY_SODIUM_LIMIT_MG_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
+    override fun setPlannerDailySugarLimitG(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[PLANNER_DAILY_SUGAR_LIMIT_G_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
     private companion object {
         const val DEFAULT_MEAL_REMINDER_START_MINUTES = 8 * 60
         const val DEFAULT_MEAL_REMINDER_INTERVAL_MINUTES = 3 * 60
@@ -311,6 +355,9 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         const val DEFAULT_PRODUCT_CHECK_SUGAR_LIMIT_G = 10.0
         const val DEFAULT_QUICK_ADD_SODIUM_CAUTION_MG = 600.0
         const val DEFAULT_QUICK_ADD_SUGAR_CAUTION_G = 15.0
+
+        const val DEFAULT_PLANNER_DAILY_SODIUM_LIMIT_MG = 2300.0
+        const val DEFAULT_PLANNER_DAILY_SUGAR_LIMIT_G = 36.0
 
         val LOCK_PORTRAIT_KEY = booleanPreferencesKey("lock_portrait")
         val PRIVACY_LOCK_ENABLED_KEY = booleanPreferencesKey("privacy_lock_enabled")
@@ -330,5 +377,10 @@ class DataStoreUserPreferencesRepository @Inject constructor(
             doublePreferencesKey("quick_add_sodium_caution_mg")
         val QUICK_ADD_SUGAR_CAUTION_G_KEY =
             doublePreferencesKey("quick_add_sugar_caution_g")
+
+        val PLANNER_DAILY_SODIUM_LIMIT_MG_KEY =
+            doublePreferencesKey("planner_daily_sodium_limit_mg")
+        val PLANNER_DAILY_SUGAR_LIMIT_G_KEY =
+            doublePreferencesKey("planner_daily_sugar_limit_g")
     }
 }

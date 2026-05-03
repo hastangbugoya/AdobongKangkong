@@ -162,6 +162,20 @@ interface UserPreferencesRepository {
     fun setQuickAddSodiumCautionMg(value: Double)
 
     fun setQuickAddSugarCautionG(value: Double)
+
+    /**
+     * Planner Day: sodium limit for total planned day (mg).
+     */
+    val plannerDailySodiumLimitMg: StateFlow<Double>
+
+    /**
+     * Planner Day: total sugar caution for planned day (g).
+     */
+    val plannerDailySugarLimitG: StateFlow<Double>
+
+    fun setPlannerDailySodiumLimitMg(value: Double)
+
+    fun setPlannerDailySugarLimitG(value: Double)
 }
 
 enum class MealReminderIntensity {

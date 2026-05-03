@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
  * - Product Check sugar: 10 g per serving
  * - Quick Add sodium: 600 mg per logged entry
  * - Quick Add sugar: 15 g per logged entry
+ * - Planner Day sodium: 2300 mg per planned day
+ * - Planner Day total sugar: 36 g per planned day
  */
 @Singleton
 class InMemoryUserPreferencesRepository @Inject constructor() :
@@ -66,6 +68,14 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override val quickAddSugarCautionG: StateFlow<Double> =
         _quickAddSugarCautionG
 
+    private val _plannerDailySodiumLimitMg = MutableStateFlow(2300.0)
+    override val plannerDailySodiumLimitMg: StateFlow<Double> =
+        _plannerDailySodiumLimitMg
+
+    private val _plannerDailySugarLimitG = MutableStateFlow(36.0)
+    override val plannerDailySugarLimitG: StateFlow<Double> =
+        _plannerDailySugarLimitG
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled
     }
@@ -108,5 +118,13 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     override fun setQuickAddSugarCautionG(value: Double) {
         _quickAddSugarCautionG.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setPlannerDailySodiumLimitMg(value: Double) {
+        _plannerDailySodiumLimitMg.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setPlannerDailySugarLimitG(value: Double) {
+        _plannerDailySugarLimitG.value = value.coerceAtLeast(0.0)
     }
 }

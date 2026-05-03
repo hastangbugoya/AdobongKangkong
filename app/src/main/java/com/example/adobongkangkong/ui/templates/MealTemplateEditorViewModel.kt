@@ -43,7 +43,9 @@ class MealTemplateEditorViewModel @Inject constructor(
     private val templates: MealTemplateRepository,
     private val templateItems: MealTemplateItemRepository,
     private val foods: FoodRepository,
-    private val getFoodNutrients: GetFoodNutrientsWithMetaUseCase
+    private val getFoodNutrients: GetFoodNutrientsWithMetaUseCase,
+    private val evaluateCautions: com.example.adobongkangkong.domain.planner.usecase.EvaluatePlannedDayNutritionCautionsUseCase,
+    private val userPrefs: com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 ) : ViewModel(), MealEditorContract {
 
     sealed interface Effect {
@@ -384,12 +386,53 @@ class MealTemplateEditorViewModel @Inject constructor(
 
             val mealMacroPreview = aggregateMacros(updatedItems)
 
+            val rowsByFood = foodIds.associateWith { nutrientCache[it] ?: emptyList() }
+
+            val foodsByFood = foodIds.associateWith { foodCache[it] }
+
+            val sodiumMg = computeTotalNutrient(
+                updatedItems,
+                rowsByFood,
+                foodsByFood,
+                "SODIUM_MG"
+            )
+
+            val sugarG = computeTotalNutrient(
+                updatedItems,
+                rowsByFood,
+                foodsByFood,
+                "SUGARS_G"
+            )
+
+            val sodiumLimit = userPrefs.quickAddSodiumCautionMg.value
+            val sugarLimit = userPrefs.quickAddSugarCautionG.value
+
+            val cautions = evaluateCautions(
+                plannedSodiumMg = sodiumMg,
+                plannedSugarG = sugarG,
+                dailySodiumLimitMg = sodiumLimit,
+                dailySugarLimitG = sugarLimit
+            )
+
+            val cautionUi = cautions.map {
+                com.example.adobongkangkong.ui.planner.PlannerNutritionCautionUi(
+                    nutrientName = when (it.nutrient) {
+                        com.example.adobongkangkong.domain.planner.usecase.PlannerNutritionCautionNutrient.SODIUM -> "Sodium"
+                        com.example.adobongkangkong.domain.planner.usecase.PlannerNutritionCautionNutrient.TOTAL_SUGAR -> "Total sugar"
+                    },
+                    plannedText = "~${"%,.0f".format(it.plannedAmount)} ${it.unit}",
+                    limitText = "${"%,.0f".format(it.limitAmount)} ${it.unit}",
+                    message = it.message
+                )
+            }
+
             _state.update {
                 it.copy(
                     items = updatedItems,
                     mealMacroPreview = mealMacroPreview,
                     liveMacroTotals = mealMacroPreview?.toMacroTotals(),
-                    liveMacroSummaryLine = buildMacroSummaryLine(mealMacroPreview) ?: "0 kcal • P 0 • C 0 • F 0"
+                    liveMacroSummaryLine = buildMacroSummaryLine(mealMacroPreview) ?: "0 kcal • P 0 • C 0 • F 0",
+                    nutritionCautions = cautionUi
                 )
             }
         }
@@ -527,6 +570,28 @@ class MealTemplateEditorViewModel @Inject constructor(
             carbsG = carbs,
             fatG = fat
         )
+    }
+
+    private fun computeTotalNutrient(
+        items: List<MealEditorUiState.Item>,
+        rowsByFood: Map<Long, List<FoodNutrientWithMetaRow>>,
+        foodsByFood: Map<Long, Food?>,
+        code: String
+    ): Double? {
+        var total = 0.0
+        var sawAny = false
+
+        items.forEach { item ->
+            val rows = rowsByFood[item.foodId] ?: return@forEach
+            val row = rows.firstOrNull { it.code == code } ?: return@forEach
+            val value = scaleRowAmount(row, item, foodsByFood[item.foodId])
+            if (value != null) {
+                total += value
+                sawAny = true
+            }
+        }
+
+        return if (sawAny) total else null
     }
 
     private fun buildQuantityText(

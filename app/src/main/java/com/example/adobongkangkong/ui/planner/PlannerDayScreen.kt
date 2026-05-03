@@ -153,6 +153,39 @@ fun PlannerDayScreen(
                 }
             }
 
+            if (s.nutritionCautions.isNotEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Planned nutrition caution",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+
+                            s.nutritionCautions.forEach { c ->
+                                Column {
+                                    Text(
+                                        text = "${c.nutrientName}: ${c.plannedText} planned today",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = c.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (s.errorMessage != null) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(0.dp)) {

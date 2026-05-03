@@ -253,6 +253,12 @@ fun MealEditorScreen(
                     MealMacroSummaryCard(summary = summary)
                 }
 
+            if (state.nutritionCautions.isNotEmpty()) {
+                MealNutritionCautionCard(cautions = state.nutritionCautions)
+            }
+
+            Divider()
+
             Divider()
 
             if (state.items.isEmpty()) {
@@ -449,6 +455,46 @@ private fun EmptyState(
         Text(text = "Add a food to start building this meal.", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedButton(onClick = onAddFood) { Text("Add food") }
+    }
+}
+
+@Composable
+private fun MealNutritionCautionCard(
+    cautions: List<com.example.adobongkangkong.ui.planner.PlannerNutritionCautionUi>
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "Meal nutrition caution",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            cautions.forEach { caution ->
+                Column {
+                    Text(
+                        text = "${caution.nutrientName}: ${caution.plannedText}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = caution.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
     }
 }
 

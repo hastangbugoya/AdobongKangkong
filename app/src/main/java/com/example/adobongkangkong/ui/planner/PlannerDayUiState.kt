@@ -26,6 +26,9 @@ data class PlannerDayUiState(
     /** Macro totals for the entire day (sum of all planned meals/items). */
     val dayMacroTotals: MacroTotals = MacroTotals(),
 
+
+    val nutritionCautions: List<PlannerNutritionCautionUi> = emptyList(),
+
     /**
      * Day-log item names grouped by stamped meal slot for the currently selected date.
      *
@@ -124,4 +127,11 @@ data class RecurringEditorState(
 
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
+)
+
+data class PlannerNutritionCautionUi(
+    val nutrientName: String,
+    val plannedText: String,
+    val limitText: String,
+    val message: String,
 )

@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.example.adobongkangkong.ui.planner.RecurrenceEndConditionUi
+import kotlinx.coroutines.flow.combine
 
 @HiltViewModel
 class PlannerDayViewModel @Inject constructor(
@@ -75,6 +76,9 @@ class PlannerDayViewModel @Inject constructor(
     private val createPlannerIou: CreateIouUseCase,
     private val updatePlannerIou: UpdateIouUseCase,
     private val deletePlannerIou: DeleteIouUseCase,
+
+    private val evaluateCautions: com.example.adobongkangkong.domain.planner.usecase.EvaluatePlannedDayNutritionCautionsUseCase,
+    private val userPrefs: com.example.adobongkangkong.domain.settings.UserPreferencesRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
@@ -1000,11 +1004,17 @@ class PlannerDayViewModel @Inject constructor(
 
     init {
         observeJob = viewModelScope.launch {
-            dateFlow
-                .flatMapLatest { d ->
-                    observePlannedDay(d.toString())
-                }
-                .distinctUntilChanged()
+            combine(
+                dateFlow
+                    .flatMapLatest { d ->
+                        observePlannedDay(d.toString())
+                    }
+                    .distinctUntilChanged(),
+                userPrefs.plannerDailySodiumLimitMg,
+                userPrefs.plannerDailySugarLimitG
+            ) { plannedDay, sodiumLimit, sugarLimit ->
+                Triple(plannedDay, sodiumLimit, sugarLimit)
+            }
                 .catch { t ->
                     t.printStackTrace()
                     Log.e("Meow", "PlannerDay> observePlannedDay failed", t)
@@ -1016,8 +1026,9 @@ class PlannerDayViewModel @Inject constructor(
                         )
                     }
                 }
-                .collectLatest { plannedDay ->
+                .collectLatest { (plannedDay, sodiumLimit, sugarLimit) ->
                     val meals = plannedDay.mealsBySlot.values.flatten()
+
                     val macros = try {
                         computeDayMacros(meals)
                     } catch (t: Throwable) {
@@ -1028,13 +1039,33 @@ class PlannerDayViewModel @Inject constructor(
                         )
                     }
 
+                    val cautions = evaluateCautions(
+                        plannedSodiumMg = macros.daySodiumMg,
+                        plannedSugarG = macros.dayTotalSugarG,
+                        dailySodiumLimitMg = sodiumLimit,
+                        dailySugarLimitG = sugarLimit
+                    )
+
+                    val cautionUi = cautions.map {
+                        PlannerNutritionCautionUi(
+                            nutrientName = when (it.nutrient) {
+                                com.example.adobongkangkong.domain.planner.usecase.PlannerNutritionCautionNutrient.SODIUM -> "Sodium"
+                                com.example.adobongkangkong.domain.planner.usecase.PlannerNutritionCautionNutrient.TOTAL_SUGAR -> "Total sugar"
+                            },
+                            plannedText = "~${"%,.0f".format(it.plannedAmount)} ${it.unit}",
+                            limitText = "${"%,.0f".format(it.limitAmount)} ${it.unit}",
+                            message = it.message
+                        )
+                    }
+
                     _state.update {
                         it.copy(
                             isLoading = false,
                             day = plannedDay,
                             errorMessage = null,
                             mealMacroTotals = macros.mealTotals,
-                            dayMacroTotals = macros.dayTotals
+                            dayMacroTotals = macros.dayTotals,
+                            nutritionCautions = cautionUi
                         )
                     }
                 }
