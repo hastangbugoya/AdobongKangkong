@@ -127,6 +127,11 @@ fun DashboardScreen(
     val selectedDate = state.date
     val currentDate = state.currentDate
 
+    val productCheckSodiumLimitMg by vm.productCheckSodiumLimitMg.collectAsState()
+    val productCheckSugarLimitG by vm.productCheckSugarLimitG.collectAsState()
+    val quickAddSodiumCautionMg by vm.quickAddSodiumCautionMg.collectAsState()
+    val quickAddSugarCautionG by vm.quickAddSugarCautionG.collectAsState()
+
     DisposableEffect(lifecycleOwner, vm) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -291,6 +296,14 @@ fun DashboardScreen(
                 onMealReminderEndMinutesChange = vm::setMealReminderEndMinutes,
                 mealReminderIntensity = mealReminderIntensity,
                 onMealReminderIntensityChange = vm::setMealReminderIntensity,
+                productCheckSodiumLimitMg = productCheckSodiumLimitMg,
+                productCheckSugarLimitG = productCheckSugarLimitG,
+                quickAddSodiumCautionMg = quickAddSodiumCautionMg,
+                quickAddSugarCautionG = quickAddSugarCautionG,
+                onProductCheckSodiumLimitMgChange = vm::setProductCheckSodiumLimitMg,
+                onProductCheckSugarLimitGChange = vm::setProductCheckSugarLimitG,
+                onQuickAddSodiumCautionMgChange = vm::setQuickAddSodiumCautionMg,
+                onQuickAddSugarCautionGChange = vm::setQuickAddSugarCautionG,
             )
         }
     }

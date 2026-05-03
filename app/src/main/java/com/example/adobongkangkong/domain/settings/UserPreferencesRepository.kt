@@ -3,10 +3,66 @@ package com.example.adobongkangkong.domain.settings
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * User preferences that affect global app behavior.
+ * ============================================================
+ * USER PREFERENCES REPOSITORY (HUMAN-READABLE OVERVIEW)
+ * ============================================================
  *
- * This is intentionally abstract so the backing implementation
- * can later move to DataStore without changing consumers.
+ * This interface defines all user-level preferences that affect
+ * app behavior globally.
+ *
+ * These are NOT domain entities and should NOT be stored in Room.
+ * They are:
+ * - lightweight
+ * - user-configurable
+ * - not historically important
+ *
+ * Backing storage is expected to be DataStore (or equivalent).
+ *
+ * Categories in this file:
+ *
+ * 1) Device / App Behavior
+ *    - orientation lock
+ *    - privacy lock
+ *
+ * 2) Notifications
+ *    - meal reminders
+ *
+ * 3) Nutrition Thresholds (NEW)
+ *    - Product Check thresholds (scan flow)
+ *    - Quick Add thresholds (logging flow)
+ *
+ * IMPORTANT DESIGN DISTINCTION:
+ *
+ * Product Check:
+ *   → evaluates a food per serving BEFORE logging/import
+ *
+ * Quick Add:
+ *   → evaluates the CURRENT LOG ENTRY amount (scaled)
+ *
+ * These MUST remain separate settings.
+ *
+ * ============================================================
+ * FOR FUTURE AI / DEV ASSISTANTS
+ * ============================================================
+ *
+ * - Do NOT move these into Room entities.
+ * - Do NOT introduce relationships or joins.
+ * - These are simple key-value preferences.
+ *
+ * Threshold semantics:
+ *
+ * productCheck*:
+ *   - evaluated against USDA per-serving values
+ *
+ * quickAdd*:
+ *   - evaluated against scaled nutrient totals for the current log entry
+ *
+ * Future expansion may include:
+ * - per-meal goals
+ * - per-user adaptive thresholds
+ * - critical nutrient flags
+ *
+ * ============================================================
  */
 interface UserPreferencesRepository {
 
@@ -31,7 +87,9 @@ interface UserPreferencesRepository {
      */
     val privacyLockTimeoutMinutes: StateFlow<Int?>
 
+    // ============================================================
     // 🔔 Meal Reminder Preferences
+    // ============================================================
 
     val mealRemindersEnabled: StateFlow<Boolean>
 
@@ -57,11 +115,53 @@ interface UserPreferencesRepository {
     /** End time (minutes from midnight). */
     fun setMealReminderEndMinutes(minutes: Int)
 
+    // ============================================================
+    // 🔒 Privacy
+    // ============================================================
+
     /** Enables or disables the optional app privacy lock. */
     fun setPrivacyLockEnabled(enabled: Boolean)
 
     /** Sets the optional privacy lock timeout policy. */
     fun setPrivacyLockTimeoutMinutes(minutes: Int?)
+
+    // ============================================================
+    // 🧂 Nutrition Thresholds (NEW)
+    // ============================================================
+
+    /**
+     * Product Check: sodium threshold per serving (mg).
+     *
+     * Used in:
+     * - barcode scan → USDA → evaluation screen
+     */
+    val productCheckSodiumLimitMg: StateFlow<Double>
+
+    /**
+     * Product Check: total sugars threshold per serving (g).
+     */
+    val productCheckSugarLimitG: StateFlow<Double>
+
+    /**
+     * Quick Add: sodium caution threshold for a single log entry (mg).
+     *
+     * This is based on the *scaled amount being logged*,
+     * not the base serving.
+     */
+    val quickAddSodiumCautionMg: StateFlow<Double>
+
+    /**
+     * Quick Add: total sugars caution threshold for a single log entry (g).
+     */
+    val quickAddSugarCautionG: StateFlow<Double>
+
+    fun setProductCheckSodiumLimitMg(value: Double)
+
+    fun setProductCheckSugarLimitG(value: Double)
+
+    fun setQuickAddSodiumCautionMg(value: Double)
+
+    fun setQuickAddSugarCautionG(value: Double)
 }
 
 enum class MealReminderIntensity {

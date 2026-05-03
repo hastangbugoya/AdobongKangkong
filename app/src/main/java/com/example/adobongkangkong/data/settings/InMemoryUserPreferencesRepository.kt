@@ -1,17 +1,23 @@
 package com.example.adobongkangkong.data.settings
 
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.example.adobongkangkong.domain.settings.MealReminderIntensity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * In-memory implementation used during development.
  *
  * Later this will be replaced with a DataStore-backed version
  * without changing the rest of the app.
+ *
+ * Nutrition threshold defaults mirror DataStoreUserPreferencesRepository:
+ * - Product Check sodium: 400 mg per serving
+ * - Product Check sugar: 10 g per serving
+ * - Quick Add sodium: 600 mg per logged entry
+ * - Quick Add sugar: 15 g per logged entry
  */
 @Singleton
 class InMemoryUserPreferencesRepository @Inject constructor() :
@@ -44,6 +50,22 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override val mealReminderIntensity: StateFlow<MealReminderIntensity> =
         _mealReminderIntensity
 
+    private val _productCheckSodiumLimitMg = MutableStateFlow(400.0)
+    override val productCheckSodiumLimitMg: StateFlow<Double> =
+        _productCheckSodiumLimitMg
+
+    private val _productCheckSugarLimitG = MutableStateFlow(10.0)
+    override val productCheckSugarLimitG: StateFlow<Double> =
+        _productCheckSugarLimitG
+
+    private val _quickAddSodiumCautionMg = MutableStateFlow(600.0)
+    override val quickAddSodiumCautionMg: StateFlow<Double> =
+        _quickAddSodiumCautionMg
+
+    private val _quickAddSugarCautionG = MutableStateFlow(15.0)
+    override val quickAddSugarCautionG: StateFlow<Double> =
+        _quickAddSugarCautionG
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled
     }
@@ -70,5 +92,21 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     override fun setMealReminderIntensity(intensity: MealReminderIntensity) {
         _mealReminderIntensity.value = intensity
+    }
+
+    override fun setProductCheckSodiumLimitMg(value: Double) {
+        _productCheckSodiumLimitMg.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setProductCheckSugarLimitG(value: Double) {
+        _productCheckSugarLimitG.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setQuickAddSodiumCautionMg(value: Double) {
+        _quickAddSodiumCautionMg.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setQuickAddSugarCautionG(value: Double) {
+        _quickAddSugarCautionG.value = value.coerceAtLeast(0.0)
     }
 }

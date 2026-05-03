@@ -115,6 +115,14 @@ fun DashboardSettingsSheet(
     onMealReminderEndMinutesChange: (Int) -> Unit,
     mealReminderIntensity: MealReminderIntensity,
     onMealReminderIntensityChange: (MealReminderIntensity) -> Unit,
+    productCheckSodiumLimitMg: Double,
+    productCheckSugarLimitG: Double,
+    quickAddSodiumCautionMg: Double,
+    quickAddSugarCautionG: Double,
+    onProductCheckSodiumLimitMgChange: (Double) -> Unit,
+    onProductCheckSugarLimitGChange: (Double) -> Unit,
+    onQuickAddSodiumCautionMgChange: (Double) -> Unit,
+    onQuickAddSugarCautionGChange: (Double) -> Unit,
 ) {
     Column(
         Modifier
@@ -206,6 +214,59 @@ fun DashboardSettingsSheet(
                 onSelect = onMealReminderIntensityChange
             )
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        Text("Nutrition caution thresholds", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Product Check uses USDA per-serving values. Quick Add uses the scaled amount being logged.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Text("Product Check", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Sodium per serving",
+            value = productCheckSodiumLimitMg,
+            unit = "mg",
+            onValueChange = onProductCheckSodiumLimitMgChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Total sugars per serving",
+            value = productCheckSugarLimitG,
+            unit = "g",
+            onValueChange = onProductCheckSugarLimitGChange
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Text("Quick Add", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Sodium per logged entry",
+            value = quickAddSodiumCautionMg,
+            unit = "mg",
+            onValueChange = onQuickAddSodiumCautionMgChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Total sugars per logged entry",
+            value = quickAddSugarCautionG,
+            unit = "g",
+            onValueChange = onQuickAddSugarCautionGChange
+        )
 
         HorizontalDivider()
         Spacer(Modifier.height(20.dp))
@@ -515,6 +576,35 @@ fun DashboardSettingsSheet(
         }
     }
 }
+
+@Composable
+private fun ThresholdNumberField(
+    label: String,
+    value: Double,
+    unit: String,
+    onValueChange: (Double) -> Unit
+) {
+    var text by remember(value) {
+        mutableStateOf(value.cleanThresholdText())
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { raw ->
+            text = raw.filter { it.isDigit() || it == '.' }
+            text.toDoubleOrNull()?.let { parsed ->
+                onValueChange(parsed.coerceAtLeast(0.0))
+            }
+        },
+        label = { Text(label) },
+        supportingText = { Text(unit) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+private fun Double.cleanThresholdText(): String =
+    if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this).trimEnd('0').trimEnd('.')
 
 @Composable
 private fun ReminderTimeField(

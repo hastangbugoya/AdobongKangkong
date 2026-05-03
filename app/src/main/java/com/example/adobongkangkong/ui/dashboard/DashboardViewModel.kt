@@ -186,6 +186,18 @@ class DashboardViewModel @Inject constructor(
         userPinnedNutrientRepository.observePreferences()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val productCheckSodiumLimitMg: StateFlow<Double> =
+        userPreferencesRepository.productCheckSodiumLimitMg
+
+    val productCheckSugarLimitG: StateFlow<Double> =
+        userPreferencesRepository.productCheckSugarLimitG
+
+    val quickAddSodiumCautionMg: StateFlow<Double> =
+        userPreferencesRepository.quickAddSodiumCautionMg
+
+    val quickAddSugarCautionG: StateFlow<Double> =
+        userPreferencesRepository.quickAddSugarCautionG
+
     val rollingStats: StateFlow<RollingNutritionStats> =
         combine(selectedDateFlow, rollingDaysFlow) { date, days -> date to days }
             .flatMapLatest { (date, days) ->
@@ -294,6 +306,22 @@ class DashboardViewModel @Inject constructor(
 
     fun setMealReminderIntensity(intensity: MealReminderIntensity) {
         userPreferencesRepository.setMealReminderIntensity(intensity)
+    }
+
+    fun setProductCheckSodiumLimitMg(value: Double) {
+        userPreferencesRepository.setProductCheckSodiumLimitMg(value)
+    }
+
+    fun setProductCheckSugarLimitG(value: Double) {
+        userPreferencesRepository.setProductCheckSugarLimitG(value)
+    }
+
+    fun setQuickAddSodiumCautionMg(value: Double) {
+        userPreferencesRepository.setQuickAddSodiumCautionMg(value)
+    }
+
+    fun setQuickAddSugarCautionG(value: Double) {
+        userPreferencesRepository.setQuickAddSugarCautionG(value)
     }
 
     fun buildSharedSnapshotJson() {
