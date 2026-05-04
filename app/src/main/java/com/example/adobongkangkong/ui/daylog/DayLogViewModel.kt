@@ -31,7 +31,8 @@ class DayLogViewModel @Inject constructor(
     private val deleteLogEntry: DeleteLogEntryUseCase,
     private val deletePlannerIou: DeleteIouUseCase,
     private val logAgainTodayUseCase: LogAgainTodayUseCase,
-    private val zoneId: ZoneId
+    private val zoneId: ZoneId,
+    private val userPrefs: com.example.adobongkangkong.domain.settings.UserPreferencesRepository,
 ) : ViewModel() {
 
     data class PendingLogAgainTodayConfirmation(
@@ -61,6 +62,12 @@ class DayLogViewModel @Inject constructor(
             .filterNotNull()
             .flatMapLatest { date -> observeDailyTotals(date, zoneId) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val dailySodiumLimitMg: StateFlow<Double> =
+        userPrefs.plannerDailySodiumLimitMg
+
+    val dailySugarLimitG: StateFlow<Double> =
+        userPrefs.plannerDailySugarLimitG
 
     val message: StateFlow<String?> = messageFlow
 

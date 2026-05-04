@@ -123,6 +123,10 @@ fun DashboardSettingsSheet(
     onProductCheckSugarLimitGChange: (Double) -> Unit,
     onQuickAddSodiumCautionMgChange: (Double) -> Unit,
     onQuickAddSugarCautionGChange: (Double) -> Unit,
+    plannerDailySodiumLimitMg: Double,
+    plannerDailySugarLimitG: Double,
+    onPlannerDailySodiumLimitMgChange: (Double) -> Unit,
+    onPlannerDailySugarLimitGChange: (Double) -> Unit,
 ) {
     Column(
         Modifier
@@ -221,7 +225,7 @@ fun DashboardSettingsSheet(
         Spacer(Modifier.height(8.dp))
 
         Text(
-            text = "Product Check uses USDA per-serving values. Quick Add uses the scaled amount being logged.",
+            text = "Product Check uses USDA per-serving values. Quick Add and Meal Templates use the scaled entry/meal amount. Daily totals apply to Planner Day and Day Log.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -267,7 +271,27 @@ fun DashboardSettingsSheet(
             unit = "g",
             onValueChange = onQuickAddSugarCautionGChange
         )
+        Spacer(Modifier.height(12.dp))
 
+        Text("Daily totals", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Sodium per day",
+            value = plannerDailySodiumLimitMg,
+            unit = "mg",
+            onValueChange = onPlannerDailySodiumLimitMgChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Total sugar per day",
+            value = plannerDailySugarLimitG,
+            unit = "g",
+            onValueChange = onPlannerDailySugarLimitGChange
+        )
+        Spacer(Modifier.height(8.dp))
         HorizontalDivider()
         Spacer(Modifier.height(20.dp))
 

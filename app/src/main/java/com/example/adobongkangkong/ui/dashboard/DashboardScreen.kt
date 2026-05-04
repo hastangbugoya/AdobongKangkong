@@ -131,6 +131,8 @@ fun DashboardScreen(
     val productCheckSugarLimitG by vm.productCheckSugarLimitG.collectAsState()
     val quickAddSodiumCautionMg by vm.quickAddSodiumCautionMg.collectAsState()
     val quickAddSugarCautionG by vm.quickAddSugarCautionG.collectAsState()
+    val plannerDailySodiumLimitMg by vm.plannerDailySodiumLimitMg.collectAsState()
+    val plannerDailySugarLimitG by vm.plannerDailySugarLimitG.collectAsState()
 
     DisposableEffect(lifecycleOwner, vm) {
         val observer = LifecycleEventObserver { _, event ->
@@ -304,6 +306,10 @@ fun DashboardScreen(
                 onProductCheckSugarLimitGChange = vm::setProductCheckSugarLimitG,
                 onQuickAddSodiumCautionMgChange = vm::setQuickAddSodiumCautionMg,
                 onQuickAddSugarCautionGChange = vm::setQuickAddSugarCautionG,
+                plannerDailySodiumLimitMg = plannerDailySodiumLimitMg,
+                plannerDailySugarLimitG = plannerDailySugarLimitG,
+                onPlannerDailySodiumLimitMgChange = vm::setPlannerDailySodiumLimitMg,
+                onPlannerDailySugarLimitGChange = vm::setPlannerDailySugarLimitG,
             )
         }
     }

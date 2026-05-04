@@ -66,6 +66,9 @@ fun DayLogScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val dailySodiumLimitMg by vm.dailySodiumLimitMg.collectAsState()
+    val dailySugarLimitG by vm.dailySugarLimitG.collectAsState()
+
     LaunchedEffect(date) {
         vm.load(date)
     }
@@ -156,7 +159,13 @@ fun DayLogScreen(
                 .padding(padding)
         ) {
 
-            totals?.let { DayTotalsCard(it) }
+            totals?.let {
+                DayTotalsCard(
+                    totals = it,
+                    sodiumLimitMg = dailySodiumLimitMg,
+                    sugarLimitG = dailySugarLimitG
+                )
+            }
 
             LazyColumn(
                 contentPadding = PaddingValues(

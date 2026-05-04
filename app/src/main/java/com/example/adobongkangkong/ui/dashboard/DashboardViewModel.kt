@@ -198,6 +198,12 @@ class DashboardViewModel @Inject constructor(
     val quickAddSugarCautionG: StateFlow<Double> =
         userPreferencesRepository.quickAddSugarCautionG
 
+    val plannerDailySodiumLimitMg: StateFlow<Double> =
+        userPreferencesRepository.plannerDailySodiumLimitMg
+
+    val plannerDailySugarLimitG: StateFlow<Double> =
+        userPreferencesRepository.plannerDailySugarLimitG
+
     val rollingStats: StateFlow<RollingNutritionStats> =
         combine(selectedDateFlow, rollingDaysFlow) { date, days -> date to days }
             .flatMapLatest { (date, days) ->
@@ -322,6 +328,14 @@ class DashboardViewModel @Inject constructor(
 
     fun setQuickAddSugarCautionG(value: Double) {
         userPreferencesRepository.setQuickAddSugarCautionG(value)
+    }
+
+    fun setPlannerDailySodiumLimitMg(value: Double) {
+        userPreferencesRepository.setPlannerDailySodiumLimitMg(value)
+    }
+
+    fun setPlannerDailySugarLimitG(value: Double) {
+        userPreferencesRepository.setPlannerDailySugarLimitG(value)
     }
 
     fun buildSharedSnapshotJson() {
