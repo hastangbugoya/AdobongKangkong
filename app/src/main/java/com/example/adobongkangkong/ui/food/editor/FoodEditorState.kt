@@ -344,6 +344,7 @@ data class BarcodeCollisionDialogState(
 )
 
 data class FoodStorePricePreviewUi(
+    val storeId: Long,
     val storeName: String,
     val address: String?,
     val pricePer100g: Double?,

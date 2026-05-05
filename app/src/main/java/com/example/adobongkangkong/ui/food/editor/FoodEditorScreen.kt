@@ -243,6 +243,7 @@ fun FoodEditorScreen(
     onStoreEditorContactChange: ((String) -> Unit)? = null,
     onConfirmStoreEditor: (() -> Unit)? = null,
     onDeleteStoreEditor: (() -> Unit)? = null,
+    onDeleteStorePriceForFood: ((Long) -> Unit)? = null,
 
     onRecomputeDisplayedNutrients: () -> Unit,
     onConfirmDiscardNutrientEditsAndRecompute: () -> Unit,
@@ -882,7 +883,12 @@ fun FoodEditorScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                StorePricePreviewSection(prices = state.storePricePreviews)
+                StorePricePreviewSection(
+                    prices = state.storePricePreviews,
+                    onDelete = { storeId ->
+                        onDeleteStorePriceForFood?.invoke(storeId)
+                    }
+                )
 
                 HorizontalDivider()
                 Row(
@@ -1646,7 +1652,8 @@ fun FoodEditorScreen(
 
 @Composable
 private fun StorePricePreviewSection(
-    prices: List<FoodStorePricePreviewUi>
+    prices: List<FoodStorePricePreviewUi>,
+    onDelete: (Long) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1664,36 +1671,44 @@ private fun StorePricePreviewSection(
         }
 
         prices.forEach { price ->
-            Column(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = price.storeName,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = price.storeName,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
 
-                price.address
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { address ->
-                        Text(
-                            text = address,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    price.address
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                    price.pricePer100g?.let {
+                        Text("$${it.toUiPrice()} / 100g")
                     }
 
-                price.pricePer100g?.let {
-                    Text(
-                        text = "$${it.toUiPrice()} / 100g",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    price.pricePer100ml?.let {
+                        Text("$${it.toUiPrice()} / 100mL")
+                    }
                 }
 
-                price.pricePer100ml?.let {
-                    Text(
-                        text = "$${it.toUiPrice()} / 100mL",
-                        style = MaterialTheme.typography.bodySmall
+                IconButton(
+                    onClick = { onDelete(price.storeId) }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.trash),
+                        contentDescription = "Delete price"
                     )
                 }
             }

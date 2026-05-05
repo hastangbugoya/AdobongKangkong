@@ -149,6 +149,7 @@ interface FoodRepository {
 }
 
 data class FoodStorePricePreview(
+    val storeId: Long,
     val storeName: String,
     val address: String?,
     val pricePer100g: Double?,

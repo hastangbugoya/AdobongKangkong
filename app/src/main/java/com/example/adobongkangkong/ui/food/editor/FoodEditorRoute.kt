@@ -213,6 +213,7 @@ fun FoodEditorRoute(
 
         storePriceStoreNames = storeNames,
         onUpdateStorePrice = viewModel::updateStorePrice,
+        onDeleteStorePriceForFood = viewModel::deleteStorePriceForFood,
         onOpenCreateStoreEditor = viewModel::openCreateStoreDialog,
         onOpenEditStoreEditor = viewModel::openEditStoreDialog,
         onDismissStoreEditor = viewModel::dismissStoreEditor,

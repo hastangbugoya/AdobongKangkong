@@ -225,6 +225,7 @@ class FoodRepositoryImpl @Inject constructor(
             val store = storeDao.getById(row.storeId) ?: return@mapNotNull null
 
             com.example.adobongkangkong.domain.repository.FoodStorePricePreview(
+                storeId = row.storeId,
                 storeName = store.name,
                 address = store.address,
                 pricePer100g = row.pricePer100g,

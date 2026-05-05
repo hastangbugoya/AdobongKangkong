@@ -2200,12 +2200,40 @@ class FoodEditorViewModel @Inject constructor(
     private suspend fun loadStorePricePreviews(foodId: Long): List<FoodStorePricePreviewUi> {
         return foodRepo.getStorePricePreviewsForFood(foodId).map { preview ->
             FoodStorePricePreviewUi(
+                storeId = preview.storeId,
                 storeName = preview.storeName,
                 address = preview.address,
                 pricePer100g = preview.pricePer100g,
                 pricePer100ml = preview.pricePer100ml,
                 updatedAtEpochMs = preview.updatedAtEpochMs
             )
+        }
+    }
+
+    fun deleteStorePriceForFood(storeId: Long) {
+        val foodId = _state.value.foodId ?: return
+
+        viewModelScope.launch {
+            try {
+                foodRepo.deleteFoodStorePrice(
+                    foodId = foodId,
+                    storeId = storeId
+                )
+
+                val refreshedPrices = loadStorePricePreviews(foodId)
+
+                update {
+                    it.copy(
+                        storePricePreviews = refreshedPrices,
+                        barcodeActionMessage = "Deleted price.",
+                        errorMessage = null
+                    )
+                }
+            } catch (t: Throwable) {
+                update {
+                    it.copy(errorMessage = t.message ?: "Failed to delete price.")
+                }
+            }
         }
     }
 
