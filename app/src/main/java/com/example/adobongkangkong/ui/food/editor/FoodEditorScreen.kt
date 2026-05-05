@@ -882,6 +882,9 @@ fun FoodEditorScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                StorePricePreviewSection(prices = state.storePricePreviews)
+
+                HorizontalDivider()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Top
@@ -1414,6 +1417,11 @@ fun FoodEditorScreen(
                         mlPerServingUnit = state.mlPerServingUnit,
                         onMlPerServingChange = onMlPerServingChange,
                         basisType = state.basisType,
+                        onOpenStorePricePeek = if (state.foodId != null) {
+                            { showStorePriceSheet = true }
+                        } else {
+                            null
+                        },
                     )
                 }
 
@@ -1635,6 +1643,66 @@ fun FoodEditorScreen(
         )
     }
 }
+
+@Composable
+private fun StorePricePreviewSection(
+    prices: List<FoodStorePricePreviewUi>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Stored prices",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        if (prices.isEmpty()) {
+            Text(
+                text = "No stored prices yet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
+        }
+
+        prices.forEach { price ->
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = price.storeName,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                price.address
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { address ->
+                        Text(
+                            text = address,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                price.pricePer100g?.let {
+                    Text(
+                        text = "$${it.toUiPrice()} / 100g",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                price.pricePer100ml?.let {
+                    Text(
+                        text = "$${it.toUiPrice()} / 100mL",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun Double.toUiPrice(): String =
+    "%,.2f".format(this)
 
 @Composable
 private fun CategoryManagerDialog(
@@ -1983,10 +2051,29 @@ private fun ServingSection(
     onMlPerServingChange: (String) -> Unit,
     onServingsPerPackageChange: (String) -> Unit,
     basisType: BasisType?,
-    isTablet: Boolean
+    isTablet: Boolean,
+    onOpenStorePricePeek: (() -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(text = "Serving", style = MaterialTheme.typography.titleMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Serving",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+
+            if (onOpenStorePricePeek != null) {
+                IconButton(onClick = onOpenStorePricePeek) {
+                    Text(
+                        text = "$",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
 
         if (isTablet) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -148,8 +148,21 @@ interface FoodStorePriceDao {
           AND storeId = :storeId
         """
     )
+
     fun observeAveragePricePer100mlForFoodAtStore(
         foodId: Long,
         storeId: Long
     ): Flow<Double?>
+
+    @Query(
+        """
+    SELECT *
+    FROM food_store_prices
+    WHERE foodId = :foodId
+    ORDER BY storeId ASC
+    """
+    )
+    suspend fun getPricesForFood(
+        foodId: Long
+    ): List<FoodStorePriceEntity>
 }

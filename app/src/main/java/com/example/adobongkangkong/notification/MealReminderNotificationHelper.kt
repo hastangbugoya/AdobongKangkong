@@ -14,9 +14,11 @@ import com.example.adobongkangkong.core.log.MeowLog
 
 object MealReminderNotificationHelper {
 
-    const val CHANNEL_ID = "meal_reminders_channel"
+    const val CHANNEL_ID = "meal_reminders_channel_v2"
     private const val CHANNEL_NAME = "Meal Reminders"
     private const val CHANNEL_DESCRIPTION = "Reminders to log your meals"
+
+    private val GENTLE_VIBRATION_PATTERN = longArrayOf(0L, 80L)
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -25,9 +27,11 @@ object MealReminderNotificationHelper {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT // gentle, not intrusive
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = CHANNEL_DESCRIPTION
+                enableVibration(true)
+                vibrationPattern = GENTLE_VIBRATION_PATTERN
             }
 
             val manager =
@@ -64,6 +68,7 @@ object MealReminderNotificationHelper {
             .setContentTitle("AK Reminder")
             .setContentText("Have any meals to log?")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVibrate(GENTLE_VIBRATION_PATTERN)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()

@@ -32,7 +32,8 @@ class FoodRepositoryImpl @Inject constructor(
     private val plannedItemDao: PlannedItemDao,
     private val recipeBatchDao: RecipeBatchDao,
     private val foodStorePriceDao: FoodStorePriceDao,
-    private val foodImageStorage: FoodImageStorage
+    private val foodImageStorage: FoodImageStorage,
+    private val storeDao: com.example.adobongkangkong.data.local.db.dao.StoreDao,
 ) : FoodRepository {
 
     override fun search(query: String, limit: Int): Flow<List<Food>> =
@@ -210,5 +211,26 @@ class FoodRepositoryImpl @Inject constructor(
         storeId: Long
     ): Flow<Double?> {
         return foodStorePriceDao.observeAveragePricePer100mlForFoodAtStore(foodId, storeId)
+    }
+
+    override suspend fun getStorePricePreviewsForFood(
+        foodId: Long
+    ): List<com.example.adobongkangkong.domain.repository.FoodStorePricePreview> {
+
+        val rows = foodStorePriceDao.getPricesForFood(foodId)
+
+        if (rows.isEmpty()) return emptyList()
+
+        return rows.mapNotNull { row ->
+            val store = storeDao.getById(row.storeId) ?: return@mapNotNull null
+
+            com.example.adobongkangkong.domain.repository.FoodStorePricePreview(
+                storeName = store.name,
+                address = store.address,
+                pricePer100g = row.pricePer100g,
+                pricePer100ml = row.pricePer100ml,
+                updatedAtEpochMs = row.updatedAtEpochMs
+            )
+        }
     }
 }

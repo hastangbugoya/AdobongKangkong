@@ -307,6 +307,12 @@ class FoodEditorViewModel @Inject constructor(
 
             storeNamesFlow.value = storeRepo.getAllStoreNames()
 
+            val storePricePreviews = if (foodId != null) {
+                loadStorePricePreviews(foodId)
+            } else {
+                emptyList()
+            }
+
             loadedCanonicalNutrientsSnapshot = rows.associate { row ->
                 NutrientKey(row.nutrient.code) to row.amount
             }
@@ -427,7 +433,8 @@ class FoodEditorViewModel @Inject constructor(
                 assignedBarcodes = assignedBarcodes,
                 barcodeActionMessage = current.barcodeActionMessage,
                 barcodePackageEditor = null,
-                scannedBarcode = current.scannedBarcode
+                scannedBarcode = current.scannedBarcode,
+                storePricePreviews = storePricePreviews,
             )
 
             val resolvedNext = next.copy(
@@ -501,10 +508,13 @@ class FoodEditorViewModel @Inject constructor(
                     updatedAtEpochMs = System.currentTimeMillis()
                 )
 
+                val refreshedPrices = loadStorePricePreviews(foodId)
+
                 update {
                     it.copy(
                         errorMessage = null,
-                        barcodeActionMessage = "Updated $trimmedStoreName price."
+                        barcodeActionMessage = "Updated $trimmedStoreName price.",
+                        storePricePreviews = refreshedPrices
                     )
                 }
             } catch (t: Throwable) {
@@ -2185,6 +2195,18 @@ class FoodEditorViewModel @Inject constructor(
             servingUnit.asMl != null -> servingUnit.asMl
             else -> mlPerServingUnit
         }?.takeIf { it > 0.0 }
+    }
+
+    private suspend fun loadStorePricePreviews(foodId: Long): List<FoodStorePricePreviewUi> {
+        return foodRepo.getStorePricePreviewsForFood(foodId).map { preview ->
+            FoodStorePricePreviewUi(
+                storeName = preview.storeName,
+                address = preview.address,
+                pricePer100g = preview.pricePer100g,
+                pricePer100ml = preview.pricePer100ml,
+                updatedAtEpochMs = preview.updatedAtEpochMs
+            )
+        }
     }
 
     fun openBarcodeScanner() = update {

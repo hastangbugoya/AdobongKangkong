@@ -135,4 +135,23 @@ interface FoodRepository {
         foodId: Long,
         storeId: Long
     ): Flow<Double?>
+
+    /**
+     * Lightweight read model for UI display of store prices.
+     *
+     * - One row per store that has a price entry for the food
+     * - Includes resolved store name for UI
+     * - Basis-specific values remain separate (no blending)
+     */
+    suspend fun getStorePricePreviewsForFood(
+        foodId: Long
+    ): List<FoodStorePricePreview>
 }
+
+data class FoodStorePricePreview(
+    val storeName: String,
+    val address: String?,
+    val pricePer100g: Double?,
+    val pricePer100ml: Double?,
+    val updatedAtEpochMs: Long
+)

@@ -238,6 +238,8 @@ data class FoodEditorState(
      */
     val storeEditor: StoreEditorState? = null,
 
+    val storePricePreviews: List<FoodStorePricePreviewUi> = emptyList(),
+
     val hasLoaded: Boolean = false,
 
     val needsFix: Boolean = false,
@@ -339,4 +341,12 @@ data class BarcodeCollisionDialogState(
     val incomingPublishedDateIso: String?,
     val incomingLabel: String,
     val reason: CollisionReason,
+)
+
+data class FoodStorePricePreviewUi(
+    val storeName: String,
+    val address: String?,
+    val pricePer100g: Double?,
+    val pricePer100ml: Double?,
+    val updatedAtEpochMs: Long
 )
