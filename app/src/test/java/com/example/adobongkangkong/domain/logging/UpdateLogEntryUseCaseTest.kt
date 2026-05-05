@@ -34,6 +34,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import com.example.adobongkangkong.domain.repository.FoodStorePricePreview
 
 class UpdateLogEntryUseCaseTest {
 
@@ -262,6 +263,12 @@ class UpdateLogEntryUseCaseTest {
     ) : FoodRepository {
         override fun search(query: String, limit: Int): Flow<List<Food>> {
             throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
+        }
+
+        override suspend fun getStorePricePreviewsForFood(
+            foodId: Long
+        ): List<FoodStorePricePreview> {
+            return emptyList()
         }
 
         override suspend fun getById(id: Long): Food? = if (id == food.id) food else null
