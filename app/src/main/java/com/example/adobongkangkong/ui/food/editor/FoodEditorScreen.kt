@@ -745,6 +745,37 @@ fun FoodEditorScreen(
 
                     HorizontalDivider()
 
+                    if (pendingInterpretationPrompt.hasProductCheckWarnings) {
+                        HorizontalDivider()
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            tonalElevation = 0.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Quick product check",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+
+                                pendingInterpretationPrompt.productCheckWarnings.forEach { warning ->
+                                    Text(
+                                        text = "⚠️ $warning",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+
                     Text(
                         "Choose how the app should treat these USDA nutrient values for this food."
                     )
@@ -1163,6 +1194,14 @@ fun FoodEditorScreen(
                         NeedsFixBannerRow(
                             message = state.fixMessage!!,
                             onDismiss = onDismissNeedsFixBanner
+                        )
+                    }
+                }
+
+                if (state.hasMissingMacroValues) {
+                    item(key = "missing_macro_banner") {
+                        MissingMacroBannerRow(
+                            message = state.missingMacroWarningMessage!!,
                         )
                     }
                 }
@@ -1850,6 +1889,38 @@ private fun NeedsFixBannerRow(
 }
 
 @Composable
+private fun MissingMacroBannerRow(
+    message: String,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        tonalElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.employee_handbook),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(AppIconSize.CardAction),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
 private fun NeedsRecomputeBanner() {
     Surface(
         color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -2470,7 +2541,7 @@ private fun nutrientEditorContextText(
     return "Nutrient amounts you edit below are per current serving.$amountPart$basisPart"
 }
 
-private fun Double.toUiNumber(): String {
+internal fun Double.toUiNumber(): String {
     val whole = toLong().toDouble()
     return if (this == whole) whole.toLong().toString() else toString()
 }

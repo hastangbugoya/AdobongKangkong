@@ -67,7 +67,25 @@ data class PendingUsdaInterpretationPromptState(
     val carbs: Double?,
     val protein: Double?,
     val fat: Double?,
-)
+    val sodiumMg: Double?,
+    val totalSugarG: Double?,
+) {
+    val productCheckWarnings: List<String>
+        get() = buildList {
+            val sodium = sodiumMg
+            if (sodium != null && sodium > 400.0) {
+                add("High sodium: ${sodium.toUiNumber()} mg per serving")
+            }
+
+            val sugar = totalSugarG
+            if (sugar != null && sugar > 15.0) {
+                add("High sugar: ${sugar.toUiNumber()} g per serving")
+            }
+        }
+
+    val hasProductCheckWarnings: Boolean
+        get() = productCheckWarnings.isNotEmpty()
+}
 
 data class UsdaBackfillMessageState(
     val message: String,
@@ -245,6 +263,8 @@ data class FoodEditorState(
     val needsFix: Boolean = false,
     val fixMessage: String? = null,
     val fixBannerDismissed: Boolean = false,
+
+
 ) {
     val isEditing: Boolean
         get() = foodId != null
@@ -266,6 +286,25 @@ data class FoodEditorState(
 
     val sodium: String
         get() = amountForAnyName("Sodium")
+
+    val missingMacroNames: List<String>
+        get() = buildList {
+            if (calories.isBlank()) add("calories")
+            if (protein.isBlank()) add("protein")
+            if (carbs.isBlank()) add("carbs")
+            if (fat.isBlank()) add("fat")
+        }
+
+    val hasMissingMacroValues: Boolean
+        get() = missingMacroNames.isNotEmpty()
+
+    val missingMacroWarningMessage: String?
+        get() {
+            if (missingMacroNames.isEmpty()) return null
+
+            val joined = missingMacroNames.joinToString(", ")
+            return "Some macro values may be missing: $joined. You can still save this food, but logs and totals may be incomplete."
+        }
 
     /**
      * New explicit status accessors for the refactored editor flow.

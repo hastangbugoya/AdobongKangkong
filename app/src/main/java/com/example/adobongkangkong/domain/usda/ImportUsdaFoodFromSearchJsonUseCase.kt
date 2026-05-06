@@ -369,7 +369,9 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
                 calories = amountForAnyCode(servingRows, "CALORIES_KCAL"),
                 carbs = amountForAnyCode(servingRows, "CARBS_G"),
                 protein = amountForAnyCode(servingRows, "PROTEIN_G"),
-                fat = amountForAnyCode(servingRows, "FAT_G")
+                fat = amountForAnyCode(servingRows, "FAT_G"),
+                sodiumMg = amountForAnyCode(servingRows, "SODIUM_MG"),
+                totalSugarG = amountForAnyCode(servingRows, "TOTAL_SUGARS_G", "SUGARS_G")
             )
         }
 
@@ -724,6 +726,8 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
             val carbs: Double?,
             val protein: Double?,
             val fat: Double?,
+            val sodiumMg: Double?,
+            val totalSugarG: Double?,
         ) : Result()
 
         data class Blocked(val reason: String) : Result()

@@ -36,23 +36,6 @@ package com.example.adobongkangkong.ui.food.editor
  * - Exactly one row per nutrient id
  */
 
-import com.example.adobongkangkong.ui.food.editor.AssignedBarcodeUi
-import com.example.adobongkangkong.ui.food.editor.BarcodeCollisionDialogState
-import com.example.adobongkangkong.ui.food.editor.BarcodePackageEditorState
-import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
-import com.example.adobongkangkong.ui.food.editor.FoodEditorState
-import com.example.adobongkangkong.ui.food.editor.GroundingMode
-import com.example.adobongkangkong.ui.food.editor.NutrientDraftState
-import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
-import com.example.adobongkangkong.ui.food.editor.NutrientSearchResultUi
-import com.example.adobongkangkong.ui.food.editor.NutritionEditorStatusState
-import com.example.adobongkangkong.ui.food.editor.PendingUsdaBackfillPromptState
-import com.example.adobongkangkong.ui.food.editor.PendingUsdaInterpretationPromptState
-import com.example.adobongkangkong.ui.food.editor.ServingDraftState
-import com.example.adobongkangkong.ui.food.editor.StoreEditorMode
-import com.example.adobongkangkong.ui.food.editor.StoreEditorState
-import com.example.adobongkangkong.ui.food.editor.UsdaBackfillMessageState
-import com.example.adobongkangkong.ui.food.editor.UsdaNutrientInterpretationChoice
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -748,7 +731,9 @@ class FoodEditorViewModel @Inject constructor(
                                 calories = result.calories,
                                 carbs = result.carbs,
                                 protein = result.protein,
-                                fat = result.fat
+                                fat = result.fat,
+                                sodiumMg = result.sodiumMg,
+                                totalSugarG = result.totalSugarG
                             ),
                             errorMessage = null
                         )
@@ -1010,7 +995,9 @@ class FoodEditorViewModel @Inject constructor(
                                 calories = r.calories,
                                 carbs = r.carbs,
                                 protein = r.protein,
-                                fat = r.fat
+                                fat = r.fat,
+                                sodiumMg = r.sodiumMg,
+                                totalSugarG = r.totalSugarG
                             )
                         )
                     }
@@ -2589,7 +2576,9 @@ class FoodEditorViewModel @Inject constructor(
                                             calories = r.calories,
                                             carbs = r.carbs,
                                             protein = r.protein,
-                                            fat = r.fat
+                                            fat = r.fat,
+                                            sodiumMg = r.sodiumMg,
+                                            totalSugarG = r.totalSugarG
                                         )
                                     )
                                 }
