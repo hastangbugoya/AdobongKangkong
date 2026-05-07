@@ -1206,6 +1206,14 @@ fun FoodEditorScreen(
                     }
                 }
 
+                if (state.hasProductCheckWarnings) {
+                    item(key = "product_check_banner") {
+                        ProductCheckBannerRow(
+                            warnings = state.productCheckWarnings
+                        )
+                    }
+                }
+
                 item {
                     val context = LocalContext.current
 
@@ -1916,6 +1924,37 @@ private fun MissingMacroBannerRow(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+private fun ProductCheckBannerRow(
+    warnings: List<String>,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        tonalElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Nutrition warning",
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            warnings.forEach { warning ->
+                Text(
+                    text = "⚠️ $warning",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }

@@ -99,6 +99,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 
 private const val KEY_BARCODE_ASSIGN_FOOD_ID = "barcode_assign_foodId"
 private const val KEY_BARCODE_ASSIGN_BARCODE = "barcode_assign_barcode"
@@ -129,6 +130,7 @@ class FoodEditorViewModel @Inject constructor(
     private val recomputeDisplayedNutrients: RecomputeDisplayedNutrientsUseCase,
     private val applyEditedNutrients: ApplyEditedNutrientsUseCase,
     private val storeRepo: StoreRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -227,6 +229,12 @@ class FoodEditorViewModel @Inject constructor(
             } else {
                 current.selectedCategoryIds
             }
+
+            val productCheckSodiumLimitMg =
+                userPreferencesRepository.productCheckSodiumLimitMg.first()
+
+            val productCheckSugarLimitG =
+                userPreferencesRepository.productCheckSugarLimitG.first()
 
             val stableId =
                 food?.stableId
@@ -418,6 +426,8 @@ class FoodEditorViewModel @Inject constructor(
                 barcodePackageEditor = null,
                 scannedBarcode = current.scannedBarcode,
                 storePricePreviews = storePricePreviews,
+                productCheckSodiumLimitMg = productCheckSodiumLimitMg,
+                productCheckSugarLimitG = productCheckSugarLimitG,
             )
 
             val resolvedNext = next.copy(
@@ -583,6 +593,16 @@ class FoodEditorViewModel @Inject constructor(
             servingUnit = state.servingUnit,
             gramsPerServingUnit = grams,
             millilitersPerServingUnit = ml
+        )
+    }
+
+    private fun FoodEditorState.withProductCheckThresholds(
+        sodiumLimitMg: Double,
+        sugarLimitG: Double,
+    ): FoodEditorState {
+        return copy(
+            productCheckSodiumLimitMg = sodiumLimitMg,
+            productCheckSugarLimitG = sugarLimitG
         )
     }
 
@@ -2149,6 +2169,22 @@ class FoodEditorViewModel @Inject constructor(
         )
 
         _state.value = applyNeedsFix(nextWithResolution, prev)
+
+        viewModelScope.launch {
+            val sodiumLimitMg = userPreferencesRepository.productCheckSodiumLimitMg.first()
+            val sugarLimitG = userPreferencesRepository.productCheckSugarLimitG.first()
+
+            val current = _state.value
+            if (
+                current.productCheckSodiumLimitMg != sodiumLimitMg ||
+                current.productCheckSugarLimitG != sugarLimitG
+            ) {
+                _state.value = current.copy(
+                    productCheckSodiumLimitMg = sodiumLimitMg,
+                    productCheckSugarLimitG = sugarLimitG
+                )
+            }
+        }
     }
 
     private fun Double.roundForUi(): String {

@@ -264,7 +264,8 @@ data class FoodEditorState(
     val fixMessage: String? = null,
     val fixBannerDismissed: Boolean = false,
 
-
+    val productCheckSodiumLimitMg: Double = 400.0,
+    val productCheckSugarLimitG: Double = 15.0,
 ) {
     val isEditing: Boolean
         get() = foodId != null
@@ -305,6 +306,27 @@ data class FoodEditorState(
             val joined = missingMacroNames.joinToString(", ")
             return "Some macro values may be missing: $joined. You can still save this food, but logs and totals may be incomplete."
         }
+
+    val productCheckWarnings: List<String>
+        get() = buildList {
+            val sodiumValue = sodium.toDoubleOrNull()
+            if (sodiumValue != null && sodiumValue > productCheckSodiumLimitMg) {
+                add("High sodium: ${sodiumValue.toUiNumber()} mg per serving")
+            }
+
+            val sugarValue = amountForAnyName(
+                "Total Sugars",
+                "Sugar",
+                "Sugars"
+            ).toDoubleOrNull()
+
+            if (sugarValue != null && sugarValue > productCheckSugarLimitG) {
+                add("High sugar: ${sugarValue.toUiNumber()} g per serving")
+            }
+        }
+
+    val hasProductCheckWarnings: Boolean
+        get() = productCheckWarnings.isNotEmpty()
 
     /**
      * New explicit status accessors for the refactored editor flow.
