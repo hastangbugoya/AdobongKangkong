@@ -14,21 +14,23 @@ import javax.inject.Inject
 /**
  * Room-backed implementation of [FoodNutritionSnapshotRepository].
  *
- * Builds per-1-unit normalized snapshots:
- * - PER_100G              -> per gram
- * - PER_100ML             -> per mL
- * - USDA_REPORTED_SERVING -> per gram / per mL when serving bridges exist
+ * Builds per-serving-grounded snapshots for recipe nutrition:
+ * - PER_100G              -> nutrients per gram
+ * - PER_100ML             -> nutrients per mL
+ * - USDA_REPORTED_SERVING -> nutrients per gram / per mL when serving bridges exist
  *
  * Important:
- * - For deterministic mass units (for example G, KG, OZ, LB), snapshot creation should behave as if
- *   the food has an effective gramsPerServingUnit of "grams per 1 servingUnit", even when the
- *   persisted Food leaves gramsPerServingUnit null.
- * - Likewise for deterministic volume units and mlPerServingUnit.
- * - USDA_REPORTED_SERVING normalization requires the persisted servingSize so the mapper can
- *   compute nutrients per reported serving correctly.
+ * - The snapshot's gramsPerServingUnit / mlPerServingUnit fields are consumed by
+ *   recipe computation as the physical amount for the CURRENT serving, not merely
+ *   the amount for one raw unit.
  *
- * This keeps logging / scaling correct for foods whose serving unit itself already carries the
- * physical grounding.
+ * Example:
+ * - servingSize = 10
+ * - servingUnit = G
+ *
+ * The effective gram amount must be 10g, not 1g.
+ *
+ * Otherwise recipe tally math undercounts mass-unit foods by the serving size.
  */
 class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
     private val db: NutriDatabase,
@@ -37,34 +39,40 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
 
     override suspend fun getSnapshot(foodId: Long): FoodNutritionSnapshot? {
         val food = db.foodDao().getById(foodId) ?: return null
-        val rows = db.foodNutrientDao().getForFood(foodId)
+        val rows = foodNutrientDao.getForFood(foodId)
         if (rows.isEmpty()) return null
 
-        val effectiveGramsPerServingUnit =
-            food.gramsPerServingUnit?.takeIf { it > 0.0 }
-                ?: if (food.servingUnit.isMassUnit()) {
-                    food.servingUnit.toGrams(1.0)?.takeIf { it > 0.0 }
-                } else {
-                    null
-                }
+        val servingSize = food.servingSize.takeIf { it > 0.0 } ?: 1.0
 
-        val effectiveMlPerServingUnit =
-            food.mlPerServingUnit?.takeIf { it > 0.0 }
-                ?: if (
-                    !food.servingUnit.isMassUnit() &&
-                    food.servingUnit.isVolumeUnit()
-                ) {
-                    food.servingUnit.toMilliliters(1.0)?.takeIf { it > 0.0 }
-                } else {
-                    null
-                }
+        val effectiveGramsPerCurrentServing =
+            when {
+                food.servingUnit.isMassUnit() ->
+                    food.servingUnit.toGrams(servingSize)?.takeIf { it > 0.0 }
+
+                food.gramsPerServingUnit != null && food.gramsPerServingUnit > 0.0 ->
+                    (servingSize * food.gramsPerServingUnit).takeIf { it > 0.0 }
+
+                else -> null
+            }
+
+        val effectiveMlPerCurrentServing =
+            when {
+                !food.servingUnit.isMassUnit() && food.servingUnit.isVolumeUnit() ->
+                    food.servingUnit.toMilliliters(servingSize)?.takeIf { it > 0.0 }
+
+                food.mlPerServingUnit != null && food.mlPerServingUnit > 0.0 ->
+                    (servingSize * food.mlPerServingUnit).takeIf { it > 0.0 }
+
+                else -> null
+            }
 
         val codeById = nutrientCodeById()
+
         return toFoodNutritionSnapshot(
             foodId = food.id,
             servingSize = food.servingSize,
-            gramsPerServingUnit = effectiveGramsPerServingUnit,
-            mlPerServingUnit = effectiveMlPerServingUnit,
+            gramsPerServingUnit = effectiveGramsPerCurrentServing,
+            mlPerServingUnit = effectiveMlPerCurrentServing,
             rows = rows,
             nutrientCodeById = codeById
         )
@@ -87,25 +95,22 @@ class FoodNutritionSnapshotRepositoryImpl @Inject constructor(
 }
 
 /**
- * AI NOTE — READ BEFORE REFACTORING (2026-02-06)
+ * AI NOTE — READ BEFORE REFACTORING
  *
- * I will be tempted to "optimize" getSnapshots by calling bulk DAO methods.
- * If I do, I must be careful: many DAOs in this project take List<Long>, not Set<Long>.
- * Convert explicitly (foodIds.toList()) and keep ordering/uniqueness in mind.
+ * Snapshot computation must provide the CURRENT serving's physical amount.
  *
- * Do NOT use a non-existent helper like getNutrientCodeMap().
- * The real source of nutrient id->code is nutrientDao().getIdCodePairs().
+ * Do NOT pass only "grams per one unit" for deterministic mass units.
+ * Example:
+ * - Food servingSize = 10
+ * - Food servingUnit = G
+ * - Effective recipe gram amount per serving must be 10g, not 1g.
  *
- * 2026-03-17 note:
- * - Snapshot creation must honor deterministic unit grounding from ServingUnit itself.
- * - Example: servingUnit = G with servingSize = 50 means the food is mass-grounded even if
- *   gramsPerServingUnit is null.
- * - Do not require gramsPerServingUnit to be physically persisted for mass units whose unit
- *   already provides deterministic gram conversion.
+ * Recipe computation multiplies:
+ * - ingredientServings * snapshot.gramsPerServingUnit
  *
- * 2026-04-09 note:
- * - USDA_REPORTED_SERVING rows are valid snapshot input when serving bridges exist.
- * - Mapper must receive servingSize so it can compute per-reported-serving normalization:
- *     servingSize * gramsPerServingUnit
- *     servingSize * mlPerServingUnit
+ * Therefore snapshot.gramsPerServingUnit must mean:
+ * - grams per current food serving
+ *
+ * Not:
+ * - grams per one raw ServingUnit.
  */

@@ -285,6 +285,8 @@ class FoodEditorViewModel @Inject constructor(
                             mlPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100ML
                     servingUnit.canResolveToMlDeterministically() ->
                         BasisType.PER_100ML
+                    servingUnit.isMassUnit() -> BasisType.PER_100G
+                    servingUnit.canResolveToGramsDeterministically() -> BasisType.PER_100G
                     gramsPerServingUnitEffectiveForDisplay != null -> BasisType.PER_100G
                     food == null -> current.basisType ?: BasisType.USDA_REPORTED_SERVING
                     else -> BasisType.USDA_REPORTED_SERVING
@@ -594,6 +596,43 @@ class FoodEditorViewModel @Inject constructor(
             gramsPerServingUnit = grams,
             millilitersPerServingUnit = ml
         )
+    }
+
+    /**
+     * Determines how edited per-serving nutrient values should be canonicalized on save.
+     *
+     * User-entered nutrient amounts in this editor are per current serving. If the serving
+     * has a deterministic gram or mL path, saving through USDA_REPORTED_SERVING would store
+     * those per-serving values literally and recipe math would later undercount them.
+     *
+     * Example:
+     * - serving = 10 g
+     * - sodium entered = 900 mg per serving
+     * - saved canonical value must be 9000 mg per 100 g, not 900 mg reported serving.
+     */
+    private fun resolveBasisTypeForSave(state: FoodEditorState): BasisType {
+        val grams = state.gramsPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+        val ml = state.mlPerServingUnit.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+
+        val hasMassPath =
+            state.servingUnit.isMassUnit() ||
+                    state.servingUnit.canResolveToGramsDeterministically() ||
+                    grams != null
+
+        val hasVolumePath =
+            state.servingUnit.canResolveToMlDeterministically() ||
+                    ml != null
+
+        return when (state.basisType) {
+            BasisType.PER_100G -> BasisType.PER_100G
+            BasisType.PER_100ML -> BasisType.PER_100ML
+            BasisType.USDA_REPORTED_SERVING, null -> when {
+                hasMassPath -> BasisType.PER_100G
+                hasVolumePath -> BasisType.PER_100ML
+                loadedBasisTypeSnapshot != null -> loadedBasisTypeSnapshot!!
+                else -> BasisType.USDA_REPORTED_SERVING
+            }
+        }
     }
 
     private fun FoodEditorState.withProductCheckThresholds(
@@ -1732,11 +1771,7 @@ class FoodEditorViewModel @Inject constructor(
             try {
                 val existing: Food? = s.foodId?.let { foodRepo.getById(it) }
 
-                // ✅ CRITICAL FIX: DO NOT RE-INTERPRET BASIS
-                val resolvedBasisType =
-                    loadedBasisTypeSnapshot
-                        ?: s.basisType
-                        ?: BasisType.USDA_REPORTED_SERVING
+                val resolvedBasisType = resolveBasisTypeForSave(s)
 
                 // ✅ CRITICAL FIX: DO NOT WIPE OR FORCE BRIDGES
                 val gramsPerServingUnitFinal = gramsInput
