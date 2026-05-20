@@ -119,10 +119,28 @@ fun SelectedFoodPanel(
 ) {
     val servingUnitIsMass = food.servingUnit.isMassUnit()
     val canLogGrams = food.gramsPerServingUnitResolved() != null
-    val canLogMilliliters = food.mlPerServingUnit != null
+
+    val millilitersPerServingUnitResolved =
+        food.servingUnit.asMl
+            ?.takeIf { it > 0.0 }
+            ?: food.mlPerServingUnit?.takeIf { it > 0.0 }
+
+    val canLogMilliliters = millilitersPerServingUnitResolved != null
     val showServingUnitAmountField = !servingUnitIsMass
     val showGramsField = canLogGrams
-    val showMillilitersField = canLogMilliliters
+
+    /**
+     * Do not show a separate "Milliliters" field when the food's own serving unit is mL.
+     * In that case Amount (mL) is already the canonical volume input.
+     *
+     * Showing both fields made it easy to accidentally double-apply the serving size:
+     *     15 mL serving * 15 mL bridge = 225 mL
+     *
+     * Future note:
+     * If we later add a more formal quantity editor, this should become one shared
+     * resolved-quantity model instead of parallel fields.
+     */
+    val showMillilitersField = canLogMilliliters && food.servingUnit != ServingUnit.ML
 
     Column(
         modifier = modifier
@@ -279,7 +297,7 @@ fun SelectedFoodPanel(
         }
 
         if (showMillilitersField) {
-            val millilitersDefault = servingUnitAmount * (food.mlPerServingUnit ?: 0.0)
+            val millilitersDefault = servingUnitAmount * (millilitersPerServingUnitResolved ?: 0.0)
             val displayedMilliliters =
                 if (inputUnit == ServingUnit.ML && inputAmount != null && inputAmount > 0.0) {
                     inputAmount
@@ -349,7 +367,7 @@ fun SelectedFoodPanel(
         }
 
         val hasGramBridge = food.gramsPerServingUnitResolved() != null
-        val hasMlBridge = food.mlPerServingUnit != null
+        val hasMlBridge = millilitersPerServingUnitResolved != null
 
         val needsRecipeBridge = !hasGramBridge && !hasMlBridge
 

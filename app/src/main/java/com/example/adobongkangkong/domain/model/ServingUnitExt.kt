@@ -21,7 +21,7 @@ fun ServingUnit.requiresGramsPerServing(): Boolean {
 }
 
 /** Convert a volume amount in this unit to milliliters, or null if not a volume unit. */
-fun ServingUnit.toMilliliters(amount: Double): Double? = this.asMl?.let { amount * it }
+internal fun ServingUnit.toMilliliters(amount: Double): Double? = this.asMl?.let { amount * it }
 
 /** Convert a milliliter amount into this unit, or null if not a volume unit. */
 fun ServingUnit.fromMilliliters(ml: Double): Double? = this.asMl?.let { per ->
