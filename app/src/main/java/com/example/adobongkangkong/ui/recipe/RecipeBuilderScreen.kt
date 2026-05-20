@@ -890,7 +890,10 @@ fun RecipeBuilderScreen(
                     )
                 } else {
                     Spacer(Modifier.height(8.dp))
-                    NutrientTallyList(rows = state.nutrientTallyRows)
+                    NutrientTallyList(
+                        rows = state.nutrientTallyRows,
+                        servingsYield = state.servingsYield
+                    )
                 }
             }
 
@@ -977,13 +980,55 @@ fun RecipeBuilderScreen(
 }
 
 @Composable
-private fun NutrientTallyList(rows: List<NutrientRowUi>) {
+private fun NutrientTallyList(
+    rows: List<NutrientRowUi>,
+    servingsYield: Double
+) {
     val grouped = rows.groupBy { it.category }
         .toSortedMap(compareBy { it.sortOrder })
 
+    val numberColWidth = 88.dp
+    val canDivideByServing = servingsYield > 0.0
+
+    fun parseAmount(text: String): Double? =
+        text.replace(",", "").trim().toDoubleOrNull()
+
+    fun formatServingAmount(batchText: String): String {
+        val batch = parseAmount(batchText) ?: return "—"
+        if (!canDivideByServing) return "—"
+
+        val serving = batch / servingsYield
+        return when {
+            kotlin.math.abs(serving) >= 100 -> "%,.0f".format(serving)
+            kotlin.math.abs(serving) >= 10 -> "%,.1f".format(serving)
+            else -> "%,.2f".format(serving)
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("", modifier = Modifier.weight(1f))
+            Text(
+                "batch",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(numberColWidth)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "serving",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(numberColWidth)
+            )
+        }
+
         grouped.forEach { (cat, list) ->
             Text(cat.displayName, style = MaterialTheme.typography.titleSmall)
+
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 list.forEach { row ->
                     Column {
@@ -1009,11 +1054,24 @@ private fun NutrientTallyList(rows: List<NutrientRowUi>) {
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
+
                             Text(
                                 text = row.amount,
-                                style = MaterialTheme.typography.bodyLarge
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.width(numberColWidth)
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Text(
+                                text = formatServingAmount(row.amount),
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.width(numberColWidth)
                             )
                         }
+
                         Divider(modifier = Modifier.padding(2.dp), thickness = 1.dp)
                     }
                 }

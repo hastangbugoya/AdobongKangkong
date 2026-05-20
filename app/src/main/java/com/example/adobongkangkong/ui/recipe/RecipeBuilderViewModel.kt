@@ -263,12 +263,46 @@ class RecipeBuilderViewModel @Inject constructor(
             }
         }.takeIf { it.isNotEmpty() }?.joinToString(" • ")
 
+        /**
+         * IMPORTANT PRICING RULES
+         * ----------------------------------------------------------------------------
+         * Prefer volume pricing when volume information exists.
+         *
+         * Why:
+         * - Some foods are fundamentally volume-based in user workflows
+         *   (cups, tbsp, mL, liquids, sauces, etc.).
+         * - Using grams first can silently produce misleading recipe cost estimates
+         *   when the user intentionally entered price-per-volume data.
+         *
+         * IMPORTANT:
+         * - We intentionally DO NOT assume:
+         *       1 mL == 1 g
+         * - Density assumptions must remain explicit and opt-in.
+         *
+         * FUTURE FIX / POSSIBLE EVOLUTION:
+         * - In the future we may introduce:
+         *     - explicit density support
+         *     - confidence-scored derived estimates
+         *     - basis mismatch warnings
+         *     - user-selectable preferred pricing basis
+         *
+         * Until then:
+         * - prefer exact matching basis
+         * - avoid hidden conversions
+         * - avoid fake precision
+         */
         val lineCost = when {
-            averagePer100g != null && lineGrams != null && lineGrams > 0.0 ->
-                (lineGrams / 100.0) * averagePer100g
-
-            averagePer100ml != null && lineMilliliters != null && lineMilliliters > 0.0 ->
+            averagePer100ml != null &&
+                    lineMilliliters != null &&
+                    lineMilliliters > 0.0 -> {
                 (lineMilliliters / 100.0) * averagePer100ml
+            }
+
+            averagePer100g != null &&
+                    lineGrams != null &&
+                    lineGrams > 0.0 -> {
+                (lineGrams / 100.0) * averagePer100g
+            }
 
             else -> null
         }
@@ -1058,9 +1092,19 @@ class RecipeBuilderViewModel @Inject constructor(
                 millilitersForLine = mlPerServing?.let { (servings * it).coerceAtLeast(0.0) }
                 isApproximateWeight = false
             } else {
-                gramsForLine = mlPerServing?.let { perServingMl ->
-                    (servings * perServingMl).coerceAtLeast(0.0)
-                }
+                /**
+                 * IMPORTANT:
+                 * Do NOT infer grams from milliliters.
+                 *
+                 * Previous implementation incorrectly treated:
+                 *     1 mL == 1 g
+                 *
+                 * which silently produced inaccurate recipe totals and cost estimates.
+                 *
+                 * Until explicit density support exists, keep grams unknown when only
+                 * volume information is available.
+                 */
+                gramsForLine = null
                 millilitersForLine = mlPerServing?.let { (servings * it).coerceAtLeast(0.0) }
                 isApproximateWeight = gramsForLine != null
             }

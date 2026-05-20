@@ -32,7 +32,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -58,6 +57,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.BarcodeMappingSource
 import com.example.adobongkangkong.data.local.db.entity.BasisType
@@ -266,6 +267,8 @@ fun FoodEditorScreen(
     var gramsPriceInput by rememberSaveable { mutableStateOf("") }
     var mlInput by rememberSaveable { mutableStateOf("") }
     var mlPriceInput by rememberSaveable { mutableStateOf("") }
+    var weightQuantityIsPounds by rememberSaveable { mutableStateOf(false) }
+    var volumeQuantityIsCups by rememberSaveable { mutableStateOf(false) }
 
     var actionMenuExpanded by remember { mutableStateOf(false) }
 
@@ -293,6 +296,51 @@ fun FoodEditorScreen(
             filtered.substring(0, firstDot + 1) +
                     filtered.substring(firstDot + 1).replace(".", "")
         }
+    }
+
+    fun formatStoreQuantity(value: Double): String =
+        if (value.isFinite() && value > 0.0) value.toUiCompactNumber() else ""
+
+    fun gramsInputForSave(): String {
+        val quantity = gramsInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: return ""
+        return if (weightQuantityIsPounds) {
+            formatStoreQuantity(quantity * POUNDS_TO_GRAMS)
+        } else {
+            gramsInput
+        }
+    }
+
+    fun mlInputForSave(): String {
+        val quantity = mlInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: return ""
+        return if (volumeQuantityIsCups) {
+            formatStoreQuantity(quantity * US_CUP_TO_ML)
+        } else {
+            mlInput
+        }
+    }
+
+    fun setWeightQuantityIsPounds(usePounds: Boolean) {
+        if (weightQuantityIsPounds == usePounds) return
+
+        val quantity = gramsInput.toDoubleOrNull()?.takeIf { it > 0.0 }
+        gramsInput = when {
+            quantity == null -> ""
+            usePounds -> formatStoreQuantity(quantity / POUNDS_TO_GRAMS)
+            else -> formatStoreQuantity(quantity * POUNDS_TO_GRAMS)
+        }
+        weightQuantityIsPounds = usePounds
+    }
+
+    fun setVolumeQuantityIsCups(useCups: Boolean) {
+        if (volumeQuantityIsCups == useCups) return
+
+        val quantity = mlInput.toDoubleOrNull()?.takeIf { it > 0.0 }
+        mlInput = when {
+            quantity == null -> ""
+            useCups -> formatStoreQuantity(quantity / US_CUP_TO_ML)
+            else -> formatStoreQuantity(quantity * US_CUP_TO_ML)
+        }
+        volumeQuantityIsCups = useCups
     }
 
     BackHandler { requestExit() }
@@ -894,202 +942,347 @@ fun FoodEditorScreen(
     }
 
     if (showStorePriceSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showStorePriceSheet = false }
+        Dialog(
+            onDismissRequest = { showStorePriceSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surface
             ) {
-                Text(
-                    text = "Store price",
-                    style = MaterialTheme.typography.titleLarge
-                )
-
-                Text(
-                    text = "Enter a package quantity and total price. The app will normalize and save an approximate estimate.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                StorePricePreviewSection(
-                    prices = state.storePricePreviews,
-                    onDelete = { storeId ->
-                        onDeleteStorePriceForFood?.invoke(storeId)
-                    }
-                )
-
-                HorizontalDivider()
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    ExposedDropdownMenuBox(
-                        expanded = storePriceExpanded,
-                        onExpandedChange = { storePriceExpanded = !storePriceExpanded },
-                        modifier = Modifier.weight(1f)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = selectedStoreName,
-                            onValueChange = {},
-                            readOnly = true,
-                            singleLine = true,
-                            label = { Text("Store") },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = storePriceExpanded)
-                            },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                        Text(
+                            text = "Store price",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f)
                         )
 
-                        ExposedDropdownMenu(
-                            expanded = storePriceExpanded,
-                            onDismissRequest = { storePriceExpanded = false }
-                        ) {
-                            storePriceStoreNames.forEach { storeName ->
-                                DropdownMenuItem(
-                                    text = { Text(storeName) },
-                                    onClick = {
-                                        selectedStoreName = storeName
-                                        storePriceExpanded = false
+                        TextButton(onClick = { showStorePriceSheet = false }) {
+                            Text("Close")
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 16.dp,
+                            bottom = 24.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item(key = "stored_prices") {
+                            StorePricePreviewSection(
+                                prices = state.storePricePreviews,
+                                onDelete = { storeId ->
+                                    onDeleteStorePriceForFood?.invoke(storeId)
+                                }
+                            )
+                        }
+
+                        item(key = "store_picker") {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HorizontalDivider()
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    ExposedDropdownMenuBox(
+                                        expanded = storePriceExpanded,
+                                        onExpandedChange = { storePriceExpanded = !storePriceExpanded },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = selectedStoreName,
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            singleLine = true,
+                                            label = { Text("Store") },
+                                            trailingIcon = {
+                                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = storePriceExpanded)
+                                            },
+                                            modifier = Modifier
+                                                .menuAnchor()
+                                                .fillMaxWidth(),
+                                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                                        )
+
+                                        ExposedDropdownMenu(
+                                            expanded = storePriceExpanded,
+                                            onDismissRequest = { storePriceExpanded = false }
+                                        ) {
+                                            storePriceStoreNames.forEach { storeName ->
+                                                DropdownMenuItem(
+                                                    text = { Text(storeName) },
+                                                    onClick = {
+                                                        selectedStoreName = storeName
+                                                        storePriceExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    BoxWithConstraints {
+                                        IconButton(onClick = { storeActionsExpanded = true }) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                                contentDescription = "Store actions",
+                                                modifier = Modifier.size(AppIconSize.CardAction)
+                                            )
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = storeActionsExpanded,
+                                            onDismissRequest = { storeActionsExpanded = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("New") },
+                                                onClick = {
+                                                    storeActionsExpanded = false
+                                                    onOpenCreateStoreEditor?.invoke()
+                                                }
+                                            )
+
+                                            DropdownMenuItem(
+                                                text = { Text("Edit") },
+                                                enabled = selectedStoreName.isNotBlank(),
+                                                onClick = {
+                                                    storeActionsExpanded = false
+                                                    if (selectedStoreName.isNotBlank()) {
+                                                        onOpenEditStoreEditor?.invoke(selectedStoreName)
+                                                    }
+                                                }
+                                            )
+
+                                            DropdownMenuItem(
+                                                text = { Text("Delete") },
+                                                enabled = selectedStoreName.isNotBlank(),
+                                                onClick = {
+                                                    storeActionsExpanded = false
+                                                    if (selectedStoreName.isNotBlank()) {
+                                                        onOpenEditStoreEditor?.invoke(selectedStoreName)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item(key = "weight_package") {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HorizontalDivider()
+
+                                Text(
+                                    text = "Weight-based package",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    OutlinedTextField(
+                                        value = gramsInput,
+                                        onValueChange = { newValue ->
+                                            gramsInput = sanitizeDecimalInput(newValue)
+                                        },
+                                        label = {
+                                            Text(
+                                                if (weightQuantityIsPounds) {
+                                                    "Quantity in lb"
+                                                } else {
+                                                    "Quantity in grams"
+                                                }
+                                            )
+                                        },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        supportingText = {
+                                            val quantity = gramsInput.toDoubleOrNull()?.takeIf { it > 0.0 }
+                                            val helper = when {
+                                                quantity == null -> "Choose g or lb."
+                                                weightQuantityIsPounds -> {
+                                                    val grams = quantity * POUNDS_TO_GRAMS
+                                                    "Saved as ${grams.toUiCompactNumber()} g."
+                                                }
+                                                else -> "Saved as ${quantity.toUiCompactNumber()} g."
+                                            }
+                                            Text(helper)
+                                        }
+                                    )
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    ) {
+                                        if (!weightQuantityIsPounds) {
+                                            Button(onClick = { setWeightQuantityIsPounds(false) }) {
+                                                Text("g")
+                                            }
+                                        } else {
+                                            OutlinedButton(onClick = { setWeightQuantityIsPounds(false) }) {
+                                                Text("g")
+                                            }
+                                        }
+
+                                        if (weightQuantityIsPounds) {
+                                            Button(onClick = { setWeightQuantityIsPounds(true) }) {
+                                                Text("lb")
+                                            }
+                                        } else {
+                                            OutlinedButton(onClick = { setWeightQuantityIsPounds(true) }) {
+                                                Text("lb")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = gramsPriceInput,
+                                    onValueChange = { newValue ->
+                                        gramsPriceInput = sanitizeDecimalInput(newValue)
+                                    },
+                                    label = { Text("Total price") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        item(key = "volume_package") {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HorizontalDivider()
+
+                                Text(
+                                    text = "Volume-based package",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    OutlinedTextField(
+                                        value = mlInput,
+                                        onValueChange = { newValue ->
+                                            mlInput = sanitizeDecimalInput(newValue)
+                                        },
+                                        label = {
+                                            Text(
+                                                if (volumeQuantityIsCups) {
+                                                    "Quantity in cups"
+                                                } else {
+                                                    "Quantity in mL"
+                                                }
+                                            )
+                                        },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        supportingText = {
+                                            val quantity = mlInput.toDoubleOrNull()?.takeIf { it > 0.0 }
+                                            val helper = when {
+                                                quantity == null -> "Choose mL or US cup."
+                                                volumeQuantityIsCups -> {
+                                                    val ml = quantity * US_CUP_TO_ML
+                                                    "Saved as ${ml.toUiCompactNumber()} mL."
+                                                }
+                                                else -> "Saved as ${quantity.toUiCompactNumber()} mL."
+                                            }
+                                            Text(helper)
+                                        }
+                                    )
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    ) {
+                                        if (!volumeQuantityIsCups) {
+                                            Button(onClick = { setVolumeQuantityIsCups(false) }) {
+                                                Text("mL")
+                                            }
+                                        } else {
+                                            OutlinedButton(onClick = { setVolumeQuantityIsCups(false) }) {
+                                                Text("mL")
+                                            }
+                                        }
+
+                                        if (volumeQuantityIsCups) {
+                                            Button(onClick = { setVolumeQuantityIsCups(true) }) {
+                                                Text("cup")
+                                            }
+                                        } else {
+                                            OutlinedButton(onClick = { setVolumeQuantityIsCups(true) }) {
+                                                Text("cup")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = mlPriceInput,
+                                    onValueChange = { newValue ->
+                                        mlPriceInput = sanitizeDecimalInput(newValue)
+                                    },
+                                    label = { Text("Total price") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Text(
+                                    text = "Enter either path or both. Weight can be entered as grams or lb. Volume can be entered as mL or US cups. The app will not convert grams and mL between each other.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    BoxWithConstraints {
-                        IconButton(
-                            onClick = { storeActionsExpanded = true }
+                    Surface(tonalElevation = 3.dp) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
-                                contentDescription = "Store actions",
-                                modifier = Modifier.size(AppIconSize.CardAction)
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = storeActionsExpanded,
-                            onDismissRequest = { storeActionsExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("New") },
+                            Button(
                                 onClick = {
-                                    storeActionsExpanded = false
-                                    onOpenCreateStoreEditor?.invoke()
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Edit") },
-                                enabled = selectedStoreName.isNotBlank(),
-                                onClick = {
-                                    storeActionsExpanded = false
-                                    if (selectedStoreName.isNotBlank()) {
-                                        onOpenEditStoreEditor?.invoke(selectedStoreName)
-                                    }
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Delete") },
-                                enabled = selectedStoreName.isNotBlank(),
-                                onClick = {
-                                    storeActionsExpanded = false
-                                    if (selectedStoreName.isNotBlank()) {
-                                        onOpenEditStoreEditor?.invoke(selectedStoreName)
-                                    }
-                                }
-                            )
+                                    onUpdateStorePrice?.invoke(
+                                        selectedStoreName,
+                                        gramsInputForSave(),
+                                        gramsPriceInput,
+                                        mlInputForSave(),
+                                        mlPriceInput
+                                    )
+                                    showStorePriceSheet = false
+                                },
+                                enabled = selectedStoreName.isNotBlank() && onUpdateStorePrice != null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Update")
+                            }
                         }
                     }
                 }
-
-                HorizontalDivider()
-
-                Text(
-                    text = "Weight-based package",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                OutlinedTextField(
-                    value = gramsInput,
-                    onValueChange = { newValue ->
-                        gramsInput = sanitizeDecimalInput(newValue)
-                    },
-                    label = { Text("Quantity in grams") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = gramsPriceInput,
-                    onValueChange = { newValue ->
-                        gramsPriceInput = sanitizeDecimalInput(newValue)
-                    },
-                    label = { Text("Total price") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                HorizontalDivider()
-
-                Text(
-                    text = "Volume-based package",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                OutlinedTextField(
-                    value = mlInput,
-                    onValueChange = { newValue ->
-                        mlInput = sanitizeDecimalInput(newValue)
-                    },
-                    label = { Text("Quantity in mL") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = mlPriceInput,
-                    onValueChange = { newValue ->
-                        mlPriceInput = sanitizeDecimalInput(newValue)
-                    },
-                    label = { Text("Total price") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = "Enter either path or both. The app will not convert grams and mL between each other.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Button(
-                    onClick = {
-                        onUpdateStorePrice?.invoke(
-                            selectedStoreName,
-                            gramsInput,
-                            gramsPriceInput,
-                            mlInput,
-                            mlPriceInput
-                        )
-                        showStorePriceSheet = false
-                    },
-                    enabled = selectedStoreName.isNotBlank() && onUpdateStorePrice != null,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Update")
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -1163,12 +1356,14 @@ fun FoodEditorScreen(
             )
         },
         bottomBar = {
-            FoodEditorBottomBar(
-                isSaving = state.isSaving,
-                errorMessage = state.errorMessage ?: state.barcodeActionMessage,
-                onSave = onSave,
-                bannerCaptureController = bannerCaptureController
-            )
+            if (!showStorePriceSheet) {
+                FoodEditorBottomBar(
+                    isSaving = state.isSaving,
+                    errorMessage = state.errorMessage ?: state.barcodeActionMessage,
+                    onSave = onSave,
+                    bannerCaptureController = bannerCaptureController
+                )
+            }
         }
     ) { padding ->
         BoxWithConstraints(
@@ -1762,6 +1957,9 @@ private fun StorePricePreviewSection(
         }
     }
 }
+
+private const val POUNDS_TO_GRAMS = 453.59237
+private const val US_CUP_TO_ML = 236.5882365
 
 private fun Double.toUiPrice(): String =
     "%,.2f".format(this)
@@ -2598,33 +2796,3 @@ private fun NutrientCategory.labelForUi(): String =
     name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
 private fun NutrientUnit.labelForUi(): String = name.lowercase()
-
-/**
- * FUTURE-YOU / FUTURE-AI NOTE
- *
- * Food editor nutrient semantics in this screen are intentionally explicit:
- * - Editable nutrient fields are labeled as per-serving UI values.
- * - This screen should not visually imply that editable nutrient fields are raw PER_100G / PER_100ML values.
- * - Canonical storage basis remains internal and is only surfaced here as explanatory text.
- *
- * Serving bridge visibility rule:
- * - Do not show manual grams bridge input for units with built-in mass grounding (`asG != null`).
- * - Do not show manual mL bridge input for units with built-in volume grounding (`asMl != null`).
- * - Do not show either bridge input when the selected unit is already deterministic.
- * - The domain layer already treats deterministic units as grounded, so showing editable bridge fields here is misleading.
- *
- * USDA interpretation prompt rule:
- * - When USDA nutrient semantics are unclear, this screen must ask the user how to interpret them.
- * - The prompt shows raw USDA macro preview values only.
- * - The screen does not apply conversions; it only routes the user's choice.
- *
- * Why this matters:
- * - USDA-imported foods are often stored canonically as PER_100G / PER_100ML.
- * - Some branded USDA search results look like label-serving values instead.
- * - Without a user choice, canonical-looking numbers can be misread or mis-imported.
- *
- * Screen rule:
- * - Always make it obvious that nutrient inputs are tied to the current serving definition shown above.
- * - Do not add grams↔mL conversions here.
- * - Do not move canonical scaling math into this file.
- */
