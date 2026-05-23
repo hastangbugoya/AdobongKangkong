@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -23,7 +25,8 @@ import kotlin.math.roundToInt
 fun DayTotalsCard(
     totals: DailyNutritionTotals,
     sodiumLimitMg: Double = 0.0,
-    sugarLimitG: Double = 0.0
+    sugarLimitG: Double = 0.0,
+    onShowAll: (() -> Unit)? = null
 ) {
     val sodiumMg = totals.totalsByCode[NutrientKey(NutrientCodes.SODIUM_MG)]
     val sugarG = totals.totalsByCode[NutrientKey(NutrientCodes.SUGARS_G)]
@@ -36,10 +39,22 @@ fun DayTotalsCard(
     ) {
         Column(Modifier.padding(14.dp)) {
 
-            Text(
-                text = "Daily totals",
-                style = MaterialTheme.typography.titleLarge
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Daily totals",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                if (onShowAll != null) {
+                    TextButton(onClick = onShowAll) {
+                        Text("Show all")
+                    }
+                }
+            }
 
             Spacer(Modifier.height(10.dp))
 

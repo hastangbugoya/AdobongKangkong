@@ -35,6 +35,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.ui.daylog.model.DayLogRow
+import com.example.adobongkangkong.ui.daynutrients.DayNutrientsScreen
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import java.time.LocalDate
 
@@ -48,6 +49,7 @@ fun DayLogScreen(
     onOpenFoodEditor: (Long) -> Unit = {},
     onOpenQuickAddFavorites: () -> Unit = {},
     onOpenProductCheck: () -> Unit = {},
+    onOpenDayNutrients: ((LocalDate) -> Unit)? = null,
     onDelete: ((Long) -> Unit)? = null,
     vm: DayLogViewModel = hiltViewModel(),
     pickedQuickAddFoodId: Long? = null,
@@ -63,6 +65,7 @@ fun DayLogScreen(
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     var editingLogId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showDayNutrients by rememberSaveable { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -77,6 +80,16 @@ fun DayLogScreen(
         val text = message ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(text)
         vm.consumeMessage()
+    }
+
+    if (showDayNutrients) {
+        DayNutrientsScreen(
+            date = date,
+            onBack = {
+                showDayNutrients = false
+            }
+        )
+        return
     }
 
     if (showQuickAdd) {
@@ -163,7 +176,14 @@ fun DayLogScreen(
                 DayTotalsCard(
                     totals = it,
                     sodiumLimitMg = dailySodiumLimitMg,
-                    sugarLimitG = dailySugarLimitG
+                    sugarLimitG = dailySugarLimitG,
+                    onShowAll = {
+                        if (onOpenDayNutrients != null) {
+                            onOpenDayNutrients(date)
+                        } else {
+                            showDayNutrients = true
+                        }
+                    }
                 )
             }
 
