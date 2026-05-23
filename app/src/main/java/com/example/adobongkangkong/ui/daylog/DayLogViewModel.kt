@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.daylog
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.domain.model.DailyNutritionTotals
@@ -11,7 +12,9 @@ import com.example.adobongkangkong.ui.daylog.model.DayLogRow
 import com.example.adobongkangkong.ui.daylog.usecase.LogAgainTodayUseCase
 import com.example.adobongkangkong.ui.daylog.usecase.ObserveDayLogIousUseCase
 import com.example.adobongkangkong.ui.daylog.usecase.ObserveDayLogRowsUseCase
+import com.example.adobongkangkong.widget.CaffeineWidgetProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -33,6 +36,7 @@ class DayLogViewModel @Inject constructor(
     private val logAgainTodayUseCase: LogAgainTodayUseCase,
     private val zoneId: ZoneId,
     private val userPrefs: com.example.adobongkangkong.domain.settings.UserPreferencesRepository,
+    @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
 
     data class PendingLogAgainTodayConfirmation(
@@ -81,7 +85,10 @@ class DayLogViewModel @Inject constructor(
     fun deleteEntry(logId: Long) {
         viewModelScope.launch {
             deleteLogEntry(logId)
-            // no manual refresh needed; flows update from Room invalidation
+
+            // Room-backed Day Log flows update themselves; the home-screen widget is external UI
+            // and must be asked to redraw after log deletion.
+            CaffeineWidgetProvider.requestRefresh(applicationContext)
         }
     }
 
@@ -98,6 +105,7 @@ class DayLogViewModel @Inject constructor(
                 is LogAgainTodayUseCase.Result.Success -> {
                     pendingLogAgainTodayConfirmationFlow.value = null
                     messageFlow.value = "Logged again for today."
+                    CaffeineWidgetProvider.requestRefresh(applicationContext)
                 }
 
                 is LogAgainTodayUseCase.Result.ConfirmationRequired -> {
@@ -127,6 +135,7 @@ class DayLogViewModel @Inject constructor(
                 is LogAgainTodayUseCase.Result.Success -> {
                     pendingLogAgainTodayConfirmationFlow.value = null
                     messageFlow.value = "Logged again for today."
+                    CaffeineWidgetProvider.requestRefresh(applicationContext)
                 }
 
                 is LogAgainTodayUseCase.Result.ConfirmationRequired -> {

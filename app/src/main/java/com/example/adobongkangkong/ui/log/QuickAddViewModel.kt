@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.ui.log
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,7 +31,9 @@ import com.example.adobongkangkong.domain.usage.UsageContext
 import com.example.adobongkangkong.domain.usage.ValidateFoodForUsageUseCase
 import com.example.adobongkangkong.domain.usecase.SearchFoodsUseCase
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
+import com.example.adobongkangkong.widget.CaffeineWidgetProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -97,6 +100,8 @@ class QuickAddViewModel @Inject constructor(
 
     // From Day Planner
     private val observeTodayPlannedItemsForQuickAddUseCase: ObserveTodayPlannedItemsForQuickAddUseCase,
+
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -1443,6 +1448,7 @@ class QuickAddViewModel @Inject constructor(
 
                 when (result) {
                     is CreateLogEntryUseCase.Result.Success -> {
+                        requestCaffeineWidgetRefresh()
                         closeResolveMassDialog()
                         clearSelection()
                         queryFlow.value = ""
@@ -1670,6 +1676,7 @@ class QuickAddViewModel @Inject constructor(
 
                 when (result) {
                     is CreateLogEntryUseCase.Result.Success -> {
+                        requestCaffeineWidgetRefresh()
                         clearSelection()
                         queryFlow.value = ""
                         onDone()
@@ -1709,6 +1716,7 @@ class QuickAddViewModel @Inject constructor(
                     nutritionDecision = decision
                 )) {
                     is UpdateLogEntryUseCase.Result.Success -> {
+                        requestCaffeineWidgetRefresh()
                         pendingNutritionChoice = null
                         isNutritionChoiceDialogOpenFlow.value = false
                         nutritionChoiceMessageFlow.value = null
@@ -1738,6 +1746,10 @@ class QuickAddViewModel @Inject constructor(
                 isSavingFlow.value = false
             }
         }
+    }
+
+    private fun requestCaffeineWidgetRefresh() {
+        CaffeineWidgetProvider.requestRefresh(appContext)
     }
 
     private fun buildNutrientCautions(

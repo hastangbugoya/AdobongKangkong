@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.widget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -30,6 +31,13 @@ import kotlinx.coroutines.launch
  * - Shows exactly 3 configurable quick-log slots.
  * - Tapping a configured slot logs 1 serving of that food through the normal AK logging use case.
  * - No separate caffeine-only records are created.
+ *
+ * Refresh behavior:
+ * - Refreshes after normal widget update.
+ * - Refreshes after widget quick-log taps.
+ * - Refreshes when app-side logging asks the widget to refresh via [requestRefresh].
+ * - Schedules a one-shot alarm for the next local midnight so the displayed total rolls over
+ *   to the new day even if the app is closed.
  */
 @AndroidEntryPoint
 class CaffeineWidgetProvider : AppWidgetProvider() {
@@ -47,6 +55,16 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
     lateinit var logFoodUseCase: LogFoodUseCase
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        scheduleNextMidnightRefresh(context.applicationContext)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        cancelNextMidnightRefresh(context.applicationContext)
+    }
 
     override fun onUpdate(
         context: Context,
@@ -70,21 +88,33 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
     ) {
         super.onReceive(context, intent)
 
-        if (intent.action != ACTION_LOG_SLOT) return
+        when (intent.action) {
+            ACTION_LOG_SLOT -> {
+                val slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, -1)
+                if (slotIndex !in 1..3) return
 
-        val slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, -1)
-        if (slotIndex !in 1..3) return
+                scope.launch {
+                    val appContext = context.applicationContext
+                    val foodId = foodIdForSlot(slotIndex) ?: return@launch
 
-        scope.launch {
-            val foodId = foodIdForSlot(slotIndex) ?: return@launch
+                    logFoodUseCase.logFoodByServings(
+                        foodId = foodId,
+                        servings = 1.0,
+                        logDateIso = LocalDate.now(ZoneId.systemDefault()).toString()
+                    )
 
-            logFoodUseCase.logFoodByServings(
-                foodId = foodId,
-                servings = 1.0,
-                logDateIso = LocalDate.now(ZoneId.systemDefault()).toString()
-            )
+                    updateAllWidgets(appContext)
+                }
+            }
 
-            updateAllWidgets(context.applicationContext)
+            ACTION_REFRESH_WIDGET,
+            Intent.ACTION_DATE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED -> {
+                scope.launch {
+                    updateAllWidgets(context.applicationContext)
+                }
+            }
         }
     }
 
@@ -95,10 +125,13 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
             ComponentName(context, CaffeineWidgetProvider::class.java)
         )
     ) {
+        val zoneId = ZoneId.systemDefault()
+        val today = LocalDate.now(zoneId)
+
         val caffeineMg =
             observeTodayCaffeineMgUseCase(
-                date = LocalDate.now(ZoneId.systemDefault()),
-                zoneId = ZoneId.systemDefault()
+                date = today,
+                zoneId = zoneId
             ).first()
 
         val slots = listOf(
@@ -168,6 +201,8 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
 
             appWidgetManager.updateAppWidget(widgetId, views)
         }
+
+        scheduleNextMidnightRefresh(context)
     }
 
     private fun bindSlotButton(
@@ -206,6 +241,45 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
             else -> null
         }
 
+    private fun scheduleNextMidnightRefresh(context: Context) {
+        val zoneId = ZoneId.systemDefault()
+        val nextMidnightMillis =
+            LocalDate.now(zoneId)
+                .plusDays(1)
+                .atStartOfDay(zoneId)
+                .toInstant()
+                .toEpochMilli()
+
+        val alarmManager =
+            context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        alarmManager.setAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            nextMidnightMillis,
+            midnightRefreshPendingIntent(context)
+        )
+    }
+
+    private fun cancelNextMidnightRefresh(context: Context) {
+        val alarmManager =
+            context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        alarmManager.cancel(midnightRefreshPendingIntent(context))
+    }
+
+    private fun midnightRefreshPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, CaffeineWidgetProvider::class.java).apply {
+            action = ACTION_REFRESH_WIDGET
+        }
+
+        return PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_MIDNIGHT_REFRESH,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private data class CaffeineWidgetSlot(
         val slotIndex: Int,
         val fallbackLabel: String,
@@ -214,12 +288,31 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
         val isConfigured: Boolean = false
     )
 
-    private companion object {
-        const val ACTION_LOG_SLOT =
+    companion object {
+        /**
+         * Requests a widget refresh from app-side flows such as Quick Add or Dashboard logging.
+         *
+         * This does not log anything. It only asks the widget provider to re-read normal log
+         * snapshots and redraw the home-screen widget.
+         */
+        fun requestRefresh(context: Context) {
+            val appContext = context.applicationContext
+            val intent = Intent(appContext, CaffeineWidgetProvider::class.java).apply {
+                action = ACTION_REFRESH_WIDGET
+            }
+            appContext.sendBroadcast(intent)
+        }
+
+        private const val ACTION_LOG_SLOT =
             "com.example.adobongkangkong.widget.ACTION_LOG_CAFFEINE_SLOT"
 
-        const val EXTRA_SLOT_INDEX =
+        private const val ACTION_REFRESH_WIDGET =
+            "com.example.adobongkangkong.widget.ACTION_REFRESH_CAFFEINE_WIDGET"
+
+        private const val EXTRA_SLOT_INDEX =
             "com.example.adobongkangkong.widget.EXTRA_SLOT_INDEX"
+
+        private const val REQUEST_CODE_MIDNIGHT_REFRESH = 1001
     }
 }
 
