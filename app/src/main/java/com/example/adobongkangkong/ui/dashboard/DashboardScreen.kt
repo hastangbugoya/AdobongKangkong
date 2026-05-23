@@ -70,6 +70,7 @@ import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
 import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
+import com.example.adobongkangkong.ui.daynutrients.DayNutrientsScreen
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
@@ -113,6 +114,7 @@ fun DashboardScreen(
     val dashboardNutrientHistory by vm.dashboardNutrientHistory.collectAsState()
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
+    var showDayNutrients by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -345,6 +347,16 @@ fun DashboardScreen(
         }
     }
 
+    if (showDayNutrients) {
+        DayNutrientsScreen(
+            date = state.date,
+            onBack = {
+                showDayNutrients = false
+            }
+        )
+        return
+    }
+
     selectedHistoryCard?.let { card ->
         selectedNutrientHistory?.let { history ->
             ModalBottomSheet(
@@ -517,8 +529,13 @@ fun DashboardScreen(
                         text = summaryText,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    TextButton(onClick = vm::openDashboardHistory) {
-                        Text("History")
+                    IconButton(
+                        onClick = { showDayNutrients = true }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.total),
+                            contentDescription = "Show all nutrients"
+                        )
                     }
                     IconButton(
                         onClick = { onOpenDayLog(state.date) }
