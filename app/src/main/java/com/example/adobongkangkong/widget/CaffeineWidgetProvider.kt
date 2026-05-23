@@ -13,6 +13,7 @@ import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.usecase.LogFoodUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayCaffeineMgUseCase
+import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDate
 import java.time.ZoneId
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
  *
  * MVP behavior:
  * - Shows today's caffeine total from normal log snapshot nutrients.
+ * - Shows today's macro totals from normal log snapshot nutrients.
  * - Shows exactly 3 configurable quick-log slots.
  * - Tapping a configured slot logs 1 serving of that food through the normal AK logging use case.
  * - No separate caffeine-only records are created.
@@ -44,6 +46,9 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
 
     @Inject
     lateinit var observeTodayCaffeineMgUseCase: ObserveTodayCaffeineMgUseCase
+
+    @Inject
+    lateinit var observeTodayMacrosUseCase: ObserveTodayMacrosUseCase
 
     @Inject
     lateinit var userPreferencesRepository: UserPreferencesRepository
@@ -134,6 +139,12 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
                 zoneId = zoneId
             ).first()
 
+        val macros =
+            observeTodayMacrosUseCase(
+                date = today,
+                zoneId = zoneId
+            ).first()
+
         val slots = listOf(
             CaffeineWidgetSlot(
                 slotIndex = 1,
@@ -176,6 +187,23 @@ class CaffeineWidgetProvider : AppWidgetProvider() {
                 } else {
                     "Configure slots in Dashboard Settings"
                 }
+            )
+
+            views.setTextViewText(
+                R.id.caffeine_widget_macro_calories,
+                "${macros.caloriesKcal.roundToWidgetInt()} kcal"
+            )
+            views.setTextViewText(
+                R.id.caffeine_widget_macro_protein,
+                "P ${macros.proteinG.roundToWidgetInt()}g"
+            )
+            views.setTextViewText(
+                R.id.caffeine_widget_macro_carbs,
+                "C ${macros.carbsG.roundToWidgetInt()}g"
+            )
+            views.setTextViewText(
+                R.id.caffeine_widget_macro_fat,
+                "F ${macros.fatG.roundToWidgetInt()}g"
             )
 
             bindSlotButton(

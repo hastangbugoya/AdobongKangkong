@@ -3,7 +3,7 @@
     android:id="@+id/caffeine_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white"
+    android:background="?android:attr/colorBackground"
     android:orientation="vertical"
     android:padding="12dp">
 
@@ -12,6 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Caffeine today"
+        android:textColor="?android:attr/textColorPrimary"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -21,6 +22,7 @@
         android:layout_height="wrap_content"
         android:paddingTop="4dp"
         android:text="0 mg"
+        android:textColor="?android:attr/textColorPrimary"
         android:textSize="24sp"
         android:textStyle="bold" />
 
@@ -30,6 +32,7 @@
         android:layout_height="wrap_content"
         android:paddingTop="2dp"
         android:text="Quick log one serving"
+        android:textColor="?android:attr/textColorSecondary"
         android:textSize="12sp" />
 
     <LinearLayout
@@ -75,6 +78,59 @@
             android:text="Monster"
             android:textAllCaps="false"
             android:textSize="11sp" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/caffeine_widget_macros_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/caffeine_widget_macro_calories"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:maxLines="1"
+            android:text="0 kcal"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/caffeine_widget_macro_protein"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:maxLines="1"
+            android:text="P 0g"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/caffeine_widget_macro_carbs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:maxLines="1"
+            android:text="C 0g"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/caffeine_widget_macro_fat"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:maxLines="1"
+            android:text="F 0g"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="12sp" />
 
     </LinearLayout>
 
