@@ -17,6 +17,7 @@ import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.SyncNutrientCatalogUseCase
 import com.example.adobongkangkong.domain.planner.usecase.ResetPlannerDataUseCase
+import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.shared.usecase.BuildSharedNutritionSnapshotJsonUseCase
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -90,6 +92,7 @@ class DashboardViewModel @Inject constructor(
     private val deleteLogEntry: DeleteLogEntryUseCase,
 
     private val logFood: LogFoodUseCase,
+    private val foodRepository: FoodRepository,
     private val observeDashboardPinOptions: ObserveDashboardPinOptionsUseCase,
 
     private val syncNutrientCatalog: SyncNutrientCatalogUseCase,
@@ -146,6 +149,64 @@ class DashboardViewModel @Inject constructor(
 
     val mealReminderIntensity: StateFlow<MealReminderIntensity> =
         userPreferencesRepository.mealReminderIntensity
+
+    val caffeineWidgetSlot1FoodId: StateFlow<Long?> =
+        userPreferencesRepository.caffeineWidgetSlot1FoodId
+
+    val caffeineWidgetSlot2FoodId: StateFlow<Long?> =
+        userPreferencesRepository.caffeineWidgetSlot2FoodId
+
+    val caffeineWidgetSlot3FoodId: StateFlow<Long?> =
+        userPreferencesRepository.caffeineWidgetSlot3FoodId
+
+    val caffeineWidgetSlots: StateFlow<List<CaffeineWidgetSlotUiModel>> =
+        combine(
+            caffeineWidgetSlot1FoodId,
+            caffeineWidgetSlot2FoodId,
+            caffeineWidgetSlot3FoodId
+        ) { slot1FoodId, slot2FoodId, slot3FoodId ->
+            listOf(
+                CaffeineWidgetSlotSeed(
+                    slotIndex = 1,
+                    fallbackLabel = "Coffee",
+                    foodId = slot1FoodId
+                ),
+                CaffeineWidgetSlotSeed(
+                    slotIndex = 2,
+                    fallbackLabel = "Soda",
+                    foodId = slot2FoodId
+                ),
+                CaffeineWidgetSlotSeed(
+                    slotIndex = 3,
+                    fallbackLabel = "Monster",
+                    foodId = slot3FoodId
+                )
+            )
+        }.flatMapLatest { seeds ->
+            flow {
+                emit(
+                    seeds.map { seed ->
+                        val food = seed.foodId?.let { foodRepository.getById(it) }
+
+                        CaffeineWidgetSlotUiModel(
+                            slotIndex = seed.slotIndex,
+                            fallbackLabel = seed.fallbackLabel,
+                            foodId = seed.foodId,
+                            foodName = food?.name,
+                            foodBrand = food?.brand
+                        )
+                    }
+                )
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = listOf(
+                CaffeineWidgetSlotUiModel(slotIndex = 1, fallbackLabel = "Coffee"),
+                CaffeineWidgetSlotUiModel(slotIndex = 2, fallbackLabel = "Soda"),
+                CaffeineWidgetSlotUiModel(slotIndex = 3, fallbackLabel = "Monster")
+            )
+        )
 
     private val zoneId = ZoneId.systemDefault()
 
@@ -312,6 +373,13 @@ class DashboardViewModel @Inject constructor(
 
     fun setMealReminderIntensity(intensity: MealReminderIntensity) {
         userPreferencesRepository.setMealReminderIntensity(intensity)
+    }
+
+    fun setCaffeineWidgetSlotFoodId(slotIndex: Int, foodId: Long?) {
+        userPreferencesRepository.setCaffeineWidgetSlotFoodId(
+            slotIndex = slotIndex,
+            foodId = foodId
+        )
     }
 
     fun setProductCheckSodiumLimitMg(value: Double) {
@@ -910,6 +978,31 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch { bootstrapDomain() }
     }
 }
+
+data class CaffeineWidgetSlotUiModel(
+    val slotIndex: Int,
+    val fallbackLabel: String,
+    val foodId: Long? = null,
+    val foodName: String? = null,
+    val foodBrand: String? = null
+) {
+    val displayTitle: String
+        get() = foodName ?: fallbackLabel
+
+    val displaySubtitle: String
+        get() = when {
+            foodId == null -> "No food selected"
+            foodName == null -> "Configured food ID: $foodId"
+            foodBrand.isNullOrBlank() -> "Food ID: $foodId"
+            else -> "$foodBrand • Food ID: $foodId"
+        }
+}
+
+private data class CaffeineWidgetSlotSeed(
+    val slotIndex: Int,
+    val fallbackLabel: String,
+    val foodId: Long?
+)
 
 private data class DashboardOverlay(
     val blockingSheet: BlockingSheetModel? = null,

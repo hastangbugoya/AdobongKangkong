@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
@@ -36,6 +37,7 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - orientation lock
  * - privacy lock policy
  * - meal logging reminder settings
+ * - caffeine widget quick-log food slots
  * - nutrition caution thresholds
  *
  * Nutrition threshold defaults:
@@ -57,6 +59,9 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  *
  * Product Check thresholds are used before import/logging.
  * Quick Add thresholds are used after scaling the amount being logged.
+ *
+ * Caffeine widget slot settings only store selected food IDs.
+ * The widget must still read caffeine totals from normal log/nutrient data.
  *
  * Keep the two threshold groups separate.
  * ============================================================
@@ -158,6 +163,39 @@ class DataStoreUserPreferencesRepository @Inject constructor(
                 scope = scope,
                 started = SharingStarted.Eagerly,
                 initialValue = MealReminderIntensity.GENTLE
+            )
+
+    override val caffeineWidgetSlot1FoodId: StateFlow<Long?> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[CAFFEINE_WIDGET_SLOT_1_FOOD_ID_KEY]?.takeIf { it > 0L }
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = null
+            )
+
+    override val caffeineWidgetSlot2FoodId: StateFlow<Long?> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[CAFFEINE_WIDGET_SLOT_2_FOOD_ID_KEY]?.takeIf { it > 0L }
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = null
+            )
+
+    override val caffeineWidgetSlot3FoodId: StateFlow<Long?> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[CAFFEINE_WIDGET_SLOT_3_FOOD_ID_KEY]?.takeIf { it > 0L }
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = null
             )
 
     override val productCheckSodiumLimitMg: StateFlow<Double> =
@@ -292,6 +330,26 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    override fun setCaffeineWidgetSlotFoodId(slotIndex: Int, foodId: Long?) {
+        val key = when (slotIndex) {
+            1 -> CAFFEINE_WIDGET_SLOT_1_FOOD_ID_KEY
+            2 -> CAFFEINE_WIDGET_SLOT_2_FOOD_ID_KEY
+            3 -> CAFFEINE_WIDGET_SLOT_3_FOOD_ID_KEY
+            else -> return
+        }
+
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                val safeFoodId = foodId?.takeIf { it > 0L }
+                if (safeFoodId == null) {
+                    preferences.remove(key)
+                } else {
+                    preferences[key] = safeFoodId
+                }
+            }
+        }
+    }
+
     override fun setProductCheckSodiumLimitMg(value: Double) {
         scope.launch {
             context.userPreferencesDataStore.edit { preferences ->
@@ -368,6 +426,13 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         val MEAL_REMINDER_INTERVAL_MINUTES_KEY = intPreferencesKey("meal_reminder_interval_minutes")
         val MEAL_REMINDER_END_MINUTES_KEY = intPreferencesKey("meal_reminder_end_minutes")
         val MEAL_REMINDER_INTENSITY_KEY = stringPreferencesKey("meal_reminder_intensity")
+
+        val CAFFEINE_WIDGET_SLOT_1_FOOD_ID_KEY =
+            longPreferencesKey("caffeine_widget_slot_1_food_id")
+        val CAFFEINE_WIDGET_SLOT_2_FOOD_ID_KEY =
+            longPreferencesKey("caffeine_widget_slot_2_food_id")
+        val CAFFEINE_WIDGET_SLOT_3_FOOD_ID_KEY =
+            longPreferencesKey("caffeine_widget_slot_3_food_id")
 
         val PRODUCT_CHECK_SODIUM_LIMIT_MG_KEY =
             doublePreferencesKey("product_check_sodium_limit_mg")

@@ -3,15 +3,20 @@ package com.example.adobongkangkong.ui.dashboard
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
@@ -21,25 +26,30 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.BuildConfig
 import com.example.adobongkangkong.domain.model.TargetDraft
 import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
-import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 
 enum class DashboardDebugResetDomain(
     val displayName: String
@@ -71,6 +81,7 @@ private val PrivacyLockTimingOptions = listOf(
     PrivacyLockTimingOption("After 30 minutes", 30)
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardSettingsSheet(
     pinnedKeys: List<NutrientKey>,
@@ -115,6 +126,10 @@ fun DashboardSettingsSheet(
     onMealReminderEndMinutesChange: (Int) -> Unit,
     mealReminderIntensity: MealReminderIntensity,
     onMealReminderIntensityChange: (MealReminderIntensity) -> Unit,
+    caffeineWidgetSlot1FoodId: Long?,
+    caffeineWidgetSlot2FoodId: Long?,
+    caffeineWidgetSlot3FoodId: Long?,
+    onCaffeineWidgetSlotFoodIdChange: (slotIndex: Int, foodId: Long?) -> Unit,
     productCheckSodiumLimitMg: Double,
     productCheckSugarLimitG: Double,
     quickAddSodiumCautionMg: Double,
@@ -128,6 +143,8 @@ fun DashboardSettingsSheet(
     onPlannerDailySodiumLimitMgChange: (Double) -> Unit,
     onPlannerDailySugarLimitGChange: (Double) -> Unit,
 ) {
+    var caffeinePickerSlotIndex by remember { mutableStateOf<Int?>(null) }
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -218,6 +235,58 @@ fun DashboardSettingsSheet(
                 onSelect = onMealReminderIntensityChange
             )
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        Text("Caffeine widget", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Configure the 3 foods that will appear as quick-log buttons on the home-screen caffeine widget. Totals will come from normal food logs and caffeine nutrient data.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        CaffeineWidgetSlotRow(
+            slotIndex = 1,
+            label = "Coffee",
+            selectedFoodId = caffeineWidgetSlot1FoodId,
+            onPick = {
+                caffeinePickerSlotIndex = 1
+            },
+            onClear = {
+                onCaffeineWidgetSlotFoodIdChange(1, null)
+            }
+        )
+        HorizontalDivider()
+
+        CaffeineWidgetSlotRow(
+            slotIndex = 2,
+            label = "Soda",
+            selectedFoodId = caffeineWidgetSlot2FoodId,
+            onPick = {
+                caffeinePickerSlotIndex = 2
+            },
+            onClear = {
+                onCaffeineWidgetSlotFoodIdChange(2, null)
+            }
+        )
+        HorizontalDivider()
+
+        CaffeineWidgetSlotRow(
+            slotIndex = 3,
+            label = "Monster",
+            selectedFoodId = caffeineWidgetSlot3FoodId,
+            onPick = {
+                caffeinePickerSlotIndex = 3
+            },
+            onClear = {
+                onCaffeineWidgetSlotFoodIdChange(3, null)
+            }
+        )
+        HorizontalDivider()
 
         Spacer(Modifier.height(20.dp))
 
@@ -599,7 +668,283 @@ fun DashboardSettingsSheet(
             }
         }
     }
+
+    caffeinePickerSlotIndex?.let { slotIndex ->
+        val slotLabel = caffeineWidgetSlotLabel(slotIndex)
+
+        CaffeineWidgetFoodPickerSheet(
+            slotIndex = slotIndex,
+            slotLabel = slotLabel,
+            onDismiss = {
+                caffeinePickerSlotIndex = null
+            },
+            onFoodSelected = { foodId ->
+                onCaffeineWidgetSlotFoodIdChange(slotIndex, foodId)
+                caffeinePickerSlotIndex = null
+            }
+        )
+    }
 }
+
+@Composable
+private fun CaffeineWidgetSlotRow(
+    slotIndex: Int,
+    label: String,
+    selectedFoodId: Long?,
+    onPick: () -> Unit,
+    onClear: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text("Slot $slotIndex: $label") },
+        supportingContent = {
+            Text(
+                selectedFoodId?.let { "Configured food ID: $it" }
+                    ?: "No food selected"
+            )
+        },
+        trailingContent = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onPick) {
+                    Text(if (selectedFoodId == null) "Pick" else "Change")
+                }
+
+                if (selectedFoodId != null) {
+                    TextButton(onClick = onClear) {
+                        Text("Clear")
+                    }
+                }
+            }
+        },
+        modifier = Modifier.clickable(onClick = onPick)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CaffeineWidgetFoodPickerSheet(
+    slotIndex: Int,
+    slotLabel: String,
+    onDismiss: () -> Unit,
+    onFoodSelected: (Long) -> Unit,
+    vm: CaffeineWidgetFoodPickerViewModel = hiltViewModel()
+) {
+    val state by vm.state.collectAsState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var pendingNonCountingFood by remember {
+        mutableStateOf<CaffeineWidgetFoodPickerFoodUiModel?>(null)
+    }
+
+    pendingNonCountingFood?.let { item ->
+        AlertDialog(
+            onDismissRequest = {
+                pendingNonCountingFood = null
+            },
+            title = { Text("No caffeine data") },
+            text = {
+                Text(
+                    "This food has no positive caffeine nutrient in its nutrition snapshot. " +
+                            "You can still use it, but it will not increase the caffeine total unless caffeine data is added later."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onFoodSelected(item.food.id)
+                        pendingNonCountingFood = null
+                    }
+                ) {
+                    Text("Use anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingNonCountingFood = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Pick slot $slotIndex: $slotLabel",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "Only foods with caffeine is on by default. Turn it off to pick a non-counting food with a warning.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Only foods with caffeine",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Uses normal nutrient snapshot data.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Switch(
+                    checked = state.onlyFoodsWithCaffeine,
+                    onCheckedChange = vm::onOnlyFoodsWithCaffeineChange
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = vm::onQueryChange,
+                label = { Text("Search foods") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            CaffeineWidgetFoodPickerResults(
+                results = state.results,
+                query = state.query,
+                onlyFoodsWithCaffeine = state.onlyFoodsWithCaffeine,
+                onPick = { item ->
+                    if (item.hasCaffeine) {
+                        onFoodSelected(item.food.id)
+                    } else {
+                        pendingNonCountingFood = item
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun CaffeineWidgetFoodPickerResults(
+    results: List<CaffeineWidgetFoodPickerFoodUiModel>,
+    query: String,
+    onlyFoodsWithCaffeine: Boolean,
+    onPick: (CaffeineWidgetFoodPickerFoodUiModel) -> Unit
+) {
+    if (query.isBlank()) {
+        Text(
+            text = "Type to search your foods…",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        return
+    }
+
+    if (results.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (onlyFoodsWithCaffeine) {
+                    "No foods with caffeine found."
+                } else {
+                    "No matching foods found."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 420.dp)
+    ) {
+        items(
+            items = results,
+            key = { it.food.id }
+        ) { item ->
+            val food = item.food
+
+            ListItem(
+                headlineContent = { Text(food.name) },
+                supportingContent = {
+                    Column {
+                        Text(caffeineWidgetFoodSubtitle(item))
+                        if (!item.hasCaffeine) {
+                            Text(
+                                text = "No caffeine nutrient found; this will not count until caffeine data exists.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPick(item) }
+            )
+            HorizontalDivider()
+        }
+    }
+}
+
+private fun caffeineWidgetFoodSubtitle(
+    item: CaffeineWidgetFoodPickerFoodUiModel
+): String {
+    val food = item.food
+
+    return buildString {
+        if (!food.brand.isNullOrBlank()) {
+            append(food.brand)
+            append(" • ")
+        }
+
+        append(food.servingSize.cleanAmount())
+        append(" ")
+        append(food.servingUnit.display)
+
+        append(" • ")
+        append(if (item.hasCaffeine) "Has caffeine" else "No caffeine data")
+    }
+}
+
+private fun caffeineWidgetSlotLabel(slotIndex: Int): String =
+    when (slotIndex) {
+        1 -> "Coffee"
+        2 -> "Soda"
+        3 -> "Monster"
+        else -> "Slot $slotIndex"
+    }
+
+private fun Double.cleanAmount(): String =
+    if (this % 1.0 == 0.0) this.toInt().toString() else "%,.2f".format(this).trimEnd('0').trimEnd('.')
 
 @Composable
 private fun ThresholdNumberField(

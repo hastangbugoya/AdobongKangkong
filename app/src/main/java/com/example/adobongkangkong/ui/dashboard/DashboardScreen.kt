@@ -249,6 +249,10 @@ fun DashboardScreen(
 
             val mealReminderIntensity by vm.mealReminderIntensity.collectAsState()
 
+            val caffeineWidgetSlot1FoodId by vm.caffeineWidgetSlot1FoodId.collectAsState()
+            val caffeineWidgetSlot2FoodId by vm.caffeineWidgetSlot2FoodId.collectAsState()
+            val caffeineWidgetSlot3FoodId by vm.caffeineWidgetSlot3FoodId.collectAsState()
+
             DashboardSettingsSheet(
                 pinnedKeys = state.pinnedKeys,
                 monitoredCards = state.nutrientCards,
@@ -298,6 +302,10 @@ fun DashboardScreen(
                 onMealReminderEndMinutesChange = vm::setMealReminderEndMinutes,
                 mealReminderIntensity = mealReminderIntensity,
                 onMealReminderIntensityChange = vm::setMealReminderIntensity,
+                caffeineWidgetSlot1FoodId = caffeineWidgetSlot1FoodId,
+                caffeineWidgetSlot2FoodId = caffeineWidgetSlot2FoodId,
+                caffeineWidgetSlot3FoodId = caffeineWidgetSlot3FoodId,
+                onCaffeineWidgetSlotFoodIdChange = vm::setCaffeineWidgetSlotFoodId,
                 productCheckSodiumLimitMg = productCheckSodiumLimitMg,
                 productCheckSugarLimitG = productCheckSugarLimitG,
                 quickAddSodiumCautionMg = quickAddSodiumCautionMg,

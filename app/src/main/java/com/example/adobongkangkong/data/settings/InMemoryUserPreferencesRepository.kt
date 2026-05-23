@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
  * - Quick Add sugar: 15 g per logged entry
  * - Planner Day sodium: 2300 mg per planned day
  * - Planner Day total sugar: 36 g per planned day
+ *
+ * Caffeine widget defaults:
+ * - All 3 quick-log food slots start unconfigured.
  */
 @Singleton
 class InMemoryUserPreferencesRepository @Inject constructor() :
@@ -51,6 +54,18 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     override val mealReminderIntensity: StateFlow<MealReminderIntensity> =
         _mealReminderIntensity
+
+    private val _caffeineWidgetSlot1FoodId = MutableStateFlow<Long?>(null)
+    override val caffeineWidgetSlot1FoodId: StateFlow<Long?> =
+        _caffeineWidgetSlot1FoodId
+
+    private val _caffeineWidgetSlot2FoodId = MutableStateFlow<Long?>(null)
+    override val caffeineWidgetSlot2FoodId: StateFlow<Long?> =
+        _caffeineWidgetSlot2FoodId
+
+    private val _caffeineWidgetSlot3FoodId = MutableStateFlow<Long?>(null)
+    override val caffeineWidgetSlot3FoodId: StateFlow<Long?> =
+        _caffeineWidgetSlot3FoodId
 
     private val _productCheckSodiumLimitMg = MutableStateFlow(400.0)
     override val productCheckSodiumLimitMg: StateFlow<Double> =
@@ -102,6 +117,16 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     override fun setMealReminderIntensity(intensity: MealReminderIntensity) {
         _mealReminderIntensity.value = intensity
+    }
+
+    override fun setCaffeineWidgetSlotFoodId(slotIndex: Int, foodId: Long?) {
+        val safeFoodId = foodId?.takeIf { it > 0L }
+
+        when (slotIndex) {
+            1 -> _caffeineWidgetSlot1FoodId.value = safeFoodId
+            2 -> _caffeineWidgetSlot2FoodId.value = safeFoodId
+            3 -> _caffeineWidgetSlot3FoodId.value = safeFoodId
+        }
     }
 
     override fun setProductCheckSodiumLimitMg(value: Double) {

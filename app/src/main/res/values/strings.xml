@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">AdobongKangkong</string>
+    <string name="caffeine_widget_description">Shows today’s caffeine total and three quick-log buttons.</string>
 </resources>

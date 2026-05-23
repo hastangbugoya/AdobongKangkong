@@ -160,6 +160,9 @@ value class NutrientKey(val value: String) {
 
         /** Sodium in milligrams. */
         val SODIUM_MG = NutrientKey("SODIUM_MG")
+
+        /** Caffeine in milligrams. */
+        val CAFFEINE_MG = NutrientKey("CAFFEINE_MG")
     }
 }
 

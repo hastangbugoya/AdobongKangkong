@@ -27,7 +27,10 @@ import kotlinx.coroutines.flow.StateFlow
  * 2) Notifications
  *    - meal reminders
  *
- * 3) Nutrition Thresholds (NEW)
+ * 3) Widget Preferences
+ *    - caffeine widget quick-log food slots
+ *
+ * 4) Nutrition Thresholds
  *    - Product Check thresholds (scan flow)
  *    - Quick Add thresholds (logging flow)
  *
@@ -40,6 +43,11 @@ import kotlinx.coroutines.flow.StateFlow
  *   → evaluates the CURRENT LOG ENTRY amount (scaled)
  *
  * These MUST remain separate settings.
+ *
+ * Caffeine widget:
+ *   → stores only the configured quick-log food IDs
+ *   → does NOT store caffeine totals
+ *   → does NOT create separate caffeine-only records
  *
  * ============================================================
  * FOR FUTURE AI / DEV ASSISTANTS
@@ -126,7 +134,44 @@ interface UserPreferencesRepository {
     fun setPrivacyLockTimeoutMinutes(minutes: Int?)
 
     // ============================================================
-    // 🧂 Nutrition Thresholds (NEW)
+    // ☕ Caffeine Widget Preferences
+    // ============================================================
+
+    /**
+     * Food ID assigned to caffeine widget slot 1.
+     *
+     * Null means the slot is not configured.
+     */
+    val caffeineWidgetSlot1FoodId: StateFlow<Long?>
+
+    /**
+     * Food ID assigned to caffeine widget slot 2.
+     *
+     * Null means the slot is not configured.
+     */
+    val caffeineWidgetSlot2FoodId: StateFlow<Long?>
+
+    /**
+     * Food ID assigned to caffeine widget slot 3.
+     *
+     * Null means the slot is not configured.
+     */
+    val caffeineWidgetSlot3FoodId: StateFlow<Long?>
+
+    /**
+     * Sets one of the three caffeine widget food slots.
+     *
+     * Slot indexes are 1-based:
+     * - 1 = first widget quick-log button
+     * - 2 = second widget quick-log button
+     * - 3 = third widget quick-log button
+     *
+     * Passing null clears the slot.
+     */
+    fun setCaffeineWidgetSlotFoodId(slotIndex: Int, foodId: Long?)
+
+    // ============================================================
+    // 🧂 Nutrition Thresholds
     // ============================================================
 
     /**
