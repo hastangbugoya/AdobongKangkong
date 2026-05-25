@@ -3,6 +3,7 @@ package com.example.adobongkangkong.di
 import android.content.Context
 import androidx.room.Room
 import com.example.adobongkangkong.data.local.db.NutriDatabase
+import com.example.adobongkangkong.data.local.db.dao.BodyWeightLogDao
 import com.example.adobongkangkong.data.local.db.dao.CalendarSuccessNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.DebugResetDao
 import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
@@ -58,6 +59,7 @@ object DatabaseModule {
             .addMigrations(NutriDatabase.MIGRATION_2_3)
             .addMigrations(NutriDatabase.MIGRATION_3_4)
             .addMigrations(NutriDatabase.MIGRATION_4_5)
+            .addMigrations(NutriDatabase.MIGRATION_5_6)
             .build()
     }
 
@@ -159,4 +161,8 @@ object DatabaseModule {
     @Provides
     fun provideFoodStorePriceDao(db: NutriDatabase): FoodStorePriceDao =
         db.foodStorePriceDao()
+
+    @Provides
+    fun provideBodyWeightLogDao(db: NutriDatabase): BodyWeightLogDao =
+        db.bodyWeightLogDao()
 }

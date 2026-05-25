@@ -6,6 +6,7 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.adobongkangkong.core.log.MeowLog
+import com.example.adobongkangkong.data.local.db.dao.BodyWeightLogDao
 import com.example.adobongkangkong.data.local.db.dao.CalendarSuccessNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.DebugResetDao
 import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
@@ -36,6 +37,7 @@ import com.example.adobongkangkong.data.local.db.dao.StoreDao
 import com.example.adobongkangkong.data.local.db.dao.SummaryDao
 import com.example.adobongkangkong.data.local.db.dao.UserNutrientTargetDao
 import com.example.adobongkangkong.data.local.db.dao.UserPinnedNutrientDao
+import com.example.adobongkangkong.data.local.db.entity.BodyWeightLogEntity
 import com.example.adobongkangkong.data.local.db.entity.CalendarSuccessNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodCategoryCrossRefEntity
@@ -119,9 +121,10 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         CalendarSuccessNutrientEntity::class,
         RecipeInstructionStepEntity::class,
         StoreEntity::class,
-        FoodStorePriceEntity::class
+        FoodStorePriceEntity::class,
+        BodyWeightLogEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -157,6 +160,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun recipeInstructionStepDao(): RecipeInstructionStepDao
     abstract fun storeDao(): StoreDao
     abstract fun foodStorePriceDao(): FoodStorePriceDao
+    abstract fun bodyWeightLogDao(): BodyWeightLogDao
 
     companion object {
 
@@ -393,6 +397,49 @@ abstract class NutriDatabase : RoomDatabase() {
                     MeowLog.d("DB> MIGRATION 4→5 SUCCESS")
                 } catch (t: Throwable) {
                     MeowLog.e("DB> MIGRATION 4→5 FAILED", t)
+                    throw t
+                }
+            }
+        }
+
+        /**
+         * Migration 5 -> 6
+         *
+         * Adds:
+         * - body_weight_logs
+         *
+         * This table stores historical body-weight entries for trend tracking.
+         * Reminder mode/interval settings intentionally remain in DataStore preferences.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 5→6 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS body_weight_logs (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            dateIso TEXT NOT NULL,
+                            weight REAL NOT NULL,
+                            unit TEXT NOT NULL,
+                            note TEXT,
+                            createdAtEpochMs INTEGER NOT NULL,
+                            updatedAtEpochMs INTEGER NOT NULL
+                        )
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_body_weight_logs_dateIso
+                        ON body_weight_logs(dateIso)
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 5→6 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 5→6 FAILED", t)
                     throw t
                 }
             }

@@ -18,6 +18,7 @@ import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
 import com.example.adobongkangkong.data.repository.StoreRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserNutrientTargetRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserPinnedNutrientRepositoryImpl
+import com.example.adobongkangkong.data.weight.BodyWeightLogRepositoryImpl
 import com.example.adobongkangkong.domain.repository.CalendarSuccessNutrientRepository
 import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
@@ -36,6 +37,7 @@ import com.example.adobongkangkong.domain.repository.RecipeRepository
 import com.example.adobongkangkong.domain.repository.StoreRepository
 import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
+import com.example.adobongkangkong.domain.weight.BodyWeightLogRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -167,10 +169,15 @@ abstract class RepositoryModule {
         impl: NutrientCatalogBootstrapRepositoryImpl
     ): NutrientCatalogBootstrapRepository
 
-    // 🔥 NEW: Store repository binding
     @Binds
     @Singleton
     abstract fun bindStoreRepository(
         impl: StoreRepositoryImpl
     ): StoreRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindBodyWeightLogRepository(
+        impl: BodyWeightLogRepositoryImpl
+    ): BodyWeightLogRepository
 }
