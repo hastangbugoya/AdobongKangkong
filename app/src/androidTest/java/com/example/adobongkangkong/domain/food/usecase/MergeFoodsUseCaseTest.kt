@@ -6,6 +6,7 @@ import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import kotlinx.coroutines.flow.Flow
+import com.example.adobongkangkong.domain.repository.FoodStorePricePreview
 
 // KEEP EVERYTHING ABOVE UNCHANGED
 
@@ -76,6 +77,14 @@ private class TestFoodRepository(
         storeId: Long
     ): Flow<Double?> {
         throw UnsupportedOperationException("Unused in MergeFoodsUseCase instrumentation tests.")
+    }
+
+    override suspend fun getStorePricePreviewsForFood(
+        foodId: Long
+    ): List<FoodStorePricePreview> {
+        throw UnsupportedOperationException(
+            "Unused in MergeFoodsUseCase instrumentation tests."
+        )
     }
 
     // -------------------------
