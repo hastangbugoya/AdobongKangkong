@@ -95,7 +95,7 @@ fun DayLogRowCard(
                         onClick = { isMenuExpanded = true }
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.menu_dots_vertical),
+                            painter = painterResource(R.drawable.ms_more_vert),
                             contentDescription = "Open Calendar",
                             modifier = Modifier.size(AppIconSize.Inline)
                         )
@@ -125,7 +125,7 @@ fun DayLogRowCard(
                             text = { Text("Delete") },
                             leadingIcon = {
                                 Icon(
-                                    painter = painterResource(R.drawable.trash),
+                                    painter = painterResource(R.drawable.ms_delete),
                                     contentDescription = null,
                                     modifier = Modifier.size(AppIconSize.CardAction)
                                 )

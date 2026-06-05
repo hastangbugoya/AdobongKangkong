@@ -157,7 +157,7 @@ fun DayLogScreen(
                         }
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.add),
+                            painter = painterResource(R.drawable.ms_add_circle),
                             contentDescription = "Quick add"
                         )
                     }

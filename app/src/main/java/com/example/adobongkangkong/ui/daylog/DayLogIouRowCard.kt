@@ -75,7 +75,7 @@ fun DayLogIouRowCard(
 
             IconButton(onClick = onDelete) {
                 Icon(
-                    painter = painterResource(R.drawable.trash),
+                    painter = painterResource(R.drawable.ms_delete),
                     contentDescription = "Delete IOU",
                     modifier = Modifier.size(AppIconSize.CardAction)
                 )

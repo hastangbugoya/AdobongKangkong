@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.meal.editor
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,14 +67,7 @@ fun MealEditorHeader(
                 selected = state.templateDefaultSlot,
                 onSelected = onTemplateDefaultSlotChanged
             )
-//            state.liveMacroSummaryLine?.takeIf { it.isNotBlank() }?.let { line ->
-//                Spacer(modifier = Modifier.height(8.dp))
-//                Text(
-//                    text = line,
-//                    style = MaterialTheme.typography.bodyMedium,
-//                    color = MaterialTheme.colorScheme.onSurfaceVariant
-//                )
-//            }
+
         }
     }
 }
@@ -90,9 +84,16 @@ private fun TemplateDefaultSlotField(
             text = "Default meal slot",
             style = MaterialTheme.typography.labelLarge
         )
-        TextButton(onClick = { expanded = true }) {
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        TextButton(
+            onClick = { expanded = true },
+            modifier = Modifier.padding(start = 0.dp)
+        ) {
             Text(selected?.display ?: "None")
         }
+
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }

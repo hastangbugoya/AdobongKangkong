@@ -96,6 +96,10 @@ fun MealEditorScreen(
     var previousLineIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var hasInitializedRows by remember { mutableStateOf(false) }
 
+    var isNutritionCautionDismissed by remember(state.mealId, state.mode) {
+        mutableStateOf(false)
+    }
+
     fun requestBack() {
         if (state.isSaving) return
         if (state.isDirty) {
@@ -189,7 +193,7 @@ fun MealEditorScreen(
                 onClick = onRequestAddFood,
                 content = {
                     Icon(
-                        painter = painterResource(R.drawable.add),
+                        painter = painterResource(R.drawable.ms_add_circle),
                         contentDescription = "Add food"
                     )
                 }
@@ -253,11 +257,12 @@ fun MealEditorScreen(
                     MealMacroSummaryCard(summary = summary)
                 }
 
-            if (state.nutritionCautions.isNotEmpty()) {
-                MealNutritionCautionCard(cautions = state.nutritionCautions)
+            if (state.nutritionCautions.isNotEmpty() && !isNutritionCautionDismissed) {
+                MealNutritionCautionCard(
+                    cautions = state.nutritionCautions,
+                    onDismiss = { isNutritionCautionDismissed = true }
+                )
             }
-
-            Divider()
 
             Divider()
 
@@ -307,7 +312,7 @@ private fun MealMacroSummaryCard(summary: String) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         shape = RoundedCornerShape(16.dp),
         tonalElevation = 2.dp
     ) {
@@ -460,7 +465,8 @@ private fun EmptyState(
 
 @Composable
 private fun MealNutritionCautionCard(
-    cautions: List<com.example.adobongkangkong.ui.planner.PlannerNutritionCautionUi>
+    cautions: List<com.example.adobongkangkong.ui.planner.PlannerNutritionCautionUi>,
+    onDismiss: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -475,11 +481,21 @@ private fun MealNutritionCautionCard(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = "Meal nutrition caution",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Meal nutrition caution",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+
+                TextButton(onClick = onDismiss) {
+                    Text("Dismiss")
+                }
+            }
 
             cautions.forEach { caution ->
                 Column {
