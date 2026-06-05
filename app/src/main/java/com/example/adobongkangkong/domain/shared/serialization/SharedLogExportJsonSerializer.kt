@@ -45,6 +45,25 @@ class SharedLogExportJsonSerializer @Inject constructor() {
         explicitNulls = false
     }
 
+    /**
+     * Serializes log rows into the shared log export JSON contract.
+     *
+     * Important snapshot rule:
+     * - This exports the persisted [LogEntryEntity.nutrientsJson] value exactly as stored.
+     * - It does not recalculate food or recipe nutrition from current app data.
+     * - This preserves historical log accuracy when foods or recipes are edited later.
+     *
+     * Sync rule:
+     * - [LogEntryEntity.stableId] is exported so consumer apps can upsert the same log
+     *   instead of creating duplicates.
+     * - [LogEntryEntity.modifiedAt] is exported so newer edits can win during sync/import.
+     *
+     * Null/optional behavior:
+     * - [LogEntryEntity.mealSlot] is omitted when null.
+     *
+     * @param logs raw persisted log rows to export.
+     * @return pretty-printed JSON containing schemaVersion and logs array.
+     */
     fun serialize(logs: List<LogEntryEntity>): String {
         val payload = buildJsonObject {
             put("schemaVersion", 1)

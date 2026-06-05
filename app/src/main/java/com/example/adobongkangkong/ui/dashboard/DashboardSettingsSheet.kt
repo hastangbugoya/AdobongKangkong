@@ -48,6 +48,7 @@ import com.example.adobongkangkong.domain.model.TargetDraft
 import com.example.adobongkangkong.domain.model.UserNutrientPreference
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
+import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 
@@ -126,6 +127,11 @@ fun DashboardSettingsSheet(
     onMealReminderEndMinutesChange: (Int) -> Unit,
     mealReminderIntensity: MealReminderIntensity,
     onMealReminderIntensityChange: (MealReminderIntensity) -> Unit,
+    weightLogReminderMode: WeightLogReminderMode = WeightLogReminderMode.NO_WARNING,
+    weightLogIntervalDays: Int = 7,
+    onWeightLogReminderModeChange: (WeightLogReminderMode) -> Unit = {},
+    onWeightLogIntervalDaysChange: (Int) -> Unit = {},
+    onOpenWeightTracker: () -> Unit = {},
     caffeineWidgetSlot1FoodId: Long?,
     caffeineWidgetSlot2FoodId: Long?,
     caffeineWidgetSlot3FoodId: Long?,
@@ -233,6 +239,62 @@ fun DashboardSettingsSheet(
             ReminderIntensityDropdown(
                 selected = mealReminderIntensity,
                 onSelect = onMealReminderIntensityChange
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        Text("Weight tracking", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Weight logs are stored as private historical records. The dashboard ribbon only appears if you opt in here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        ListItem(
+            headlineContent = { Text("Open weight tracker") },
+            supportingContent = {
+                Text("Log or review body-weight entries without showing them prominently on the dashboard.")
+            },
+            modifier = Modifier.clickable {
+                onDismiss()
+                onOpenWeightTracker()
+            }
+        )
+        HorizontalDivider()
+
+        Spacer(Modifier.height(12.dp))
+
+        WeightLogReminderModeDropdown(
+            selected = weightLogReminderMode,
+            onSelect = onWeightLogReminderModeChange
+        )
+
+        if (weightLogReminderMode != WeightLogReminderMode.NO_WARNING) {
+            Spacer(Modifier.height(8.dp))
+
+            WeightLogIntervalDaysField(
+                intervalDays = weightLogIntervalDays,
+                onIntervalDaysChange = onWeightLogIntervalDaysChange
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = when (weightLogReminderMode) {
+                    WeightLogReminderMode.NO_WARNING -> ""
+                    WeightLogReminderMode.REMINDER ->
+                        "Reminder mode shows a dismissible dashboard ribbon when due."
+
+                    WeightLogReminderMode.REQUIRE ->
+                        "Require mode keeps the dashboard ribbon visible until weight is logged. It does not block app use."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -1019,6 +1081,30 @@ private fun ReminderIntervalField(
     )
 }
 
+@Composable
+private fun WeightLogIntervalDaysField(
+    intervalDays: Int,
+    onIntervalDaysChange: (Int) -> Unit
+) {
+    var text by remember(intervalDays) {
+        mutableStateOf(intervalDays.coerceAtLeast(1).toString())
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { value ->
+            text = value.filter { it.isDigit() }
+            text.toIntOrNull()?.let { parsed ->
+                onIntervalDaysChange(parsed.coerceAtLeast(1))
+            }
+        },
+        label = { Text("Weight reminder interval days") },
+        supportingText = { Text("Counter resets when you dismiss the reminder or log weight.") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReminderIntensityDropdown(
@@ -1077,6 +1163,76 @@ private fun ReminderIntensityDropdown(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WeightLogReminderModeDropdown(
+    selected: WeightLogReminderMode,
+    onSelect: (WeightLogReminderMode) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val selectedLabel = selected.weightLogReminderModeLabel()
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Weight log dashboard ribbon") },
+//            supportingText = {
+//                Text("No warning hides the ribbon. Reminder can be dismissed. Require stays until logged.")
+//            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            WeightLogReminderMode.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(option.weightLogReminderModeLabel())
+                            Text(
+                                text = option.weightLogReminderModeDescription(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun WeightLogReminderMode.weightLogReminderModeLabel(): String =
+    when (this) {
+        WeightLogReminderMode.NO_WARNING -> "No warning"
+        WeightLogReminderMode.REMINDER -> "Reminder"
+        WeightLogReminderMode.REQUIRE -> "Require"
+    }
+
+private fun WeightLogReminderMode.weightLogReminderModeDescription(): String =
+    when (this) {
+        WeightLogReminderMode.NO_WARNING -> "Do not show a dashboard ribbon."
+        WeightLogReminderMode.REMINDER -> "Show a dismissible ribbon when due."
+        WeightLogReminderMode.REQUIRE -> "Show a persistent ribbon until weight is logged."
+    }
 
 private fun formatMinutesAsTime(minutes: Int): String {
     val safeMinutes = minutes.coerceIn(0, 23 * 60 + 59)

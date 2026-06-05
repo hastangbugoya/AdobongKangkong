@@ -69,8 +69,10 @@ import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
 import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
+import com.example.adobongkangkong.domain.weight.WeightLogReminderRibbonState
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.daynutrients.DayNutrientsScreen
+import com.example.adobongkangkong.ui.weight.BodyWeightTrackerScreen
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
@@ -106,6 +108,7 @@ fun DashboardScreen(
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+    val weightLogReminderRibbon by vm.weightLogReminderRibbon.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
@@ -115,6 +118,7 @@ fun DashboardScreen(
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     var showDayNutrients by rememberSaveable { mutableStateOf(false) }
+    var showWeightTracker by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -251,6 +255,9 @@ fun DashboardScreen(
 
             val mealReminderIntensity by vm.mealReminderIntensity.collectAsState()
 
+            val weightLogReminderMode by vm.weightLogReminderMode.collectAsState()
+            val weightLogIntervalDays by vm.weightLogIntervalDays.collectAsState()
+
             val caffeineWidgetSlot1FoodId by vm.caffeineWidgetSlot1FoodId.collectAsState()
             val caffeineWidgetSlot2FoodId by vm.caffeineWidgetSlot2FoodId.collectAsState()
             val caffeineWidgetSlot3FoodId by vm.caffeineWidgetSlot3FoodId.collectAsState()
@@ -304,6 +311,13 @@ fun DashboardScreen(
                 onMealReminderEndMinutesChange = vm::setMealReminderEndMinutes,
                 mealReminderIntensity = mealReminderIntensity,
                 onMealReminderIntensityChange = vm::setMealReminderIntensity,
+                weightLogReminderMode = weightLogReminderMode,
+                weightLogIntervalDays = weightLogIntervalDays,
+                onWeightLogReminderModeChange = vm::setWeightLogReminderMode,
+                onWeightLogIntervalDaysChange = vm::setWeightLogIntervalDays,
+                onOpenWeightTracker = {
+                    showWeightTracker = true
+                },
                 caffeineWidgetSlot1FoodId = caffeineWidgetSlot1FoodId,
                 caffeineWidgetSlot2FoodId = caffeineWidgetSlot2FoodId,
                 caffeineWidgetSlot3FoodId = caffeineWidgetSlot3FoodId,
@@ -345,6 +359,16 @@ fun DashboardScreen(
                 onPickedQuickAddFoodConsumed()
             }
         }
+    }
+
+    if (showWeightTracker) {
+        BodyWeightTrackerScreen(
+            startDate = currentDate,
+            onBack = {
+                showWeightTracker = false
+            }
+        )
+        return
     }
 
     if (showDayNutrients) {
@@ -497,6 +521,21 @@ fun DashboardScreen(
                 }
             }
 
+            if (selectedDate == currentDate) {
+                when (val ribbon = weightLogReminderRibbon) {
+                    WeightLogReminderRibbonState.Hidden -> Unit
+                    is WeightLogReminderRibbonState.Visible -> {
+                        item(key = "weight_log_reminder_ribbon") {
+                            WeightLogReminderRibbon(
+                                ribbon = ribbon,
+                                onLogWeight = { showWeightTracker = true },
+                                onDismiss = vm::dismissWeightLogReminder
+                            )
+                        }
+                    }
+                }
+            }
+
             items(
                 items = state.nutrientCards,
                 key = { it.code }
@@ -642,6 +681,58 @@ private fun DashboardBottomActionBar(
                     painter = painterResource(R.drawable.calendar_days),
                     contentDescription = "Open Calendar",
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeightLogReminderRibbon(
+    ribbon: WeightLogReminderRibbonState.Visible,
+    onLogWeight: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = ribbon.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = ribbon.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (ribbon.canDismiss) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Dismiss")
+                    }
+                }
+
+                TextButton(onClick = onLogWeight) {
+                    Text("Log weight")
+                }
             }
         }
     }

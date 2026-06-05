@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
+import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,6 +39,7 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - privacy lock policy
  * - meal logging reminder settings
  * - caffeine widget quick-log food slots
+ * - weight-log dashboard ribbon settings
  * - nutrition caution thresholds
  *
  * Nutrition threshold defaults:
@@ -47,6 +49,11 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - Quick Add sugar: 15 g per logged entry
  * - Planner Day sodium: 2300 mg per planned day
  * - Planner Day total sugar: 36 g per planned day
+ *
+ * Weight-log reminder defaults:
+ * - Mode: NO_WARNING
+ * - Interval: 7 days
+ * - Last reset anchor: null
  *
  * ============================================================
  * FOR FUTURE DEV
@@ -62,6 +69,9 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  *
  * Caffeine widget slot settings only store selected food IDs.
  * The widget must still read caffeine totals from normal log/nutrient data.
+ *
+ * Weight logs themselves are historical records and belong in Room.
+ * Only the dashboard reminder/ribbon preference state belongs here.
  *
  * Keep the two threshold groups separate.
  * ============================================================
@@ -191,6 +201,42 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         context.userPreferencesDataStore.data
             .map { preferences ->
                 preferences[CAFFEINE_WIDGET_SLOT_3_FOOD_ID_KEY]?.takeIf { it > 0L }
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = null
+            )
+
+    override val weightLogReminderMode: StateFlow<WeightLogReminderMode> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                WeightLogReminderMode.fromStoredName(
+                    preferences[WEIGHT_LOG_REMINDER_MODE_KEY]
+                )
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = WeightLogReminderMode.NO_WARNING
+            )
+
+    override val weightLogIntervalDays: StateFlow<Int> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                (preferences[WEIGHT_LOG_INTERVAL_DAYS_KEY] ?: DEFAULT_WEIGHT_LOG_INTERVAL_DAYS)
+                    .coerceAtLeast(1)
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_WEIGHT_LOG_INTERVAL_DAYS
+            )
+
+    override val weightLogLastPromptResetEpochDay: StateFlow<Long?> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[WEIGHT_LOG_LAST_PROMPT_RESET_EPOCH_DAY_KEY]
             }
             .stateIn(
                 scope = scope,
@@ -350,6 +396,34 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    override fun setWeightLogReminderMode(mode: WeightLogReminderMode) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_LOG_REMINDER_MODE_KEY] = mode.name
+            }
+        }
+    }
+
+    override fun setWeightLogIntervalDays(days: Int) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_LOG_INTERVAL_DAYS_KEY] = days.coerceAtLeast(1)
+            }
+        }
+    }
+
+    override fun setWeightLogLastPromptResetEpochDay(epochDay: Long?) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                if (epochDay == null) {
+                    preferences.remove(WEIGHT_LOG_LAST_PROMPT_RESET_EPOCH_DAY_KEY)
+                } else {
+                    preferences[WEIGHT_LOG_LAST_PROMPT_RESET_EPOCH_DAY_KEY] = epochDay
+                }
+            }
+        }
+    }
+
     override fun setProductCheckSodiumLimitMg(value: Double) {
         scope.launch {
             context.userPreferencesDataStore.edit { preferences ->
@@ -409,6 +483,8 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         const val DEFAULT_MEAL_REMINDER_INTERVAL_MINUTES = 3 * 60
         const val DEFAULT_MEAL_REMINDER_END_MINUTES = 21 * 60
 
+        const val DEFAULT_WEIGHT_LOG_INTERVAL_DAYS = 7
+
         const val DEFAULT_PRODUCT_CHECK_SODIUM_LIMIT_MG = 400.0
         const val DEFAULT_PRODUCT_CHECK_SUGAR_LIMIT_G = 10.0
         const val DEFAULT_QUICK_ADD_SODIUM_CAUTION_MG = 600.0
@@ -433,6 +509,13 @@ class DataStoreUserPreferencesRepository @Inject constructor(
             longPreferencesKey("caffeine_widget_slot_2_food_id")
         val CAFFEINE_WIDGET_SLOT_3_FOOD_ID_KEY =
             longPreferencesKey("caffeine_widget_slot_3_food_id")
+
+        val WEIGHT_LOG_REMINDER_MODE_KEY =
+            stringPreferencesKey("weight_log_reminder_mode")
+        val WEIGHT_LOG_INTERVAL_DAYS_KEY =
+            intPreferencesKey("weight_log_interval_days")
+        val WEIGHT_LOG_LAST_PROMPT_RESET_EPOCH_DAY_KEY =
+            longPreferencesKey("weight_log_last_prompt_reset_epoch_day")
 
         val PRODUCT_CHECK_SODIUM_LIMIT_MG_KEY =
             doublePreferencesKey("product_check_sodium_limit_mg")

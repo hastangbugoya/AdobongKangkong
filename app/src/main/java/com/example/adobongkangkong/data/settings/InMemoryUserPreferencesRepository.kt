@@ -2,6 +2,7 @@ package com.example.adobongkangkong.data.settings
 
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
+import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,11 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * Caffeine widget defaults:
  * - All 3 quick-log food slots start unconfigured.
+ *
+ * Weight-log reminder defaults:
+ * - Mode: NO_WARNING
+ * - Interval: 7 days
+ * - Last reset anchor: null
  */
 @Singleton
 class InMemoryUserPreferencesRepository @Inject constructor() :
@@ -66,6 +72,20 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     private val _caffeineWidgetSlot3FoodId = MutableStateFlow<Long?>(null)
     override val caffeineWidgetSlot3FoodId: StateFlow<Long?> =
         _caffeineWidgetSlot3FoodId
+
+    private val _weightLogReminderMode =
+        MutableStateFlow(WeightLogReminderMode.NO_WARNING)
+
+    override val weightLogReminderMode: StateFlow<WeightLogReminderMode> =
+        _weightLogReminderMode
+
+    private val _weightLogIntervalDays = MutableStateFlow(7)
+    override val weightLogIntervalDays: StateFlow<Int> =
+        _weightLogIntervalDays
+
+    private val _weightLogLastPromptResetEpochDay = MutableStateFlow<Long?>(null)
+    override val weightLogLastPromptResetEpochDay: StateFlow<Long?> =
+        _weightLogLastPromptResetEpochDay
 
     private val _productCheckSodiumLimitMg = MutableStateFlow(400.0)
     override val productCheckSodiumLimitMg: StateFlow<Double> =
@@ -127,6 +147,18 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
             2 -> _caffeineWidgetSlot2FoodId.value = safeFoodId
             3 -> _caffeineWidgetSlot3FoodId.value = safeFoodId
         }
+    }
+
+    override fun setWeightLogReminderMode(mode: WeightLogReminderMode) {
+        _weightLogReminderMode.value = mode
+    }
+
+    override fun setWeightLogIntervalDays(days: Int) {
+        _weightLogIntervalDays.value = days.coerceAtLeast(1)
+    }
+
+    override fun setWeightLogLastPromptResetEpochDay(epochDay: Long?) {
+        _weightLogLastPromptResetEpochDay.value = epochDay
     }
 
     override fun setProductCheckSodiumLimitMg(value: Double) {

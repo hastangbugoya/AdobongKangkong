@@ -30,7 +30,10 @@ import kotlinx.coroutines.flow.StateFlow
  * 3) Widget Preferences
  *    - caffeine widget quick-log food slots
  *
- * 4) Nutrition Thresholds
+ * 4) Weight Log Reminder Preferences
+ *    - dashboard weight-log ribbon behavior
+ *
+ * 5) Nutrition Thresholds
  *    - Product Check thresholds (scan flow)
  *    - Quick Add thresholds (logging flow)
  *
@@ -48,6 +51,10 @@ import kotlinx.coroutines.flow.StateFlow
  *   → stores only the configured quick-log food IDs
  *   → does NOT store caffeine totals
  *   → does NOT create separate caffeine-only records
+ *
+ * Weight logs:
+ *   → actual historical body-weight records belong in Room
+ *   → reminder mode/interval/reset anchor belong here in preferences
  *
  * ============================================================
  * FOR FUTURE AI / DEV ASSISTANTS
@@ -169,6 +176,54 @@ interface UserPreferencesRepository {
      * Passing null clears the slot.
      */
     fun setCaffeineWidgetSlotFoodId(slotIndex: Int, foodId: Long?)
+
+    // ============================================================
+    // ⚖️ Weight Log Reminder Preferences
+    // ============================================================
+
+    /**
+     * Dashboard reminder/ribbon mode for body-weight logging.
+     *
+     * This does not store weight values. It only controls whether AK should show
+     * a quiet dashboard ribbon when the user is due to log weight.
+     */
+    val weightLogReminderMode: StateFlow<WeightLogReminderMode>
+
+    /**
+     * Number of days between dashboard weight-log ribbon prompts.
+     *
+     * Example:
+     * - 7 means prompt every 7 days after the last dismiss/log reset.
+     *
+     * Implementations should coerce this to at least 1.
+     */
+    val weightLogIntervalDays: StateFlow<Int>
+
+    /**
+     * Epoch day when the weight-log reminder counter was last reset.
+     *
+     * Reset events:
+     * - User dismisses reminder ribbon in REMINDER mode.
+     * - User logs weight.
+     *
+     * Null means no reset anchor exists yet.
+     */
+    val weightLogLastPromptResetEpochDay: StateFlow<Long?>
+
+    /** Sets the dashboard weight-log reminder mode. */
+    fun setWeightLogReminderMode(mode: WeightLogReminderMode)
+
+    /** Sets the reminder interval in days. */
+    fun setWeightLogIntervalDays(days: Int)
+
+    /**
+     * Sets the reset anchor used by the N-day counter.
+     *
+     * Use today's LocalDate.toEpochDay() when:
+     * - dismissing the ribbon in REMINDER mode
+     * - successfully logging weight
+     */
+    fun setWeightLogLastPromptResetEpochDay(epochDay: Long?)
 
     // ============================================================
     // 🧂 Nutrition Thresholds

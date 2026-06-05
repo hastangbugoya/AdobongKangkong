@@ -34,6 +34,9 @@ import com.example.adobongkangkong.domain.usecase.LogFoodUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayLogItemsUseCase
 import com.example.adobongkangkong.domain.usecase.ObserveTodayMacrosUseCase
 import com.example.adobongkangkong.domain.usecase.UpsertUserNutrientTargetUseCase
+import com.example.adobongkangkong.domain.weight.DismissWeightLogReminderUseCase
+import com.example.adobongkangkong.domain.weight.ObserveWeightLogReminderRibbonUseCase
+import com.example.adobongkangkong.domain.weight.WeightLogReminderRibbonState
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingSheetModel
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
 import com.example.adobongkangkong.ui.dashboard.pinned.usecase.ObserveDashboardPinOptionsUseCase
@@ -55,6 +58,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
+import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
 import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
 import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
 import com.example.adobongkangkong.domain.trend.usecase.ObserveDashboardNutrientHistoryUseCase
@@ -107,6 +111,8 @@ class DashboardViewModel @Inject constructor(
 
     private val userPinnedNutrientRepository: UserPinnedNutrientRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
+    private val observeWeightLogReminderRibbonUseCase: ObserveWeightLogReminderRibbonUseCase,
+    private val dismissWeightLogReminderUseCase: DismissWeightLogReminderUseCase,
     private val setPinnedDashboardNutrientsUseCase: SetPinnedDashboardNutrientsUseCase,
     private val upsertUserNutrientTargetUseCase: UpsertUserNutrientTargetUseCase,
 
@@ -149,6 +155,12 @@ class DashboardViewModel @Inject constructor(
 
     val mealReminderIntensity: StateFlow<MealReminderIntensity> =
         userPreferencesRepository.mealReminderIntensity
+
+    val weightLogReminderMode: StateFlow<WeightLogReminderMode> =
+        userPreferencesRepository.weightLogReminderMode
+
+    val weightLogIntervalDays: StateFlow<Int> =
+        userPreferencesRepository.weightLogIntervalDays
 
     val caffeineWidgetSlot1FoodId: StateFlow<Long?> =
         userPreferencesRepository.caffeineWidgetSlot1FoodId
@@ -211,6 +223,18 @@ class DashboardViewModel @Inject constructor(
     private val zoneId = ZoneId.systemDefault()
 
     private val currentDateFlow = MutableStateFlow(LocalDate.now())
+
+    val weightLogReminderRibbon: StateFlow<WeightLogReminderRibbonState> =
+        currentDateFlow
+            .flatMapLatest { today ->
+                observeWeightLogReminderRibbonUseCase(today = today)
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = WeightLogReminderRibbonState.Hidden
+            )
+
     private val macrosFlow =
         selectedDateFlow.flatMapLatest { date ->
             observeTodayMacrosUseCase(date = date, zoneId = zoneId)
@@ -347,6 +371,28 @@ class DashboardViewModel @Inject constructor(
         currentDateFlow.value = LocalDate.now()
     }
 
+    fun dismissWeightLogReminder() {
+        val currentRibbon = weightLogReminderRibbon.value
+
+        if (currentRibbon !is WeightLogReminderRibbonState.Visible) {
+            return
+        }
+
+        when (
+            val result = dismissWeightLogReminderUseCase(
+                today = currentDateFlow.value,
+                mode = currentRibbon.mode
+            )
+        ) {
+            DismissWeightLogReminderUseCase.Result.Dismissed,
+            DismissWeightLogReminderUseCase.Result.NoOp -> Unit
+
+            is DismissWeightLogReminderUseCase.Result.Blocked -> {
+                _snackbar.value = result.message
+            }
+        }
+    }
+
     fun setPrivacyLockEnabled(enabled: Boolean) {
         userPreferencesRepository.setPrivacyLockEnabled(enabled)
     }
@@ -373,6 +419,14 @@ class DashboardViewModel @Inject constructor(
 
     fun setMealReminderIntensity(intensity: MealReminderIntensity) {
         userPreferencesRepository.setMealReminderIntensity(intensity)
+    }
+
+    fun setWeightLogReminderMode(mode: WeightLogReminderMode) {
+        userPreferencesRepository.setWeightLogReminderMode(mode)
+    }
+
+    fun setWeightLogIntervalDays(days: Int) {
+        userPreferencesRepository.setWeightLogIntervalDays(days)
     }
 
     fun setCaffeineWidgetSlotFoodId(slotIndex: Int, foodId: Long?) {
