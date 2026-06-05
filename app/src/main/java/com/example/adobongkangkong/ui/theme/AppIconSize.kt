@@ -8,7 +8,9 @@ object AppIconSize {
     val TopBar = 24.dp
 
     /** Standard action icons in cards/lists */
-    val CardAction = 18.dp
+    val CardAction = 22.dp // val CardAction = 18.dp
+
+    val CalendarDayCell = 24.dp
 
     /** Very small inline icons (nutrients, metadata) */
     val Inline = 14.dp

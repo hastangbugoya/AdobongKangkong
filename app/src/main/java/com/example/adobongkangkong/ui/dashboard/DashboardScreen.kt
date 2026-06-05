@@ -70,6 +70,7 @@ import com.example.adobongkangkong.domain.trend.model.TargetStatus
 import com.example.adobongkangkong.domain.trend.usecase.DashboardNutrientHistory
 import com.example.adobongkangkong.domain.trend.usecase.NutrientHistoryEntry
 import com.example.adobongkangkong.domain.weight.WeightLogReminderRibbonState
+import com.example.adobongkangkong.ui.calendar.DayIconStatus
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.daynutrients.DayNutrientsScreen
 import com.example.adobongkangkong.ui.weight.BodyWeightTrackerScreen
@@ -435,7 +436,7 @@ fun DashboardScreen(
                 actions = {
                     IconButton(onClick = vm::onSettingsClicked) {
                         Icon(
-                            painter = painterResource(id = R.drawable.settings),
+                            painter = painterResource(id = R.drawable.ms_settings),
                             contentDescription = "Dashboard settings"
                         )
                     }
@@ -572,7 +573,7 @@ fun DashboardScreen(
                         onClick = { showDayNutrients = true }
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.total),
+                            painter = painterResource(R.drawable.ms_functions),
                             contentDescription = "Show all nutrients"
                         )
                     }
@@ -580,7 +581,7 @@ fun DashboardScreen(
                         onClick = { onOpenDayLog(state.date) }
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.overview),
+                            painter = painterResource(R.drawable.ms_assignment_add),
                             contentDescription = "Open day log"
                         )
                     }
@@ -660,7 +661,7 @@ private fun DashboardBottomActionBar(
                 modifier = Modifier.weight(1f).size(56.dp)
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.list),
+                    painter = painterResource(R.drawable.ms_list),
                     contentDescription = "Open Foods",
                 )
             }
@@ -669,7 +670,7 @@ private fun DashboardBottomActionBar(
                 modifier = Modifier.weight(1f).size(56.dp)
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.add),
+                    painter = painterResource(R.drawable.ms_add_circle),
                     contentDescription = "Quick Log",
                 )
             }
@@ -678,7 +679,7 @@ private fun DashboardBottomActionBar(
                 modifier = Modifier.weight(1f).size(56.dp)
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.calendar_days),
+                    painter = painterResource(R.drawable.ms_calendar_month),
                     contentDescription = "Open Calendar",
                 )
             }
@@ -802,11 +803,19 @@ private fun DashboardNutrientCardRow(
 
             Spacer(Modifier.width(6.dp))
 
+//            val icon = when (card.status) {
+//                TargetStatus.OK -> R.drawable.check_circle__1_
+//                TargetStatus.LOW -> R.drawable.exclamation
+//                TargetStatus.HIGH -> R.drawable.exclamation
+//                TargetStatus.NO_TARGET -> R.drawable.empty_set
+//            }
+
+
             val icon = when (card.status) {
-                TargetStatus.OK -> R.drawable.check_circle__1_
-                TargetStatus.LOW -> R.drawable.exclamation
-                TargetStatus.HIGH -> R.drawable.exclamation
-                TargetStatus.NO_TARGET -> R.drawable.empty_set
+                TargetStatus.OK -> R.drawable.ms_check_box
+                TargetStatus.LOW -> R.drawable.ms_disabled_by_default
+                TargetStatus.HIGH -> R.drawable.ms_disabled_by_default
+                TargetStatus.NO_TARGET -> R.drawable.ms_help_center
             }
 
             val tint = when (card.status) {
@@ -819,7 +828,7 @@ private fun DashboardNutrientCardRow(
                 painter = painterResource(icon),
                 contentDescription = card.status.name,
                 tint = tint,
-                modifier = Modifier.size(AppIconSize.Inline),
+                modifier = Modifier.size(AppIconSize.CardAction),
             )
         }
 

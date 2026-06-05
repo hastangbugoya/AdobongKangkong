@@ -250,7 +250,7 @@ fun RecipeBuilderScreen(
                     Box {
                         IconButton(onClick = { showActionsMenu = true }) {
                             Icon(
-                                painter = painterResource(R.drawable.settings),
+                                painter = painterResource(R.drawable.ms_settings),
                                 contentDescription = "More actions"
                             )
                         }

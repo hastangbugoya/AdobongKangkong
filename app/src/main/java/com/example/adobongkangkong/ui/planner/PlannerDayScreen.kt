@@ -111,7 +111,7 @@ fun PlannerDayScreen(
                 navigationIcon = {
                     IconButton(onClick = { onEvent(PlannerDayEvent.Back) }) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_circle_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Back"
                         )
                     }
@@ -291,8 +291,8 @@ private fun DateStrip(
         text = dateText,
         onPrev = onPrev,
         onNext = onNext,
-        prevIcon = painterResource(R.drawable.angle_small_left),
-        nextIcon = painterResource(R.drawable.angle_small_right),
+        prevIcon = painterResource(R.drawable.ms_arrow_back),
+        nextIcon = painterResource(R.drawable.ms_arrow_forward),
         prevContentDescription = "Previous day",
         nextContentDescription = "Next day",
         spacing = 4.dp
@@ -317,7 +317,7 @@ private fun SlotHeader(
             )
             IconButton(onClick = onAdd) {
                 Icon(
-                    painter = painterResource(R.drawable.add),
+                    painter = painterResource(R.drawable.ms_add_circle),
                     contentDescription = "Add meal",
                     modifier = Modifier.size(AppIconSize.CardAction)
                 )
@@ -868,7 +868,7 @@ private fun PlannedMealCard(
 
                 if (isRecurring) {
                     Icon(
-                        painter = painterResource(R.drawable.rotate_reverse),
+                        painter = painterResource(R.drawable.ms_cycle),
                         contentDescription = "Recurring",
                         modifier = Modifier
                             .padding(end = 4.dp)
@@ -879,7 +879,7 @@ private fun PlannedMealCard(
                 Column(horizontalAlignment = Alignment.End) {
                     IconButton(onClick = { showActionsMenu = true }) {
                         Icon(
-                            painter = painterResource(R.drawable.menu_dots_vertical),
+                            painter = painterResource(R.drawable.ms_more_vert),
                             contentDescription = "Meal actions",
                             modifier = Modifier.size(AppIconSize.CardAction)
                         )
@@ -997,14 +997,14 @@ private fun PlannedItemRow(
         Spacer(Modifier.width(8.dp))
         IconButton(onClick = onLog) {
             Icon(
-                painter = painterResource(R.drawable.log_file),
+                painter = painterResource(R.drawable.ms_save),
                 contentDescription = "Log",
                 modifier = Modifier.size(AppIconSize.CardAction)
             )
         }
         IconButton(onClick = onRemove) {
             Icon(
-                painter = painterResource(R.drawable.trash),
+                painter = painterResource(R.drawable.ms_delete),
                 contentDescription = "Remove",
                 modifier = Modifier.size(AppIconSize.CardAction)
             )

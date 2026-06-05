@@ -70,8 +70,8 @@ fun MealEditorItemRow(
                 IconButton(onClick = onToggleExpanded) {
                     Icon(
                         painter = painterResource(
-                            if (isExpanded) R.drawable.compress_alt
-                            else R.drawable.expand_arrows
+                            if (isExpanded) R.drawable.ms_collapse_content
+                            else R.drawable.ms_expand_content
                         ),
                         contentDescription = if (isExpanded) "Collapse" else "Expand",
                         modifier = Modifier.size(AppIconSize.CardAction),
@@ -80,7 +80,7 @@ fun MealEditorItemRow(
 
                 IconButton(onClick = onRemove) {
                     Icon(
-                        painter = painterResource(R.drawable.trash),
+                        painter = painterResource(R.drawable.ms_delete),
                         contentDescription = "Remove",
                         modifier = Modifier.size(AppIconSize.CardAction),
                     )
@@ -89,7 +89,7 @@ fun MealEditorItemRow(
                 if (onMoveUp != null) {
                     IconButton(onClick = onMoveUp) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_double_small_down),
+                            painter = painterResource(R.drawable.ms_keyboard_double_arrow_down),
                             contentDescription = "Move up",
                             modifier = Modifier.size(AppIconSize.CardAction),
                         )
@@ -101,7 +101,7 @@ fun MealEditorItemRow(
                 if (onMoveDown != null) {
                     IconButton(onClick = onMoveDown) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_double_small_up),
+                            painter = painterResource(R.drawable.ms_keyboard_double_arrow_up),
                             contentDescription = "Move down",
                             modifier = Modifier.size(AppIconSize.CardAction),
                         )

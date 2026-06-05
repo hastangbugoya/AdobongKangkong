@@ -206,7 +206,7 @@ fun FoodsListScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_circle_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Back"
                         )
                     }
@@ -217,7 +217,7 @@ fun FoodsListScreen(
                             onClick = { actionMenuExpanded = true }
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                painter = painterResource(R.drawable.ms_more_vert),
                                 contentDescription = "More actions",
                                 modifier = Modifier.size(AppIconSize.CardAction)
                             )
@@ -281,7 +281,7 @@ fun FoodsListScreen(
                             enabled = query.isNotBlank()
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.cross_small),
+                                painter = painterResource(R.drawable.ms_close),
                                 contentDescription = "Clear search",
                             )
                         }
@@ -542,7 +542,7 @@ private fun FoodsSortRow(
 
         IconButton(onClick = onToggleDirection) {
             Icon(
-                painter = painterResource(R.drawable.priority_arrows),
+                painter = painterResource(R.drawable.ms_swap_vert),
                 contentDescription = "Toggle sort direction",
                 modifier = Modifier.size(AppIconSize.CardAction)
             )
@@ -625,7 +625,7 @@ private fun FoodRow(
 
                     if (row.isMergeFallback) {
                         Icon(
-                            painter = painterResource(R.drawable.layers),
+                            painter = painterResource(R.drawable.ms_arrow_and_edge),
                             contentDescription = "Default merge fallback food",
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -684,7 +684,7 @@ private fun FoodRow(
                 ) {
                     Icon(
                         painter = painterResource(
-                            if (row.isRecipe) R.drawable.recipe else R.drawable.salad
+                            if (row.isRecipe) R.drawable.ms_chef_hat else R.drawable.ms_washoku
                         ),
                         contentDescription = if (row.isRecipe) "Recipe" else "Food",
                         modifier = Modifier.size(AppIconSize.CardAction),
@@ -715,7 +715,7 @@ private fun NeedsFixBanner(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Icon(
-            painter = painterResource(R.drawable.triangle_warning),
+            painter = painterResource(R.drawable.ms_warning),
             contentDescription = "Needs fix",
             tint = MaterialTheme.colorScheme.onErrorContainer,
             modifier = Modifier.size(AppIconSize.CardAction)
@@ -746,7 +746,7 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
     ) {
         if (showFavorite) {
             Icon(
-                painter = painterResource(R.drawable.star),
+                painter = painterResource(R.drawable.ms_star_fav),
                 contentDescription = "Favorite",
                 modifier = Modifier.size(AppIconSize.CardAction),
             )
@@ -754,7 +754,7 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
 
         if (showEatMore) {
             Icon(
-                painter = painterResource(R.drawable.social_network),
+                painter = painterResource(R.drawable.ms_thumb_up),
                 contentDescription = "Eat more",
                 modifier = Modifier.size(AppIconSize.CardAction),
             )
@@ -762,7 +762,7 @@ fun FoodGoalFlagsStrip(flags: FoodGoalFlagsEntity?) {
 
         if (showLimit) {
             Icon(
-                painter = painterResource(R.drawable.triangle_warning),
+                painter = painterResource(R.drawable.ms_warning),
                 contentDescription = "Limit",
                 modifier = Modifier.size(AppIconSize.CardAction),
             )

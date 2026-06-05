@@ -259,7 +259,7 @@ fun QuickAddBottomSheet(
                         }
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.magnifying_glass_wave),
+                            painter = painterResource(R.drawable.ms_barcode_reader),
                             contentDescription = "Check product"
                         )
                     }
@@ -343,7 +343,7 @@ fun QuickAddBottomSheet(
                             trailingIcon = {
                                 IconButton(onClick = { vm.openBarcodeScanner() }) {
                                     Icon(
-                                        painter = painterResource(R.drawable.barcode_read),
+                                        painter = painterResource(R.drawable.ms_barcode_scanner),
                                         contentDescription = "Scan barcode"
                                     )
                                 }

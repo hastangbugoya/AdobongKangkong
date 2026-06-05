@@ -97,7 +97,7 @@ fun CalendarScreen(
                     actions = {
                         IconButton(onClick = vm::openSettingsSheet) {
                             Icon(
-                                painter = painterResource(R.drawable.settings),
+                                painter = painterResource(R.drawable.ms_settings),
                                 contentDescription = "Calendar settings"
                             )
                         }

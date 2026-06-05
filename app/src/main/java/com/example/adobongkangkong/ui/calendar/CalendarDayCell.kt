@@ -83,11 +83,18 @@ fun CalendarDayCell(
 
                 Spacer(Modifier.height(4.dp))
 
+//                val dailyGoalIcon = when (iconStatus) {
+//                    DayIconStatus.OK -> painterResource(R.drawable.check_circle__1_)
+//                    DayIconStatus.MISSED -> painterResource(R.drawable.exclamation)
+//                    DayIconStatus.NO_DATA -> painterResource(R.drawable.empty_set)
+//                    DayIconStatus.NO_TARGETS, null -> painterResource(R.drawable.interrogation)
+//                }
+
                 val dailyGoalIcon = when (iconStatus) {
-                    DayIconStatus.OK -> painterResource(R.drawable.check_circle__1_)
-                    DayIconStatus.MISSED -> painterResource(R.drawable.exclamation)
-                    DayIconStatus.NO_DATA -> painterResource(R.drawable.empty_set)
-                    DayIconStatus.NO_TARGETS, null -> painterResource(R.drawable.interrogation)
+                    DayIconStatus.OK -> painterResource(R.drawable.ms_check_box)
+                    DayIconStatus.MISSED -> painterResource(R.drawable.ms_disabled_by_default)
+                    DayIconStatus.NO_DATA -> painterResource(R.drawable.ms_check_box_outline_blank)
+                    DayIconStatus.NO_TARGETS, null -> painterResource(R.drawable.ms_help_center)
                 }
 
                 if (dailyGoalIcon != null && cell?.date != null ) {
@@ -99,7 +106,7 @@ fun CalendarDayCell(
                     Icon(
                         painter = dailyGoalIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(AppIconSize.CardAction),
+                        modifier = Modifier.size(AppIconSize.CalendarDayCell),
                         tint = tint
                     )
                 } else {

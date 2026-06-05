@@ -21,7 +21,7 @@ fun EditorActionMenu(
 
     IconButton(onClick = { expanded = true }) {
         Icon(
-            painter = painterResource(R.drawable.settings),
+            painter = painterResource(R.drawable.ms_settings),
             contentDescription = "Actions"
         )
     }
