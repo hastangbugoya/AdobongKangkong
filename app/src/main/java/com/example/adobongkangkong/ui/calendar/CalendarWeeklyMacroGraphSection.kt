@@ -37,6 +37,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
@@ -114,8 +115,9 @@ fun CalendarWeeklyMacroGraphSection(
             ) {
                 IconButton(onClick = onPrevWeek, modifier = Modifier.size(40.dp)) {
                     Icon(
-                        painter = painterResource(R.drawable.angle_small_left),
-                        contentDescription = "Previous graph week"
+                        painter = painterResource(R.drawable.ms_arrow_back),
+                        contentDescription = "Previous graph week",
+                        modifier = Modifier.size(AppIconSize.Inline)
                     )
                 }
 
@@ -126,8 +128,9 @@ fun CalendarWeeklyMacroGraphSection(
 
                 IconButton(onClick = onNextWeek, modifier = Modifier.size(40.dp)) {
                     Icon(
-                        painter = painterResource(R.drawable.angle_small_right),
-                        contentDescription = "Next graph week"
+                        painter = painterResource(R.drawable.ms_arrow_forward),
+                        contentDescription = "Next graph week",
+                        modifier = Modifier.size(AppIconSize.Inline)
                     )
                 }
             }

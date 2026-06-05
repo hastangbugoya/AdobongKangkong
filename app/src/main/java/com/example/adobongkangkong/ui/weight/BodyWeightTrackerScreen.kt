@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.weight.BodyWeightUnit
+import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -87,7 +89,7 @@ fun BodyWeightTrackerScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_circle_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Back"
                         )
                     }
@@ -173,8 +175,9 @@ private fun WeightDateHeader(
     ) {
         IconButton(onClick = onPreviousDay) {
             Icon(
-                painter = painterResource(R.drawable.angle_small_left),
-                contentDescription = "Previous day"
+                painter = painterResource(R.drawable.ms_arrow_back),
+                contentDescription = "Previous day",
+                modifier = Modifier.size(AppIconSize.Inline)
             )
         }
 
@@ -197,8 +200,9 @@ private fun WeightDateHeader(
 
         IconButton(onClick = onNextDay) {
             Icon(
-                painter = painterResource(R.drawable.angle_small_right),
-                contentDescription = "Next day"
+                painter = painterResource(R.drawable.ms_arrow_forward),
+                contentDescription = "Next day",
+                modifier = Modifier.size(AppIconSize.Inline)
             )
         }
     }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -47,5 +48,23 @@ fun BlockingBottomSheet(
         ) {
             Text("Close")
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun BlockingBottomSheetPreview() {
+    MaterialTheme {
+        BlockingBottomSheet(
+            model = BlockingSheetModel(
+                title = "Food needs fixing",
+                message = "This food needs grams per serving before it can be logged or used in recipes.",
+                primaryButtonText = "Edit food",
+                secondaryButtonText = "Learn more",
+                onPrimary = {},
+                onSecondary = {}
+            ),
+            onDismiss = {}
+        )
     }
 }

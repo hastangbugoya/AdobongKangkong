@@ -29,7 +29,7 @@ fun MealTemplateEditorActions(
 
     IconButton(onClick = { if (enabled) expanded = true }, enabled = enabled) {
         Icon(
-            painter = painterResource(R.drawable.circle_ellipsis_vertical),
+            painter = painterResource(R.drawable.ms_more_vert),
             contentDescription = "Template actions"
         )
     }

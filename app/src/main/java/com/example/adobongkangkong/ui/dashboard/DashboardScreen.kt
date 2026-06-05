@@ -416,7 +416,7 @@ fun DashboardScreen(
                     if (showBackButton) {
                         IconButton(onClick = onBack) {
                             Icon(
-                                painter = painterResource(R.drawable.angle_circle_left),
+                                painter = painterResource(R.drawable.ms_arrow_back),
                                 contentDescription = "Back"
                             )
                         }
@@ -493,7 +493,7 @@ fun DashboardScreen(
                 ) {
                     IconButton(onClick = vm::showPreviousDay) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_small_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Previous day",
                             tint = MaterialTheme.colorScheme.onSurface
                         )
@@ -514,7 +514,7 @@ fun DashboardScreen(
                         enabled = state.date < currentDate
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_small_right),
+                            painter = painterResource(R.drawable.ms_arrow_forward),
                             contentDescription = "Next day",
                             tint = MaterialTheme.colorScheme.onSurface
                         )

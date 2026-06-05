@@ -83,7 +83,7 @@ fun MealTemplatePickerScreen(
                 navigationIcon = {
                     IconButton(onClick = { onEvent(MealTemplatePickerEvent.Back) }) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_circle_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Back"
                         )
                     }

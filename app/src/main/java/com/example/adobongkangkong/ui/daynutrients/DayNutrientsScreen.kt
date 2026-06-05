@@ -71,7 +71,7 @@ fun DayNutrientsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_circle_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Back"
                         )
                     }

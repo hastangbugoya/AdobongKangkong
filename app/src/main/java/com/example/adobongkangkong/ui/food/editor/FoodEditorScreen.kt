@@ -1040,7 +1040,7 @@ fun FoodEditorScreen(
                                     BoxWithConstraints {
                                         IconButton(onClick = { storeActionsExpanded = true }) {
                                             Icon(
-                                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                                painter = painterResource(R.drawable.ms_more_vert),
                                                 contentDescription = "Store actions",
                                                 modifier = Modifier.size(AppIconSize.CardAction)
                                             )
@@ -1300,7 +1300,7 @@ fun FoodEditorScreen(
                 navigationIcon = {
                     IconButton(onClick = ::requestExit) {
                         Icon(
-                            painter = painterResource(R.drawable.angle_circle_left),
+                            painter = painterResource(R.drawable.ms_arrow_back),
                             contentDescription = "Back"
                         )
                     }
@@ -1311,7 +1311,7 @@ fun FoodEditorScreen(
                             onClick = { actionMenuExpanded = true }
                         ) {
                             Icon(
-                                painter = painterResource(R.drawable.circle_ellipsis_vertical),
+                                painter = painterResource(R.drawable.ms_more_vert),
                                 contentDescription = "More actions",
                                 modifier = Modifier.size(AppIconSize.CardAction)
                             )

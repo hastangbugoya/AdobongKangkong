@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.adobongkangkong.ui.theme.AppIconSize
 
 @Composable
 fun CenteredChevronHeader(
@@ -38,7 +40,9 @@ fun CenteredChevronHeader(
         horizontalArrangement = Arrangement.Center
     ) {
         IconButton(onClick = onPrev) {
-            Icon(painter = prevIcon, contentDescription = prevContentDescription)
+            Icon(painter = prevIcon,
+                contentDescription = prevContentDescription,
+                modifier = Modifier.size(AppIconSize.Inline))
         }
 
         Spacer(Modifier.width(spacing))
@@ -51,7 +55,9 @@ fun CenteredChevronHeader(
         Spacer(Modifier.width(spacing))
 
         IconButton(onClick = onNext) {
-            Icon(painter = nextIcon, contentDescription = nextContentDescription)
+            Icon(painter = nextIcon,
+                contentDescription = nextContentDescription,
+                modifier = Modifier.size(AppIconSize.Inline))
         }
     }
 }
