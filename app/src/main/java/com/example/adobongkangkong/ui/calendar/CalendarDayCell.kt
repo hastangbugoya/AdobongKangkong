@@ -28,6 +28,11 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
 import com.example.adobongkangkong.ui.theme.LimitRed
 import java.time.LocalDate
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.tooling.preview.Preview
+
 
 @Composable
 fun CalendarDayCell(
@@ -133,5 +138,114 @@ fun CalendarDayCell(
                 }
             }
         }
+    }
+}
+
+
+@Preview(showBackground = true, name = "Calendar day cells - status combinations")
+@Composable
+private fun CalendarDayCellStatusPreview() {
+    MaterialTheme {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CalendarDayCellPreviewItem(
+                    label = "OK",
+                    isSelected = false,
+                    isToday = false,
+                    iconStatus = DayIconStatus.OK,
+                    hasPlannedMeals = false
+                )
+                CalendarDayCellPreviewItem(
+                    label = "Missed",
+                    isSelected = false,
+                    isToday = false,
+                    iconStatus = DayIconStatus.MISSED,
+                    hasPlannedMeals = false
+                )
+                CalendarDayCellPreviewItem(
+                    label = "No data",
+                    isSelected = false,
+                    isToday = false,
+                    iconStatus = DayIconStatus.NO_DATA,
+                    hasPlannedMeals = false
+                )
+                CalendarDayCellPreviewItem(
+                    label = "No targets",
+                    isSelected = false,
+                    isToday = false,
+                    iconStatus = DayIconStatus.NO_TARGETS,
+                    hasPlannedMeals = false
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CalendarDayCellPreviewItem(
+                    label = "Selected OK",
+                    isSelected = true,
+                    isToday = false,
+                    iconStatus = DayIconStatus.OK,
+                    hasPlannedMeals = true
+                )
+                CalendarDayCellPreviewItem(
+                    label = "Today missed",
+                    isSelected = false,
+                    isToday = true,
+                    iconStatus = DayIconStatus.MISSED,
+                    hasPlannedMeals = true
+                )
+                CalendarDayCellPreviewItem(
+                    label = "Selected today",
+                    isSelected = true,
+                    isToday = true,
+                    iconStatus = DayIconStatus.NO_DATA,
+                    hasPlannedMeals = true
+                )
+                CalendarDayCellPreviewItem(
+                    label = "Blank",
+                    isSelected = false,
+                    isToday = false,
+                    iconStatus = null,
+                    hasPlannedMeals = false,
+                    date = null
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarDayCellPreviewItem(
+    label: String,
+    isSelected: Boolean,
+    isToday: Boolean,
+    iconStatus: DayIconStatus?,
+    hasPlannedMeals: Boolean,
+    date: LocalDate? = LocalDate.of(2026, 6, 15)
+) {
+    Column(
+        modifier = Modifier.width(72.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        CalendarDayCell(
+            cell = CalendarCell(
+                date = date,
+                hasPlannedMeals = hasPlannedMeals
+            ),
+            isSelected = isSelected,
+            iconStatus = iconStatus,
+            isToday = isToday,
+            onClick = {}
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center
+        )
     }
 }

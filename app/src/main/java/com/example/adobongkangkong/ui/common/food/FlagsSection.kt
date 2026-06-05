@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -63,5 +64,39 @@ private fun FlagCheck(
         Checkbox(checked = checked, onCheckedChange = onChecked)
         Spacer(Modifier.width(8.dp))
         Text(text = label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun GoalFlagsSectionPreviewTablet() {
+    MaterialTheme {
+        GoalFlagsSection(
+            true,
+            true,
+            true,
+            {},
+            {},
+            {},
+            true,
+            Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun GoalFlagsSectionPreviewPhone() {
+    MaterialTheme {
+        GoalFlagsSection(
+            true,
+            true,
+            true,
+            {},
+            {},
+            {},
+            true,
+            Modifier.width(100.dp)
+        )
     }
 }

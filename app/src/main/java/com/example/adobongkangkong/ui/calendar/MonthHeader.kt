@@ -44,6 +44,7 @@ fun MonthHeader(
             modifier = modifier,
             prevContentDescription = "Previous month",
             nextContentDescription = "Next month",
+            spacing = 10.dp
         )
     }
 }

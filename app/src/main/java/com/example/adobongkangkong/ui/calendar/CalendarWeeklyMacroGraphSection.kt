@@ -37,6 +37,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.trend.model.TargetStatus
+import com.example.adobongkangkong.ui.common.chevronheader.CenteredChevronHeader
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -108,33 +109,16 @@ fun CalendarWeeklyMacroGraphSection(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconButton(onClick = onPrevWeek, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ms_arrow_back),
-                        contentDescription = "Previous graph week",
-                        modifier = Modifier.size(AppIconSize.Inline)
-                    )
-                }
-
-                Text(
-                    text = weekLabel,
-                    style = MaterialTheme.typography.titleSmall
-                )
-
-                IconButton(onClick = onNextWeek, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ms_arrow_forward),
-                        contentDescription = "Next graph week",
-                        modifier = Modifier.size(AppIconSize.Inline)
-                    )
-                }
-            }
-
+            CenteredChevronHeader(
+                text = weekLabel,
+                onPrev = onPrevWeek,
+                onNext = onNextWeek,
+                prevIcon = painterResource(R.drawable.ms_arrow_back),
+                nextIcon = painterResource(R.drawable.ms_arrow_forward),
+                prevContentDescription = "Previous graph week",
+                nextContentDescription = "Next graph week",
+                spacing = 10.dp
+            )
             Spacer(Modifier.height(4.dp))
             caloriesReference?.let {
                 Text(
