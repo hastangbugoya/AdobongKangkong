@@ -552,7 +552,6 @@ fun QuickAddBottomSheet(
                                         batches = state.batches,
                                         selectedBatchId = state.selectedBatchId,
                                         onSelected = vm::onBatchSelected,
-                                        onCreate = vm::openCreateBatchDialog
                                     )
                                     if (isLoggingByGrams &&
                                         state.selectedBatchId == null &&
@@ -794,24 +793,8 @@ private fun BatchSelector(
     batches: List<BatchSummary>,
     selectedBatchId: Long?,
     onSelected: (Long?) -> Unit,
-    onCreate: () -> Unit
 ) {
     Column {
-        if (batches.isEmpty()) {
-            Text(
-                "No cooked batches yet",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedButton(onClick = onCreate) {
-                Text("Create cooked batch")
-            }
-            return
-        }
-
         var expanded by remember { mutableStateOf(false) }
 
         val selected =
@@ -843,16 +826,6 @@ private fun BatchSelector(
                     }
                 )
             }
-
-            HorizontalDivider()
-
-            DropdownMenuItem(
-                text = { Text("➕ New cooked batch") },
-                onClick = {
-                    expanded = false
-                    onCreate()
-                }
-            )
         }
     }
 }
