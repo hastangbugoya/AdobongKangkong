@@ -68,6 +68,9 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeInstructionStepEnt
 import com.example.adobongkangkong.data.local.db.entity.StoreEntity
 import com.example.adobongkangkong.data.local.db.entity.UserNutrientTargetEntity
 import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
+import com.example.adobongkangkong.data.local.db.dao.RecipeVariantDao
+import com.example.adobongkangkong.data.local.db.entity.RecipeVariantEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 
 /**
  * Primary Room database for AdobongKangkong.
@@ -122,9 +125,11 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
         RecipeInstructionStepEntity::class,
         StoreEntity::class,
         FoodStorePriceEntity::class,
-        BodyWeightLogEntity::class
+        BodyWeightLogEntity::class,
+        RecipeVariantEntity::class,
+        RecipeVariantIngredientChangeEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -161,6 +166,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun storeDao(): StoreDao
     abstract fun foodStorePriceDao(): FoodStorePriceDao
     abstract fun bodyWeightLogDao(): BodyWeightLogDao
+    abstract fun recipeVariantDao(): RecipeVariantDao
 
     companion object {
 
@@ -444,6 +450,81 @@ abstract class NutriDatabase : RoomDatabase() {
                 }
             }
         }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS `recipe_variant` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `recipeFoodId` INTEGER NOT NULL,
+                `name` TEXT NOT NULL,
+                `notes` TEXT,
+                `isArchived` INTEGER NOT NULL DEFAULT 0,
+                `servingsYieldOverride` REAL,
+                `totalYieldGramsOverride` REAL,
+                `nutrientsJsonSnapshot` TEXT,
+                `createdAtEpochMillis` INTEGER NOT NULL,
+                `updatedAtEpochMillis` INTEGER NOT NULL
+            )
+            """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+            CREATE INDEX IF NOT EXISTS `index_recipe_variant_recipeFoodId`
+            ON `recipe_variant` (`recipeFoodId`)
+            """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+            CREATE UNIQUE INDEX IF NOT EXISTS `index_recipe_variant_recipeFoodId_name`
+            ON `recipe_variant` (`recipeFoodId`, `name`)
+            """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS `recipe_variant_ingredient_change` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `variantId` INTEGER NOT NULL,
+                `changeType` TEXT NOT NULL,
+                `baseRecipeIngredientId` INTEGER,
+                `foodId` INTEGER,
+                `servings` REAL,
+                `grams` REAL,
+                `note` TEXT,
+                `sortOrder` INTEGER NOT NULL,
+                `createdAtEpochMillis` INTEGER NOT NULL,
+                `updatedAtEpochMillis` INTEGER NOT NULL
+            )
+            """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+            CREATE INDEX IF NOT EXISTS `index_recipe_variant_ingredient_change_variantId`
+            ON `recipe_variant_ingredient_change` (`variantId`)
+            """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+            CREATE INDEX IF NOT EXISTS `index_recipe_variant_ingredient_change_baseRecipeIngredientId`
+            ON `recipe_variant_ingredient_change` (`baseRecipeIngredientId`)
+            """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+            CREATE INDEX IF NOT EXISTS `index_recipe_variant_ingredient_change_foodId`
+            ON `recipe_variant_ingredient_change` (`foodId`)
+            """.trimIndent()
+                )
+            }
+        }
+
     }
 }
 

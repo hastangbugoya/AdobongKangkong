@@ -30,6 +30,7 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeInstructionStepDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeVariantDao
 import com.example.adobongkangkong.data.local.db.dao.StoreDao
 import com.example.adobongkangkong.data.local.db.dao.SummaryDao
 import com.example.adobongkangkong.data.local.db.dao.UserNutrientTargetDao
@@ -60,6 +61,7 @@ object DatabaseModule {
             .addMigrations(NutriDatabase.MIGRATION_3_4)
             .addMigrations(NutriDatabase.MIGRATION_4_5)
             .addMigrations(NutriDatabase.MIGRATION_5_6)
+            .addMigrations(NutriDatabase.MIGRATION_6_7)
             .build()
     }
 
@@ -165,4 +167,8 @@ object DatabaseModule {
     @Provides
     fun provideBodyWeightLogDao(db: NutriDatabase): BodyWeightLogDao =
         db.bodyWeightLogDao()
+
+    @Provides
+    fun provideRecipeVariantDao(db: NutriDatabase): RecipeVariantDao =
+        db.recipeVariantDao()
 }
