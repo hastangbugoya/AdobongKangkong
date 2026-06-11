@@ -15,6 +15,7 @@ import com.example.adobongkangkong.data.repository.PlannedSeriesItemRepositoryIm
 import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
+import com.example.adobongkangkong.data.repository.RecipeVariantRepositoryImpl
 import com.example.adobongkangkong.data.repository.StoreRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserNutrientTargetRepositoryImpl
 import com.example.adobongkangkong.data.repository.UserPinnedNutrientRepositoryImpl
@@ -34,6 +35,7 @@ import com.example.adobongkangkong.domain.repository.PlannedSeriesRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import com.example.adobongkangkong.domain.repository.StoreRepository
 import com.example.adobongkangkong.domain.repository.UserNutrientTargetRepository
 import com.example.adobongkangkong.domain.repository.UserPinnedNutrientRepository
@@ -180,4 +182,10 @@ abstract class RepositoryModule {
     abstract fun bindBodyWeightLogRepository(
         impl: BodyWeightLogRepositoryImpl
     ): BodyWeightLogRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRecipeVariantRepository(
+        impl: RecipeVariantRepositoryImpl,
+    ): RecipeVariantRepository
 }

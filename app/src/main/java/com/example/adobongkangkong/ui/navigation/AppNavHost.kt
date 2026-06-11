@@ -30,6 +30,7 @@ import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.planner.PlannerDayRoute
 import com.example.adobongkangkong.ui.productcheck.ProductCheckScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
+import com.example.adobongkangkong.ui.recipevariant.RecipeVariantListRoute
 import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
@@ -46,6 +47,8 @@ private const val FOOD_PICK_INITIAL_FILTER_FAVORITES = "favorites"
 
 private const val KEY_TEMPLATE_PICK_TEMPLATE_ID = "template_pick_template_id"
 private const val KEY_TEMPLATE_PICK_OVERRIDE_SLOT = "template_pick_override_slot"
+
+private const val RECIPE_VARIANTS_ROUTE = "recipeVariants/{recipeFoodId}"
 
 @Composable
 fun AppNavHost(
@@ -69,6 +72,10 @@ fun AppNavHost(
                     launchSingleTop = true
                 }
             }
+        }
+
+        fun openRecipeVariants(recipeFoodId: Long) {
+            navController.navigate("recipeVariants/$recipeFoodId")
         }
 
         composable(NavRoutes.ProductCheck.route) {
@@ -498,6 +505,18 @@ fun AppNavHost(
             )
         }
 
+
+        composable(
+            route = RECIPE_VARIANTS_ROUTE,
+            arguments = listOf(
+                navArgument("recipeFoodId") { type = NavType.LongType }
+            )
+        ) {
+            RecipeVariantListRoute(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(route = NavRoutes.Recipes.route) {
             RecipeBuilderScreen(
                 editFoodId = null,
@@ -525,6 +544,7 @@ fun AppNavHost(
                 recipeId = recipeId,
                 onBack = { navController.popBackStack() },
                 onEditFood = { foodId -> navController.navigate(NavRoutes.Foods.edit(foodId)) },
+                onOpenRecipeVariants = { recipeFoodId -> openRecipeVariants(recipeFoodId) },
                 bannerRefreshTick = bannerRefreshTick,
                 bannerCaptureController = bannerCaptureController,
                 onDeleteRecipe = {

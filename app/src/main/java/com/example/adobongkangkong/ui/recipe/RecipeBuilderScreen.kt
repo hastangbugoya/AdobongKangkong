@@ -103,6 +103,7 @@ import java.io.IOException
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.material3.OutlinedButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +114,7 @@ fun RecipeBuilderScreen(
     onEditFood: (Long) -> Unit,
     bannerRefreshTick: Int,
     bannerCaptureController: BannerCaptureController,
+    onOpenRecipeVariants: ((Long) -> Unit)? = null,
     onDeleteRecipe: (() -> Unit)? = null
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
@@ -494,6 +496,40 @@ fun RecipeBuilderScreen(
                     onToggleLimit = vm::onLimitChange,
                     isTablet = isTablet
                 )
+            }
+
+            if (editFoodId != null && onOpenRecipeVariants != null) {
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        tonalElevation = 2.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Recipe variants",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+
+                            Text(
+                                text = "Create and archive recipe-specific variants. Variants stay attached to this recipe and do not appear as separate foods.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedButton(
+                                onClick = { onOpenRecipeVariants(editFoodId) }
+                            ) {
+                                Text("Manage variants")
+                            }
+                        }
+                    }
+                }
             }
 
             state.errorMessage?.let { err ->
