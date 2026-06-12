@@ -45,6 +45,18 @@ interface RecipeVariantDao {
         LIMIT 1
         """
     )
+    fun observeVariantById(
+        variantId: Long,
+    ): Flow<RecipeVariantEntity?>
+
+    @Query(
+        """
+        SELECT *
+        FROM recipe_variant
+        WHERE id = :variantId
+        LIMIT 1
+        """
+    )
     suspend fun getVariantById(
         variantId: Long,
     ): RecipeVariantEntity?

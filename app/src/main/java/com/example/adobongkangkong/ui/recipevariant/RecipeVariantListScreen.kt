@@ -48,6 +48,7 @@ fun RecipeVariantListScreen(
     onArchiveVariant: (Long) -> Unit,
     onRestoreVariant: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenVariant: (Long) -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
@@ -158,6 +159,7 @@ fun RecipeVariantListScreen(
                         variant = variant,
                         onArchiveVariant = onArchiveVariant,
                         onRestoreVariant = onRestoreVariant,
+                        onOpenVariant = onOpenVariant,
                     )
                 }
             }
@@ -224,6 +226,7 @@ private fun RecipeVariantCard(
     variant: RecipeVariantEntity,
     onArchiveVariant: (Long) -> Unit,
     onRestoreVariant: (Long) -> Unit,
+    onOpenVariant: (Long) -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -279,6 +282,12 @@ private fun RecipeVariantCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
+                TextButton(
+                    onClick = { onOpenVariant(variant.id) },
+                ) {
+                    Text("Edit")
+                }
+
                 if (variant.isArchived) {
                     Button(
                         onClick = { onRestoreVariant(variant.id) },

@@ -17,6 +17,9 @@ interface RecipeDao {
     // Queries (exclude soft-deleted by default)
     // --------------------------------------------------
 
+    @Query("SELECT * FROM recipes WHERE foodId = :foodId LIMIT 1")
+    fun observeByFoodId(foodId: Long): Flow<RecipeEntity?>
+
     @Query("SELECT * FROM recipes WHERE isDeleted = 0 ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<RecipeEntity>>
 

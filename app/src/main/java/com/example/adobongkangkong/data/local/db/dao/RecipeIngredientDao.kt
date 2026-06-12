@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecipeIngredientDao {
@@ -54,4 +55,7 @@ interface RecipeIngredientDao {
         ingredientId: Long,
         servings: Double?
     )
+
+    @Query("SELECT * FROM recipe_ingredient WHERE recipeId = :recipeId ORDER BY sortOrder ASC")
+    fun observeForRecipe(recipeId: Long): Flow<List<RecipeIngredientEntity>>
 }

@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.repository
 
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 import kotlinx.coroutines.flow.Flow
 
 interface RecipeVariantRepository {
@@ -13,12 +14,24 @@ interface RecipeVariantRepository {
         recipeFoodId: Long,
     ): Flow<List<RecipeVariantEntity>>
 
+    fun observeVariantById(
+        variantId: Long,
+    ): Flow<RecipeVariantEntity?>
+
+    suspend fun getVariantById(
+        variantId: Long,
+    ): RecipeVariantEntity?
+
     suspend fun createVariant(
         recipeFoodId: Long,
         name: String,
         notes: String?,
         nowEpochMillis: Long,
     ): Long
+
+    suspend fun updateVariant(
+        variant: RecipeVariantEntity,
+    )
 
     suspend fun archiveVariant(
         variantId: Long,
@@ -27,6 +40,25 @@ interface RecipeVariantRepository {
 
     suspend fun restoreVariant(
         variantId: Long,
+        nowEpochMillis: Long,
+    )
+
+    fun observeChangesForVariant(
+        variantId: Long,
+    ): Flow<List<RecipeVariantIngredientChangeEntity>>
+
+    suspend fun getChangesForVariant(
+        variantId: Long,
+    ): List<RecipeVariantIngredientChangeEntity>
+
+    suspend fun replaceChangesForVariant(
+        variantId: Long,
+        changes: List<RecipeVariantIngredientChangeEntity>,
+    )
+
+    suspend fun updateVariantNutritionSnapshot(
+        variantId: Long,
+        nutrientsJsonSnapshot: String?,
         nowEpochMillis: Long,
     )
 }

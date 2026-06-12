@@ -536,5 +536,9 @@ class UpdateLogEntryUseCaseTest {
         ) = Unit
 
         override suspend fun countRecipes(): Int = 0
+
+        override fun observeByFoodId(foodId: Long): Flow<RecipeEntity?> {
+            throw UnsupportedOperationException("Not used in this test")
+        }
     }
 }

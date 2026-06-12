@@ -9,10 +9,12 @@ import com.example.adobongkangkong.domain.usecase.recipevariant.CreateRecipeVari
 import com.example.adobongkangkong.domain.usecase.recipevariant.ObserveRecipeVariantsForRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.RestoreRecipeVariantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -50,6 +52,13 @@ class RecipeVariantListViewModel @Inject constructor(
     private val restoreRecipeVariant: RestoreRecipeVariantUseCase,
 ) : ViewModel() {
 
+    sealed interface Effect {
+        data class OpenVariantEditor(
+            val recipeFoodId: Long,
+            val variantId: Long,
+        ) : Effect
+    }
+
     private val recipeFoodId: Long =
         savedStateHandle.get<Long>("recipeFoodId")
             ?: savedStateHandle.get<String>("recipeFoodId")?.toLongOrNull()
@@ -60,6 +69,9 @@ class RecipeVariantListViewModel @Inject constructor(
     private val newVariantName = MutableStateFlow("")
     private val newVariantNotes = MutableStateFlow("")
     private val errorMessage = MutableStateFlow<String?>(null)
+
+    private val effectsChannel = Channel<Effect>(Channel.BUFFERED)
+    val effects = effectsChannel.receiveAsFlow()
 
     private val variants = observeRecipeVariantsForRecipe(recipeFoodId)
 
@@ -144,16 +156,34 @@ class RecipeVariantListViewModel @Inject constructor(
                     name = name,
                     notes = newVariantNotes.value,
                 )
-            }.onSuccess {
+            }.onSuccess { variantId ->
                 isCreateDialogOpen.value = false
                 newVariantName.value = ""
                 newVariantNotes.value = ""
                 errorMessage.value = null
                 filter.value = RecipeVariantFilter.CURRENT
+
+                effectsChannel.send(
+                    Effect.OpenVariantEditor(
+                        recipeFoodId = recipeFoodId,
+                        variantId = variantId,
+                    )
+                )
             }.onFailure { throwable ->
                 errorMessage.value =
                     throwable.message ?: "Could not create variant."
             }
+        }
+    }
+
+    fun openVariantEditor(variantId: Long) {
+        viewModelScope.launch {
+            effectsChannel.send(
+                Effect.OpenVariantEditor(
+                    recipeFoodId = recipeFoodId,
+                    variantId = variantId,
+                )
+            )
         }
     }
 
