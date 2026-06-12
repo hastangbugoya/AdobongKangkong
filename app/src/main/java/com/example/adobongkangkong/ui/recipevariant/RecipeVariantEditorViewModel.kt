@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
 data class RecipeVariantEditorUiState(
     val recipeFoodId: Long = 0L,
     val variantId: Long = 0L,
@@ -41,6 +42,18 @@ data class RecipeVariantEditorUiState(
         get() = name != originalName ||
                 notes != originalNotes ||
                 draftChanges != originalDraftChanges
+
+    val removedBaseIngredientIds: Set<Long>
+        get() = draftChanges
+            .filter { it.changeType == RecipeVariantIngredientChangeType.REMOVE }
+            .mapNotNull { it.baseRecipeIngredientId }
+            .toSet()
+
+    val adjustedBaseIngredientIds: Set<Long>
+        get() = draftChanges
+            .filter { it.changeType == RecipeVariantIngredientChangeType.ADJUST }
+            .mapNotNull { it.baseRecipeIngredientId }
+            .toSet()
 }
 
 @HiltViewModel
@@ -137,6 +150,140 @@ class RecipeVariantEditorViewModel @Inject constructor(
         }
     }
 
+    fun markIngredientRemoved(
+        baseRecipeIngredientId: Long,
+    ) {
+        if (baseRecipeIngredientId <= 0L) return
+
+        val now = System.currentTimeMillis()
+
+        updateDraftChanges { current ->
+            current
+                .filterNot { it.baseRecipeIngredientId == baseRecipeIngredientId }
+                .plus(
+                    RecipeVariantIngredientChangeEntity(
+                        variantId = variantId,
+                        changeType = RecipeVariantIngredientChangeType.REMOVE,
+                        baseRecipeIngredientId = baseRecipeIngredientId,
+                        foodId = null,
+                        servings = null,
+                        grams = null,
+                        note = null,
+                        sortOrder = current.size,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    )
+                )
+        }
+    }
+
+    fun restoreIngredientLine(
+        baseRecipeIngredientId: Long,
+    ) {
+        if (baseRecipeIngredientId <= 0L) return
+
+        updateDraftChanges { current ->
+            current.filterNot { it.baseRecipeIngredientId == baseRecipeIngredientId }
+        }
+    }
+
+    fun adjustIngredientToGrams(
+        baseRecipeIngredientId: Long,
+        grams: Double,
+    ) {
+        if (baseRecipeIngredientId <= 0L) return
+
+        if (grams <= 0.0) {
+            _uiState.update {
+                it.copy(errorMessage = "Grams must be greater than zero.")
+            }
+            return
+        }
+
+        val now = System.currentTimeMillis()
+
+        updateDraftChanges { current ->
+            current
+                .filterNot { it.baseRecipeIngredientId == baseRecipeIngredientId }
+                .plus(
+                    RecipeVariantIngredientChangeEntity(
+                        variantId = variantId,
+                        changeType = RecipeVariantIngredientChangeType.ADJUST,
+                        baseRecipeIngredientId = baseRecipeIngredientId,
+                        foodId = null,
+                        servings = null,
+                        grams = grams,
+                        note = null,
+                        sortOrder = current.size,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    )
+                )
+        }
+    }
+
+    fun adjustIngredientToServings(
+        baseRecipeIngredientId: Long,
+        servings: Double,
+    ) {
+        if (baseRecipeIngredientId <= 0L) return
+
+        if (servings <= 0.0) {
+            _uiState.update {
+                it.copy(errorMessage = "Servings must be greater than zero.")
+            }
+            return
+        }
+
+        val now = System.currentTimeMillis()
+
+        updateDraftChanges { current ->
+            current
+                .filterNot { it.baseRecipeIngredientId == baseRecipeIngredientId }
+                .plus(
+                    RecipeVariantIngredientChangeEntity(
+                        variantId = variantId,
+                        changeType = RecipeVariantIngredientChangeType.ADJUST,
+                        baseRecipeIngredientId = baseRecipeIngredientId,
+                        foodId = null,
+                        servings = servings,
+                        grams = null,
+                        note = null,
+                        sortOrder = current.size,
+                        createdAtEpochMillis = now,
+                        updatedAtEpochMillis = now,
+                    )
+                )
+        }
+    }
+
+    fun clearIngredientAdjustment(
+        baseRecipeIngredientId: Long,
+    ) {
+        if (baseRecipeIngredientId <= 0L) return
+
+        updateDraftChanges { current ->
+            current.filterNot {
+                it.baseRecipeIngredientId == baseRecipeIngredientId &&
+                        it.changeType == RecipeVariantIngredientChangeType.ADJUST
+            }
+        }
+    }
+
+    private fun updateDraftChanges(
+        transform: (List<RecipeVariantIngredientChangeEntity>) -> List<RecipeVariantIngredientChangeEntity>,
+    ) {
+        _uiState.update { current ->
+            current.copy(
+                draftChanges = transform(current.draftChanges)
+                    .mapIndexed { index, change ->
+                        change.copy(sortOrder = index)
+                    },
+                errorMessage = null,
+            )
+        }
+    }
+
     fun save() {
         val current = uiState.value
         val cleanedName = current.name.trim()
@@ -175,6 +322,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                         notes = savedNotes,
                         originalName = cleanedName,
                         originalNotes = savedNotes,
+                        originalDraftChanges = current.draftChanges,
                         isSaving = false,
                         errorMessage = null,
                     )

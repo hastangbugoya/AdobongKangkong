@@ -19,5 +19,10 @@ fun RecipeVariantEditorRoute(
         onNotesChanged = viewModel::onNotesChanged,
         onSave = viewModel::save,
         onClearError = viewModel::clearError,
+        onMarkIngredientRemoved = viewModel::markIngredientRemoved,
+        onRestoreIngredientLine = viewModel::restoreIngredientLine,
+        onAdjustIngredientToGrams = viewModel::adjustIngredientToGrams,
+        onAdjustIngredientToServings = viewModel::adjustIngredientToServings,
+        onClearIngredientAdjustment = viewModel::clearIngredientAdjustment,
     )
 }
