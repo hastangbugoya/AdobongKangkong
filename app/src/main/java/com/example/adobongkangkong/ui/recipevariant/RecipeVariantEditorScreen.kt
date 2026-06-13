@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -273,7 +274,7 @@ private fun RecipeHeaderCard(
                 )
 
                 Text(
-                    text = uiState.originalName.ifBlank { "Recipe" },
+                    text = uiState.recipeName.ifBlank { "Recipe" },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
@@ -460,53 +461,42 @@ private fun FinalIngredientLineCard(
         ),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Text(
-                text = line.food.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            line.food.brand?.takeIf { it.isNotBlank() }?.let { brand ->
-                Text(
-                    text = brand,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AssistChip(
-                    onClick = {},
-                    label = {
-                        Text(line.source.label)
-                    },
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    Text(
+                        text = line.food.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
 
-                if (isMarkedRemoved) {
-                    AssistChip(
-                        onClick = {},
-                        label = {
-                            Text("Pending removal")
-                        },
-                    )
-                } else if (isMarkedAdjusted) {
-                    AssistChip(
-                        onClick = {},
-                        label = {
-                            Text("Pending adjustment")
-                        },
-                    )
+                    line.food.brand?.takeIf { it.isNotBlank() }?.let { brand ->
+                        Text(
+                            text = brand,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
+
+                IngredientLineStatusIcon(
+                    source = line.source,
+                    isMarkedRemoved = isMarkedRemoved,
+                    isMarkedAdjusted = isMarkedAdjusted,
+                )
             }
 
             line.note?.takeIf { it.isNotBlank() }?.let { note ->
@@ -546,7 +536,13 @@ private fun FinalIngredientLineCard(
                             parsedAmount?.let { amount ->
                                 when (adjustMode) {
                                     VariantAdjustMode.SERVINGS -> {
-                                        onAdjustIngredientToServings(baseRecipeIngredientId, amount)
+                                        onAdjustIngredientToServings(
+                                            baseRecipeIngredientId,
+                                            servingsFromDisplayAmount(
+                                                displayAmount = amount,
+                                                servingSize = line.food.servingSize,
+                                            ),
+                                        )
                                     }
 
                                     VariantAdjustMode.GRAMS -> {
@@ -568,6 +564,43 @@ private fun FinalIngredientLineCard(
             }
         }
     }
+}
+
+@Composable
+private fun IngredientLineStatusIcon(
+    source: RecipeVariantIngredientLineSource,
+    isMarkedRemoved: Boolean,
+    isMarkedAdjusted: Boolean,
+) {
+    val iconRes = when {
+        isMarkedRemoved -> android.R.drawable.ic_menu_delete
+        isMarkedAdjusted || source == RecipeVariantIngredientLineSource.ADJUSTED -> android.R.drawable.ic_menu_edit
+        source == RecipeVariantIngredientLineSource.ADDED -> android.R.drawable.ic_input_add
+        else -> android.R.drawable.ic_menu_info_details
+    }
+
+    val description = when {
+        isMarkedRemoved -> "Pending removal"
+        isMarkedAdjusted || source == RecipeVariantIngredientLineSource.ADJUSTED -> "Adjusted ingredient"
+        source == RecipeVariantIngredientLineSource.ADDED -> "Added ingredient"
+        else -> "Original ingredient"
+    }
+
+    val tint = when {
+        isMarkedRemoved -> MaterialTheme.colorScheme.error
+        isMarkedAdjusted || source == RecipeVariantIngredientLineSource.ADJUSTED -> MaterialTheme.colorScheme.primary
+        source == RecipeVariantIngredientLineSource.ADDED -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Icon(
+        painter = painterResource(iconRes),
+        contentDescription = description,
+        tint = tint,
+        modifier = Modifier
+            .padding(top = 1.dp)
+            .size(20.dp),
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -622,7 +655,7 @@ private fun CompactIngredientAmountEditor(
             modifier = Modifier.fillMaxWidth(),
             label = {
                 Text(
-                    text = "Original: ${originalAmountLabel(line, adjustMode)}",
+                    text = "Recipe: ${originalAmountLabel(line, adjustMode)}",
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -763,7 +796,11 @@ private fun defaultAdjustText(
     mode: VariantAdjustMode,
 ): String {
     val value = when (mode) {
-        VariantAdjustMode.SERVINGS -> line.servings ?: 1.0
+        VariantAdjustMode.SERVINGS -> displayAmountFromServings(
+            servings = line.servings,
+            servingSize = line.food.servingSize,
+        ) ?: 1.0
+
         VariantAdjustMode.GRAMS -> currentGramsOrNull(line) ?: 1.0
     }
 
@@ -794,19 +831,62 @@ private fun originalAmountLabel(
     line: AssembledRecipeVariantIngredientLine,
     mode: VariantAdjustMode,
 ): String {
+    if (line.source == RecipeVariantIngredientLineSource.ADDED) {
+        return "new ingredient"
+    }
+
     return when (mode) {
         VariantAdjustMode.SERVINGS -> {
-            line.servings?.let { servings ->
-                "${formatAmountNumber(servings)} ${line.food.servingUnit.display}"
-            } ?: "not set"
+            formatVariantAmount(
+                servings = line.originalServings,
+                grams = line.originalGrams,
+                servingSize = line.food.servingSize,
+                servingUnitLabel = line.food.servingUnit.display,
+            )
         }
 
         VariantAdjustMode.GRAMS -> {
-            currentGramsOrNull(line)?.let { grams ->
+            originalGramsOrNull(line)?.let { grams ->
                 "${formatAmountNumber(grams)} g"
-            } ?: "not set"
+            } ?: formatVariantAmount(
+                servings = line.originalServings,
+                grams = line.originalGrams,
+                servingSize = line.food.servingSize,
+                servingUnitLabel = line.food.servingUnit.display,
+            )
         }
     }
+}
+
+private fun originalGramsOrNull(
+    line: AssembledRecipeVariantIngredientLine,
+): Double? {
+    return line.originalGrams
+        ?: line.originalServings
+            ?.let { servings ->
+                line.food.gramsPerServingUnit?.let { gramsPerServing ->
+                    servings * gramsPerServing
+                } ?: displayAmountFromServings(
+                    servings = servings,
+                    servingSize = line.food.servingSize,
+                )
+            }
+}
+
+private fun displayAmountFromServings(
+    servings: Double?,
+    servingSize: Double,
+): Double? {
+    val safeServingSize = servingSize.takeIf { it > 0.0 } ?: 1.0
+    return servings?.times(safeServingSize)
+}
+
+private fun servingsFromDisplayAmount(
+    displayAmount: Double,
+    servingSize: Double,
+): Double {
+    val safeServingSize = servingSize.takeIf { it > 0.0 } ?: 1.0
+    return displayAmount / safeServingSize
 }
 
 private fun formatAmountNumber(value: Double): String {

@@ -22,6 +22,7 @@ data class RecipeVariantEditorUiState(
     val recipeFoodId: Long = 0L,
     val variantId: Long = 0L,
 
+    val recipeName: String = "",
     val name: String = "",
     val notes: String = "",
 
@@ -107,6 +108,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         recipeFoodId = recipeFoodId,
+                        recipeName = assembled.recipeName,
                         variantId = variantId,
                         name = variant.name,
                         notes = variant.notes.orEmpty(),
@@ -347,6 +349,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
             }.onSuccess { assembled ->
                 _uiState.update {
                     it.copy(
+                        recipeName = assembled.recipeName,
                         finalIngredientLines = assembled.finalIngredientLines,
                         removedIngredientLines = assembled.removedIngredientLines,
                         warnings = assembled.warnings,

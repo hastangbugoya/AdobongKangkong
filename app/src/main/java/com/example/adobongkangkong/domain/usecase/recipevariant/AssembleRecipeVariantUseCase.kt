@@ -28,6 +28,7 @@ class AssembleRecipeVariantUseCase @Inject constructor(
         val variant = recipeVariantRepository.getVariantById(variantId)
             ?: return AssembledRecipeVariant(
                 recipeFoodId = 0L,
+                recipeName = "",
                 variantId = variantId,
                 variantName = "Missing variant",
                 variantNotes = null,
@@ -36,9 +37,12 @@ class AssembleRecipeVariantUseCase @Inject constructor(
                 warnings = listOf("Variant not found."),
             )
 
+        val recipeFood = foodDao.getById(variant.recipeFoodId)
+
         val recipe = recipeDao.getByFoodId(variant.recipeFoodId)
             ?: return AssembledRecipeVariant(
                 recipeFoodId = variant.recipeFoodId,
+                recipeName = recipeFood?.name.orEmpty(),
                 variantId = variant.id,
                 variantName = variant.name,
                 variantNotes = variant.notes,
@@ -145,8 +149,15 @@ class AssembleRecipeVariantUseCase @Inject constructor(
                     source = RecipeVariantIngredientLineSource.ADJUSTED,
                     baseRecipeIngredientId = baseIngredientId,
                     food = food,
+
+                    // Final variant amount.
                     servings = change.servings,
                     grams = change.grams,
+
+                    // Permanent base recipe reference amount.
+                    originalServings = baseIngredient.amountServings,
+                    originalGrams = baseIngredient.amountGrams,
+
                     note = change.note,
                     sortOrder = baseIngredient.sortOrder,
                 )
@@ -173,8 +184,15 @@ class AssembleRecipeVariantUseCase @Inject constructor(
                 source = RecipeVariantIngredientLineSource.ADDED,
                 baseRecipeIngredientId = null,
                 food = food,
+
+                // Final variant amount.
                 servings = change.servings,
                 grams = change.grams,
+
+                // Added ingredients have no base recipe amount.
+                originalServings = null,
+                originalGrams = null,
+
                 note = change.note,
                 sortOrder = maxBaseSortOrder + 1 + index,
             )
@@ -185,6 +203,7 @@ class AssembleRecipeVariantUseCase @Inject constructor(
 
         return AssembledRecipeVariant(
             recipeFoodId = variant.recipeFoodId,
+            recipeName = recipeFood?.name.orEmpty(),
             variantId = variant.id,
             variantName = variant.name,
             variantNotes = variant.notes,
@@ -207,8 +226,15 @@ class AssembleRecipeVariantUseCase @Inject constructor(
             source = RecipeVariantIngredientLineSource.ORIGINAL,
             baseRecipeIngredientId = id,
             food = food,
+
+            // Original recipe amount is also the final amount until adjusted.
             servings = amountServings,
             grams = amountGrams,
+
+            // Permanent base recipe reference amount.
+            originalServings = amountServings,
+            originalGrams = amountGrams,
+
             note = null,
             sortOrder = sortOrder,
         )
