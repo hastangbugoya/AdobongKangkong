@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.domain.usecase.recipevariant
 
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
 import com.example.adobongkangkong.domain.model.minus
 import com.example.adobongkangkong.domain.model.toGrams
@@ -14,8 +15,12 @@ class CompareRecipeVariantMacrosUseCase @Inject constructor(
 
     suspend operator fun invoke(
         variantId: Long,
+        draftChanges: List<RecipeVariantIngredientChangeEntity>? = null,
     ): RecipeVariantMacroComparison {
-        val assembled = assembleRecipeVariant(variantId)
+        val assembled = assembleRecipeVariant(
+            variantId = variantId,
+            draftChanges = draftChanges,
+        )
         val warnings = assembled.warnings.toMutableList()
 
         val recipeInputs = buildList {

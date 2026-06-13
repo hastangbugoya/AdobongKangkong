@@ -5,6 +5,7 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
+import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeType
 import com.example.adobongkangkong.domain.model.AssembledRecipeVariant
 import com.example.adobongkangkong.domain.model.AssembledRecipeVariantIngredientLine
@@ -22,6 +23,7 @@ class AssembleRecipeVariantUseCase @Inject constructor(
 
     suspend operator fun invoke(
         variantId: Long,
+        draftChanges: List<RecipeVariantIngredientChangeEntity>? = null,
     ): AssembledRecipeVariant {
         val warnings = mutableListOf<String>()
 
@@ -52,7 +54,8 @@ class AssembleRecipeVariantUseCase @Inject constructor(
             )
 
         val baseIngredients = recipeIngredientDao.getForRecipe(recipe.id)
-        val changes = recipeVariantRepository.getChangesForVariant(variant.id)
+        val changes = draftChanges
+            ?: recipeVariantRepository.getChangesForVariant(variant.id)
 
         val foodIds = buildSet {
             baseIngredients.forEach { add(it.foodId) }

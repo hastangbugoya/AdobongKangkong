@@ -151,7 +151,6 @@ fun RecipeVariantEditorScreen(
                 item {
                     MacroComparisonCard(
                         comparison = comparison,
-                        isStale = uiState.hasUnsavedChanges,
                     )
                 }
             }
@@ -378,7 +377,6 @@ private fun VariantDetailsCard(
 @Composable
 private fun MacroComparisonCard(
     comparison: RecipeVariantMacroComparison,
-    isStale: Boolean,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -397,11 +395,7 @@ private fun MacroComparisonCard(
                 )
 
                 Text(
-                    text = if (isStale) {
-                        "Saved comparison. Save variant to refresh."
-                    } else {
-                        "Recipe, variant, and raw difference."
-                    },
+                    text = "Live preview. Recipe, variant, and raw difference.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

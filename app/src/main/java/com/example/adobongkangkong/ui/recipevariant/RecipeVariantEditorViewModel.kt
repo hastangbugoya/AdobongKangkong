@@ -106,9 +106,15 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 val variant = recipeVariantRepository.getVariantById(variantId)
                     ?: error("Variant not found.")
 
-                val assembled = assembleRecipeVariant(variantId)
-                val macroComparison = compareRecipeVariantMacros(variantId)
                 val changes = recipeVariantRepository.getChangesForVariant(variantId)
+                val assembled = assembleRecipeVariant(
+                    variantId = variantId,
+                    draftChanges = changes,
+                )
+                val macroComparison = compareRecipeVariantMacros(
+                    variantId = variantId,
+                    draftChanges = changes,
+                )
 
                 _uiState.update {
                     it.copy(
@@ -281,15 +287,19 @@ class RecipeVariantEditorViewModel @Inject constructor(
     private fun updateDraftChanges(
         transform: (List<RecipeVariantIngredientChangeEntity>) -> List<RecipeVariantIngredientChangeEntity>,
     ) {
+        val nextDraftChanges = transform(_uiState.value.draftChanges)
+            .mapIndexed { index, change ->
+                change.copy(sortOrder = index)
+            }
+
         _uiState.update { current ->
             current.copy(
-                draftChanges = transform(current.draftChanges)
-                    .mapIndexed { index, change ->
-                        change.copy(sortOrder = index)
-                    },
+                draftChanges = nextDraftChanges,
                 errorMessage = null,
             )
         }
+
+        refreshAssembledVariant(draftChanges = nextDraftChanges)
     }
 
     fun save() {
@@ -336,7 +346,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     )
                 }
 
-                refreshAssembledVariant()
+                refreshAssembledVariant(draftChanges = current.draftChanges)
             }.onFailure { throwable ->
                 _uiState.update {
                     it.copy(
@@ -348,13 +358,20 @@ class RecipeVariantEditorViewModel @Inject constructor(
         }
     }
 
-    fun refreshAssembledVariant() {
+    fun refreshAssembledVariant(
+        draftChanges: List<RecipeVariantIngredientChangeEntity> = _uiState.value.draftChanges,
+    ) {
         viewModelScope.launch {
             runCatching {
-                val assembled = assembleRecipeVariant(variantId)
-                val macroComparison = compareRecipeVariantMacros(variantId)
-                assembled to macroComparison
-            }.onSuccess { (assembled, macroComparison) ->
+                val assembled = assembleRecipeVariant(
+                    variantId = variantId,
+                    draftChanges = draftChanges,
+                )
+                val macroComparison = compareRecipeVariantMacros(
+                    variantId = variantId,
+                    draftChanges = draftChanges,
+                )
+
                 _uiState.update {
                     it.copy(
                         recipeName = assembled.recipeName,
