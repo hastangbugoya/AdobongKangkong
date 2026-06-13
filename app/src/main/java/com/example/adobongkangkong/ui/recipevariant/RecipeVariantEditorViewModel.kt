@@ -7,8 +7,10 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientC
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeType
 import com.example.adobongkangkong.domain.model.AssembledRecipeVariantIngredientLine
 import com.example.adobongkangkong.domain.model.RemovedRecipeVariantIngredientLine
+import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
 import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import com.example.adobongkangkong.domain.usecase.recipevariant.AssembleRecipeVariantUseCase
+import com.example.adobongkangkong.domain.usecase.recipevariant.CompareRecipeVariantMacrosUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.SaveRecipeVariantChangesUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.UpdateRecipeVariantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +34,7 @@ data class RecipeVariantEditorUiState(
     val finalIngredientLines: List<AssembledRecipeVariantIngredientLine> = emptyList(),
     val removedIngredientLines: List<RemovedRecipeVariantIngredientLine> = emptyList(),
     val warnings: List<String> = emptyList(),
+    val macroComparison: RecipeVariantMacroComparison? = null,
 
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
@@ -63,6 +66,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
     private val recipeVariantRepository: RecipeVariantRepository,
     private val updateRecipeVariant: UpdateRecipeVariantUseCase,
     private val assembleRecipeVariant: AssembleRecipeVariantUseCase,
+    private val compareRecipeVariantMacros: CompareRecipeVariantMacrosUseCase,
     private val saveRecipeVariantChanges: SaveRecipeVariantChangesUseCase,
 ) : ViewModel() {
 
@@ -103,6 +107,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     ?: error("Variant not found.")
 
                 val assembled = assembleRecipeVariant(variantId)
+                val macroComparison = compareRecipeVariantMacros(variantId)
                 val changes = recipeVariantRepository.getChangesForVariant(variantId)
 
                 _uiState.update {
@@ -116,7 +121,8 @@ class RecipeVariantEditorViewModel @Inject constructor(
                         originalNotes = variant.notes.orEmpty(),
                         finalIngredientLines = assembled.finalIngredientLines,
                         removedIngredientLines = assembled.removedIngredientLines,
-                        warnings = assembled.warnings,
+                        warnings = macroComparison.warnings.distinct(),
+                        macroComparison = macroComparison,
                         isLoading = false,
                         errorMessage = null,
                         draftChanges = changes,
@@ -345,14 +351,17 @@ class RecipeVariantEditorViewModel @Inject constructor(
     fun refreshAssembledVariant() {
         viewModelScope.launch {
             runCatching {
-                assembleRecipeVariant(variantId)
-            }.onSuccess { assembled ->
+                val assembled = assembleRecipeVariant(variantId)
+                val macroComparison = compareRecipeVariantMacros(variantId)
+                assembled to macroComparison
+            }.onSuccess { (assembled, macroComparison) ->
                 _uiState.update {
                     it.copy(
                         recipeName = assembled.recipeName,
                         finalIngredientLines = assembled.finalIngredientLines,
                         removedIngredientLines = assembled.removedIngredientLines,
-                        warnings = assembled.warnings,
+                        warnings = macroComparison.warnings.distinct(),
+                        macroComparison = macroComparison,
                         errorMessage = null,
                     )
                 }

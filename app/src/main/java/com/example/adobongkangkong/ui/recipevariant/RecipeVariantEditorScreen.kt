@@ -40,13 +40,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.domain.model.AssembledRecipeVariantIngredientLine
+import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.model.RecipeVariantIngredientLineSource
+import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
 import com.example.adobongkangkong.domain.model.RemovedRecipeVariantIngredientLine
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
+import java.util.Locale
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -140,6 +145,15 @@ fun RecipeVariantEditorScreen(
                     onNameChanged = onNameChanged,
                     onNotesChanged = onNotesChanged,
                 )
+            }
+
+            uiState.macroComparison?.let { comparison ->
+                item {
+                    MacroComparisonCard(
+                        comparison = comparison,
+                        isStale = uiState.hasUnsavedChanges,
+                    )
+                }
             }
 
             if (uiState.warnings.isNotEmpty()) {
@@ -359,6 +373,195 @@ private fun VariantDetailsCard(
             )
         }
     }
+}
+
+@Composable
+private fun MacroComparisonCard(
+    comparison: RecipeVariantMacroComparison,
+    isStale: Boolean,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Macro comparison",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Text(
+                    text = if (isStale) {
+                        "Saved comparison. Save variant to refresh."
+                    } else {
+                        "Recipe, variant, and raw difference."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            MacroComparisonHeaderRow()
+
+            MacroComparisonRow(
+                label = "Calories",
+                recipeValue = comparison.recipe.totalCalories,
+                variantValue = comparison.variant.totalCalories,
+                deltaValue = comparison.delta.totalCalories,
+                suffix = "",
+                decimals = 0,
+            )
+
+            MacroComparisonRow(
+                label = "Protein",
+                recipeValue = comparison.recipe.totalProteinG,
+                variantValue = comparison.variant.totalProteinG,
+                deltaValue = comparison.delta.totalProteinG,
+                suffix = "g",
+                decimals = 1,
+            )
+
+            MacroComparisonRow(
+                label = "Carbs",
+                recipeValue = comparison.recipe.totalCarbsG,
+                variantValue = comparison.variant.totalCarbsG,
+                deltaValue = comparison.delta.totalCarbsG,
+                suffix = "g",
+                decimals = 1,
+            )
+
+            MacroComparisonRow(
+                label = "Fat",
+                recipeValue = comparison.recipe.totalFatG,
+                variantValue = comparison.variant.totalFatG,
+                deltaValue = comparison.delta.totalFatG,
+                suffix = "g",
+                decimals = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MacroComparisonHeaderRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "",
+            modifier = Modifier.weight(1.1f),
+        )
+
+        Text(
+            text = "Recipe",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+        )
+
+        Text(
+            text = "Variant",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+        )
+
+        Text(
+            text = "Δ",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+private fun MacroComparisonRow(
+    label: String,
+    recipeValue: Double,
+    variantValue: Double,
+    deltaValue: Double,
+    suffix: String,
+    decimals: Int,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1.1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        Text(
+            text = formatMacroValue(
+                value = recipeValue,
+                suffix = suffix,
+                decimals = decimals,
+                showPlus = false,
+            ),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.End,
+        )
+
+        Text(
+            text = formatMacroValue(
+                value = variantValue,
+                suffix = suffix,
+                decimals = decimals,
+                showPlus = false,
+            ),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.End,
+        )
+
+        Text(
+            text = formatMacroValue(
+                value = deltaValue,
+                suffix = suffix,
+                decimals = decimals,
+                showPlus = true,
+            ),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+private fun formatMacroValue(
+    value: Double,
+    suffix: String,
+    decimals: Int,
+    showPlus: Boolean,
+): String {
+    val normalized = if (abs(value) < 0.0001) 0.0 else value
+    val prefix = if (showPlus && normalized > 0.0) "+" else ""
+    val number = if (decimals <= 0) {
+        String.format(Locale.US, "%,.0f", normalized)
+    } else {
+        String.format(Locale.US, "%,.${decimals}f", normalized)
+            .trimEnd('0')
+            .trimEnd('.')
+    }
+
+    return "$prefix$number$suffix"
 }
 
 @Composable
