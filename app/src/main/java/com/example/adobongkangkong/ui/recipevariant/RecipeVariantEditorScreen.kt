@@ -1,6 +1,8 @@
 package com.example.adobongkangkong.ui.recipevariant
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,10 +34,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -44,12 +49,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.domain.model.AssembledRecipeVariantIngredientLine
+import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeMacroPreview
 import com.example.adobongkangkong.domain.model.RecipeVariantIngredientLineSource
 import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
+import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.RemovedRecipeVariantIngredientLine
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
+import com.example.adobongkangkong.ui.common.ingredient.IngredientAmountEditorBottomSheet
 import java.util.Locale
 import kotlin.math.abs
 
@@ -67,11 +76,126 @@ fun RecipeVariantEditorScreen(
     onAdjustIngredientToGrams: (Long, Double) -> Unit,
     onAdjustIngredientToServings: (Long, Double) -> Unit,
     onClearIngredientAdjustment: (Long) -> Unit,
+    onAdjustAddedIngredientToGrams: (Long, Int, Double) -> Unit,
+    onAdjustAddedIngredientToServings: (Long, Int, Double) -> Unit,
+    onRemoveAddedIngredient: (Long, Int) -> Unit,
+    onAddIngredientQueryChanged: (String) -> Unit,
+    onPickFoodForIngredient: (Food) -> Unit,
+    onClearPickedFoodForIngredient: () -> Unit,
+    onPickedServingsChanged: (Double) -> Unit,
+    onPickedServingUnitAmountChanged: (Double) -> Unit,
+    onPickedGramsChanged: (Double) -> Unit,
+    onPickedInputUnitChanged: (ServingUnit) -> Unit,
+    onPickedInputAmountChanged: (Double?) -> Unit,
+    onPickedPackageClicked: (Double) -> Unit,
+    onAddPickedVariantIngredient: () -> Unit,
+    onAddPickedVariantIngredientWithAmount: (Double, Double?, Boolean) -> Unit,
+    onEditFood: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val canSave = !uiState.isSaving &&
             uiState.name.isNotBlank() &&
             uiState.hasUnsavedChanges
+
+    var editingTarget by remember {
+        mutableStateOf<VariantIngredientEditTarget?>(null)
+    }
+
+    val editingLine = editingTarget?.let { target ->
+        uiState.finalIngredientLines.firstOrNull { line ->
+            when (target) {
+                is VariantIngredientEditTarget.Base -> {
+                    line.baseRecipeIngredientId == target.baseRecipeIngredientId
+                }
+
+                is VariantIngredientEditTarget.Added -> {
+                    line.source == RecipeVariantIngredientLineSource.ADDED &&
+                            line.food.id == target.foodId &&
+                            line.sortOrder == target.sortOrder
+                }
+            }
+        }
+    }
+
+    uiState.pickedFood?.let { pickedFood ->
+        IngredientAmountEditorBottomSheet(
+            title = "Add ingredient",
+            food = pickedFood,
+            initialServings = uiState.pickedServings,
+            initialGrams = uiState.pickedGrams,
+            initialPreferGrams = uiState.pickedGrams != null,
+            primaryButtonLabel = "Add ingredient",
+            onDismiss = onClearPickedFoodForIngredient,
+            onPrimaryAction = { result ->
+                onAddPickedVariantIngredientWithAmount(
+                    result.servings,
+                    result.grams,
+                    result.preferGrams,
+                )
+            },
+            errorMessage = uiState.errorMessage,
+            onEditFoodInEditor = onEditFood,
+        )
+    }
+
+    editingLine?.let { line ->
+        IngredientAmountEditorBottomSheet(
+            title = "Edit ingredient amount",
+            food = line.food.toDomainFood(),
+            initialServings = line.servingsForEditor(),
+            initialGrams = line.currentGramsForEditor(),
+            initialPreferGrams = line.grams != null,
+            primaryButtonLabel = "Apply",
+            originalAmountLabel = if (line.source == RecipeVariantIngredientLineSource.ADDED) {
+                null
+            } else {
+                "Recipe: ${originalAmountLabel(line)}"
+            },
+            onDismiss = {
+                editingTarget = null
+            },
+            onPrimaryAction = { result ->
+                when (val target = editingTarget) {
+                    is VariantIngredientEditTarget.Base -> {
+                        if (result.preferGrams && result.grams != null) {
+                            onAdjustIngredientToGrams(target.baseRecipeIngredientId, result.grams)
+                        } else {
+                            onAdjustIngredientToServings(target.baseRecipeIngredientId, result.servings)
+                        }
+                    }
+
+                    is VariantIngredientEditTarget.Added -> {
+                        if (result.preferGrams && result.grams != null) {
+                            onAdjustAddedIngredientToGrams(target.foodId, target.sortOrder, result.grams)
+                        } else {
+                            onAdjustAddedIngredientToServings(target.foodId, target.sortOrder, result.servings)
+                        }
+                    }
+
+                    null -> Unit
+                }
+
+                editingTarget = null
+            },
+            errorMessage = uiState.errorMessage,
+            onEditFoodInEditor = onEditFood,
+            onRemove = {
+                when (val target = editingTarget) {
+                    is VariantIngredientEditTarget.Base -> {
+                        onMarkIngredientRemoved(target.baseRecipeIngredientId)
+                    }
+
+                    is VariantIngredientEditTarget.Added -> {
+                        onRemoveAddedIngredient(target.foodId, target.sortOrder)
+                    }
+
+                    null -> Unit
+                }
+
+                editingTarget = null
+            },
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -155,6 +279,24 @@ fun RecipeVariantEditorScreen(
                 }
             }
 
+            item {
+                AddVariantIngredientCard(
+                    uiState = uiState,
+                    onAddIngredientQueryChanged = onAddIngredientQueryChanged,
+                    onPickFoodForIngredient = onPickFoodForIngredient,
+                    onClearPickedFoodForIngredient = onClearPickedFoodForIngredient,
+                    onPickedServingsChanged = onPickedServingsChanged,
+                    onPickedServingUnitAmountChanged = onPickedServingUnitAmountChanged,
+                    onPickedGramsChanged = onPickedGramsChanged,
+                    onPickedInputUnitChanged = onPickedInputUnitChanged,
+                    onPickedInputAmountChanged = onPickedInputAmountChanged,
+                    onPickedPackageClicked = onPickedPackageClicked,
+                    onAddPickedVariantIngredient = onAddPickedVariantIngredient,
+                    onAddPickedVariantIngredientWithAmount = onAddPickedVariantIngredientWithAmount,
+                    onEditFood = onEditFood,
+                )
+            }
+
             if (uiState.warnings.isNotEmpty()) {
                 item {
                     WarningCard(warnings = uiState.warnings)
@@ -216,11 +358,18 @@ fun RecipeVariantEditorScreen(
                             line = line,
                             isMarkedRemoved = isMarkedRemoved,
                             isMarkedAdjusted = isMarkedAdjusted,
-                            onMarkIngredientRemoved = onMarkIngredientRemoved,
                             onRestoreIngredientLine = onRestoreIngredientLine,
-                            onAdjustIngredientToGrams = onAdjustIngredientToGrams,
-                            onAdjustIngredientToServings = onAdjustIngredientToServings,
-                            onClearIngredientAdjustment = onClearIngredientAdjustment,
+                            onRemoveAddedIngredient = onRemoveAddedIngredient,
+                            onEditIngredient = {
+                                editingTarget = if (baseRecipeIngredientId != null) {
+                                    VariantIngredientEditTarget.Base(baseRecipeIngredientId)
+                                } else {
+                                    VariantIngredientEditTarget.Added(
+                                        foodId = line.food.id,
+                                        sortOrder = line.sortOrder,
+                                    )
+                                }
+                            },
                         )
                     }
                 }
@@ -370,6 +519,96 @@ private fun VariantDetailsCard(
                 },
                 minLines = 2,
             )
+        }
+    }
+}
+
+@Composable
+private fun AddVariantIngredientCard(
+    uiState: RecipeVariantEditorUiState,
+    onAddIngredientQueryChanged: (String) -> Unit,
+    onPickFoodForIngredient: (Food) -> Unit,
+    onClearPickedFoodForIngredient: () -> Unit,
+    onPickedServingsChanged: (Double) -> Unit,
+    onPickedServingUnitAmountChanged: (Double) -> Unit,
+    onPickedGramsChanged: (Double) -> Unit,
+    onPickedInputUnitChanged: (ServingUnit) -> Unit,
+    onPickedInputAmountChanged: (Double?) -> Unit,
+    onPickedPackageClicked: (Double) -> Unit,
+    onAddPickedVariantIngredient: () -> Unit,
+    onAddPickedVariantIngredientWithAmount: (Double, Double?, Boolean) -> Unit,
+    onEditFood: ((Long) -> Unit)?,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Add ingredient",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Text(
+                    text = "Pick a food, then set the amount in the bottom sheet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            OutlinedTextField(
+                value = uiState.addIngredientQuery,
+                onValueChange = onAddIngredientQueryChanged,
+                modifier = Modifier.fillMaxWidth(),
+                label = {
+                    Text("Search foods")
+                },
+                singleLine = true,
+            )
+
+            if (uiState.addIngredientResults.isNotEmpty()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    uiState.addIngredientResults.take(8).forEach { food ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = food.name,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+
+                            TextButton(
+                                onClick = {
+                                    onPickFoodForIngredient(food)
+                                },
+                            ) {
+                                Text("Pick")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (uiState.pickedFood != null) {
+                Text(
+                    text = "Set the amount in the bottom sheet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -609,47 +848,16 @@ private fun SectionHeader(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FinalIngredientLineCard(
     line: AssembledRecipeVariantIngredientLine,
     isMarkedRemoved: Boolean,
     isMarkedAdjusted: Boolean,
-    onMarkIngredientRemoved: (Long) -> Unit,
     onRestoreIngredientLine: (Long) -> Unit,
-    onAdjustIngredientToGrams: (Long, Double) -> Unit,
-    onAdjustIngredientToServings: (Long, Double) -> Unit,
-    onClearIngredientAdjustment: (Long) -> Unit,
+    onRemoveAddedIngredient: (Long, Int) -> Unit,
+    onEditIngredient: () -> Unit,
 ) {
     val baseRecipeIngredientId = line.baseRecipeIngredientId
-
-    var adjustModeName by rememberSaveable(
-        baseRecipeIngredientId,
-        line.source.name,
-        line.servings,
-        line.grams,
-    ) {
-        mutableStateOf(defaultAdjustMode(line).name)
-    }
-
-    val adjustMode = VariantAdjustMode.valueOf(adjustModeName)
-
-    var adjustAmountText by rememberSaveable(
-        baseRecipeIngredientId,
-        line.source.name,
-        line.servings,
-        line.grams,
-    ) {
-        mutableStateOf(defaultAdjustText(line, defaultAdjustMode(line)))
-    }
-
-    val parsedAmount = adjustAmountText.toDoubleOrNull()
-    val defaultAmountText = defaultAdjustText(line, adjustMode)
-    val canApply = baseRecipeIngredientId != null &&
-            !isMarkedRemoved &&
-            parsedAmount != null &&
-            parsedAmount > 0.0 &&
-            adjustAmountText != defaultAmountText
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -659,7 +867,7 @@ private fun FinalIngredientLineCard(
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -696,6 +904,27 @@ private fun FinalIngredientLineCard(
                 )
             }
 
+            Text(
+                text = "Variant: ${
+                    formatVariantAmount(
+                        servings = line.servings,
+                        grams = line.grams,
+                        servingSize = line.food.servingSize,
+                        servingUnitLabel = line.food.servingUnit.display,
+                    )
+                }",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (line.source != RecipeVariantIngredientLineSource.ADDED) {
+                Text(
+                    text = "Recipe: ${originalAmountLabel(line)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             line.note?.takeIf { it.isNotBlank() }?.let { note ->
                 Text(
                     text = note,
@@ -704,8 +933,11 @@ private fun FinalIngredientLineCard(
                 )
             }
 
-            if (baseRecipeIngredientId != null) {
-                if (isMarkedRemoved) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (baseRecipeIngredientId != null && isMarkedRemoved) {
                     OutlinedButton(
                         onClick = {
                             onRestoreIngredientLine(baseRecipeIngredientId)
@@ -714,49 +946,26 @@ private fun FinalIngredientLineCard(
                         Text("Restore")
                     }
                 } else {
-                    CompactIngredientAmountEditor(
-                        line = line,
-                        adjustMode = adjustMode,
-                        adjustAmountText = adjustAmountText,
-                        canApply = canApply,
-                        isMarkedAdjusted = isMarkedAdjusted,
-                        onAdjustModeChanged = { newMode ->
-                            adjustModeName = newMode.name
-                            adjustAmountText = defaultAdjustText(line, newMode)
-                        },
-                        onAdjustAmountTextChanged = { newValue ->
-                            adjustAmountText = newValue.filter { character ->
-                                character.isDigit() || character == '.'
-                            }
-                        },
-                        onApply = {
-                            parsedAmount?.let { amount ->
-                                when (adjustMode) {
-                                    VariantAdjustMode.SERVINGS -> {
-                                        onAdjustIngredientToServings(
-                                            baseRecipeIngredientId,
-                                            servingsFromDisplayAmount(
-                                                displayAmount = amount,
-                                                servingSize = line.food.servingSize,
-                                            ),
-                                        )
-                                    }
+                    OutlinedButton(
+                        onClick = onEditIngredient,
+                    ) {
+                        Text("Edit amount")
+                    }
 
-                                    VariantAdjustMode.GRAMS -> {
-                                        onAdjustIngredientToGrams(baseRecipeIngredientId, amount)
-                                    }
-                                }
+                    TextButton(
+                        onClick = {
+                            if (baseRecipeIngredientId == null) {
+                                onRemoveAddedIngredient(
+                                    line.food.id,
+                                    line.sortOrder,
+                                )
+                            } else {
+                                onEditIngredient()
                             }
                         },
-                        onClearAdjustment = {
-                            adjustModeName = defaultAdjustMode(line).name
-                            adjustAmountText = defaultAdjustText(line, defaultAdjustMode(line))
-                            onClearIngredientAdjustment(baseRecipeIngredientId)
-                        },
-                        onRemove = {
-                            onMarkIngredientRemoved(baseRecipeIngredientId)
-                        },
-                    )
+                    ) {
+                        Text("Remove")
+                    }
                 }
             }
         }
@@ -852,7 +1061,11 @@ private fun CompactIngredientAmountEditor(
             modifier = Modifier.fillMaxWidth(),
             label = {
                 Text(
-                    text = "Recipe: ${originalAmountLabel(line, adjustMode)}",
+                    text = if (line.source == RecipeVariantIngredientLineSource.ADDED) {
+                        "Variant amount"
+                    } else {
+                        "Recipe: ${originalAmountLabel(line, adjustMode)}"
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -948,6 +1161,99 @@ private fun RemovedIngredientLineCard(
             }
         }
     }
+}
+
+private sealed interface VariantIngredientEditTarget {
+    data class Base(
+        val baseRecipeIngredientId: Long,
+    ) : VariantIngredientEditTarget
+
+    data class Added(
+        val foodId: Long,
+        val sortOrder: Int,
+    ) : VariantIngredientEditTarget
+}
+
+private fun FoodEntity.toDomainFood(): Food {
+    return Food(
+        id = id,
+        stableId = stableId,
+        name = name,
+        brand = brand,
+        servingSize = servingSize,
+        servingUnit = servingUnit,
+        gramsPerServingUnit = gramsPerServingUnit,
+        mlPerServingUnit = mlPerServingUnit,
+        servingsPerPackage = servingsPerPackage,
+        isRecipe = isRecipe,
+        isLowSodium = isLowSodium,
+        usdaFdcId = usdaFdcId,
+        usdaGtinUpc = usdaGtinUpc,
+        usdaPublishedDate = usdaPublishedDate,
+        usdaModifiedDate = usdaModifiedDate,
+        usdaServingSize = usdaServingSize,
+        usdaServingUnit = usdaServingUnit,
+        householdServingText = householdServingText,
+        mergedIntoFoodId = mergedIntoFoodId,
+        mergedAtEpochMs = mergedAtEpochMs,
+        isDeleted = isDeleted,
+        deletedAtEpochMs = deletedAtEpochMs,
+        mergeChildCount = mergeChildCount,
+    )
+}
+
+private fun AssembledRecipeVariantIngredientLine.servingsForEditor(): Double {
+    servings?.takeIf { it > 0.0 }?.let { return it }
+
+    val gramsValue = grams?.takeIf { it > 0.0 }
+    val gramsPerServing = currentGramsForOneServing()
+
+    if (gramsValue != null && gramsPerServing != null && gramsPerServing > 0.0) {
+        return gramsValue / gramsPerServing
+    }
+
+    return 1.0
+}
+
+private fun AssembledRecipeVariantIngredientLine.currentGramsForEditor(): Double? {
+    grams?.takeIf { it > 0.0 }?.let { return it }
+
+    val servingsValue = servings?.takeIf { it > 0.0 } ?: return null
+    val gramsPerServing = currentGramsForOneServing() ?: return null
+
+    return servingsValue * gramsPerServing
+}
+
+private fun AssembledRecipeVariantIngredientLine.currentGramsForOneServing(): Double? {
+    lineFoodDirectMassGramsPerServing(food)?.let { return it }
+
+    val gramsPerOneUnit = food.gramsPerServingUnit
+    if (gramsPerOneUnit != null && gramsPerOneUnit > 0.0 && food.servingSize > 0.0) {
+        return food.servingSize * gramsPerOneUnit
+    }
+
+    return null
+}
+
+private fun lineFoodDirectMassGramsPerServing(
+    food: FoodEntity,
+): Double? {
+    return food.servingUnit.asG
+        ?.takeIf { it > 0.0 }
+        ?.let { gramsPerUnit ->
+            food.servingSize * gramsPerUnit
+        }
+}
+
+private fun originalAmountLabel(
+    line: AssembledRecipeVariantIngredientLine,
+): String {
+    return formatVariantAmount(
+        servings = line.originalServings,
+        grams = line.originalGrams,
+        servingSize = line.food.servingSize,
+        servingUnitLabel = line.food.servingUnit.display,
+    )
 }
 
 private enum class VariantAdjustMode {

@@ -6,8 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeType
 import com.example.adobongkangkong.domain.model.AssembledRecipeVariantIngredientLine
+import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RemovedRecipeVariantIngredientLine
 import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
+import com.example.adobongkangkong.domain.model.ServingUnit
+import com.example.adobongkangkong.domain.model.toGrams
+import com.example.adobongkangkong.domain.model.toMilliliters
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
+import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import com.example.adobongkangkong.domain.usecase.recipevariant.AssembleRecipeVariantUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.CompareRecipeVariantMacrosUseCase
@@ -16,9 +22,11 @@ import com.example.adobongkangkong.domain.usecase.recipevariant.UpdateRecipeVari
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.max
 
 data class RecipeVariantEditorUiState(
     val recipeFoodId: Long = 0L,
@@ -35,6 +43,14 @@ data class RecipeVariantEditorUiState(
     val removedIngredientLines: List<RemovedRecipeVariantIngredientLine> = emptyList(),
     val warnings: List<String> = emptyList(),
     val macroComparison: RecipeVariantMacroComparison? = null,
+
+    val addIngredientQuery: String = "",
+    val addIngredientResults: List<Food> = emptyList(),
+    val pickedFood: Food? = null,
+    val pickedServings: Double = 1.0,
+    val pickedGrams: Double? = null,
+    val pickedInputUnit: ServingUnit = ServingUnit.G,
+    val pickedInputAmount: Double? = null,
 
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
@@ -64,6 +80,7 @@ data class RecipeVariantEditorUiState(
 class RecipeVariantEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val recipeVariantRepository: RecipeVariantRepository,
+    private val foodRepository: FoodRepository,
     private val updateRecipeVariant: UpdateRecipeVariantUseCase,
     private val assembleRecipeVariant: AssembleRecipeVariantUseCase,
     private val compareRecipeVariantMacros: CompareRecipeVariantMacrosUseCase,
@@ -162,6 +179,395 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 errorMessage = null,
             )
         }
+    }
+
+    fun onAddIngredientQueryChanged(value: String) {
+        _uiState.update {
+            it.copy(
+                addIngredientQuery = value,
+                errorMessage = null,
+            )
+        }
+
+        val query = value.trim()
+
+        if (query.isBlank()) {
+            _uiState.update {
+                it.copy(addIngredientResults = emptyList())
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                foodRepository.search(query, limit = 50).first()
+            }.onSuccess { results ->
+                _uiState.update { current ->
+                    if (current.addIngredientQuery.trim() == query) {
+                        current.copy(addIngredientResults = results)
+                    } else {
+                        current
+                    }
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(errorMessage = throwable.message ?: "Food search failed.")
+                }
+            }
+        }
+    }
+
+    fun pickFoodForIngredient(food: Food) {
+        val servings = 1.0
+        _uiState.update {
+            it.copy(
+                pickedFood = food,
+                pickedServings = servings,
+                pickedGrams = food.gramsPerCurrentServingResolved()?.let { gramsPerServing ->
+                    servings * gramsPerServing
+                },
+                pickedInputUnit = ServingUnit.G,
+                pickedInputAmount = null,
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun clearPickedFoodForIngredient() {
+        _uiState.update {
+            it.copy(
+                pickedFood = null,
+                pickedServings = 1.0,
+                pickedGrams = null,
+                pickedInputUnit = ServingUnit.G,
+                pickedInputAmount = null,
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun onPickedServingsChanged(servings: Double) {
+        val food = _uiState.value.pickedFood ?: return
+        val safeServings = max(0.0, servings)
+
+        _uiState.update {
+            it.copy(
+                pickedServings = safeServings,
+                pickedGrams = food.gramsPerCurrentServingResolved()?.let { gramsPerServing ->
+                    safeServings * gramsPerServing
+                },
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun onPickedServingUnitAmountChanged(amountInServingUnit: Double) {
+        val food = _uiState.value.pickedFood ?: return
+        val servingSize = food.servingSize.takeIf { it > 0.0 } ?: return
+        val servings = (amountInServingUnit / servingSize).coerceAtLeast(0.0)
+        onPickedServingsChanged(servings)
+    }
+
+    fun onPickedGramsChanged(grams: Double) {
+        val food = _uiState.value.pickedFood ?: return
+        val gramsPerServing = food.gramsPerCurrentServingResolved() ?: return
+
+        if (gramsPerServing <= 0.0) {
+            return
+        }
+
+        val safeGrams = grams.coerceAtLeast(0.0)
+        val servings = safeGrams / gramsPerServing
+
+        _uiState.update {
+            it.copy(
+                pickedServings = servings,
+                pickedGrams = safeGrams,
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun onPickedInputUnitChanged(unit: ServingUnit) {
+        _uiState.update {
+            it.copy(pickedInputUnit = unit)
+        }
+
+        val amount = _uiState.value.pickedInputAmount ?: return
+        onPickedInputAmountChanged(amount)
+    }
+
+    fun onPickedInputAmountChanged(amount: Double?) {
+        val food = _uiState.value.pickedFood ?: return
+        val unit = _uiState.value.pickedInputUnit
+
+        _uiState.update {
+            it.copy(pickedInputAmount = amount)
+        }
+
+        if (amount == null || amount <= 0.0) {
+            return
+        }
+
+        val grams = computePickedInputGrams(
+            food = food,
+            amount = amount,
+            unit = unit,
+        ) ?: return
+
+        onPickedGramsChanged(grams)
+    }
+
+    fun onPickedPackageClicked(multiplier: Double) {
+        val food = _uiState.value.pickedFood ?: return
+        val servingsPerPackage = food.servingsPerPackage ?: return
+
+        if (servingsPerPackage <= 0.0) {
+            return
+        }
+
+        onPickedServingsChanged(servingsPerPackage * multiplier)
+    }
+
+    fun addPickedVariantIngredientWithAmount(
+        servings: Double,
+        grams: Double?,
+        preferGrams: Boolean,
+    ) {
+        val current = _uiState.value
+        val food = current.pickedFood ?: return
+
+        if (servings <= 0.0 && (grams == null || grams <= 0.0)) {
+            _uiState.update {
+                it.copy(errorMessage = "Ingredient amount must be greater than zero.")
+            }
+            return
+        }
+
+        val gramsPerServing = food.gramsPerCurrentServingResolved()
+        val millilitersPerServing = food.millilitersPerCurrentServingResolved()
+
+        val hasNutritionPath =
+            (gramsPerServing != null && gramsPerServing > 0.0) ||
+                    (millilitersPerServing != null && millilitersPerServing > 0.0)
+
+        if (!hasNutritionPath) {
+            _uiState.update {
+                it.copy(
+                    errorMessage = "Add grams-per-serving or mL-per-serving to enable recipe conversion.",
+                )
+            }
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val savedAsGrams = preferGrams && grams != null && grams > 0.0
+
+        updateDraftChanges { changes ->
+            changes + RecipeVariantIngredientChangeEntity(
+                variantId = variantId,
+                changeType = RecipeVariantIngredientChangeType.ADD,
+                baseRecipeIngredientId = null,
+                foodId = food.id,
+                servings = if (savedAsGrams) null else servings,
+                grams = if (savedAsGrams) grams else null,
+                note = null,
+                sortOrder = changes.size,
+                createdAtEpochMillis = now,
+                updatedAtEpochMillis = now,
+            )
+        }
+
+        _uiState.update {
+            it.copy(
+                addIngredientQuery = "",
+                addIngredientResults = emptyList(),
+                pickedFood = null,
+                pickedServings = 1.0,
+                pickedGrams = null,
+                pickedInputUnit = ServingUnit.G,
+                pickedInputAmount = null,
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun addPickedVariantIngredient() {
+        val current = _uiState.value
+        val food = current.pickedFood ?: return
+        val servings = current.pickedServings
+
+        if (servings <= 0.0) {
+            _uiState.update {
+                it.copy(errorMessage = "Ingredient amount must be greater than zero.")
+            }
+            return
+        }
+
+        val gramsPerServing = food.gramsPerCurrentServingResolved()
+        val millilitersPerServing = food.millilitersPerCurrentServingResolved()
+
+        val hasNutritionPath =
+            (gramsPerServing != null && gramsPerServing > 0.0) ||
+                    (millilitersPerServing != null && millilitersPerServing > 0.0)
+
+        if (!hasNutritionPath) {
+            _uiState.update {
+                it.copy(
+                    errorMessage = "Add grams-per-serving or mL-per-serving to enable recipe conversion.",
+                )
+            }
+            return
+        }
+
+        val now = System.currentTimeMillis()
+
+        updateDraftChanges { changes ->
+            changes + RecipeVariantIngredientChangeEntity(
+                variantId = variantId,
+                changeType = RecipeVariantIngredientChangeType.ADD,
+                baseRecipeIngredientId = null,
+                foodId = food.id,
+                servings = servings,
+                grams = null,
+                note = null,
+                sortOrder = changes.size,
+                createdAtEpochMillis = now,
+                updatedAtEpochMillis = now,
+            )
+        }
+
+        _uiState.update {
+            it.copy(
+                addIngredientQuery = "",
+                addIngredientResults = emptyList(),
+                pickedFood = null,
+                pickedServings = 1.0,
+                pickedGrams = null,
+                pickedInputUnit = ServingUnit.G,
+                pickedInputAmount = null,
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun adjustAddedIngredientToGrams(
+        foodId: Long,
+        lineSortOrder: Int,
+        grams: Double,
+    ) {
+        if (foodId <= 0L || grams <= 0.0) {
+            _uiState.update {
+                it.copy(errorMessage = "Grams must be greater than zero.")
+            }
+            return
+        }
+
+        updateAddedIngredientChange(
+            foodId = foodId,
+            lineSortOrder = lineSortOrder,
+        ) { change ->
+            change.copy(
+                servings = null,
+                grams = grams,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    fun adjustAddedIngredientToServings(
+        foodId: Long,
+        lineSortOrder: Int,
+        servings: Double,
+    ) {
+        if (foodId <= 0L || servings <= 0.0) {
+            _uiState.update {
+                it.copy(errorMessage = "Servings must be greater than zero.")
+            }
+            return
+        }
+
+        updateAddedIngredientChange(
+            foodId = foodId,
+            lineSortOrder = lineSortOrder,
+        ) { change ->
+            change.copy(
+                servings = servings,
+                grams = null,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    fun removeAddedIngredient(
+        foodId: Long,
+        lineSortOrder: Int,
+    ) {
+        val addedIndex = findAddedIngredientIndex(
+            foodId = foodId,
+            lineSortOrder = lineSortOrder,
+        )
+
+        if (addedIndex < 0) {
+            return
+        }
+
+        updateDraftChanges { changes ->
+            var seenAddedIndex = -1
+
+            changes.filterNot { change ->
+                if (change.changeType != RecipeVariantIngredientChangeType.ADD) {
+                    false
+                } else {
+                    seenAddedIndex += 1
+                    seenAddedIndex == addedIndex
+                }
+            }
+        }
+    }
+
+    private fun updateAddedIngredientChange(
+        foodId: Long,
+        lineSortOrder: Int,
+        transform: (RecipeVariantIngredientChangeEntity) -> RecipeVariantIngredientChangeEntity,
+    ) {
+        val addedIndex = findAddedIngredientIndex(
+            foodId = foodId,
+            lineSortOrder = lineSortOrder,
+        )
+
+        if (addedIndex < 0) {
+            return
+        }
+
+        updateDraftChanges { changes ->
+            var seenAddedIndex = -1
+
+            changes.map { change ->
+                if (change.changeType != RecipeVariantIngredientChangeType.ADD) {
+                    change
+                } else {
+                    seenAddedIndex += 1
+
+                    if (seenAddedIndex == addedIndex) {
+                        transform(change)
+                    } else {
+                        change
+                    }
+                }
+            }
+        }
+    }
+
+    private fun findAddedIngredientIndex(
+        foodId: Long,
+        lineSortOrder: Int,
+    ): Int {
+        return _uiState.value.finalIngredientLines
+            .filter { it.source == com.example.adobongkangkong.domain.model.RecipeVariantIngredientLineSource.ADDED }
+            .indexOfFirst { line ->
+                line.food.id == foodId && line.sortOrder == lineSortOrder
+            }
     }
 
     fun markIngredientRemoved(
@@ -390,6 +796,57 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun Food.gramsPerCurrentServingResolved(): Double? {
+        val directMass = servingUnit.toGrams(servingSize)
+        if (directMass != null && directMass > 0.0) {
+            return directMass
+        }
+
+        val gramsPerOneUnit = gramsPerServingUnitResolved()
+        if (gramsPerOneUnit != null && gramsPerOneUnit > 0.0 && servingSize > 0.0) {
+            return servingSize * gramsPerOneUnit
+        }
+
+        return null
+    }
+
+    private fun Food.millilitersPerCurrentServingResolved(): Double? {
+        val directVolume = servingUnit.toMilliliters(servingSize)
+        if (directVolume != null && directVolume > 0.0) {
+            return directVolume
+        }
+
+        val mlPerOneUnit = mlPerServingUnit
+        if (mlPerOneUnit != null && mlPerOneUnit > 0.0 && servingSize > 0.0) {
+            return servingSize * mlPerOneUnit
+        }
+
+        return null
+    }
+
+    private fun computePickedInputGrams(
+        food: Food,
+        amount: Double,
+        unit: ServingUnit,
+    ): Double? {
+        val safeAmount = amount.coerceAtLeast(0.0)
+
+        unit.toGrams(safeAmount)?.let { grams ->
+            return grams
+        }
+
+        val mlInput = unit.toMilliliters(safeAmount) ?: return null
+        val gramsPerServing = food.gramsPerCurrentServingResolved() ?: return null
+        val mlPerServing = food.millilitersPerCurrentServingResolved() ?: return null
+
+        if (gramsPerServing <= 0.0 || mlPerServing <= 0.0) {
+            return null
+        }
+
+        val densityGPerMl = gramsPerServing / mlPerServing
+        return mlInput * densityGPerMl
     }
 
     fun clearError() {

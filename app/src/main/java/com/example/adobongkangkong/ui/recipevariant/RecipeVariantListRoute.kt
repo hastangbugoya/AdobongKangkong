@@ -1,31 +1,17 @@
 package com.example.adobongkangkong.ui.recipevariant
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
 
 @Composable
 fun RecipeVariantListRoute(
     onBack: () -> Unit,
-    onOpenVariantEditor: (recipeFoodId: Long, variantId: Long) -> Unit,
+    onOpenVariantEditor: (Long, Long) -> Unit,
     viewModel: RecipeVariantListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(viewModel) {
-        viewModel.effects.collect { effect ->
-            when (effect) {
-                is RecipeVariantListViewModel.Effect.OpenVariantEditor -> {
-                    onOpenVariantEditor(
-                        effect.recipeFoodId,
-                        effect.variantId,
-                    )
-                }
-            }
-        }
-    }
 
     RecipeVariantListScreen(
         uiState = uiState,
@@ -38,6 +24,11 @@ fun RecipeVariantListRoute(
         onCreateConfirmed = viewModel::createVariant,
         onArchiveVariant = viewModel::archiveVariant,
         onRestoreVariant = viewModel::restoreVariant,
-        onOpenVariant = viewModel::openVariantEditor,
+        onOpenVariantEditor = { variantId ->
+            onOpenVariantEditor(uiState.recipeFoodId, variantId)
+        },
+        onDeleteArchivedVariantClicked = viewModel::openDeleteArchivedVariantDialog,
+        onDeleteArchivedVariantDismissed = viewModel::closeDeleteArchivedVariantDialog,
+        onDeleteArchivedVariantConfirmed = viewModel::deletePendingArchivedVariant,
     )
 }

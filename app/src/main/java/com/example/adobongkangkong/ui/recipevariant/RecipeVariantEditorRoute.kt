@@ -8,6 +8,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun RecipeVariantEditorRoute(
     onBack: () -> Unit,
+    onEditFood: ((Long) -> Unit)? = null,
     viewModel: RecipeVariantEditorViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -24,5 +25,20 @@ fun RecipeVariantEditorRoute(
         onAdjustIngredientToGrams = viewModel::adjustIngredientToGrams,
         onAdjustIngredientToServings = viewModel::adjustIngredientToServings,
         onClearIngredientAdjustment = viewModel::clearIngredientAdjustment,
+        onAdjustAddedIngredientToGrams = viewModel::adjustAddedIngredientToGrams,
+        onAdjustAddedIngredientToServings = viewModel::adjustAddedIngredientToServings,
+        onRemoveAddedIngredient = viewModel::removeAddedIngredient,
+        onAddIngredientQueryChanged = viewModel::onAddIngredientQueryChanged,
+        onPickFoodForIngredient = viewModel::pickFoodForIngredient,
+        onClearPickedFoodForIngredient = viewModel::clearPickedFoodForIngredient,
+        onPickedServingsChanged = viewModel::onPickedServingsChanged,
+        onPickedServingUnitAmountChanged = viewModel::onPickedServingUnitAmountChanged,
+        onPickedGramsChanged = viewModel::onPickedGramsChanged,
+        onPickedInputUnitChanged = viewModel::onPickedInputUnitChanged,
+        onPickedInputAmountChanged = viewModel::onPickedInputAmountChanged,
+        onPickedPackageClicked = viewModel::onPickedPackageClicked,
+        onAddPickedVariantIngredient = viewModel::addPickedVariantIngredient,
+        onAddPickedVariantIngredientWithAmount = viewModel::addPickedVariantIngredientWithAmount,
+        onEditFood = onEditFood,
     )
 }

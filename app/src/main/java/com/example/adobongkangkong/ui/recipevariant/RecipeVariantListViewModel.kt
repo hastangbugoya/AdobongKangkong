@@ -6,15 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantEntity
 import com.example.adobongkangkong.domain.usecase.recipevariant.ArchiveRecipeVariantUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.CreateRecipeVariantUseCase
+import com.example.adobongkangkong.domain.usecase.recipevariant.DeleteArchivedRecipeVariantUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.ObserveRecipeVariantsForRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.RestoreRecipeVariantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -31,6 +30,7 @@ data class RecipeVariantListUiState(
     val variants: List<RecipeVariantEntity> = emptyList(),
     val visibleVariants: List<RecipeVariantEntity> = emptyList(),
     val isCreateDialogOpen: Boolean = false,
+    val pendingDeleteVariant: RecipeVariantEntity? = null,
     val newVariantName: String = "",
     val newVariantNotes: String = "",
     val errorMessage: String? = null,
@@ -50,14 +50,8 @@ class RecipeVariantListViewModel @Inject constructor(
     private val createRecipeVariant: CreateRecipeVariantUseCase,
     private val archiveRecipeVariant: ArchiveRecipeVariantUseCase,
     private val restoreRecipeVariant: RestoreRecipeVariantUseCase,
+    private val deleteArchivedRecipeVariant: DeleteArchivedRecipeVariantUseCase,
 ) : ViewModel() {
-
-    sealed interface Effect {
-        data class OpenVariantEditor(
-            val recipeFoodId: Long,
-            val variantId: Long,
-        ) : Effect
-    }
 
     private val recipeFoodId: Long =
         savedStateHandle.get<Long>("recipeFoodId")
@@ -69,9 +63,7 @@ class RecipeVariantListViewModel @Inject constructor(
     private val newVariantName = MutableStateFlow("")
     private val newVariantNotes = MutableStateFlow("")
     private val errorMessage = MutableStateFlow<String?>(null)
-
-    private val effectsChannel = Channel<Effect>(Channel.BUFFERED)
-    val effects = effectsChannel.receiveAsFlow()
+    private val pendingDeleteVariantId = MutableStateFlow<Long?>(null)
 
     private val variants = observeRecipeVariantsForRecipe(recipeFoodId)
 
@@ -95,11 +87,18 @@ class RecipeVariantListViewModel @Inject constructor(
             variants,
             filter,
             createDialogState,
-        ) { variants, selectedFilter, createDialogState ->
+            pendingDeleteVariantId,
+        ) { variants, selectedFilter, createDialogState, pendingDeleteVariantId ->
             val visibleVariants = when (selectedFilter) {
                 RecipeVariantFilter.CURRENT -> variants.filterNot { it.isArchived }
                 RecipeVariantFilter.ARCHIVED -> variants.filter { it.isArchived }
                 RecipeVariantFilter.ALL -> variants
+            }
+
+            val pendingDeleteVariant = pendingDeleteVariantId?.let { pendingId ->
+                variants.firstOrNull { variant ->
+                    variant.id == pendingId && variant.isArchived
+                }
             }
 
             RecipeVariantListUiState(
@@ -108,6 +107,7 @@ class RecipeVariantListViewModel @Inject constructor(
                 variants = variants,
                 visibleVariants = visibleVariants,
                 isCreateDialogOpen = createDialogState.isOpen,
+                pendingDeleteVariant = pendingDeleteVariant,
                 newVariantName = createDialogState.name,
                 newVariantNotes = createDialogState.notes,
                 errorMessage = createDialogState.errorMessage,
@@ -156,34 +156,16 @@ class RecipeVariantListViewModel @Inject constructor(
                     name = name,
                     notes = newVariantNotes.value,
                 )
-            }.onSuccess { variantId ->
+            }.onSuccess {
                 isCreateDialogOpen.value = false
                 newVariantName.value = ""
                 newVariantNotes.value = ""
                 errorMessage.value = null
                 filter.value = RecipeVariantFilter.CURRENT
-
-                effectsChannel.send(
-                    Effect.OpenVariantEditor(
-                        recipeFoodId = recipeFoodId,
-                        variantId = variantId,
-                    )
-                )
             }.onFailure { throwable ->
                 errorMessage.value =
                     throwable.message ?: "Could not create variant."
             }
-        }
-    }
-
-    fun openVariantEditor(variantId: Long) {
-        viewModelScope.launch {
-            effectsChannel.send(
-                Effect.OpenVariantEditor(
-                    recipeFoodId = recipeFoodId,
-                    variantId = variantId,
-                )
-            )
         }
     }
 
@@ -205,6 +187,32 @@ class RecipeVariantListViewModel @Inject constructor(
             }.onFailure { throwable ->
                 errorMessage.value =
                     throwable.message ?: "Could not restore variant."
+            }
+        }
+    }
+
+    fun openDeleteArchivedVariantDialog(variantId: Long) {
+        errorMessage.value = null
+        pendingDeleteVariantId.value = variantId
+    }
+
+    fun closeDeleteArchivedVariantDialog() {
+        pendingDeleteVariantId.value = null
+    }
+
+    fun deletePendingArchivedVariant() {
+        val variantId = pendingDeleteVariantId.value ?: return
+
+        viewModelScope.launch {
+            runCatching {
+                deleteArchivedRecipeVariant(variantId)
+            }.onSuccess {
+                pendingDeleteVariantId.value = null
+                errorMessage.value = null
+                filter.value = RecipeVariantFilter.ARCHIVED
+            }.onFailure { throwable ->
+                errorMessage.value =
+                    throwable.message ?: "Could not delete archived variant."
             }
         }
     }

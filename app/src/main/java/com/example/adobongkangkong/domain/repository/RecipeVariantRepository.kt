@@ -14,10 +14,6 @@ interface RecipeVariantRepository {
         recipeFoodId: Long,
     ): Flow<List<RecipeVariantEntity>>
 
-    fun observeVariantById(
-        variantId: Long,
-    ): Flow<RecipeVariantEntity?>
-
     suspend fun getVariantById(
         variantId: Long,
     ): RecipeVariantEntity?
@@ -43,9 +39,9 @@ interface RecipeVariantRepository {
         nowEpochMillis: Long,
     )
 
-    fun observeChangesForVariant(
+    suspend fun deleteArchivedVariant(
         variantId: Long,
-    ): Flow<List<RecipeVariantIngredientChangeEntity>>
+    )
 
     suspend fun getChangesForVariant(
         variantId: Long,

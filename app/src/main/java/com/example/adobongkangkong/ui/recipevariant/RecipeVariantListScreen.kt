@@ -47,8 +47,11 @@ fun RecipeVariantListScreen(
     onCreateConfirmed: () -> Unit,
     onArchiveVariant: (Long) -> Unit,
     onRestoreVariant: (Long) -> Unit,
+    onOpenVariantEditor: (Long) -> Unit,
+    onDeleteArchivedVariantClicked: (Long) -> Unit,
+    onDeleteArchivedVariantDismissed: () -> Unit,
+    onDeleteArchivedVariantConfirmed: () -> Unit,
     modifier: Modifier = Modifier,
-    onOpenVariant: (Long) -> Unit,
 ) {
     Scaffold(
         modifier = modifier,
@@ -159,7 +162,8 @@ fun RecipeVariantListScreen(
                         variant = variant,
                         onArchiveVariant = onArchiveVariant,
                         onRestoreVariant = onRestoreVariant,
-                        onOpenVariant = onOpenVariant,
+                        onOpenVariantEditor = onOpenVariantEditor,
+                        onDeleteArchivedVariantClicked = onDeleteArchivedVariantClicked,
                     )
                 }
             }
@@ -179,6 +183,14 @@ fun RecipeVariantListScreen(
             onNotesChanged = onNewVariantNotesChanged,
             onDismiss = onCreateDismissed,
             onConfirm = onCreateConfirmed,
+        )
+    }
+
+    uiState.pendingDeleteVariant?.let { variant ->
+        DeleteArchivedVariantDialog(
+            variantName = variant.name,
+            onDismiss = onDeleteArchivedVariantDismissed,
+            onConfirm = onDeleteArchivedVariantConfirmed,
         )
     }
 }
@@ -226,7 +238,8 @@ private fun RecipeVariantCard(
     variant: RecipeVariantEntity,
     onArchiveVariant: (Long) -> Unit,
     onRestoreVariant: (Long) -> Unit,
-    onOpenVariant: (Long) -> Unit,
+    onOpenVariantEditor: (Long) -> Unit,
+    onDeleteArchivedVariantClicked: (Long) -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -280,21 +293,31 @@ private fun RecipeVariantCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(
+                    space = 8.dp,
+                    alignment = Alignment.End,
+                ),
             ) {
-                TextButton(
-                    onClick = { onOpenVariant(variant.id) },
-                ) {
-                    Text("Edit")
-                }
-
                 if (variant.isArchived) {
+                    OutlinedButton(
+                        onClick = { onDeleteArchivedVariantClicked(variant.id) },
+                    ) {
+                        Text("Delete")
+                    }
+
+
                     Button(
                         onClick = { onRestoreVariant(variant.id) },
                     ) {
                         Text("Restore")
                     }
                 } else {
+                    Button(
+                        onClick = { onOpenVariantEditor(variant.id) },
+                    ) {
+                        Text("Edit")
+                    }
+
                     OutlinedButton(
                         onClick = { onArchiveVariant(variant.id) },
                     ) {
@@ -304,6 +327,51 @@ private fun RecipeVariantCard(
             }
         }
     }
+}
+
+@Composable
+private fun DeleteArchivedVariantDialog(
+    variantName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Delete archived variant?")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = variantName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Text(
+                    text = "This permanently deletes this variant and its ingredient changes. The original recipe and food logs are not deleted.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+            ) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable

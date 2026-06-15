@@ -28,12 +28,6 @@ class RecipeVariantRepositoryImpl @Inject constructor(
         return recipeVariantDao.observeActiveVariantsForRecipe(recipeFoodId)
     }
 
-    override fun observeVariantById(
-        variantId: Long,
-    ): Flow<RecipeVariantEntity?> {
-        return recipeVariantDao.observeVariantById(variantId)
-    }
-
     override suspend fun getVariantById(
         variantId: Long,
     ): RecipeVariantEntity? {
@@ -87,10 +81,20 @@ class RecipeVariantRepositoryImpl @Inject constructor(
         )
     }
 
-    override fun observeChangesForVariant(
+    override suspend fun deleteArchivedVariant(
         variantId: Long,
-    ): Flow<List<RecipeVariantIngredientChangeEntity>> {
-        return recipeVariantDao.observeChangesForVariant(variantId)
+    ) {
+        db.withTransaction {
+            val variant = recipeVariantDao.getVariantById(variantId)
+                ?: return@withTransaction
+
+            require(variant.isArchived) {
+                "Only archived variants can be permanently deleted."
+            }
+
+            recipeVariantDao.deleteChangesForVariant(variantId)
+            recipeVariantDao.deleteVariantById(variantId)
+        }
     }
 
     override suspend fun getChangesForVariant(
@@ -107,15 +111,7 @@ class RecipeVariantRepositoryImpl @Inject constructor(
             recipeVariantDao.deleteChangesForVariant(variantId)
 
             if (changes.isNotEmpty()) {
-                recipeVariantDao.insertChanges(
-                    changes = changes.mapIndexed { index, change ->
-                        change.copy(
-                            id = 0L,
-                            variantId = variantId,
-                            sortOrder = index,
-                        )
-                    }
-                )
+                recipeVariantDao.insertChanges(changes)
             }
         }
     }

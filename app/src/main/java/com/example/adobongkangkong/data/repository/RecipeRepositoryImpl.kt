@@ -64,12 +64,13 @@ class RecipeRepositoryImpl @Inject constructor(
         )
 
         ingredientDao.insertAll(
-            draft.ingredients.map { ing ->
+            draft.ingredients.mapIndexed { index, ing ->
                 RecipeIngredientEntity(
                     recipeId = recipeId,
                     foodId = ing.foodId,
                     amountServings = ing.ingredientServings,
-                    amountGrams = null
+                    amountGrams = null,
+                    sortOrder = index
                 )
             }
         )
@@ -164,17 +165,41 @@ class RecipeRepositoryImpl @Inject constructor(
                 gramsPerServingUnit = gramsPerServing
             )
 
-            ingredientDao.deleteForRecipe(recipeId)
-            ingredientDao.insertAll(
-                ingredients.map { line ->
-                    RecipeIngredientEntity(
-                        recipeId = recipeId,
-                        foodId = line.ingredientFoodId,
-                        amountServings = line.ingredientServings,
-                        amountGrams = line.ingredientGrams
-                    )
+            val existingIngredients = ingredientDao.getForRecipe(recipeId)
+            val usedExistingIngredientIds = mutableSetOf<Long>()
+
+            val updatedIngredientRows = ingredients.mapIndexed { index, line ->
+                val matchedExisting = findIngredientRowToPreserve(
+                    line = line,
+                    existingRows = existingIngredients,
+                    usedExistingIngredientIds = usedExistingIngredientIds
+                )
+
+                if (matchedExisting != null) {
+                    usedExistingIngredientIds += matchedExisting.id
                 }
-            )
+
+                RecipeIngredientEntity(
+                    id = matchedExisting?.id ?: 0L,
+                    recipeId = recipeId,
+                    foodId = line.ingredientFoodId,
+                    amountServings = line.ingredientServings,
+                    amountGrams = line.ingredientGrams,
+                    sortOrder = index
+                )
+            }
+
+            val staleIngredientIds = existingIngredients
+                .map { it.id }
+                .filterNot { it in usedExistingIngredientIds }
+
+            if (staleIngredientIds.isNotEmpty()) {
+                ingredientDao.deleteByIds(staleIngredientIds)
+            }
+
+            if (updatedIngredientRows.isNotEmpty()) {
+                ingredientDao.insertAll(updatedIngredientRows)
+            }
 
             val domainRecipe = Recipe(
                 id = recipeId,
@@ -415,6 +440,28 @@ class RecipeRepositoryImpl @Inject constructor(
                 stepId = stepId,
                 position = index
             )
+        }
+    }
+
+    private fun findIngredientRowToPreserve(
+        line: RecipeIngredientLine,
+        existingRows: List<RecipeIngredientEntity>,
+        usedExistingIngredientIds: Set<Long>
+    ): RecipeIngredientEntity? {
+        val exactAmountMatch = existingRows.firstOrNull { existing ->
+            existing.id !in usedExistingIngredientIds &&
+                    existing.foodId == line.ingredientFoodId &&
+                    existing.amountServings == line.ingredientServings &&
+                    existing.amountGrams == line.ingredientGrams
+        }
+
+        if (exactAmountMatch != null) {
+            return exactAmountMatch
+        }
+
+        return existingRows.firstOrNull { existing ->
+            existing.id !in usedExistingIngredientIds &&
+                    existing.foodId == line.ingredientFoodId
         }
     }
 

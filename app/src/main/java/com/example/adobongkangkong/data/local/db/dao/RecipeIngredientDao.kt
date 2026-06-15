@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.adobongkangkong.data.local.db.entity.RecipeIngredientEntity
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecipeIngredientDao {
@@ -19,6 +18,9 @@ interface RecipeIngredientDao {
     // Edit Recipe
     @Query("DELETE FROM recipe_ingredient WHERE recipeId = :recipeId")
     suspend fun deleteForRecipe(recipeId: Long)
+
+    @Query("DELETE FROM recipe_ingredient WHERE id IN (:ingredientIds)")
+    suspend fun deleteByIds(ingredientIds: List<Long>)
 
     /**
      * Used for referential-integrity checks (e.g., block deleting foods that are used by recipes).
@@ -55,7 +57,4 @@ interface RecipeIngredientDao {
         ingredientId: Long,
         servings: Double?
     )
-
-    @Query("SELECT * FROM recipe_ingredient WHERE recipeId = :recipeId ORDER BY sortOrder ASC")
-    fun observeForRecipe(recipeId: Long): Flow<List<RecipeIngredientEntity>>
 }
