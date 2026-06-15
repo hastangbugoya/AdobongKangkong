@@ -50,6 +50,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class RecipeBuilderIngredientAmountEdit(
+    val index: Int,
+    val food: Food,
+    val initialServings: Double,
+    val initialGrams: Double?,
+    val initialPreferGrams: Boolean,
+    val normalizedPriceDisplay: String?,
+    val servingPriceDisplay: String?,
+    val ingredientCostDisplay: String?,
+)
+
 @HiltViewModel
 class RecipeBuilderViewModel @Inject constructor(
     private val foodRepo: FoodRepository,
@@ -103,6 +114,11 @@ class RecipeBuilderViewModel @Inject constructor(
     private val pickedNormalizedPriceDisplayFlow = MutableStateFlow<String?>(null)
     private val pickedServingPriceDisplayFlow = MutableStateFlow<String?>(null)
     private val pickedIngredientLineCostDisplayFlow = MutableStateFlow<String?>(null)
+
+    private val editingIngredientAmountFlow =
+        MutableStateFlow<RecipeBuilderIngredientAmountEdit?>(null)
+    val editingIngredientAmount: StateFlow<RecipeBuilderIngredientAmountEdit?> =
+        editingIngredientAmountFlow
 
     private val favoriteFlow = MutableStateFlow(false)
     private val eatMoreFlow = MutableStateFlow(false)
@@ -1050,6 +1066,42 @@ class RecipeBuilderViewModel @Inject constructor(
         navigateToEditFoodIdFlow.value = null
     }
 
+    fun addPickedIngredientWithAmount(
+        servings: Double,
+        grams: Double?,
+        preferGrams: Boolean,
+    ) {
+        val food = pickedFoodFlow.value ?: return
+
+        if (servings <= 0.0 && (grams == null || grams <= 0.0)) {
+            errorFlow.value = "Ingredient amount must be > 0."
+            return
+        }
+
+        isEditingGrams = preferGrams && grams != null && grams > 0.0
+
+        if (isEditingGrams) {
+            pickedGramsTextFlow.value = formatTo2Decimals(grams ?: 0.0)
+            val gramsPerServing = food.gramsPerCurrentServingResolved()
+
+            if (gramsPerServing != null && gramsPerServing > 0.0 && grams != null) {
+                val computedServings = (grams / gramsPerServing).coerceAtLeast(0.0)
+                pickedServingsFlow.value = computedServings
+                pickedServingsTextFlow.value = formatTo2Decimals(computedServings)
+            } else {
+                pickedServingsFlow.value = servings.coerceAtLeast(0.0)
+                pickedServingsTextFlow.value = formatTo2Decimals(servings.coerceAtLeast(0.0))
+            }
+        } else {
+            pickedServingsFlow.value = servings.coerceAtLeast(0.0)
+            pickedServingsTextFlow.value = formatTo2Decimals(servings.coerceAtLeast(0.0))
+            syncPickedGramsTextFromServings()
+        }
+
+        refreshPickedPricePreview()
+        addPickedIngredient()
+    }
+
     fun addPickedIngredient() {
         val food = pickedFoodFlow.value ?: return
         val servings = pickedServingsFlow.value
@@ -1158,6 +1210,138 @@ class RecipeBuilderViewModel @Inject constructor(
             pickedNormalizedPriceDisplayFlow.value = null
             pickedServingPriceDisplayFlow.value = null
             pickedIngredientLineCostDisplayFlow.value = null
+        }
+    }
+
+    fun openIngredientAmountEditor(index: Int) {
+        val ingredient = ingredientsFlow.value.getOrNull(index) ?: return
+
+        viewModelScope.launch {
+            val food = foodRepo.getById(ingredient.foodId)
+
+            if (food == null) {
+                errorFlow.value = "Could not load ingredient food."
+                return@launch
+            }
+
+            val initialServings = ingredient.servings
+                ?: ingredient.grams?.let { grams ->
+                    val gramsPerServing = food.gramsPerCurrentServingResolved()
+                    if (gramsPerServing != null && gramsPerServing > 0.0) {
+                        grams / gramsPerServing
+                    } else {
+                        null
+                    }
+                }
+                ?: 1.0
+
+            val pricing = buildIngredientPricePreview(
+                food = food,
+                servings = initialServings
+            )
+
+            editingIngredientAmountFlow.value = RecipeBuilderIngredientAmountEdit(
+                index = index,
+                food = food,
+                initialServings = initialServings,
+                initialGrams = ingredient.grams,
+                initialPreferGrams = ingredient.grams != null,
+                normalizedPriceDisplay = pricing.normalizedDisplay,
+                servingPriceDisplay = pricing.servingDisplay,
+                ingredientCostDisplay = pricing.lineCostDisplay,
+            )
+        }
+    }
+
+    fun closeIngredientAmountEditor() {
+        editingIngredientAmountFlow.value = null
+    }
+
+    fun updateIngredientAmountAt(
+        index: Int,
+        servings: Double,
+        grams: Double?,
+        preferGrams: Boolean,
+    ) {
+        val current = ingredientsFlow.value
+        val existingIngredient = current.getOrNull(index) ?: return
+
+        if (servings <= 0.0 && (grams == null || grams <= 0.0)) {
+            errorFlow.value = "Ingredient amount must be > 0."
+            return
+        }
+
+        viewModelScope.launch {
+            val food = foodRepo.getById(existingIngredient.foodId)
+
+            if (food == null) {
+                errorFlow.value = "Could not load ingredient food."
+                return@launch
+            }
+
+            val gramsPerServing = food.gramsPerCurrentServingResolved()
+            val mlPerServing = food.millilitersPerCurrentServingResolved()
+
+            val safeGrams = grams?.takeIf { it > 0.0 }
+            val resolvedServings = if (
+                preferGrams &&
+                safeGrams != null &&
+                gramsPerServing != null &&
+                gramsPerServing > 0.0
+            ) {
+                safeGrams / gramsPerServing
+            } else {
+                servings.coerceAtLeast(0.0)
+            }
+
+            if (resolvedServings <= 0.0) {
+                errorFlow.value = "Ingredient amount must be > 0."
+                return@launch
+            }
+
+            val gramsForLine: Double?
+            val millilitersForLine: Double?
+            val isApproximateWeight: Boolean
+
+            if (gramsPerServing != null) {
+                gramsForLine = if (preferGrams && safeGrams != null) {
+                    safeGrams
+                } else {
+                    (resolvedServings * gramsPerServing).coerceAtLeast(0.0)
+                }
+                millilitersForLine = mlPerServing?.let { (resolvedServings * it).coerceAtLeast(0.0) }
+                isApproximateWeight = false
+            } else {
+                gramsForLine = null
+                millilitersForLine = mlPerServing?.let { (resolvedServings * it).coerceAtLeast(0.0) }
+                isApproximateWeight = false
+            }
+
+            val pricing = buildIngredientPricePreview(
+                food = food,
+                servings = resolvedServings
+            )
+
+            val next = current.toMutableList()
+            next[index] = existingIngredient.copy(
+                servings = resolvedServings,
+                servingUnitLabel = food.servingUnit.toString(),
+                grams = gramsForLine,
+                milliliters = millilitersForLine,
+                isApproximateWeight = isApproximateWeight,
+                enteredAmount = if (preferGrams && safeGrams != null) safeGrams else resolvedServings,
+                enteredUnitLabel = if (preferGrams && safeGrams != null) ServingUnit.G.toString() else food.servingUnit.toString(),
+                estimatedLineCost = pricing.lineCost,
+                estimatedLineCostDisplay = pricing.lineCostDisplay,
+            )
+
+            ingredientsFlow.value = next
+            editingIngredientAmountFlow.value = null
+            errorFlow.value = null
+
+            recomputeNutrientTally()
+            maybeAutoPrefillTotalYieldGramsFromIngredients()
+            markDirty()
         }
     }
 

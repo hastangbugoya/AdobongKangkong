@@ -94,6 +94,7 @@ import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.common.category.CategoryAssignmentSection
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.common.food.GoalFlagsSection
+import com.example.adobongkangkong.ui.common.ingredient.IngredientAmountEditorBottomSheet
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
 import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
@@ -119,6 +120,7 @@ fun RecipeBuilderScreen(
 ) {
     val vm: RecipeBuilderViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+    val editingIngredientAmount by vm.editingIngredientAmount.collectAsState()
     val shareBundle by vm.shareRecipeBundleFlow.collectAsState()
 
     val ingredientTotalGrams by vm.ingredientTotalGrams.collectAsState()
@@ -234,6 +236,59 @@ fun RecipeBuilderScreen(
     }
 
     val canSave = !state.isSaving
+    state.pickedFood?.let { pickedFood ->
+        IngredientAmountEditorBottomSheet(
+            title = "Add ingredient",
+            food = pickedFood,
+            initialServings = state.pickedServings,
+            initialGrams = state.pickedGrams,
+            initialPreferGrams = state.pickedGrams != null,
+            primaryButtonLabel = "Add ingredient",
+            onDismiss = vm::clearSelection,
+            onPrimaryAction = { result ->
+                vm.addPickedIngredientWithAmount(
+                    servings = result.servings,
+                    grams = result.grams,
+                    preferGrams = result.preferGrams,
+                )
+            },
+            errorMessage = state.errorMessage,
+            onEditFoodInEditor = onEditFood,
+            normalizedPriceDisplay = state.pickedNormalizedPriceDisplay,
+            servingPriceDisplay = state.pickedServingPriceDisplay,
+            ingredientCostDisplay = state.pickedIngredientLineCostDisplay,
+        )
+    }
+
+    editingIngredientAmount?.let { edit ->
+        IngredientAmountEditorBottomSheet(
+            title = "Edit ingredient amount",
+            food = edit.food,
+            initialServings = edit.initialServings,
+            initialGrams = edit.initialGrams,
+            initialPreferGrams = edit.initialPreferGrams,
+            primaryButtonLabel = "Apply",
+            onDismiss = vm::closeIngredientAmountEditor,
+            onPrimaryAction = { result ->
+                vm.updateIngredientAmountAt(
+                    index = edit.index,
+                    servings = result.servings,
+                    grams = result.grams,
+                    preferGrams = result.preferGrams,
+                )
+            },
+            errorMessage = state.errorMessage,
+            onEditFoodInEditor = onEditFood,
+            onRemove = {
+                vm.removeIngredientAt(edit.index)
+                vm.closeIngredientAmountEditor()
+            },
+            normalizedPriceDisplay = edit.normalizedPriceDisplay,
+            servingPriceDisplay = edit.servingPriceDisplay,
+            ingredientCostDisplay = edit.ingredientCostDisplay,
+        )
+    }
+
     val canDeleteRecipe = editFoodId != null && onDeleteRecipe != null
 
     Scaffold(
@@ -642,6 +697,12 @@ fun RecipeBuilderScreen(
                                             }
                                         }
 
+                                        TextButton(
+                                            onClick = { vm.openIngredientAmountEditor(index) },
+                                        ) {
+                                            Text("Edit")
+                                        }
+
                                         IconButton(
                                             onClick = { vm.removeIngredientAt(index) },
                                             modifier = Modifier.size(36.dp)
@@ -699,73 +760,13 @@ fun RecipeBuilderScreen(
                 }
             }
 
-            state.pickedFood?.let { pickedFood ->
+            state.pickedFood?.let {
                 item {
-                    val gramsPerServing = pickedFood.gramsPerServingResolved()
-                    var inputUnit by rememberSaveable(pickedFood.id) { mutableStateOf(ServingUnit.G) }
-                    var inputAmount by rememberSaveable(pickedFood.id) { mutableStateOf<Double?>(null) }
-
-                    var servingUnitAmount by rememberSaveable(pickedFood.id) {
-                        mutableStateOf(state.pickedServings * pickedFood.servingSize)
-                    }
-
-                    var gramsAmount by rememberSaveable(pickedFood.id) {
-                        mutableStateOf(gramsPerServing?.let { g -> state.pickedServings * g })
-                    }
-
-                    LaunchedEffect(state.pickedServings, pickedFood.id, gramsPerServing) {
-                        servingUnitAmount = state.pickedServings * pickedFood.servingSize
-                        gramsAmount = gramsPerServing?.let { g -> state.pickedServings * g }
-                    }
-
-                    val shape = RoundedCornerShape(16.dp)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(shape)
-                            .border(1.dp, MaterialTheme.colorScheme.primary, shape)
-                            .padding(12.dp)
-                    ) {
-                        SelectedFoodPanel(
-                            food = pickedFood,
-                            servings = state.pickedServings,
-                            servingUnitAmount = servingUnitAmount,
-                            gramsAmount = gramsAmount,
-                            inputUnit = inputUnit,
-                            inputAmount = inputAmount,
-                            errorMessage = state.errorMessage,
-                            onBack = vm::clearSelection,
-                            onServingsChanged = { s -> vm.onServingsChanged(s) },
-                            onServingUnitAmountChanged = { amt ->
-                                servingUnitAmount = amt
-                                vm.onServingUnitAmountChanged(amt)
-                            },
-                            onGramsChanged = { g ->
-                                gramsAmount = g
-                                vm.onGramsChanged(g)
-                            },
-                            onInputUnitChanged = { u ->
-                                inputUnit = u
-                                vm.onInputUnitChanged(u)
-                            },
-                            onInputAmountChanged = { amt ->
-                                inputAmount = amt
-                                vm.onInputAmountChanged(amt)
-                            },
-                            onPackage = { mult -> vm.onPackageClicked(mult) },
-                            onEditFoodInEditor = { onEditFood(pickedFood.id) },
-                            primaryButtonLabel = "Add ingredient",
-                            onPrimaryAction = vm::addPickedIngredient,
-                            normalizedPriceDisplay = state.pickedNormalizedPriceDisplay,
-                            servingPriceDisplay = state.pickedServingPriceDisplay,
-                            ingredientCostDisplay = state.pickedIngredientLineCostDisplay
-                        )
-                        Spacer(
-                            modifier = Modifier
-                                .height(1.dp)
-                                .bringIntoViewRequester(bringAddIntoView)
-                        )
-                    }
+                    Text(
+                        text = "Set the ingredient amount in the bottom sheet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
