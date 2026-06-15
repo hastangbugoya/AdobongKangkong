@@ -3,6 +3,7 @@ package com.example.adobongkangkong.domain.usecase.recipevariant
 import com.example.adobongkangkong.data.local.db.entity.FoodEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
+import com.example.adobongkangkong.domain.model.dividedBy
 import com.example.adobongkangkong.domain.model.minus
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.repository.FoodNutrientRepository
@@ -16,6 +17,7 @@ class CompareRecipeVariantMacrosUseCase @Inject constructor(
     suspend operator fun invoke(
         variantId: Long,
         draftChanges: List<RecipeVariantIngredientChangeEntity>? = null,
+        draftServingsYieldOverride: Double? = null,
     ): RecipeVariantMacroComparison {
         val assembled = assembleRecipeVariant(
             variantId = variantId,
@@ -81,10 +83,32 @@ class CompareRecipeVariantMacrosUseCase @Inject constructor(
         val recipePreview = foodNutrientRepository.computeRecipeMacroPreview(recipeInputs)
         val variantPreview = foodNutrientRepository.computeRecipeMacroPreview(variantInputs)
 
+        val baseServingsYield = assembled.baseServingsYield
+        val variantServingsYieldOverride =
+            draftServingsYieldOverride ?: assembled.variantServingsYieldOverride
+        val variantServingsYield = variantServingsYieldOverride ?: baseServingsYield
+
+        val recipePerServing = recipePreview.dividedBy(baseServingsYield)
+        val variantPerServing = variantPreview.dividedBy(variantServingsYield)
+
+        if (baseServingsYield == null || baseServingsYield <= 0.0) {
+            warnings += "Could not calculate recipe per-serving macros because recipe servings yield is missing."
+        }
+
+        if (variantServingsYield == null || variantServingsYield <= 0.0) {
+            warnings += "Could not calculate variant per-serving macros because variant servings yield is missing."
+        }
+
         return RecipeVariantMacroComparison(
             recipe = recipePreview,
             variant = variantPreview,
             delta = variantPreview.minus(recipePreview),
+            recipePerServing = recipePerServing,
+            variantPerServing = variantPerServing,
+            perServingDelta = variantPerServing.minus(recipePerServing),
+            baseServingsYield = baseServingsYield,
+            variantServingsYield = variantServingsYield,
+            variantServingsYieldOverride = variantServingsYieldOverride,
             warnings = warnings,
         )
     }

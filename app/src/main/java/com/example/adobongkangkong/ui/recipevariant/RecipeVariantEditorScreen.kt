@@ -69,6 +69,8 @@ fun RecipeVariantEditorScreen(
     onBack: () -> Unit,
     onNameChanged: (String) -> Unit,
     onNotesChanged: (String) -> Unit,
+    onVariantServingsYieldTextChanged: (String) -> Unit,
+    onApplyVariantServingsYieldOverride: () -> Unit,
     onSave: () -> Unit,
     onClearError: () -> Unit,
     onMarkIngredientRemoved: (Long) -> Unit,
@@ -275,6 +277,9 @@ fun RecipeVariantEditorScreen(
                 item {
                     MacroComparisonCard(
                         comparison = comparison,
+                        servingsYieldText = uiState.variantServingsYieldText,
+                        onServingsYieldTextChanged = onVariantServingsYieldTextChanged,
+                        onApplyServingsYield = onApplyVariantServingsYieldOverride,
                     )
                 }
             }
@@ -616,6 +621,9 @@ private fun AddVariantIngredientCard(
 @Composable
 private fun MacroComparisonCard(
     comparison: RecipeVariantMacroComparison,
+    servingsYieldText: String,
+    onServingsYieldTextChanged: (String) -> Unit,
+    onApplyServingsYield: () -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -677,8 +685,163 @@ private fun MacroComparisonCard(
                 suffix = "g",
                 decimals = 1,
             )
+
+            PerServingMacroComparisonSection(
+                comparison = comparison,
+                servingsYieldText = servingsYieldText,
+                onServingsYieldTextChanged = onServingsYieldTextChanged,
+                onApplyServingsYield = onApplyServingsYield,
+            )
         }
     }
+}
+
+@Composable
+private fun PerServingMacroComparisonSection(
+    comparison: RecipeVariantMacroComparison,
+    servingsYieldText: String,
+    onServingsYieldTextChanged: (String) -> Unit,
+    onApplyServingsYield: () -> Unit,
+) {
+    var expanded by rememberSaveable(comparison.hasServingYieldOverride) {
+        mutableStateOf(comparison.hasServingYieldOverride)
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Per-serving comparison",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Text(
+                    text = perServingSummary(comparison),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            TextButton(
+                onClick = {
+                    expanded = !expanded
+                },
+            ) {
+                Text(if (expanded) "Hide" else "Show")
+            }
+        }
+
+        Text(
+            text = "ⓘ Serving count only divides the final batch. It does not scale ingredient amounts.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = servingsYieldText,
+                onValueChange = onServingsYieldTextChanged,
+                modifier = Modifier.weight(1f),
+                label = {
+                    Text("Variant makes (servings)")
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                ),
+            )
+
+            Button(
+                onClick = onApplyServingsYield,
+            ) {
+                Text("Apply")
+            }
+        }
+
+        if (comparison.baseServingsYield != null && comparison.variantServingsYield != null) {
+            Text(
+                text = "Recipe makes ${formatAmountNumber(comparison.baseServingsYield)} serving${if (comparison.baseServingsYield == 1.0) "" else "s"} • Variant makes ${formatAmountNumber(comparison.variantServingsYield)} serving${if (comparison.variantServingsYield == 1.0) "" else "s"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (expanded) {
+            MacroComparisonHeaderRow()
+
+            MacroComparisonRow(
+                label = "Calories",
+                recipeValue = comparison.recipePerServing.totalCalories,
+                variantValue = comparison.variantPerServing.totalCalories,
+                deltaValue = comparison.perServingDelta.totalCalories,
+                suffix = "",
+                decimals = 0,
+            )
+
+            MacroComparisonRow(
+                label = "Protein",
+                recipeValue = comparison.recipePerServing.totalProteinG,
+                variantValue = comparison.variantPerServing.totalProteinG,
+                deltaValue = comparison.perServingDelta.totalProteinG,
+                suffix = "g",
+                decimals = 1,
+            )
+
+            MacroComparisonRow(
+                label = "Carbs",
+                recipeValue = comparison.recipePerServing.totalCarbsG,
+                variantValue = comparison.variantPerServing.totalCarbsG,
+                deltaValue = comparison.perServingDelta.totalCarbsG,
+                suffix = "g",
+                decimals = 1,
+            )
+
+            MacroComparisonRow(
+                label = "Fat",
+                recipeValue = comparison.recipePerServing.totalFatG,
+                variantValue = comparison.variantPerServing.totalFatG,
+                deltaValue = comparison.perServingDelta.totalFatG,
+                suffix = "g",
+                decimals = 1,
+            )
+        }
+    }
+}
+
+private fun perServingSummary(
+    comparison: RecipeVariantMacroComparison,
+): String {
+    val calorieDelta = formatMacroValue(
+        value = comparison.perServingDelta.totalCalories,
+        suffix = "",
+        decimals = 0,
+        showPlus = true,
+    )
+
+    val proteinDelta = formatMacroValue(
+        value = comparison.perServingDelta.totalProteinG,
+        suffix = "g",
+        decimals = 1,
+        showPlus = true,
+    )
+
+    return "Variant serving: $calorieDelta kcal, $proteinDelta protein vs recipe serving."
 }
 
 @Composable

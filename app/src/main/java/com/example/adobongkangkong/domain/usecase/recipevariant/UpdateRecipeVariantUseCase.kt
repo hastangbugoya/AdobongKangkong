@@ -10,6 +10,8 @@ class UpdateRecipeVariantUseCase @Inject constructor(
         variantId: Long,
         name: String,
         notes: String?,
+        servingsYieldOverride: Double? = null,
+        totalYieldGramsOverride: Double? = null,
     ) {
         val cleanedName = name.trim()
 
@@ -24,6 +26,8 @@ class UpdateRecipeVariantUseCase @Inject constructor(
             existing.copy(
                 name = cleanedName,
                 notes = notes?.trim()?.takeIf { it.isNotBlank() },
+                servingsYieldOverride = servingsYieldOverride?.takeIf { it > 0.0 },
+                totalYieldGramsOverride = totalYieldGramsOverride?.takeIf { it > 0.0 },
                 updatedAtEpochMillis = System.currentTimeMillis(),
             )
         )

@@ -39,6 +39,11 @@ data class RecipeVariantEditorUiState(
     val originalName: String = "",
     val originalNotes: String = "",
 
+    val baseServingsYield: Double? = null,
+    val variantServingsYieldOverride: Double? = null,
+    val originalVariantServingsYieldOverride: Double? = null,
+    val variantServingsYieldText: String = "",
+
     val finalIngredientLines: List<AssembledRecipeVariantIngredientLine> = emptyList(),
     val removedIngredientLines: List<RemovedRecipeVariantIngredientLine> = emptyList(),
     val warnings: List<String> = emptyList(),
@@ -61,7 +66,42 @@ data class RecipeVariantEditorUiState(
     val hasUnsavedChanges: Boolean
         get() = name != originalName ||
                 notes != originalNotes ||
+                normalizedServingsOverride() != normalizedOriginalServingsOverride() ||
                 draftChanges != originalDraftChanges
+
+    fun normalizedServingsOverride(): Double? {
+        val base = baseServingsYield
+        val parsed = variantServingsYieldText
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?.toDoubleOrNull()
+            ?.takeIf { it > 0.0 }
+
+        if (parsed == null) {
+            return null
+        }
+
+        if (base != null && kotlin.math.abs(parsed - base) < 0.0001) {
+            return null
+        }
+
+        return parsed
+    }
+
+    private fun normalizedOriginalServingsOverride(): Double? {
+        val base = baseServingsYield
+        val original = originalVariantServingsYieldOverride?.takeIf { it > 0.0 }
+
+        if (original == null) {
+            return null
+        }
+
+        if (base != null && kotlin.math.abs(original - base) < 0.0001) {
+            return null
+        }
+
+        return original
+    }
 
     val removedBaseIngredientIds: Set<Long>
         get() = draftChanges
@@ -131,6 +171,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 val macroComparison = compareRecipeVariantMacros(
                     variantId = variantId,
                     draftChanges = changes,
+                    draftServingsYieldOverride = variant.servingsYieldOverride,
                 )
 
                 _uiState.update {
@@ -142,6 +183,12 @@ class RecipeVariantEditorViewModel @Inject constructor(
                         notes = variant.notes.orEmpty(),
                         originalName = variant.name,
                         originalNotes = variant.notes.orEmpty(),
+                        baseServingsYield = assembled.baseServingsYield,
+                        variantServingsYieldOverride = variant.servingsYieldOverride,
+                        originalVariantServingsYieldOverride = variant.servingsYieldOverride,
+                        variantServingsYieldText = formatServingsYield(
+                            variant.servingsYieldOverride ?: assembled.baseServingsYield,
+                        ),
                         finalIngredientLines = assembled.finalIngredientLines,
                         removedIngredientLines = assembled.removedIngredientLines,
                         warnings = macroComparison.warnings.distinct(),
@@ -179,6 +226,68 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 errorMessage = null,
             )
         }
+    }
+
+    fun onVariantServingsYieldTextChanged(value: String) {
+        _uiState.update {
+            it.copy(
+                variantServingsYieldText = value.filter { character ->
+                    character.isDigit() || character == '.'
+                },
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun applyVariantServingsYieldOverride() {
+        val current = _uiState.value
+        val raw = current.variantServingsYieldText.trim()
+
+        if (raw.isBlank()) {
+            _uiState.update {
+                it.copy(
+                    variantServingsYieldOverride = null,
+                    variantServingsYieldText = formatServingsYield(it.baseServingsYield),
+                    errorMessage = null,
+                )
+            }
+            refreshAssembledVariant(
+                draftChanges = current.draftChanges,
+                draftServingsYieldOverride = null,
+            )
+            return
+        }
+
+        val parsed = raw.toDoubleOrNull()
+
+        if (parsed == null || parsed <= 0.0) {
+            _uiState.update {
+                it.copy(errorMessage = "Variant servings must be greater than zero.")
+            }
+            return
+        }
+
+        val normalized = if (
+            current.baseServingsYield != null &&
+            kotlin.math.abs(parsed - current.baseServingsYield) < 0.0001
+        ) {
+            null
+        } else {
+            parsed
+        }
+
+        _uiState.update {
+            it.copy(
+                variantServingsYieldOverride = normalized,
+                variantServingsYieldText = formatServingsYield(parsed),
+                errorMessage = null,
+            )
+        }
+
+        refreshAssembledVariant(
+            draftChanges = current.draftChanges,
+            draftServingsYieldOverride = normalized,
+        )
     }
 
     fun onAddIngredientQueryChanged(value: String) {
@@ -732,6 +841,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     variantId = variantId,
                     name = cleanedName,
                     notes = current.notes,
+                    servingsYieldOverride = current.normalizedServingsOverride(),
                 )
                 saveRecipeVariantChanges(
                     variantId = variantId,
@@ -746,6 +856,11 @@ class RecipeVariantEditorViewModel @Inject constructor(
                         notes = savedNotes,
                         originalName = cleanedName,
                         originalNotes = savedNotes,
+                        variantServingsYieldOverride = current.normalizedServingsOverride(),
+                        originalVariantServingsYieldOverride = current.normalizedServingsOverride(),
+                        variantServingsYieldText = formatServingsYield(
+                            current.normalizedServingsOverride() ?: current.baseServingsYield,
+                        ),
                         originalDraftChanges = current.draftChanges,
                         isSaving = false,
                         errorMessage = null,
@@ -766,6 +881,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
 
     fun refreshAssembledVariant(
         draftChanges: List<RecipeVariantIngredientChangeEntity> = _uiState.value.draftChanges,
+        draftServingsYieldOverride: Double? = _uiState.value.normalizedServingsOverride(),
     ) {
         viewModelScope.launch {
             runCatching {
@@ -776,11 +892,13 @@ class RecipeVariantEditorViewModel @Inject constructor(
                 val macroComparison = compareRecipeVariantMacros(
                     variantId = variantId,
                     draftChanges = draftChanges,
+                    draftServingsYieldOverride = draftServingsYieldOverride,
                 )
 
                 _uiState.update {
                     it.copy(
                         recipeName = assembled.recipeName,
+                        baseServingsYield = assembled.baseServingsYield,
                         finalIngredientLines = assembled.finalIngredientLines,
                         removedIngredientLines = assembled.removedIngredientLines,
                         warnings = macroComparison.warnings.distinct(),
@@ -847,6 +965,18 @@ class RecipeVariantEditorViewModel @Inject constructor(
 
         val densityGPerMl = gramsPerServing / mlPerServing
         return mlInput * densityGPerMl
+    }
+
+    private fun formatServingsYield(value: Double?): String {
+        val safeValue = value ?: return ""
+
+        return if (safeValue % 1.0 == 0.0) {
+            safeValue.toInt().toString()
+        } else {
+            java.lang.String.format(java.util.Locale.US, "%.2f", safeValue)
+                .trimEnd('0')
+                .trimEnd('.')
+        }
     }
 
     fun clearError() {

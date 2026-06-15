@@ -18,6 +18,8 @@ fun RecipeVariantEditorRoute(
         onBack = onBack,
         onNameChanged = viewModel::onNameChanged,
         onNotesChanged = viewModel::onNotesChanged,
+        onVariantServingsYieldTextChanged = viewModel::onVariantServingsYieldTextChanged,
+        onApplyVariantServingsYieldOverride = viewModel::applyVariantServingsYieldOverride,
         onSave = viewModel::save,
         onClearError = viewModel::clearError,
         onMarkIngredientRemoved = viewModel::markIngredientRemoved,
