@@ -16,6 +16,7 @@ import com.example.adobongkangkong.domain.nutrition.dividedBy
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.toRecipe
+import com.example.adobongkangkong.domain.usecase.recipevariant.ComputeRecipeVariantNutritionUseCase
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
@@ -37,6 +38,7 @@ class UpdateLogEntryUseCase @Inject constructor(
     private val recipeBatchLookup: RecipeBatchLookupRepository,
     private val computeRecipeBatchNutritionUseCase: ComputeRecipeBatchNutritionUseCase,
     private val computeLoggedRecipeNutrition: ComputeLoggedRecipeNutritionUseCase,
+    private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase,
     private val recipeDao: RecipeDao
 ) {
 
@@ -80,17 +82,28 @@ class UpdateLogEntryUseCase @Inject constructor(
         val food = resolveFoodForStableId(stableId)
             ?: return Result.Error("Logged food no longer exists")
 
-        val recomputed = if (!food.isRecipe) {
-            recomputeFoodNutrients(
-                foodId = food.id,
-                amountInput = amountInput
-            )
-        } else {
-            recomputeRecipeNutrients(
-                foodId = food.id,
-                recipeBatchId = existing.recipeBatchId,
-                amountInput = amountInput
-            )
+        val recomputed = when {
+            !food.isRecipe -> {
+                recomputeFoodNutrients(
+                    foodId = food.id,
+                    amountInput = amountInput
+                )
+            }
+
+            existing.recipeVariantId != null -> {
+                recomputeRecipeVariantNutrients(
+                    variantId = existing.recipeVariantId,
+                    amountInput = amountInput,
+                )
+            }
+
+            else -> {
+                recomputeRecipeNutrients(
+                    foodId = food.id,
+                    recipeBatchId = existing.recipeBatchId,
+                    amountInput = amountInput
+                )
+            }
         }
 
         val recomputedNutrients = when (recomputed) {
@@ -127,10 +140,15 @@ class UpdateLogEntryUseCase @Inject constructor(
         val now = Instant.now()
 
         val updatedEntry = existing.copy(
-            itemName = food.name,
+            itemName = if (existing.recipeVariantId != null) existing.itemName else food.name,
             nutrients = finalNutrients,
             amount = storedAmount,
             unit = storedUnit,
+            gramsPerServingCooked = when {
+                nutritionDecision == NutritionDecision.KEEP_ORIGINAL -> existing.gramsPerServingCooked
+                recomputed is RecomputeResult.Success -> recomputed.gramsPerServingCooked ?: existing.gramsPerServingCooked
+                else -> existing.gramsPerServingCooked
+            },
             mealSlot = mealSlot,
             modifiedAt = now
         )
@@ -149,7 +167,10 @@ class UpdateLogEntryUseCase @Inject constructor(
     }
 
     private sealed interface RecomputeResult {
-        data class Success(val nutrients: NutrientMap) : RecomputeResult
+        data class Success(
+            val nutrients: NutrientMap,
+            val gramsPerServingCooked: Double? = null,
+        ) : RecomputeResult
         data class Blocked(val message: String) : RecomputeResult
         data class Error(val message: String) : RecomputeResult
     }
@@ -269,7 +290,33 @@ class UpdateLogEntryUseCase @Inject constructor(
             return RecomputeResult.Blocked(reason)
         }
 
-        return RecomputeResult.Success(logged.totals)
+        return RecomputeResult.Success(
+            nutrients = logged.totals,
+            gramsPerServingCooked = computed.gramsPerServingCooked,
+        )
+    }
+
+    private suspend fun recomputeRecipeVariantNutrients(
+        variantId: Long,
+        amountInput: AmountInput,
+    ): RecomputeResult {
+        val computed = computeRecipeVariantNutrition(variantId)
+
+        val logged = computeLoggedRecipeNutrition.invoke(
+            recipeNutrition = computed,
+            input = amountInput.toRecipeLogInput(),
+        )
+
+        if (!logged.isAllowed) {
+            val reason = logged.warnings.firstOrNull()?.toString()
+                ?: "Editing blocked by recipe variant rules."
+            return RecomputeResult.Blocked(reason)
+        }
+
+        return RecomputeResult.Success(
+            nutrients = logged.totals,
+            gramsPerServingCooked = computed.gramsPerServingCooked,
+        )
     }
 
     private fun scaleStoredNutrients(
@@ -277,13 +324,16 @@ class UpdateLogEntryUseCase @Inject constructor(
         food: Food,
         newAmountInput: AmountInput
     ): NutrientMap {
+        val gramsPerServingForScaling = existing.gramsPerServingCooked
+            ?.takeIf { it > 0.0 }
+            ?: food.gramsPerServingResolved()
+
         val oldCanonicalAmount = when (existing.unit) {
             LogUnit.GRAM_COOKED -> existing.amount
             LogUnit.SERVING,
             LogUnit.ITEM -> {
-                val gramsPerServing = food.gramsPerServingResolved()
-                if (gramsPerServing != null && gramsPerServing > 0.0) {
-                    existing.amount * gramsPerServing
+                if (gramsPerServingForScaling != null && gramsPerServingForScaling > 0.0) {
+                    existing.amount * gramsPerServingForScaling
                 } else {
                     existing.amount
                 }
@@ -293,9 +343,8 @@ class UpdateLogEntryUseCase @Inject constructor(
         val newCanonicalAmount = when (newAmountInput) {
             is AmountInput.ByGrams -> newAmountInput.grams
             is AmountInput.ByServings -> {
-                val gramsPerServing = food.gramsPerServingResolved()
-                if (gramsPerServing != null && gramsPerServing > 0.0) {
-                    newAmountInput.servings * gramsPerServing
+                if (gramsPerServingForScaling != null && gramsPerServingForScaling > 0.0) {
+                    newAmountInput.servings * gramsPerServingForScaling
                 } else {
                     newAmountInput.servings
                 }
@@ -321,6 +370,7 @@ class UpdateLogEntryUseCase @Inject constructor(
         ) ?: return false
 
         val newCanonicalAmount = canonicalAmountForEditedInput(
+            existing = existing,
             amountInput = editedAmountInput,
             food = food
         ) ?: return false
@@ -372,6 +422,7 @@ class UpdateLogEntryUseCase @Inject constructor(
     }
 
     private fun canonicalAmountForEditedInput(
+        existing: LogEntry,
         amountInput: AmountInput,
         food: Food
     ): Double? {
@@ -379,7 +430,10 @@ class UpdateLogEntryUseCase @Inject constructor(
             is AmountInput.ByGrams -> amountInput.grams.takeIf { it > 0.0 }
 
             is AmountInput.ByServings -> {
-                val gramsPerServing = food.gramsPerServingResolved()
+                val gramsPerServing = existing.gramsPerServingCooked
+                    ?.takeIf { it > 0.0 }
+                    ?: food.gramsPerServingResolved()
+
                 if (gramsPerServing != null && gramsPerServing > 0.0) {
                     amountInput.servings * gramsPerServing
                 } else {

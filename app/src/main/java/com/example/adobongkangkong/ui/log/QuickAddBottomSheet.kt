@@ -484,7 +484,7 @@ fun QuickAddBottomSheet(
                     val isPrimaryEnabled =
                         !selected.isRecipe ||
                                 !isLoggingByGrams ||
-                                state.selectedBatchId != null
+                                (state.selectedRecipeVariantId == null && state.selectedBatchId != null)
 
                     Box(Modifier.fillMaxWidth()) {
                         bannerBitmapState.value?.let { bmp ->
@@ -546,20 +546,38 @@ fun QuickAddBottomSheet(
 
                                 if (selected.isRecipe) {
                                     Spacer(Modifier.height(16.dp))
-                                    Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
+                                    Text("Recipe version", style = MaterialTheme.typography.titleMedium)
                                     Spacer(Modifier.height(8.dp))
-                                    BatchSelector(
-                                        batches = state.batches,
-                                        selectedBatchId = state.selectedBatchId,
-                                        onSelected = vm::onBatchSelected,
+                                    RecipeVariantSelector(
+                                        variants = state.recipeVariants,
+                                        selectedVariantId = state.selectedRecipeVariantId,
+                                        onSelected = vm::onRecipeVariantSelected,
                                     )
-                                    if (isLoggingByGrams &&
-                                        state.selectedBatchId == null &&
-                                        state.errorMessage == null
-                                    ) {
+
+                                    if (state.selectedRecipeVariantId == null) {
+                                        Spacer(Modifier.height(16.dp))
+                                        Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
+                                        Spacer(Modifier.height(8.dp))
+                                        BatchSelector(
+                                            batches = state.batches,
+                                            selectedBatchId = state.selectedBatchId,
+                                            onSelected = vm::onBatchSelected,
+                                        )
+                                        if (isLoggingByGrams &&
+                                            state.selectedBatchId == null &&
+                                            state.errorMessage == null
+                                        ) {
+                                            Spacer(Modifier.height(8.dp))
+                                            Text(
+                                                "Select or create a cooked batch to log by grams.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    } else {
                                         Spacer(Modifier.height(8.dp))
                                         Text(
-                                            "Select or create a cooked batch to log by grams.",
+                                            "Variant logs use the variant ingredient and serving rules. Cooked batch selection is disabled for variants for now.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -784,6 +802,71 @@ private fun MealSlotPicker(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun RecipeVariantSelector(
+    variants: List<QuickAddRecipeVariantUi>,
+    selectedVariantId: Long?,
+    onSelected: (Long?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val selectedVariant = variants.firstOrNull { it.id == selectedVariantId }
+
+    Column {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                selectedVariant?.let { "Variant: ${it.name}" } ?: "Default recipe"
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Default recipe") },
+                onClick = {
+                    expanded = false
+                    onSelected(null)
+                }
+            )
+
+            variants.forEach { variant ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(variant.name)
+                            variant.servingsYieldOverride?.let { servings ->
+                                Text(
+                                    text = "Makes ${servings.clean()} servings",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(variant.id)
+                    }
+                )
+            }
+        }
+
+        if (variants.isEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "No active variants for this recipe.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

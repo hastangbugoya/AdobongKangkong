@@ -26,6 +26,7 @@ data class LogEntry(
 
     // ✅ NEW: provenance + UI grouping
     val recipeBatchId: Long? = null,
+    val recipeVariantId: Long? = null,
     val gramsPerServingCooked: Double? = null,
     val mealSlot: MealSlot? = null
 )

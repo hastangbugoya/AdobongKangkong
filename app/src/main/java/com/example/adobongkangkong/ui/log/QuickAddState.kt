@@ -24,6 +24,13 @@ data class QuickAddNutrientCaution(
     val message: String
 )
 
+data class QuickAddRecipeVariantUi(
+    val id: Long,
+    val name: String,
+    val notes: String? = null,
+    val servingsYieldOverride: Double? = null
+)
+
 data class QuickAddState(
     val query: String = "",
     val results: List<FoodListItemUiModel> = emptyList(),
@@ -49,6 +56,9 @@ data class QuickAddState(
 
     val batches: List<BatchSummary> = emptyList(),
     val selectedBatchId: Long? = null,
+
+    val recipeVariants: List<QuickAddRecipeVariantUi> = emptyList(),
+    val selectedRecipeVariantId: Long? = null,
 
     val mealSlot: MealSlot? = null,
 

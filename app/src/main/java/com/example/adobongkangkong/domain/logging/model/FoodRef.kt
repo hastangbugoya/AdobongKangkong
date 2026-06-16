@@ -11,4 +11,12 @@ sealed interface FoodRef {
         val displayName: String,
         val servingsYieldDefault: Double
     ) : FoodRef
+
+    data class RecipeVariant(
+        val recipeId: Long,
+        val variantId: Long,
+        val stableId: String,
+        val displayName: String,
+        val servingsYieldDefault: Double
+    ) : FoodRef
 }

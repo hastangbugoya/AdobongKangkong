@@ -129,7 +129,7 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientC
         RecipeVariantEntity::class,
         RecipeVariantIngredientChangeEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -522,6 +522,34 @@ abstract class NutriDatabase : RoomDatabase() {
             ON `recipe_variant_ingredient_change` (`foodId`)
             """.trimIndent()
                 )
+            }
+        }
+
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 7→8 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        ALTER TABLE log_entries
+                        ADD COLUMN recipeVariantId INTEGER
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_log_entries_recipeVariantId
+                        ON log_entries(recipeVariantId)
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 7→8 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 7→8 FAILED", t)
+                    throw t
+                }
             }
         }
 

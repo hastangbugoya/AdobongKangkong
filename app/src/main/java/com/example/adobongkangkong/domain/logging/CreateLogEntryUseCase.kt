@@ -20,6 +20,7 @@ import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
 import com.example.adobongkangkong.domain.usage.FoodUsageCheck
 import com.example.adobongkangkong.domain.usage.UsageContext
+import com.example.adobongkangkong.domain.usecase.recipevariant.ComputeRecipeVariantNutritionUseCase
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
@@ -41,7 +42,8 @@ class CreateLogEntryUseCase @Inject constructor(
     private val recipeDraftLookup: RecipeDraftLookupRepository,
     private val recipeBatchLookup: RecipeBatchLookupRepository,
     private val computeRecipeBatchNutritionUseCase: ComputeRecipeBatchNutritionUseCase,
-    private val computeLoggedRecipeNutrition: ComputeLoggedRecipeNutritionUseCase
+    private val computeLoggedRecipeNutrition: ComputeLoggedRecipeNutritionUseCase,
+    private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase,
 ) {
 
     sealed interface Result {
@@ -72,6 +74,14 @@ class CreateLogEntryUseCase @Inject constructor(
             is FoodRef.Recipe -> logRecipe(
                 recipeRef = ref,
                 recipeBatchId = recipeBatchId,
+                timestamp = timestamp,
+                amountInput = amountInput,
+                mealSlot = mealSlot,
+                logDateIso = logDateIso
+            )
+
+            is FoodRef.RecipeVariant -> logRecipeVariant(
+                recipeVariantRef = ref,
                 timestamp = timestamp,
                 amountInput = amountInput,
                 mealSlot = mealSlot,
@@ -236,6 +246,50 @@ class CreateLogEntryUseCase @Inject constructor(
             gramsPerServingCooked = gramsPerServingCooked,
             mealSlot = mealSlot,
             logDateIso = logDateIso
+        )
+
+        val id = logRepository.insert(entry)
+        return Result.Success(id = id)
+    }
+
+    private suspend fun logRecipeVariant(
+        recipeVariantRef: FoodRef.RecipeVariant,
+        timestamp: Instant,
+        amountInput: AmountInput,
+        mealSlot: MealSlot?,
+        logDateIso: String,
+    ): Result {
+        val computed = computeRecipeVariantNutrition(recipeVariantRef.variantId)
+
+        val logged = computeLoggedRecipeNutrition.invoke(
+            recipeNutrition = computed,
+            input = amountInput.toRecipeLogInput(),
+        )
+
+        if (!logged.isAllowed) {
+            val reason = logged.warnings.firstOrNull()?.toString()
+                ?: "Logging blocked by recipe variant rules."
+            return Result.Blocked(reason)
+        }
+
+        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
+
+        val now = Instant.now()
+
+        val entry = LogEntry(
+            stableId = UUID.randomUUID().toString(),
+            createdAt = now,
+            modifiedAt = now,
+            timestamp = timestamp,
+            foodStableId = recipeVariantRef.stableId,
+            itemName = recipeVariantRef.displayName,
+            nutrients = logged.totals,
+            amount = storedAmount,
+            unit = storedUnit,
+            recipeVariantId = recipeVariantRef.variantId,
+            gramsPerServingCooked = computed.gramsPerServingCooked,
+            mealSlot = mealSlot,
+            logDateIso = logDateIso,
         )
 
         val id = logRepository.insert(entry)

@@ -68,7 +68,10 @@ import java.time.Instant
         Index(value = ["foodStableId"]),
 
         // For batch-based logs and batch usage queries.
-        Index(value = ["recipeBatchId"])
+        Index(value = ["recipeBatchId"]),
+
+        // For recipe variant provenance and future variant usage queries.
+        Index(value = ["recipeVariantId"])
     ]
 )
 data class LogEntryEntity(
@@ -168,7 +171,15 @@ data class LogEntryEntity(
     val recipeBatchId: Long? = null,
 
     /**
-     * Optional cooked grams-per-serving used when logging a recipe batch.
+     * Optional recipe variant id when this log entry corresponds to a recipe variant.
+     *
+     * The immutable nutrient snapshot remains the source of truth for totals; this field only
+     * preserves provenance so history can identify which variant produced the logged snapshot.
+     */
+    val recipeVariantId: Long? = null,
+
+    /**
+     * Optional cooked grams-per-serving used when logging a recipe batch or a variant with yield.
      *
      * Captures the cooked yield scaling basis so the log event remains reproducible and auditable
      * even if batch/recipe metadata changes later.

@@ -26,6 +26,7 @@ import com.example.adobongkangkong.domain.repository.FoodBarcodeRepository
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
+import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import com.example.adobongkangkong.domain.usage.FoodValidationResult
 import com.example.adobongkangkong.domain.usage.UsageContext
 import com.example.adobongkangkong.domain.usage.ValidateFoodForUsageUseCase
@@ -89,6 +90,7 @@ class QuickAddViewModel @Inject constructor(
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
     private val foodRepository: FoodRepository,
     private val logRepository: LogRepository,
+    private val recipeVariantRepository: RecipeVariantRepository,
 
     // validation + snapshot access for preflight gating
     private val snapshotRepo: FoodNutritionSnapshotRepository,
@@ -136,6 +138,7 @@ class QuickAddViewModel @Inject constructor(
     private val selectedRecipeStableIdFlow = MutableStateFlow<String?>(null)
     private val selectedRecipeServingsYieldDefaultFlow = MutableStateFlow<Double?>(null)
     private val selectedBatchIdFlow = MutableStateFlow<Long?>(null)
+    private val selectedRecipeVariantIdFlow = MutableStateFlow<Long?>(null)
 
     // create-batch dialog
     private val yieldGramsTextFlow = MutableStateFlow("")
@@ -222,6 +225,25 @@ class QuickAddViewModel @Inject constructor(
                         )
                     }
                 }
+            }
+        }
+
+    private val recipeVariantsFlow =
+        selectedFoodFlow.flatMapLatest { food ->
+            if (food == null || !food.isRecipe) {
+                flowOf(emptyList())
+            } else {
+                recipeVariantRepository.observeActiveVariantsForRecipe(food.id)
+                    .map { variants ->
+                        variants.map { variant ->
+                            QuickAddRecipeVariantUi(
+                                id = variant.id,
+                                name = variant.name,
+                                notes = variant.notes,
+                                servingsYieldOverride = variant.servingsYieldOverride,
+                            )
+                        }
+                    }
             }
         }
 
@@ -316,6 +338,7 @@ class QuickAddViewModel @Inject constructor(
                     food = food,
                     selectedBatchIdOverride = entry.recipeBatchId
                 )
+                selectedRecipeVariantIdFlow.value = entry.recipeVariantId
 
                 restoreAmountForEdit(
                     food = food,
@@ -359,6 +382,7 @@ class QuickAddViewModel @Inject constructor(
         selectedRecipeStableIdFlow.value = null
         selectedRecipeServingsYieldDefaultFlow.value = null
         selectedBatchIdFlow.value = null
+        selectedRecipeVariantIdFlow.value = null
 
         errorFlow.value = null
     }
@@ -623,7 +647,9 @@ class QuickAddViewModel @Inject constructor(
         val batches: List<BatchSummary>,
         val selectedBatchId: Long?,
         val yieldGramsText: String,
-        val servingsYieldText: String
+        val servingsYieldText: String,
+        val recipeVariants: List<QuickAddRecipeVariantUi>,
+        val selectedRecipeVariantId: Long?,
     )
 
     private data class UiFlags(
@@ -762,7 +788,7 @@ class QuickAddViewModel @Inject constructor(
             )
         }
 
-        val recipeFlow = combine(
+        val recipeBaseFlow = combine(
             batchesFlow,
             selectedBatchIdFlow,
             yieldGramsTextFlow,
@@ -772,7 +798,20 @@ class QuickAddViewModel @Inject constructor(
                 batches = batches,
                 selectedBatchId = selectedBatchId,
                 yieldGramsText = yieldGramsText,
-                servingsYieldText = servingsYieldText
+                servingsYieldText = servingsYieldText,
+                recipeVariants = emptyList(),
+                selectedRecipeVariantId = null,
+            )
+        }
+
+        val recipeFlow = combine(
+            recipeBaseFlow,
+            recipeVariantsFlow,
+            selectedRecipeVariantIdFlow
+        ) { recipe, recipeVariants, selectedRecipeVariantId ->
+            recipe.copy(
+                recipeVariants = recipeVariants,
+                selectedRecipeVariantId = selectedRecipeVariantId,
             )
         }
 
@@ -935,6 +974,8 @@ class QuickAddViewModel @Inject constructor(
 
                     batches = recipe.batches,
                     selectedBatchId = recipe.selectedBatchId,
+                    recipeVariants = recipe.recipeVariants,
+                    selectedRecipeVariantId = recipe.selectedRecipeVariantId,
                     mealSlot = core.mealSlot,
                     yieldGramsText = recipe.yieldGramsText,
                     servingsYieldText = recipe.servingsYieldText,
@@ -1029,6 +1070,7 @@ class QuickAddViewModel @Inject constructor(
         inputAmountFlow.value = food.servingSize.coerceAtLeast(0.0)
         errorFlow.value = null
         mealSlotFlow.value = null
+        selectedRecipeVariantIdFlow.value = null
 
         applyRecipeContextForFood(
             food = food,
@@ -1045,6 +1087,7 @@ class QuickAddViewModel @Inject constructor(
             selectedRecipeStableIdFlow.value = null
             selectedRecipeServingsYieldDefaultFlow.value = null
             selectedBatchIdFlow.value = null
+            selectedRecipeVariantIdFlow.value = null
             return
         }
 
@@ -1056,6 +1099,7 @@ class QuickAddViewModel @Inject constructor(
             selectedRecipeStableIdFlow.value = null
             selectedRecipeServingsYieldDefaultFlow.value = null
             selectedBatchIdFlow.value = null
+            selectedRecipeVariantIdFlow.value = null
             errorFlow.value = "Recipe data missing for this item."
             return
         }
@@ -1079,6 +1123,7 @@ class QuickAddViewModel @Inject constructor(
         selectedRecipeStableIdFlow.value = null
         selectedRecipeServingsYieldDefaultFlow.value = null
         selectedBatchIdFlow.value = null
+        selectedRecipeVariantIdFlow.value = null
 
         isTodayPlanPickerOpenFlow.value = false
         todayPlanSectionsFlow.value = emptyMap()
@@ -1257,6 +1302,24 @@ class QuickAddViewModel @Inject constructor(
 
     fun onBatchSelected(batchId: Long?) {
         selectedBatchIdFlow.value = batchId
+    }
+
+    fun onRecipeVariantSelected(variantId: Long?) {
+        if (modeFlow.value == QuickAddMode.EDIT && isIdentityLockedFlow.value) return
+
+        selectedRecipeVariantIdFlow.value = variantId
+
+        // Variant yield and ingredient rules are separate from cooked batch records for now.
+        // Avoid combining the two contexts until variant-specific cooked batches exist.
+        if (variantId != null) {
+            selectedBatchIdFlow.value = null
+
+            if (inputModeFlow.value == InputMode.GRAMS) {
+                onServingsChanged(servingsFlow.value.takeIf { it > 0.0 } ?: 1.0)
+            }
+        }
+
+        errorFlow.value = null
     }
 
     fun openCreateBatchDialog() {
@@ -1648,30 +1711,61 @@ class QuickAddViewModel @Inject constructor(
                     val stableId = selectedRecipeStableIdFlow.value ?: food.stableId
                     val servingsYieldDefault = selectedRecipeServingsYieldDefaultFlow.value ?: 1.0
 
-                    val batchId =
-                        when (inputModeFlow.value) {
-                            InputMode.GRAMS -> selectedBatchIdFlow.value
-                                ?: run {
-                                    errorFlow.value = "Select or create a cooked batch (yield grams) to log by grams."
-                                    return@launch
-                                }
+                    val selectedVariantId = selectedRecipeVariantIdFlow.value
 
-                            else -> selectedBatchIdFlow.value
+                    if (selectedVariantId != null) {
+                        val variant = recipeVariantRepository.getVariantById(selectedVariantId)
+                            ?: run {
+                                errorFlow.value = "Recipe variant not found."
+                                return@launch
+                            }
+
+                        if (inputModeFlow.value == InputMode.GRAMS) {
+                            errorFlow.value = "Recipe variants can be logged by servings for now."
+                            return@launch
                         }
 
-                    createLogEntry.execute(
-                        ref = FoodRef.Recipe(
-                            recipeId = recipeId,
-                            stableId = stableId,
-                            displayName = food.name,
-                            servingsYieldDefault = servingsYieldDefault
-                        ),
-                        timestamp = Instant.now(),
-                        amountInput = amountInput,
-                        recipeBatchId = batchId,
-                        logDateIso = logDate.toString(),
-                        mealSlot = mealSlot
-                    )
+                        createLogEntry.execute(
+                            ref = FoodRef.RecipeVariant(
+                                recipeId = recipeId,
+                                variantId = selectedVariantId,
+                                stableId = stableId,
+                                displayName = "${food.name} • ${variant.name}",
+                                servingsYieldDefault = variant.servingsYieldOverride
+                                    ?: servingsYieldDefault,
+                            ),
+                            timestamp = timestamp,
+                            amountInput = amountInput,
+                            recipeBatchId = null,
+                            logDateIso = logDate.toString(),
+                            mealSlot = mealSlot,
+                        )
+                    } else {
+                        val batchId =
+                            when (inputModeFlow.value) {
+                                InputMode.GRAMS -> selectedBatchIdFlow.value
+                                    ?: run {
+                                        errorFlow.value = "Select or create a cooked batch (yield grams) to log by grams."
+                                        return@launch
+                                    }
+
+                                else -> selectedBatchIdFlow.value
+                            }
+
+                        createLogEntry.execute(
+                            ref = FoodRef.Recipe(
+                                recipeId = recipeId,
+                                stableId = stableId,
+                                displayName = food.name,
+                                servingsYieldDefault = servingsYieldDefault
+                            ),
+                            timestamp = timestamp,
+                            amountInput = amountInput,
+                            recipeBatchId = batchId,
+                            logDateIso = logDate.toString(),
+                            mealSlot = mealSlot
+                        )
+                    }
                 }
 
                 when (result) {

@@ -1,544 +1,456 @@
 package com.example.adobongkangkong.domain.logging
 
+import android.util.Log
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
-import com.example.adobongkangkong.data.local.db.entity.RecipeEntity
-import com.example.adobongkangkong.domain.logging.UpdateLogEntryUseCase.NutritionDecision
 import com.example.adobongkangkong.domain.logging.model.AmountInput
-import com.example.adobongkangkong.domain.logging.model.BatchSummary
-import com.example.adobongkangkong.domain.logging.model.FoodRef
 import com.example.adobongkangkong.domain.model.Food
-import com.example.adobongkangkong.domain.model.FoodHardDeleteBlockers
 import com.example.adobongkangkong.domain.model.LogEntry
 import com.example.adobongkangkong.domain.model.LogUnit
-import com.example.adobongkangkong.domain.model.RecipeDraft
-import com.example.adobongkangkong.domain.model.ServingUnit
-import com.example.adobongkangkong.domain.model.TodayLogItem
+import com.example.adobongkangkong.domain.model.isVolumeUnit
+import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ComputeRecipeBatchNutritionUseCase
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
+import com.example.adobongkangkong.domain.nutrition.dividedBy
+import com.example.adobongkangkong.domain.nutrition.gramsPerServingResolved
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
-import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
+import com.example.adobongkangkong.domain.recipes.toRecipe
+import com.example.adobongkangkong.domain.usecase.recipevariant.ComputeRecipeVariantNutritionUseCase
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
-import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
-import com.example.adobongkangkong.domain.repository.RecipeInstructionStep
-import com.example.adobongkangkong.domain.repository.RecipeRepository
 import com.example.adobongkangkong.domain.usage.CheckFoodUsableUseCase
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import com.example.adobongkangkong.domain.usage.FoodUsageCheck
+import com.example.adobongkangkong.domain.usage.UsageContext
 import java.time.Instant
-import com.example.adobongkangkong.domain.repository.FoodStorePricePreview
+import javax.inject.Inject
+import kotlin.math.abs
 
-class UpdateLogEntryUseCaseTest {
+class UpdateLogEntryUseCase @Inject constructor(
+    private val foodRepository: FoodRepository,
+    private val snapshotRepository: FoodNutritionSnapshotRepository,
+    private val logRepository: LogRepository,
+    private val checkFoodUsable: CheckFoodUsableUseCase,
+    private val recipeDraftLookup: RecipeDraftLookupRepository,
+    private val recipeBatchLookup: RecipeBatchLookupRepository,
+    private val computeRecipeBatchNutritionUseCase: ComputeRecipeBatchNutritionUseCase,
+    private val computeLoggedRecipeNutrition: ComputeLoggedRecipeNutritionUseCase,
+    private val recipeDao: RecipeDao,
+    private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase? = null
+) {
 
-    @Test
-    fun noPopup_whenAmountChanges_butBasisSame() = runBlocking {
-        val food = testFood()
-        val existing = testLog(food, grams = 100.0, proteinPer100g = 10.0)
-        val snapshot = snapshot(food.id, proteinPer100g = 10.0)
-        val env = buildUseCase(existing, food, snapshot)
-
-        val result = env.useCase.execute(
-            logId = existing.id,
-            amountInput = AmountInput.ByGrams(200.0),
-            mealSlot = MealSlot.BREAKFAST
-        )
-
-        assertTrue(result is UpdateLogEntryUseCase.Result.Success)
+    enum class NutritionDecision {
+        USE_CURRENT,
+        KEEP_ORIGINAL
     }
 
-    @Test
-    fun popup_whenSentinelChanged() = runBlocking {
-        val food = testFood()
-        val existing = testLog(food, grams = 100.0, proteinPer100g = 10.0)
-        val snapshot = snapshot(food.id, proteinPer100g = 2.0)
-        val env = buildUseCase(existing, food, snapshot)
-
-        val result = env.useCase.execute(
-            logId = existing.id,
-            amountInput = AmountInput.ByGrams(100.0),
-            mealSlot = MealSlot.LUNCH
-        )
-
-        assertTrue(result is UpdateLogEntryUseCase.Result.NutritionChoiceRequired)
+    sealed interface Result {
+        data class Success(val id: Long) : Result
+        data class Blocked(val message: String) : Result
+        data class Error(val message: String) : Result
+        data class NutritionChoiceRequired(
+            val existingEntry: LogEntry,
+            val recomputedNutrients: NutrientMap
+        ) : Result
     }
 
-    @Test
-    fun noPopup_whenOnlyNonSentinelChanged() = runBlocking {
-        val food = testFood()
-        val existing = testLog(food, grams = 100.0, proteinPer100g = 10.0)
+    suspend fun execute(
+        logId: Long,
+        amountInput: AmountInput,
+        mealSlot: MealSlot?,
+        nutritionDecision: NutritionDecision? = null
+    ): Result {
+        val existing = logRepository.getById(logId)
+            ?: return Result.Error("Log entry not found")
 
-        val snapshot = FoodNutritionSnapshot(
-            foodId = food.id,
-            gramsPerServingUnit = null,
-            mlPerServingUnit = null,
-            nutrientsPerGram = NutrientMap(
-                mapOf(
-                    NutrientKey.PROTEIN_G to 0.10,
-                    NutrientKey.FIBER_G to 0.50
+        val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
+
+        if (
+            existing.amount == storedAmount &&
+            existing.unit == storedUnit &&
+            existing.mealSlot == mealSlot
+        ) {
+            return Result.Success(existing.id)
+        }
+
+        val stableId = existing.foodStableId
+            ?: return Result.Error("Log entry is missing food identity")
+
+        val food = resolveFoodForStableId(stableId)
+            ?: return Result.Error("Logged food no longer exists")
+
+        val recomputed = when {
+            !food.isRecipe -> {
+                recomputeFoodNutrients(
+                    foodId = food.id,
+                    amountInput = amountInput
                 )
-            ),
-            nutrientsPerMilliliter = null
-        )
+            }
 
-        val env = buildUseCase(existing, food, snapshot)
+            existing.recipeVariantId != null -> {
+                recomputeRecipeVariantNutrients(
+                    variantId = existing.recipeVariantId,
+                    amountInput = amountInput,
+                )
+            }
 
-        val result = env.useCase.execute(
-            logId = existing.id,
-            amountInput = AmountInput.ByGrams(100.0),
-            mealSlot = MealSlot.BREAKFAST
-        )
+            else -> {
+                recomputeRecipeNutrients(
+                    foodId = food.id,
+                    recipeBatchId = existing.recipeBatchId,
+                    amountInput = amountInput
+                )
+            }
+        }
 
-        assertTrue(result is UpdateLogEntryUseCase.Result.Success)
-    }
+        val recomputedNutrients = when (recomputed) {
+            is RecomputeResult.Success -> recomputed.nutrients
+            is RecomputeResult.Blocked -> return Result.Blocked(recomputed.message)
+            is RecomputeResult.Error -> return Result.Error(recomputed.message)
+        }
 
-    @Test
-    fun keepOriginal_scalesStoredNutrients() = runBlocking {
-        val food = testFood()
-        val existing = testLog(food, grams = 100.0, proteinPer100g = 10.0)
-        val snapshot = snapshot(food.id, proteinPer100g = 8.0)
-        val env = buildUseCase(existing, food, snapshot)
+        val finalNutrients = when {
+            nutritionDecision == NutritionDecision.USE_CURRENT -> recomputedNutrients
+            nutritionDecision == NutritionDecision.KEEP_ORIGINAL -> {
+                scaleStoredNutrients(
+                    existing = existing,
+                    food = food,
+                    newAmountInput = amountInput
+                )
+            }
 
-        val result = env.useCase.execute(
-            logId = existing.id,
-            amountInput = AmountInput.ByGrams(200.0),
-            mealSlot = MealSlot.BREAKFAST,
-            nutritionDecision = NutritionDecision.KEEP_ORIGINAL
-        )
+            materiallyDifferentNormalizedBasis(
+                existing = existing,
+                current = recomputedNutrients,
+                food = food,
+                editedAmountInput = amountInput
+            ) -> {
+                return Result.NutritionChoiceRequired(
+                    existingEntry = existing,
+                    recomputedNutrients = recomputedNutrients
+                )
+            }
 
-        val updated = env.logRepo.updated!!
+            else -> recomputedNutrients
+        }
 
-        assertEquals(20.0, updated.nutrients[NutrientKey.PROTEIN_G], 0.0001)
-        assertTrue(result is UpdateLogEntryUseCase.Result.Success)
-    }
-
-    @Test
-    fun useCurrent_usesRecomputedNutrients() = runBlocking {
-        val food = testFood()
-        val existing = testLog(food, grams = 100.0, proteinPer100g = 10.0)
-        val snapshot = snapshot(food.id, proteinPer100g = 8.0)
-        val env = buildUseCase(existing, food, snapshot)
-
-        val result = env.useCase.execute(
-            logId = existing.id,
-            amountInput = AmountInput.ByGrams(200.0),
-            mealSlot = MealSlot.BREAKFAST,
-            nutritionDecision = NutritionDecision.USE_CURRENT
-        )
-
-        val updated = env.logRepo.updated!!
-
-        assertEquals(16.0, updated.nutrients[NutrientKey.PROTEIN_G], 0.0001)
-        assertTrue(result is UpdateLogEntryUseCase.Result.Success)
-    }
-
-    private fun testFood(): Food {
-        return Food(
-            id = 1L,
-            stableId = "food1",
-            name = "Test Food",
-            brand = null,
-            servingSize = 1.0,
-            servingUnit = ServingUnit.SERVING,
-            gramsPerServingUnit = 100.0,
-            mlPerServingUnit = null,
-            servingsPerPackage = null,
-            isRecipe = false
-        )
-    }
-
-    private fun testLog(
-        food: Food,
-        grams: Double,
-        proteinPer100g: Double
-    ): LogEntry {
-        val totalProtein = proteinPer100g * (grams / 100.0)
         val now = Instant.now()
 
-        return LogEntry(
-            id = 1L,
-            stableId = "log-1",
-            createdAt = now,
-            modifiedAt = now,
-            timestamp = now,
-            logDateIso = "2026-01-01",
-            itemName = food.name,
-            foodStableId = food.stableId,
-            nutrients = NutrientMap(
-                mapOf(NutrientKey.PROTEIN_G to totalProtein)
-            ),
-            amount = grams,
-            unit = LogUnit.GRAM_COOKED,
-            recipeBatchId = null,
-            gramsPerServingCooked = null,
-            mealSlot = MealSlot.BREAKFAST
+        val updatedEntry = existing.copy(
+            itemName = if (existing.recipeVariantId != null) existing.itemName else food.name,
+            nutrients = finalNutrients,
+            amount = storedAmount,
+            unit = storedUnit,
+            gramsPerServingCooked = when {
+                nutritionDecision == NutritionDecision.KEEP_ORIGINAL -> existing.gramsPerServingCooked
+                recomputed is RecomputeResult.Success -> recomputed.gramsPerServingCooked ?: existing.gramsPerServingCooked
+                else -> existing.gramsPerServingCooked
+            },
+            mealSlot = mealSlot,
+            modifiedAt = now
         )
+
+        logRepository.update(updatedEntry)
+        return Result.Success(existing.id)
     }
 
-    private fun snapshot(
+    private suspend fun resolveFoodForStableId(stableId: String): Food? {
+        foodRepository.getByStableId(stableId)?.let { return it }
+
+        val recipeId = recipeDao.getIdByStableId(stableId) ?: return null
+        val recipe = recipeDao.getById(recipeId) ?: return null
+
+        return foodRepository.getById(recipe.foodId)
+    }
+
+    private sealed interface RecomputeResult {
+        data class Success(
+            val nutrients: NutrientMap,
+            val gramsPerServingCooked: Double? = null,
+        ) : RecomputeResult
+        data class Blocked(val message: String) : RecomputeResult
+        data class Error(val message: String) : RecomputeResult
+    }
+
+    private fun toStoredAmountAndUnit(amountInput: AmountInput): Pair<Double, LogUnit> {
+        return when (amountInput) {
+            is AmountInput.ByServings -> amountInput.servings to LogUnit.SERVING
+            is AmountInput.ByGrams -> amountInput.grams to LogUnit.GRAM_COOKED
+        }
+    }
+
+    private suspend fun recomputeFoodNutrients(
         foodId: Long,
-        proteinPer100g: Double
-    ): FoodNutritionSnapshot {
-        return FoodNutritionSnapshot(
-            foodId = foodId,
-            gramsPerServingUnit = null,
-            mlPerServingUnit = null,
-            nutrientsPerGram = NutrientMap(
-                mapOf(NutrientKey.PROTEIN_G to proteinPer100g / 100.0)
-            ),
-            nutrientsPerMilliliter = null
+        amountInput: AmountInput
+    ): RecomputeResult {
+        val food = foodRepository.getById(foodId)
+            ?: return RecomputeResult.Error("Food not found")
+
+        val gramsPerServing = food.gramsPerServingResolved()
+
+        when (val check = checkFoodUsable.execute(
+            servingUnit = food.servingUnit,
+            gramsPerServingUnit = gramsPerServing,
+            mlPerServingUnit = food.mlPerServingUnit,
+            amountInput = amountInput,
+            context = UsageContext.LOGGING
+        )) {
+            FoodUsageCheck.Ok -> Unit
+            is FoodUsageCheck.Blocked -> return RecomputeResult.Blocked(check.message)
+        }
+
+        val snapshot = snapshotRepository.getSnapshot(food.id)
+            ?: return RecomputeResult.Error("Nutrition snapshot unavailable")
+
+        val nutrients = snapshot.nutrientsPerGram?.let { perG ->
+            val grams = when (amountInput) {
+                is AmountInput.ByGrams -> amountInput.grams
+                is AmountInput.ByServings -> {
+                    val resolved = food.gramsPerServingResolved()
+                        ?: return RecomputeResult.Blocked(
+                            "Set grams-per-serving before editing by servings."
+                        )
+                    amountInput.servings * resolved
+                }
+            }
+            perG.scaledBy(grams)
+        } ?: snapshot.nutrientsPerMilliliter?.let { perMl ->
+            val ml = when (amountInput) {
+                is AmountInput.ByServings -> {
+                    val mlPerServing = when {
+                        food.mlPerServingUnit != null &&
+                                food.mlPerServingUnit > 0.0 &&
+                                food.servingSize > 0.0 ->
+                            food.servingSize * food.mlPerServingUnit
+
+                        food.servingUnit.isVolumeUnit() ->
+                            food.servingUnit.toMilliliters(food.servingSize)
+
+                        else -> null
+                    } ?: return RecomputeResult.Error(
+                        "Food is volume-based but missing mL-per-serving."
+                    )
+                    amountInput.servings * mlPerServing
+                }
+
+                is AmountInput.ByGrams -> {
+                    return RecomputeResult.Blocked(
+                        "This food is volume-based; edit it by servings."
+                    )
+                }
+            }
+            perMl.scaledBy(ml)
+        } ?: return RecomputeResult.Error("Food nutrition incomplete")
+
+        return RecomputeResult.Success(nutrients)
+    }
+
+    private suspend fun recomputeRecipeNutrients(
+        foodId: Long,
+        recipeBatchId: Long?,
+        amountInput: AmountInput
+    ): RecomputeResult {
+        val recipe = recipeDao.getByFoodId(foodId)
+            ?: recipeDao.getById(foodId)
+            ?: return RecomputeResult.Error("Recipe data missing for this item.")
+
+        val baseDraft = recipeDraftLookup.getRecipeDraft(recipe.id)
+            ?: return RecomputeResult.Error("Recipe not found")
+
+        val batch = if (recipeBatchId != null) {
+            recipeBatchLookup.getBatchById(recipeBatchId)
+                ?: return RecomputeResult.Error("Recipe batch not found")
+        } else {
+            null
+        }
+
+        val effectiveDraft = if (batch != null) {
+            baseDraft.copy(
+                totalYieldGrams = batch.cookedYieldGrams,
+                servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
+            )
+        } else {
+            baseDraft
+        }
+
+        val computed = computeRecipeBatchNutritionUseCase(effectiveDraft.toRecipe())
+            ?: return RecomputeResult.Error("Recipe nutrition unavailable")
+
+        val logged = computeLoggedRecipeNutrition.invoke(
+            recipeNutrition = computed,
+            input = amountInput.toRecipeLogInput()
+        )
+
+        if (!logged.isAllowed) {
+            val reason = logged.warnings.firstOrNull()?.toString()
+                ?: "Editing blocked by recipe rules."
+            return RecomputeResult.Blocked(reason)
+        }
+
+        return RecomputeResult.Success(
+            nutrients = logged.totals,
+            gramsPerServingCooked = computed.gramsPerServingCooked,
         )
     }
 
-    private data class TestEnv(
-        val useCase: UpdateLogEntryUseCase,
-        val logRepo: TestLogRepo
-    )
+    private suspend fun recomputeRecipeVariantNutrients(
+        variantId: Long,
+        amountInput: AmountInput,
+    ): RecomputeResult {
+        val computed = computeRecipeVariantNutrition?.invoke(variantId)
+            ?: return RecomputeResult.Error("Recipe variant nutrition calculator unavailable.")
 
-    private fun buildUseCase(
+        val logged = computeLoggedRecipeNutrition.invoke(
+            recipeNutrition = computed,
+            input = amountInput.toRecipeLogInput(),
+        )
+
+        if (!logged.isAllowed) {
+            val reason = logged.warnings.firstOrNull()?.toString()
+                ?: "Editing blocked by recipe variant rules."
+            return RecomputeResult.Blocked(reason)
+        }
+
+        return RecomputeResult.Success(
+            nutrients = logged.totals,
+            gramsPerServingCooked = computed.gramsPerServingCooked,
+        )
+    }
+
+    private fun scaleStoredNutrients(
         existing: LogEntry,
         food: Food,
-        snapshot: FoodNutritionSnapshot
-    ): TestEnv {
-        val logRepo = TestLogRepo(existing)
+        newAmountInput: AmountInput
+    ): NutrientMap {
+        val gramsPerServingForScaling = existing.gramsPerServingCooked
+            ?.takeIf { it > 0.0 }
+            ?: food.gramsPerServingResolved()
 
-        val useCase = UpdateLogEntryUseCase(
-            foodRepository = TestFoodRepo(food),
-            snapshotRepository = TestSnapshotRepo(snapshot),
-            logRepository = logRepo,
-            checkFoodUsable = CheckFoodUsableUseCase(),
-            recipeDraftLookup = EmptyRecipeDraftRepo(),
-            recipeBatchLookup = EmptyRecipeBatchRepo(),
-            computeRecipeBatchNutritionUseCase = dummyBatchNutrition(),
-            computeLoggedRecipeNutrition = ComputeLoggedRecipeNutritionUseCase(),
-            recipeDao = EmptyRecipeDao()
-        )
-
-        return TestEnv(
-            useCase = useCase,
-            logRepo = logRepo
-        )
-    }
-
-    private class TestLogRepo(
-        private val existing: LogEntry
-    ) : LogRepository {
-        var updated: LogEntry? = null
-
-        override suspend fun insert(entry: LogEntry): Long = entry.id
-
-        override suspend fun update(entry: LogEntry) {
-            updated = entry
-        }
-
-        override suspend fun getById(logId: Long): LogEntry? = existing
-
-        override fun observeDay(logDateIso: String): Flow<List<LogEntry>> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override fun observeRangeByDateIso(
-            startDateIsoInclusive: String,
-            endDateIsoInclusive: String
-        ): Flow<List<LogEntry>> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override fun observeTodayItems(logDateIso: String): Flow<List<TodayLogItem>> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun deleteById(logId: Long) = Unit
-    }
-
-    private class TestFoodRepo(
-        private val food: Food
-    ) : FoodRepository {
-        override fun search(query: String, limit: Int): Flow<List<Food>> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getStorePricePreviewsForFood(
-            foodId: Long
-        ): List<FoodStorePricePreview> {
-            return emptyList()
-        }
-
-        override suspend fun getById(id: Long): Food? = if (id == food.id) food else null
-
-        override suspend fun upsert(food: Food): Long {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getFoodRefForLogging(foodId: Long): FoodRef.Food? {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun isFoodsEmpty(): Boolean {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun deleteFood(foodId: Long): Boolean {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun softDeleteFood(foodId: Long) {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getFoodHardDeleteBlockers(foodId: Long): FoodHardDeleteBlockers {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun hardDeleteFood(foodId: Long) {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun cleanupOrphanFoodMedia(): Int {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getByStableId(stableId: String): Food? =
-            if (stableId == food.stableId) food else null
-
-        override suspend fun upsertFoodStorePrice(
-            foodId: Long,
-            storeId: Long,
-            pricePer100g: Double?,
-            pricePer100ml: Double?,
-            updatedAtEpochMs: Long
-        ): Long {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun deleteFoodStorePrice(foodId: Long, storeId: Long) {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getAveragePricePer100gForFood(foodId: Long): Double? {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override fun observeAveragePricePer100gForFood(foodId: Long): Flow<Double?> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getAveragePricePer100mlForFood(foodId: Long): Double? {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override fun observeAveragePricePer100mlForFood(foodId: Long): Flow<Double?> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getAveragePricePer100gForFoodAtStore(
-            foodId: Long,
-            storeId: Long
-        ): Double? {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override fun observeAveragePricePer100gForFoodAtStore(
-            foodId: Long,
-            storeId: Long
-        ): Flow<Double?> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override suspend fun getAveragePricePer100mlForFoodAtStore(
-            foodId: Long,
-            storeId: Long
-        ): Double? {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-
-        override fun observeAveragePricePer100mlForFoodAtStore(
-            foodId: Long,
-            storeId: Long
-        ): Flow<Double?> {
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-        }
-    }
-
-    private class TestSnapshotRepo(
-        private val snapshot: FoodNutritionSnapshot
-    ) : FoodNutritionSnapshotRepository {
-        override suspend fun getSnapshot(foodId: Long): FoodNutritionSnapshot? =
-            if (foodId == snapshot.foodId) snapshot else null
-
-        override suspend fun getSnapshots(foodIds: Set<Long>): Map<Long, FoodNutritionSnapshot> =
-            if (snapshot.foodId in foodIds) {
-                mapOf(snapshot.foodId to snapshot)
-            } else {
-                emptyMap()
+        val oldCanonicalAmount = when (existing.unit) {
+            LogUnit.GRAM_COOKED -> existing.amount
+            LogUnit.SERVING,
+            LogUnit.ITEM -> {
+                if (gramsPerServingForScaling != null && gramsPerServingForScaling > 0.0) {
+                    existing.amount * gramsPerServingForScaling
+                } else {
+                    existing.amount
+                }
             }
-    }
-
-    private class EmptyRecipeDraftRepo : RecipeDraftLookupRepository {
-        override suspend fun getRecipeDraft(recipeId: Long): RecipeDraft? = null
-    }
-
-    private class EmptyRecipeBatchRepo : RecipeBatchLookupRepository {
-        override suspend fun getBatchById(batchId: Long): BatchSummary? = null
-
-        override suspend fun getBatchesForRecipe(recipeId: Long): List<BatchSummary> = emptyList()
-
-        override suspend fun getBatchFoodIds(batchIds: Set<Long>): Map<Long, Long> = emptyMap()
-    }
-
-    private fun dummyBatchNutrition(): ComputeRecipeBatchNutritionUseCase {
-        return ComputeRecipeBatchNutritionUseCase(
-            recipeRepo = object : RecipeRepository {
-
-                override suspend fun createRecipe(draft: RecipeDraft): Long {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun updateRecipeByFoodId(
-                    foodId: Long,
-                    servingsYield: Double,
-                    totalYieldGrams: Double?,
-                    ingredients: List<RecipeIngredientLine>
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun getRecipeByFoodId(foodId: Long) = null
-
-                override suspend fun getIngredients(recipeId: Long): List<RecipeIngredientLine> =
-                    emptyList()
-
-                override suspend fun getHeaderByRecipeId(recipeId: Long) = null
-
-                override suspend fun getFoodIdsByRecipeIds(recipeIds: Set<Long>): Map<Long, Long> =
-                    emptyMap()
-
-                override suspend fun getRecipeIdsByFoodIds(foodIds: Set<Long>): Map<Long, Long> =
-                    emptyMap()
-
-                override suspend fun getInstructionSteps(recipeId: Long): List<RecipeInstructionStep> =
-                    emptyList()
-
-                override suspend fun insertInstructionStep(
-                    recipeId: Long,
-                    position: Int,
-                    text: String
-                ): Long {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun updateInstructionStepText(
-                    stepId: Long,
-                    text: String
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun updateInstructionStepPosition(
-                    stepId: Long,
-                    position: Int
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun setInstructionStepImage(
-                    stepId: Long,
-                    imagePath: String?
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun deleteInstructionStep(stepId: Long) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun deleteInstructionStepsForRecipe(recipeId: Long) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun reorderInstructionSteps(
-                    recipeId: Long,
-                    orderedStepIds: List<Long>
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun moveInstructionStepUp(
-                    recipeId: Long,
-                    stepId: Long
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun moveInstructionStepDown(
-                    recipeId: Long,
-                    stepId: Long
-                ) {
-                    throw UnsupportedOperationException()
-                }
-
-                override suspend fun softDeleteRecipeByFoodId(foodId: Long) {
-                    throw UnsupportedOperationException()
-                }
-            },
-            snapshotRepo = TestSnapshotRepo(
-                FoodNutritionSnapshot(
-                    foodId = 0L,
-                    gramsPerServingUnit = null,
-                    mlPerServingUnit = null,
-                    nutrientsPerGram = null,
-                    nutrientsPerMilliliter = null
-                )
-            )
-        )
-    }
-
-    private class EmptyRecipeDao : RecipeDao {
-        override suspend fun insert(recipe: RecipeEntity): Long = 0L
-
-        override fun observeAll() =
-            throw UnsupportedOperationException("Unused in UpdateLogEntryUseCaseTest.")
-
-        override suspend fun getById(recipeId: Long): RecipeEntity? = null
-
-        override suspend fun getByIds(recipeIds: List<Long>): List<RecipeEntity> = emptyList()
-
-        override suspend fun getByFoodId(foodId: Long): RecipeEntity? = null
-
-        override suspend fun getByFoodIds(foodIds: List<Long>): List<RecipeEntity> = emptyList()
-
-        override suspend fun getAll(): List<RecipeEntity> = emptyList()
-
-        override suspend fun getIdByStableId(stableId: String): Long? = null
-
-        override suspend fun updateCore(
-            id: Long,
-            foodId: Long,
-            name: String,
-            servingsYield: Double
-        ) = Unit
-
-        override suspend fun softDeleteById(
-            recipeId: Long,
-            deletedAtEpochMs: Long
-        ) = Unit
-
-        override suspend fun softDeleteByFoodId(
-            foodId: Long,
-            deletedAtEpochMs: Long
-        ) = Unit
-
-        override suspend fun countRecipes(): Int = 0
-
-        override fun observeByFoodId(foodId: Long): Flow<RecipeEntity?> {
-            throw UnsupportedOperationException("Not used in this test")
         }
+
+        val newCanonicalAmount = when (newAmountInput) {
+            is AmountInput.ByGrams -> newAmountInput.grams
+            is AmountInput.ByServings -> {
+                if (gramsPerServingForScaling != null && gramsPerServingForScaling > 0.0) {
+                    newAmountInput.servings * gramsPerServingForScaling
+                } else {
+                    newAmountInput.servings
+                }
+            }
+        }
+
+        val safeOldAmount = oldCanonicalAmount.takeIf { it > 0.0 } ?: 1.0
+        val factor = newCanonicalAmount / safeOldAmount
+        return existing.nutrients.scaledBy(factor)
+    }
+
+    private fun materiallyDifferentNormalizedBasis(
+        existing: LogEntry,
+        current: NutrientMap,
+        food: Food,
+        editedAmountInput: AmountInput,
+        absoluteTolerance: Double = 0.05,
+        relativeTolerance: Double = 0.05
+    ): Boolean {
+        val oldCanonicalAmount = canonicalAmountForStoredLog(
+            existing = existing,
+            food = food
+        ) ?: return false
+
+        val newCanonicalAmount = canonicalAmountForEditedInput(
+            existing = existing,
+            amountInput = editedAmountInput,
+            food = food
+        ) ?: return false
+
+        if (oldCanonicalAmount <= 0.0 || newCanonicalAmount <= 0.0) {
+            return false
+        }
+
+        val oldBasis = existing.nutrients.dividedBy(oldCanonicalAmount)
+        val currentBasis = current.dividedBy(newCanonicalAmount)
+
+        return SENTINEL_NUTRIENTS.any { key ->
+            val oldValue = oldBasis[key]
+            val currentValue = currentBasis[key]
+
+            val diff = abs(oldValue - currentValue)
+            val safeOld = if (abs(oldValue) < 1e-6) 0.0 else oldValue
+            val safeCurrent = if (abs(currentValue) < 1e-6) 0.0 else currentValue
+            val scale = maxOf(abs(safeOld), abs(safeCurrent), 1.0)
+
+            diff > absoluteTolerance && (diff / scale) > relativeTolerance
+        }
+    }
+
+    private fun canonicalAmountForStoredLog(
+        existing: LogEntry,
+        food: Food
+    ): Double? {
+        return when (existing.unit) {
+            LogUnit.GRAM_COOKED -> existing.amount.takeIf { it > 0.0 }
+
+            LogUnit.SERVING,
+            LogUnit.ITEM -> {
+                val gramsPerServing = when {
+                    existing.gramsPerServingCooked != null &&
+                            existing.gramsPerServingCooked > 0.0 ->
+                        existing.gramsPerServingCooked
+
+                    else -> food.gramsPerServingResolved()
+                }
+
+                if (gramsPerServing != null && gramsPerServing > 0.0) {
+                    existing.amount * gramsPerServing
+                } else {
+                    existing.amount.takeIf { it > 0.0 }
+                }
+            }
+        }
+    }
+
+    private fun canonicalAmountForEditedInput(
+        existing: LogEntry,
+        amountInput: AmountInput,
+        food: Food
+    ): Double? {
+        return when (amountInput) {
+            is AmountInput.ByGrams -> amountInput.grams.takeIf { it > 0.0 }
+
+            is AmountInput.ByServings -> {
+                val gramsPerServing = existing.gramsPerServingCooked
+                    ?.takeIf { it > 0.0 }
+                    ?: food.gramsPerServingResolved()
+
+                if (gramsPerServing != null && gramsPerServing > 0.0) {
+                    amountInput.servings * gramsPerServing
+                } else {
+                    amountInput.servings.takeIf { it > 0.0 }
+                }
+            }
+        }
+    }
+
+    private companion object {
+        val SENTINEL_NUTRIENTS = listOf(
+            NutrientKey.CALORIES_KCAL,
+            NutrientKey.PROTEIN_G,
+            NutrientKey.CARBS_G,
+            NutrientKey.FAT_G,
+            NutrientKey.SODIUM_MG
+        )
     }
 }
