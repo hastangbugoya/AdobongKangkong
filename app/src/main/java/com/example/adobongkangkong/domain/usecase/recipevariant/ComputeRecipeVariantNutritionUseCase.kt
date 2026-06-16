@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.usecase.recipevariant
 
+import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
 import com.example.adobongkangkong.domain.nutrition.NutrientMap
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionResult
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
@@ -21,8 +22,13 @@ class ComputeRecipeVariantNutritionUseCase @Inject constructor(
 
     suspend operator fun invoke(
         variantId: Long,
+        draftChanges: List<RecipeVariantIngredientChangeEntity>? = null,
+        draftServingsYieldOverride: Double? = null,
     ): RecipeNutritionResult {
-        val assembled = assembleRecipeVariant(variantId = variantId)
+        val assembled = assembleRecipeVariant(
+            variantId = variantId,
+            draftChanges = draftChanges,
+        )
 
         val warnings = mutableListOf<RecipeNutritionWarning>()
 
@@ -98,7 +104,9 @@ class ComputeRecipeVariantNutritionUseCase @Inject constructor(
         }
 
         val servingsYield =
-            assembled.variantServingsYieldOverride ?: assembled.baseServingsYield
+            draftServingsYieldOverride
+                ?: assembled.variantServingsYieldOverride
+                ?: assembled.baseServingsYield
 
         val perServing = when {
             servingsYield == null -> {

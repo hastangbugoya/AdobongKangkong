@@ -12,11 +12,14 @@ import com.example.adobongkangkong.domain.model.RecipeVariantMacroComparison
 import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
+import com.example.adobongkangkong.domain.nutrition.NutrientCaution
+import com.example.adobongkangkong.domain.nutrition.NutrientCautionCalculator
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import com.example.adobongkangkong.domain.usecase.recipevariant.AssembleRecipeVariantUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.CompareRecipeVariantMacrosUseCase
+import com.example.adobongkangkong.domain.usecase.recipevariant.ComputeRecipeVariantNutritionUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.SaveRecipeVariantChangesUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.UpdateRecipeVariantUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +51,7 @@ data class RecipeVariantEditorUiState(
     val removedIngredientLines: List<RemovedRecipeVariantIngredientLine> = emptyList(),
     val warnings: List<String> = emptyList(),
     val macroComparison: RecipeVariantMacroComparison? = null,
+    val variantPerServingCautions: List<NutrientCaution> = emptyList(),
 
     val addIngredientQuery: String = "",
     val addIngredientResults: List<Food> = emptyList(),
@@ -124,6 +128,8 @@ class RecipeVariantEditorViewModel @Inject constructor(
     private val updateRecipeVariant: UpdateRecipeVariantUseCase,
     private val assembleRecipeVariant: AssembleRecipeVariantUseCase,
     private val compareRecipeVariantMacros: CompareRecipeVariantMacrosUseCase,
+    private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase,
+    private val nutrientCautionCalculator: NutrientCautionCalculator,
     private val saveRecipeVariantChanges: SaveRecipeVariantChangesUseCase,
 ) : ViewModel() {
 
@@ -173,6 +179,13 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     draftChanges = changes,
                     draftServingsYieldOverride = variant.servingsYieldOverride,
                 )
+                val variantNutrition = computeRecipeVariantNutrition(
+                    variantId = variantId,
+                    draftChanges = changes,
+                    draftServingsYieldOverride = variant.servingsYieldOverride,
+                )
+                val variantPerServingCautions =
+                    nutrientCautionCalculator.forRecipeServing(variantNutrition.perServing)
 
                 _uiState.update {
                     it.copy(
@@ -193,6 +206,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                         removedIngredientLines = assembled.removedIngredientLines,
                         warnings = macroComparison.warnings.distinct(),
                         macroComparison = macroComparison,
+                        variantPerServingCautions = variantPerServingCautions,
                         isLoading = false,
                         errorMessage = null,
                         draftChanges = changes,
@@ -894,6 +908,13 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     draftChanges = draftChanges,
                     draftServingsYieldOverride = draftServingsYieldOverride,
                 )
+                val variantNutrition = computeRecipeVariantNutrition(
+                    variantId = variantId,
+                    draftChanges = draftChanges,
+                    draftServingsYieldOverride = draftServingsYieldOverride,
+                )
+                val variantPerServingCautions =
+                    nutrientCautionCalculator.forRecipeServing(variantNutrition.perServing)
 
                 _uiState.update {
                     it.copy(
@@ -903,6 +924,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
                         removedIngredientLines = assembled.removedIngredientLines,
                         warnings = macroComparison.warnings.distinct(),
                         macroComparison = macroComparison,
+                        variantPerServingCautions = variantPerServingCautions,
                         errorMessage = null,
                     )
                 }

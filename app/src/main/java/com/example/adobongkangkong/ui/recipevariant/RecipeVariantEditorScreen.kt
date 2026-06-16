@@ -59,6 +59,7 @@ import com.example.adobongkangkong.domain.model.ServingUnit
 import com.example.adobongkangkong.domain.model.RemovedRecipeVariantIngredientLine
 import com.example.adobongkangkong.ui.common.food.FoodBannerCardBackground
 import com.example.adobongkangkong.ui.common.ingredient.IngredientAmountEditorBottomSheet
+import com.example.adobongkangkong.ui.common.nutrition.NutrientCautionCard
 import java.util.Locale
 import kotlin.math.abs
 
@@ -280,6 +281,16 @@ fun RecipeVariantEditorScreen(
                         servingsYieldText = uiState.variantServingsYieldText,
                         onServingsYieldTextChanged = onVariantServingsYieldTextChanged,
                         onApplyServingsYield = onApplyVariantServingsYieldOverride,
+                    )
+                }
+            }
+
+            if (uiState.variantPerServingCautions.isNotEmpty()) {
+                item {
+                    NutrientCautionCard(
+                        cautions = uiState.variantPerServingCautions,
+                        title = "Cautions",
+                        subtitle = "Based on one variant serving.",
                     )
                 }
             }
