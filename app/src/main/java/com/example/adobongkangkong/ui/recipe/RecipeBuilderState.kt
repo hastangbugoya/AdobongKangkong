@@ -86,6 +86,9 @@ data class RecipeBuilderState(
     val selectedCategoryIds: Set<Long> = emptySet(),
     val newCategoryName: String = "",
 
+    // Recipe variants
+    val variantCount: Int = 0,
+
     // UI state
     val isSaving: Boolean = false,
     val errorMessage: String? = null,

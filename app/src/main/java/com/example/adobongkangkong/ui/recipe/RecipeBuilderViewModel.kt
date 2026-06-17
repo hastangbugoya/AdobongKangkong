@@ -24,6 +24,7 @@ import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.repository.RecipeIngredientLine
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import com.example.adobongkangkong.domain.transfer.RecipeBundleDto
 import com.example.adobongkangkong.domain.usecase.CreateRecipeUseCase
 import com.example.adobongkangkong.domain.usecase.ExportRecipeBundleUseCase
@@ -71,10 +72,30 @@ class RecipeBuilderViewModel @Inject constructor(
     private val foodCategoryRepo: FoodCategoryRepository,
     private val computeRecipeNutrition: ComputeRecipeNutritionForSnapshotUseCase,
     private val nutrientRepo: NutrientRepository,
+    private val recipeVariantRepository: RecipeVariantRepository,
     observePreview: ObserveRecipeMacroPreviewUseCase,
 ) : ViewModel() {
 
     private var editFoodId: Long? = null
+    private val editFoodIdFlow = MutableStateFlow<Long?>(null)
+
+    private val variantCountFlow: StateFlow<Int> =
+        editFoodIdFlow
+            .flatMapLatest { recipeFoodId ->
+                if (recipeFoodId == null) {
+                    flowOf(0)
+                } else {
+                    recipeVariantRepository
+                        .observeVariantsForRecipe(recipeFoodId)
+                        .map { variants -> variants.size }
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                0
+            )
+
     private val hasUnsavedChangesFlow = MutableStateFlow(false)
     private val nameFlow = MutableStateFlow("")
     private val servingsYieldFlow = MutableStateFlow(5.0)
@@ -585,7 +606,13 @@ class RecipeBuilderViewModel @Inject constructor(
                 )
             }
 
-            combine(leftFlow, rightFlow, overlayFlow, categoryFlow) { left, right, overlay, categoryState ->
+            combine(
+                leftFlow,
+                rightFlow,
+                overlayFlow,
+                categoryFlow,
+                variantCountFlow,
+            ) { left, right, overlay, categoryState, variantCount ->
                 val pickedGrams =
                     left.pickedFood
                         ?.gramsPerCurrentServingResolved()
@@ -598,6 +625,7 @@ class RecipeBuilderViewModel @Inject constructor(
                     categories = categoryState.categories,
                     selectedCategoryIds = categoryState.selectedCategoryIds,
                     newCategoryName = categoryState.newCategoryName,
+                    variantCount = variantCount,
                     query = left.query,
                     results = left.results,
                     pickedFood = left.pickedFood,
@@ -1458,9 +1486,15 @@ class RecipeBuilderViewModel @Inject constructor(
     }
 
     fun loadForEdit(foodId: Long?) {
-        if (foodId == null) return
+        if (foodId == null) {
+            editFoodId = null
+            editFoodIdFlow.value = null
+            return
+        }
+
         hasUnsavedChangesFlow.value = false
         editFoodId = foodId
+        editFoodIdFlow.value = foodId
 
         didAutoPrefillTotalYieldGrams = false
         didUserEditTotalYieldGrams = false

@@ -566,13 +566,37 @@ fun RecipeBuilderScreen(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "Recipe variants",
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Recipe variants",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+
+                                if (state.variantCount > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    ) {
+                                        Text(
+                                            text = "${state.variantCount} variant${if (state.variantCount == 1) "" else "s"}",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
 
                             Text(
-                                text = "Create and archive recipe-specific variants. Variants stay attached to this recipe and do not appear as separate foods.",
+                                text = if (state.variantCount > 0) {
+                                    "This recipe has ${state.variantCount} variant${if (state.variantCount == 1) "" else "s"}. Variants stay attached to this recipe and do not appear as separate foods."
+                                } else {
+                                    "Create and archive recipe-specific variants. Variants stay attached to this recipe and do not appear as separate foods."
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -580,7 +604,13 @@ fun RecipeBuilderScreen(
                             OutlinedButton(
                                 onClick = { onOpenRecipeVariants(editFoodId) }
                             ) {
-                                Text("Manage variants")
+                                Text(
+                                    text = if (state.variantCount > 0) {
+                                        "Manage variants (${state.variantCount})"
+                                    } else {
+                                        "Manage variants"
+                                    }
+                                )
                             }
                         }
                     }
