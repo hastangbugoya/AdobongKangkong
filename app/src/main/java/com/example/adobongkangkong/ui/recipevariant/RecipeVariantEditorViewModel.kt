@@ -14,9 +14,11 @@ import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.NutrientCaution
 import com.example.adobongkangkong.domain.nutrition.NutrientCautionCalculator
+import com.example.adobongkangkong.domain.nutrition.NutrientCautionThresholds
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
+import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.usecase.recipevariant.AssembleRecipeVariantUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.CompareRecipeVariantMacrosUseCase
 import com.example.adobongkangkong.domain.usecase.recipevariant.ComputeRecipeVariantNutritionUseCase
@@ -130,6 +132,7 @@ class RecipeVariantEditorViewModel @Inject constructor(
     private val compareRecipeVariantMacros: CompareRecipeVariantMacrosUseCase,
     private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase,
     private val nutrientCautionCalculator: NutrientCautionCalculator,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val saveRecipeVariantChanges: SaveRecipeVariantChangesUseCase,
 ) : ViewModel() {
 
@@ -185,7 +188,10 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     draftServingsYieldOverride = variant.servingsYieldOverride,
                 )
                 val variantPerServingCautions =
-                    nutrientCautionCalculator.forRecipeServing(variantNutrition.perServing)
+                    nutrientCautionCalculator.forRecipeServing(
+                        perServingNutrients = variantNutrition.perServing,
+                        thresholds = quickAddCautionThresholds(),
+                    )
 
                 _uiState.update {
                     it.copy(
@@ -914,7 +920,10 @@ class RecipeVariantEditorViewModel @Inject constructor(
                     draftServingsYieldOverride = draftServingsYieldOverride,
                 )
                 val variantPerServingCautions =
-                    nutrientCautionCalculator.forRecipeServing(variantNutrition.perServing)
+                    nutrientCautionCalculator.forRecipeServing(
+                        perServingNutrients = variantNutrition.perServing,
+                        thresholds = quickAddCautionThresholds(),
+                    )
 
                 _uiState.update {
                     it.copy(
@@ -1006,4 +1015,11 @@ class RecipeVariantEditorViewModel @Inject constructor(
             it.copy(errorMessage = null)
         }
     }
+
+    private fun quickAddCautionThresholds(): NutrientCautionThresholds =
+        NutrientCautionThresholds(
+            sodiumMg = userPreferencesRepository.quickAddSodiumCautionMg.value,
+            totalSugarG = userPreferencesRepository.quickAddSugarCautionG.value,
+        )
+
 }
