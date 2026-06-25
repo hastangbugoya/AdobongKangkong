@@ -708,10 +708,174 @@ class FoodEditorViewModel @Inject constructor(
             )
         }
     }
+    /**
 
+     * ============================================================
+     * USDA IMPORT INTERPRETATION FLOW — IMPORTANT MAINTENANCE NOTE
+     * ============================================================
+     *
+     * USDA search/barcode imports can be a TWO-STEP flow.
+     *
+     * Why:
+     * * USDA branded `/foods/search` results may include both:
+     * * a serving definition, e.g. `servingSize = 126`, `servingSizeUnit = "g"`,
+     * ```
+    `householdServingFullText = "0.5 cup"`
+    ```
+     * * nutrient values, e.g. calories = 48, sodium = 460
+     *
+     * * Those nutrient values may already be normalized PER 100g / PER 100mL,
+     * even though the item also has a serving size.
+     *
+     * Example:
+     * * GTIN 027000500439
+     * * Hunt's Four Cheese Pasta Sauce
+     * * USDA serving: 0.5 cup = 126 g
+     * * USDA Energy value: 48
+     *
+     * Correct PER_100G interpretation:
+     * * 48 kcal per 100 g
+     * * displayed serving calories = 48 * 126 / 100 = 60.48 kcal
+     *
+     * Incorrect PER_SERVING interpretation:
+     * * 48 kcal per 0.5 cup serving
+     *
+     * Because both interpretations are possible from UI perspective, ambiguous branded
+     * imports must ask the user:
+     *
+     * 1. Treat USDA nutrients as PER 100g / PER 100mL
+     * 2. Treat USDA nutrients as PER serving
+     *
+     * ---
+     * STEP 1 — INITIAL IMPORT
+     * ---
+     *
+     * Initial import calls:
+     *
+     * ```
+    importUsdaFromSearchJson(
+    ```
+     * ```
+    searchJson = json,
+    ```
+     * ```
+    selectedFdcId = selectedFdcId,
+    ```
+     * ```
+    forcedInterpretation = null
+    ```
+     * ```
+    )
+    ```
+     *
+     * If the item is unambiguous, this may return Result.Success and persist both:
+     * * Food metadata
+     * * Nutrient rows
+     *
+     * If the item is ambiguous, this returns Result.NeedsInterpretationChoice.
+     *
+     * In that case, the importer intentionally persists only the Food shell:
+     * * name
+     * * brand
+     * * serving size/unit
+     * * gram or mL bridge
+     * * USDA ids / GTIN metadata
+     *
+     * Nutrient rows are NOT persisted yet.
+     *
+     * This is expected. Do not treat an empty `food_nutrients` table after
+     * NeedsInterpretationChoice as a DAO failure.
+     *
+     * ---
+     * STEP 2 — CALLER MUST SURFACE THE PROMPT
+     * ---
+     *
+     * Any caller that receives Result.NeedsInterpretationChoice MUST keep:
+     *
+     * * the original USDA search JSON
+     * * selected FDC id
+     * * prompt preview values
+     *
+     * and expose them through UI state so the Food Editor can show the interpretation
+     * dialog.
+     *
+     * Do NOT navigate away as if import is finished.
+     * Do NOT clear pendingUsdaSearchJson before the user chooses.
+     *
+     * Required state:
+     *
+     * ```
+    pendingUsdaSearchJson = originalJson
+    ```
+     * ```
+    pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(...)
+    ```
+     *
+     * ---
+     * STEP 3 — USER CONFIRMS INTERPRETATION
+     * ---
+     *
+     * When the user chooses PER_100 or PER_SERVING, rerun the same import use case
+     * with forcedInterpretation:
+     *
+     * ```
+    importUsdaFromSearchJson(
+    ```
+     * ```
+    searchJson = pendingUsdaSearchJson,
+    ```
+     * ```
+    selectedFdcId = prompt.selectedFdcId,
+    ```
+     * ```
+    forcedInterpretation = PER_100_STYLE or PER_SERVING_STYLE
+    ```
+     * ```
+    )
+    ```
+     *
+     * This second call finalizes nutrient rows.
+     *
+     * PER_100_STYLE:
+     * * USDA values are treated as already per-100.
+     * * Values are relabeled as PER_100G or PER_100ML without scaling.
+     *
+     * PER_SERVING_STYLE:
+     * * USDA values are treated as per reported serving.
+     * * If possible, later save/canonicalization may convert them using the serving bridge.
+     *
+     * ---
+     * BARCODE VS DIRECT USDA IMPORT
+     * ---
+     *
+     * Barcode import usually has scannedBarcode in state.
+     * Direct USDA search/import may NOT have scannedBarcode in state.
+     *
+     * Therefore confirmation must NOT require scannedBarcode.
+     *
+     * Correct behavior:
+     * * If scannedBarcode exists, use it for barcode mapping.
+     * * Else if result.gtinUpc exists, use result.gtinUpc for barcode mapping.
+     * * Else finalize nutrients anyway and skip barcode mapping.
+     *
+     * Nutrient finalization must not depend on barcode mapping.
+     *
+     * ---
+     * DO NOT BREAK THESE RULES
+     * ---
+     *
+     * * NeedsInterpretationChoice means "food shell saved, nutrients pending."
+     * * The caller must preserve pendingUsdaSearchJson until the user chooses.
+     * * Direct USDA import and barcode USDA import must share the same interpretation flow.
+     * * Never silently finish an ambiguous import without either:
+     * 1. saving nutrients, or
+     * 2. showing the interpretation prompt.
+     * * Never require scannedBarcode to finalize USDA nutrient interpretation.
+     */
     fun confirmUsdaInterpretationPrompt(choice: UsdaNutrientInterpretationChoice) {
         val s = _state.value
         val prompt = s.pendingUsdaInterpretationPrompt ?: return
+
         val json = s.pendingUsdaSearchJson ?: run {
             update {
                 it.copy(
@@ -722,15 +886,9 @@ class FoodEditorViewModel @Inject constructor(
             return
         }
 
-        val barcode = s.scannedBarcode.trim()
-        if (barcode.isBlank()) {
-            update {
-                it.copy(
-                    errorMessage = "Missing scanned barcode."
-                )
-            }
-            return
-        }
+        val barcodeFromState = s.scannedBarcode
+            .trim()
+            .takeIf { it.isNotBlank() }
 
         val forcedInterpretation = when (choice) {
             UsdaNutrientInterpretationChoice.PER_100 ->
@@ -751,18 +909,25 @@ class FoodEditorViewModel @Inject constructor(
                 is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
                     val now = System.currentTimeMillis()
 
-                    foodBarcodeRepo.upsertAndTouch(
-                        entity = FoodBarcodeEntity(
-                            barcode = barcode,
-                            foodId = result.foodId,
-                            source = BarcodeMappingSource.USDA,
-                            usdaFdcId = result.fdcId,
-                            usdaPublishedDateIso = result.publishedDateIso,
-                            assignedAtEpochMs = now,
-                            lastSeenAtEpochMs = now
-                        ),
-                        nowEpochMs = now
-                    )
+                    val barcodeToMap = barcodeFromState
+                        ?: result.gtinUpc
+                            ?.trim()
+                            ?.takeIf { it.isNotBlank() }
+
+                    if (barcodeToMap != null) {
+                        foodBarcodeRepo.upsertAndTouch(
+                            entity = FoodBarcodeEntity(
+                                barcode = barcodeToMap,
+                                foodId = result.foodId,
+                                source = BarcodeMappingSource.USDA,
+                                usdaFdcId = result.fdcId,
+                                usdaPublishedDateIso = result.publishedDateIso,
+                                assignedAtEpochMs = now,
+                                lastSeenAtEpochMs = now
+                            ),
+                            nowEpochMs = now
+                        )
+                    }
 
                     update {
                         it.copy(
@@ -772,7 +937,8 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeCollisionDialog = null,
                             errorMessage = null,
                             pendingUsdaBackfillPrompt = null,
-                            pendingUsdaInterpretationPrompt = null
+                            pendingUsdaInterpretationPrompt = null,
+                            scannedBarcode = barcodeToMap ?: it.scannedBarcode
                         )
                     }
 
@@ -782,6 +948,10 @@ class FoodEditorViewModel @Inject constructor(
                 is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
                     update {
                         it.copy(
+                            barcodeCollisionDialog = null,
+                            barcodePickItems = emptyList(),
+                            errorMessage = null,
+                            pendingUsdaSearchJson = json,
                             pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(
                                 foodId = result.foodId,
                                 selectedFdcId = result.fdcId,
@@ -793,8 +963,7 @@ class FoodEditorViewModel @Inject constructor(
                                 fat = result.fat,
                                 sodiumMg = result.sodiumMg,
                                 totalSugarG = result.totalSugarG
-                            ),
-                            errorMessage = null
+                            )
                         )
                     }
                 }
@@ -1046,6 +1215,8 @@ class FoodEditorViewModel @Inject constructor(
                             barcodeCollisionDialog = null,
                             barcodePickItems = emptyList(),
                             errorMessage = null,
+                            pendingUsdaSearchJson = json,
+                            scannedBarcode = dialog.barcode,
                             pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(
                                 foodId = r.foodId,
                                 selectedFdcId = r.fdcId,

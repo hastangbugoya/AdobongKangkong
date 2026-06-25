@@ -20,168 +20,214 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * Imports a USDA `/foods/search` result into the local database, canonicalizing nutrients and serving bridges.
+ * Imports one USDA `/foods/search` item into the local food database.
  *
- * ============================================================
- * DATA FLOW DIAGRAM (DFD)
- * ============================================================
+ * This use case is the domain boundary for USDA search-result import. It selects a USDA item,
+ * builds or revives a local [Food], resolves the serving display/bridge, maps USDA nutrients into
+ * AK's nutrient catalog, and decides whether nutrient rows can be saved immediately or must wait
+ * for explicit user interpretation.
  *
- * USDA `/foods/search` JSON
- *        │
- *        ▼
- * UsdaFoodsSearchParser.parse()
- *        │
- *        ▼
- * Select USDA item (fdcId)
- *        │
- *        ▼
- * Build Food draft
- *   - servingSize
- *   - servingUnit
- *   - gramsPerServingUnit (mass bridge)
- *   - mlPerServingUnit (volume bridge)
- *   - stableId (gtin or fdc)
- *        │
- *        ▼
- * Map USDA nutrients → internal nutrient catalog
- *        │
- *        ▼
- * Decide whether interpretation is safe or user-confirmation is required
- *   ├─ safe → canonicalize/persist immediately
- *   └─ ambiguous → persist Food shell only, return preview so UI can ask user
- *        │
- *        ▼
- * DB transaction
- *   ├─ FoodRepository.upsert()
- *   └─ FoodNutrientRepository.replaceForFood() only after interpretation is known
- *        │
- *        ▼
- * RETURN foodId + USDA metadata (or pending interpretation preview)
+ * ## Why interpretation is needed
  *
- * ============================================================
+ * USDA branded search results can contain both a serving definition and nutrient values. The
+ * nutrient values are not always obvious from the UI perspective: they may represent PER_100G /
+ * PER_100ML values even though the item also has a serving size.
  *
- * Purpose
- * - Convert USDA search response JSON into a usable Food draft plus nutrient snapshot.
- * - Normalize nutrients into a canonical storage basis only when interpretation is safe.
- * - When USDA payload semantics are ambiguous, stop and require explicit user confirmation.
+ * Example:
  *
- * Rationale (why this use case exists)
- * - Some USDA/branded search results expose a serving size while nutrient numbers may behave more
- *   like label-style per-100 values.
- * - In those cases the app must not silently force PER_100G / PER_100ML.
- * - This use case now supports a two-step flow:
- *   1) import/adopt enough Food data to continue
- *   2) ask user how to interpret nutrients
- *   3) only then persist nutrient rows
+ * ```text
+ * GTIN: 027000500439
+ * Food: Hunt's Four Cheese Pasta Sauce
+ * USDA serving: 0.5 cup = 126 g
+ * USDA Energy value: 48
+ * ```
  *
- * Core invariants enforced here
+ * Correct PER_100G interpretation:
  *
- * ONE-basis rule
- * - Exactly one row per (foodId, nutrientId).
- * - Never store multiple basis rows for same nutrient.
+ * ```text
+ * 48 kcal per 100 g
+ * displayed serving calories = 48 * 126 / 100 = 60.48 kcal
+ * ```
  *
- * Mass grounding rule
- * - If USDA serving unit is mass-based OR grams bridge exists:
- *     mass grounding is available
+ * Incorrect PER_SERVING interpretation:
  *
- * Volume grounding rule
- * - If USDA serving unit is volume-based OR mL bridge exists:
- *     volume grounding is available
+ * ```text
+ * 48 kcal per 0.5 cup serving
+ * ```
  *
- * Raw fallback rule
- * - If neither mass nor volume grounding exists:
- *     store USDA_REPORTED_SERVING only.
+ * Because both interpretations are possible from the app/user perspective, ambiguous branded
+ * imports use a two-step flow.
  *
- * Absolute safety rules
- * - NEVER infer grams from mL.
- * - NEVER infer mL from grams.
- * - NEVER guess density.
+ * ## Flow summary
  *
- * User-confirmation rule
- * - If the USDA payload appears ambiguous for a grounded item and no explicit interpretation was
- *   provided, persist the Food shell only and return a prompt payload.
- * - Do NOT persist nutrient rows until interpretation is explicit.
+ * ### Step 1: initial import
  *
- * Revive-on-import behavior
- * - If a food with same usdaFdcId already exists:
- *     reuse its row id and stableId.
+ * Caller invokes this use case without a forced interpretation:
  *
- * This prevents:
- * - duplicate foods
- * - broken log references
+ * ```kotlin
+ * importUsdaFromSearchJson(
+ *     searchJson = json,
+ *     selectedFdcId = selectedFdcId,
+ *     forcedInterpretation = null
+ * )
+ * ```
  *
- * Household serving bridge logic
+ * The use case parses the USDA JSON, selects the target item, builds a local [Food], maps nutrient
+ * rows, and checks whether interpretation is required.
  *
- * USDA example:
+ * If the item has mapped nutrient rows and valid mass/volume grounding, this returns
+ * [Result.NeedsInterpretationChoice] so the user can choose PER_100 or PER_SERVING.
  *
- *     servingSize = 473
- *     servingUnit = MLT
- *     householdServingFullText = "1 can (473 mL)"
+ * If there are no mapped nutrients, or PER_100 interpretation is not safely available because
+ * the food has no mass/volume grounding, this may return [Result.Success] without prompting. In that path, this use
+ * case intentionally persists only the food shell:
  *
- * Stored as:
+ * - name
+ * - brand
+ * - serving size/unit
+ * - gram or mL bridge
+ * - USDA FDC id / GTIN metadata
  *
- *     servingSize = 1
- *     servingUnit = CAN
- *     mlPerServingUnit = 473
+ * Nutrient rows are not persisted yet. An empty `food_nutrients` table after
+ * [Result.NeedsInterpretationChoice] is expected and should not be treated as a DAO/repository
+ * failure.
  *
- * This preserves:
+ * ### Step 2: caller shows interpretation prompt
  *
- * UI display:
- *     "1 can"
+ * Any caller that receives [Result.NeedsInterpretationChoice] must preserve:
  *
- * mathematical truth:
- *     1 can = 473 mL
+ * - the original USDA search JSON
+ * - the selected FDC id
+ * - the preview values returned by [Result.NeedsInterpretationChoice]
  *
- * Interpretation flow
+ * The caller must then show a user choice:
  *
- * Step 1 — Parse USDA JSON
- * Uses UsdaFoodsSearchParser.
+ * - treat USDA nutrient values as PER_100G / PER_100ML
+ * - treat USDA nutrient values as PER serving
  *
- * Step 2 — Select target USDA item
- * Either first item or selectedFdcId.
+ * Do not navigate away as if the import is complete. Do not clear the pending USDA JSON before the
+ * user chooses.
  *
- * Step 3 — Detect revive scenario
- * Existing usdaFdcId → reuse id and stableId.
+ * Required caller state is conceptually:
  *
- * Step 4 — Resolve serving model
- * Determine:
- *     servingSize
- *     servingUnit
- *     gramsPerServingUnit bridge
- *     mlPerServingUnit bridge
+ * ```kotlin
+ * pendingUsdaSearchJson = originalJson
+ * pendingUsdaInterpretationPrompt = PendingUsdaInterpretationPromptState(...)
+ * ```
  *
- * Step 5 — Map USDA nutrients
- * USDA nutrientNumber → CSV code → internal nutrient.
+ * ### Step 3: user confirms interpretation
  *
- * Step 6 — Decide interpretation handling
- * - safe immediate canonicalization
- * - or pending user choice
+ * After the user chooses, the caller invokes this same use case again with [forcedInterpretation]:
  *
- * Step 7 — Transactional persistence
- * Upsert FoodEntity.
- * Persist nutrient rows only when interpretation is final.
+ * ```kotlin
+ * importUsdaFromSearchJson(
+ *     searchJson = pendingUsdaSearchJson,
+ *     selectedFdcId = prompt.selectedFdcId,
+ *     forcedInterpretation = PER_100_STYLE or PER_SERVING_STYLE
+ * )
+ * ```
  *
- * Parameters
- * - searchJson:
- *   USDA foods/search JSON string.
+ * This second call finalizes and persists nutrient rows.
  *
- * - selectedFdcId:
- *   Optional specific USDA food to import.
+ * ## Interpretation semantics
  *
- * - forcedInterpretation:
- *   Optional explicit interpretation chosen by the user for an otherwise ambiguous item.
+ * [InterpretationChoice.PER_100_STYLE]
  *
- * Return
- * - Success:
- *   Food imported and nutrient interpretation finalized.
+ * - USDA nutrient values are treated as already normalized per 100 g or per 100 mL.
+ * - Values are relabeled as [BasisType.PER_100G] or [BasisType.PER_100ML].
+ * - Amounts are not scaled.
  *
- * - NeedsInterpretationChoice:
- *   Food shell persisted, but nutrient rows were intentionally not finalized yet.
+ * [InterpretationChoice.PER_SERVING_STYLE]
  *
- * - Blocked:
- *   Unsupported serving unit
- *   USDA parsing/select failure
- *   Invalid forced interpretation for available grounding
+ * - USDA nutrient values are treated as values for the reported serving.
+ * - Rows remain [BasisType.USDA_REPORTED_SERVING] in this use case.
+ *
+ * ## Serving and bridge rules
+ *
+ * USDA often provides both a raw serving and a household serving.
+ *
+ * Example:
+ *
+ * ```text
+ * servingSize = 126
+ * servingSizeUnit = "g"
+ * householdServingFullText = "0.5 cup"
+ * ```
+ *
+ * AK stores this as:
+ *
+ * ```text
+ * servingSize = 0.5
+ * servingUnit = CUP
+ * gramsPerServingUnit = 252.0
+ * mlPerServingUnit = null
+ * ```
+ *
+ * Meaning:
+ *
+ * ```text
+ * 0.5 cup = 126 g
+ * 1 cup = 252 g
+ * ```
+ *
+ * Deterministic serving units do not need redundant bridges:
+ *
+ * - mass units already know grams per unit
+ * - volume units already know mL per unit
+ *
+ * Non-deterministic display units such as CUP, CAN, PIECE, SERVING, or PACKAGE may need an explicit
+ * gram or mL bridge when USDA provides one.
+ *
+ * ## Safety invariants
+ *
+ * - Never infer grams from mL.
+ * - Never infer mL from grams.
+ * - Never guess density.
+ * - Mass grounding takes precedence over volume grounding.
+ * - Exactly one persisted nutrient row should exist per food/nutrient after finalization.
+ * - Preserve `stableId` when reviving an existing USDA food so logs and references do not break.
+ * - All database writes in this use case must happen inside a transaction.
+ *
+ * ## Revive-on-import behavior
+ *
+ * If a local food already exists with the same USDA FDC id:
+ *
+ * - reuse the existing row id
+ * - preserve its existing `stableId`
+ * - update/import against that food instead of creating a duplicate
+ *
+ * This protects existing logs and avoids unique-constraint collisions.
+ *
+ * ## Caller contract
+ *
+ * Barcode import and direct USDA search import must both handle [Result.NeedsInterpretationChoice]
+ * the same way.
+ *
+ * Barcode import usually has a scanned barcode in UI state. Direct USDA search import may not.
+ * Therefore, finalizing nutrient interpretation must not depend on barcode mapping.
+ *
+ * Correct caller behavior after successful finalization:
+ *
+ * - if a scanned barcode exists, map it
+ * - else if [Result.Success.gtinUpc] exists, map that if desired
+ * - else finalize nutrients anyway and skip barcode mapping
+ *
+ * Nutrient persistence must never fail just because no barcode is available.
+ *
+ * ## Result meaning
+ *
+ * [Result.Success]
+ * - Food metadata and nutrient rows are finalized.
+ *
+ * [Result.NeedsInterpretationChoice]
+ * - Food shell was persisted.
+ * - Nutrient rows were intentionally not persisted yet.
+ * - Caller must show the interpretation prompt and rerun this use case with [forcedInterpretation].
+ *
+ * [Result.Blocked]
+ * - Import could not continue safely.
+ * - Typical causes include unsupported serving units, missing selected FDC id, or impossible
+ *   interpretation for the available serving grounding.
  */
 class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
     private val db: NutriDatabase,
@@ -336,12 +382,8 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         }
 
         val requiresInterpretationPrompt = shouldRequireInterpretationPrompt(
-            itemFdcId = item.fdcId,
             food = food,
-            rawServingSize = rawServingSize,
-            rawServingUnit = rawServingUnit,
-            servingRows = servingRows,
-            isGenericUsdaItem = isGenericUsdaItem
+            servingRows = servingRows
         )
 
         if (requiresInterpretationPrompt && forcedInterpretation == null) {
@@ -537,67 +579,26 @@ class ImportUsdaFoodFromSearchJsonUseCase @Inject constructor(
         return dedupeRows(canonicalRows)
     }
 
+    /**
+     * Returns true when this USDA item has nutrient rows and enough serving grounding for the
+     * user to choose how the raw USDA nutrient numbers should be interpreted.
+     *
+     * Deliberately conservative:
+     * - Do not guess PER_100 versus PER_SERVING from USDA payload shape.
+     * - Do not auto-canonicalize branded/search imports just because the raw serving is 100 g/mL.
+     * - Do not auto-canonicalize generic items either when a valid choice exists.
+     *
+     * If the item has no mapped nutrient rows, there is nothing to interpret.
+     * If the item has no mass or volume grounding, PER_100 interpretation is not safely available;
+     * those rows fall back to USDA_REPORTED_SERVING.
+     */
     private fun shouldRequireInterpretationPrompt(
-        itemFdcId: Long,
         food: Food,
-        rawServingSize: Double,
-        rawServingUnit: ServingUnit,
-        servingRows: List<FoodNutrientRow>,
-        isGenericUsdaItem: Boolean
+        servingRows: List<FoodNutrientRow>
     ): Boolean {
         if (servingRows.isEmpty()) return false
         if (!isMassGrounded(food) && !isVolumeGrounded(food)) return false
-
-        // Generic/foundation-ish items are usually safer to canonicalize directly, especially when
-        // USDA is effectively already giving us standard-basis data.
-        if (isGenericUsdaItem) return false
-
-        val servingLooksAlreadyPer100 = when {
-            rawUnitLooksPer100Mass(rawServingUnit, rawServingSize) -> true
-            rawUnitLooksPer100Volume(rawServingUnit, rawServingSize) -> true
-            else -> false
-        }
-
-        if (servingLooksAlreadyPer100) return false
-
-        // Strong ambiguity signal for mass-grounded foods:
-        // if macro grams exceed serving mass, the USDA values cannot literally be per-serving.
-        val gramsPerServing = computeGramsPerServing(food)
-        val macroGramTotal = listOfNotNull(
-            amountForAnyCode(servingRows, "CARBS_G"),
-            amountForAnyCode(servingRows, "PROTEIN_G"),
-            amountForAnyCode(servingRows, "FAT_G")
-        ).sum()
-
-        val impossibleAsPerServingForMass = gramsPerServing != null &&
-                gramsPerServing > 0.0 &&
-                macroGramTotal > (gramsPerServing + 0.5)
-
-        if (impossibleAsPerServingForMass) {
-            Log.w(
-                "USDA_IMPORT",
-                "Ambiguous USDA nutrient interpretation detected for fdcId=$itemFdcId: " +
-                        "macroGramTotal=$macroGramTotal gramsPerServing=$gramsPerServing"
-            )
-            return true
-        }
-
-        // Conservative branded-item rule:
-        // if a branded item is grounded and USDA's raw serving is not a clean 100 g / 100 mL basis,
-        // we should not silently force per-serving vs per-100 interpretation.
         return true
-    }
-
-    private fun rawUnitLooksPer100Mass(rawUnit: ServingUnit, rawServingSize: Double): Boolean {
-        if (!rawUnit.isMassUnit()) return false
-        val grams = rawUnit.toGrams(rawServingSize) ?: return false
-        return kotlin.math.abs(grams - 100.0) < 0.001
-    }
-
-    private fun rawUnitLooksPer100Volume(rawUnit: ServingUnit, rawServingSize: Double): Boolean {
-        if (!rawUnit.isVolumeUnit()) return false
-        val ml = rawUnit.toMilliliters(rawServingSize) ?: return false
-        return kotlin.math.abs(ml - 100.0) < 0.001
     }
 
     private fun isMassGrounded(food: Food): Boolean {
@@ -747,58 +748,3 @@ fun String.toTitleCase(): String =
         .joinToString(" ") { word ->
             word.replaceFirstChar { it.uppercase() }
         }
-
-/**
- * ===== Bottom KDoc (for future AI assistant) =====
- *
- * Invariants (must never change)
- * - Exactly ONE nutrient row per (foodId, nutrientId) is persisted.
- * - Canonical basis after interpretation is finalized:
- *   - PER_100G when user/safe logic resolves to per-100 and food is mass-grounded
- *   - PER_100ML when user/safe logic resolves to per-100 and food is volume-grounded
- *   - USDA_REPORTED_SERVING when user chooses per-serving or when no grounding exists
- * - Never infer density; never convert grams <-> mL.
- * - Preserve stableId on revive to avoid breaking log references.
- * - All writes must occur inside a single DB transaction.
- * - Deterministic serving units must not persist redundant bridges:
- *   - mass units -> gramsPerServingUnit = null
- *   - volume units -> mlPerServingUnit = null
- *
- * Critical behavior added for ambiguous USDA items
- * - This use case may now stop after persisting the Food shell and return
- *   Result.NeedsInterpretationChoice.
- * - In that result path, nutrient rows are intentionally NOT persisted yet.
- * - Caller must ask user whether USDA numbers should be interpreted as:
- *   - per-100 style
- *   - per-serving style
- * - Caller can then invoke this use case again with forcedInterpretation to finalize rows.
- *
- * Interpretation semantics
- * - PER_SERVING_STYLE means the USDA raw numbers are treated as per-serving values and may be
- *   canonicalized to per-100 only when the importer itself chooses that path safely.
- * - PER_100_STYLE means the USDA raw numbers are already per-100-style values.
- *   In that path, this use case must relabel basis to PER_100G / PER_100ML without rescaling the amounts.
- *
- * Do not refactor notes
- * - Keep grounding decision order: mass grounding takes precedence over volume grounding.
- * - Keep revive-on-import logic (unique usdaFdcId constraint safety).
- * - Keep groupBy(nutrient.id).firstOrNull() de-dupe behavior unless you also update DB constraints and readers.
- * - Generic USDA items with missing servingSizeUnit may default to 100 g mass-grounded import.
- *   This is intentional to avoid blocking Foundation/generic foods that are effectively reported on a 100 g basis.
- *
- * Architectural boundaries
- * - This use case is a domain/persistence orchestration boundary:
- *   - parsing + mapping is domain logic
- *   - writes happen through repositories inside a transaction
- * - InterpretationChoice is defined here intentionally so domain does not depend on UI-layer enums.
- *
- * Migration notes (KMP / time APIs)
- * - This file currently depends on android.util.Log; replace with injected logger for KMP.
- *
- * Performance considerations
- * - Conversion is in-memory; DB writes are batched via replaceForFood.
- *
- * Maintenance recommendations
- * - If title casing changes, audit UI snapshots (names/brands will change).
- * - Consider a single shared title-case util if multiple USDA import paths need identical behavior.
- */

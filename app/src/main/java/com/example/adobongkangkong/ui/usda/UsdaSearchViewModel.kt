@@ -18,6 +18,20 @@ class UsdaSearchViewModel @Inject constructor(
     private val importUsdaFoodFromSearchJson: ImportUsdaFoodFromSearchJsonUseCase
 ) : ViewModel() {
 
+    data class PendingInterpretationState(
+        val searchJson: String,
+        val selectedFdcId: Long,
+        val foodId: Long,
+        val candidateLabel: String,
+        val servingText: String?,
+        val calories: Double?,
+        val carbs: Double?,
+        val protein: Double?,
+        val fat: Double?,
+        val sodiumMg: Double?,
+        val totalSugarG: Double?
+    )
+
     data class UiState(
         val query: String = "",
         val isSearching: Boolean = false,
@@ -26,6 +40,7 @@ class UsdaSearchViewModel @Inject constructor(
         val errorMessage: String? = null,
         val lastSearchedQuery: String? = null,
         val pageNumber: Int = 1,
+        val pendingInterpretation: PendingInterpretationState? = null
     )
 
     private val stateFlow = MutableStateFlow(UiState())
@@ -57,7 +72,8 @@ class UsdaSearchViewModel @Inject constructor(
             stateFlow.value = stateFlow.value.copy(
                 isSearching = true,
                 errorMessage = null,
-                results = emptyList()
+                results = emptyList(),
+                pendingInterpretation = null
             )
 
             try {
@@ -75,7 +91,8 @@ class UsdaSearchViewModel @Inject constructor(
                             results = result.candidates,
                             errorMessage = null,
                             lastSearchedQuery = result.query,
-                            pageNumber = result.pageNumber
+                            pageNumber = result.pageNumber,
+                            pendingInterpretation = null
                         )
                     }
 
@@ -86,7 +103,8 @@ class UsdaSearchViewModel @Inject constructor(
                             results = emptyList(),
                             errorMessage = result.reason,
                             lastSearchedQuery = query,
-                            pageNumber = 1
+                            pageNumber = 1,
+                            pendingInterpretation = null
                         )
                     }
 
@@ -97,7 +115,8 @@ class UsdaSearchViewModel @Inject constructor(
                             results = emptyList(),
                             errorMessage = result.message,
                             lastSearchedQuery = query,
-                            pageNumber = 1
+                            pageNumber = 1,
+                            pendingInterpretation = null
                         )
                     }
                 }
@@ -108,7 +127,8 @@ class UsdaSearchViewModel @Inject constructor(
                     results = emptyList(),
                     errorMessage = t.message ?: "USDA search failed.",
                     lastSearchedQuery = query,
-                    pageNumber = 1
+                    pageNumber = 1,
+                    pendingInterpretation = null
                 )
                 MeowLog.e("UsdaSearchViewModel>search>q=$query e=${t.message}")
             }
@@ -128,14 +148,22 @@ class UsdaSearchViewModel @Inject constructor(
         viewModelScope.launch {
             stateFlow.value = stateFlow.value.copy(
                 isImporting = true,
-                errorMessage = null
+                errorMessage = null,
+                pendingInterpretation = null
             )
 
             try {
-                when (val result = importUsdaFoodFromSearchJson(searchJson, selectedFdcId = fdcId)) {
+                when (
+                    val result = importUsdaFoodFromSearchJson(
+                        searchJson = searchJson,
+                        selectedFdcId = fdcId
+                    )
+                ) {
                     is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
                         stateFlow.value = stateFlow.value.copy(
-                            isImporting = false
+                            isImporting = false,
+                            errorMessage = null,
+                            pendingInterpretation = null
                         )
                         snackbarFlow.value = "Imported USDA food."
                     }
@@ -143,7 +171,76 @@ class UsdaSearchViewModel @Inject constructor(
                     is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
                         stateFlow.value = stateFlow.value.copy(
                             isImporting = false,
-                            errorMessage = "This USDA item needs an interpretation choice before it can be imported from search."
+                            errorMessage = null,
+                            pendingInterpretation = result.toPendingInterpretation(searchJson)
+                        )
+                    }
+
+                    is ImportUsdaFoodFromSearchJsonUseCase.Result.Blocked -> {
+                        stateFlow.value = stateFlow.value.copy(
+                            isImporting = false,
+                            errorMessage = result.reason,
+                            pendingInterpretation = null
+                        )
+                    }
+                }
+            } catch (t: Throwable) {
+                stateFlow.value = stateFlow.value.copy(
+                    isImporting = false,
+                    errorMessage = t.message ?: "USDA import failed.",
+                    pendingInterpretation = null
+                )
+                MeowLog.e("UsdaSearchViewModel>importSelected>e=${t.message}")
+            }
+        }
+    }
+
+    fun confirmPendingInterpretationAsPer100() {
+        confirmPendingInterpretation(
+            ImportUsdaFoodFromSearchJsonUseCase.InterpretationChoice.PER_100_STYLE
+        )
+    }
+
+    fun confirmPendingInterpretationAsPerServing() {
+        confirmPendingInterpretation(
+            ImportUsdaFoodFromSearchJsonUseCase.InterpretationChoice.PER_SERVING_STYLE
+        )
+    }
+
+    private fun confirmPendingInterpretation(
+        choice: ImportUsdaFoodFromSearchJsonUseCase.InterpretationChoice
+    ) {
+        val pending = stateFlow.value.pendingInterpretation ?: return
+        if (stateFlow.value.isImporting) return
+
+        viewModelScope.launch {
+            stateFlow.value = stateFlow.value.copy(
+                isImporting = true,
+                errorMessage = null
+            )
+
+            try {
+                when (
+                    val result = importUsdaFoodFromSearchJson(
+                        searchJson = pending.searchJson,
+                        selectedFdcId = pending.selectedFdcId,
+                        forcedInterpretation = choice
+                    )
+                ) {
+                    is ImportUsdaFoodFromSearchJsonUseCase.Result.Success -> {
+                        stateFlow.value = stateFlow.value.copy(
+                            isImporting = false,
+                            errorMessage = null,
+                            pendingInterpretation = null
+                        )
+                        snackbarFlow.value = "Imported USDA food."
+                    }
+
+                    is ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice -> {
+                        stateFlow.value = stateFlow.value.copy(
+                            isImporting = false,
+                            errorMessage = null,
+                            pendingInterpretation = result.toPendingInterpretation(pending.searchJson)
                         )
                     }
 
@@ -159,9 +256,16 @@ class UsdaSearchViewModel @Inject constructor(
                     isImporting = false,
                     errorMessage = t.message ?: "USDA import failed."
                 )
-                MeowLog.e("UsdaSearchViewModel>importSelected>e=${t.message}")
+                MeowLog.e("UsdaSearchViewModel>confirmPendingInterpretation>e=${t.message}")
             }
         }
+    }
+
+    fun dismissPendingInterpretation() {
+        stateFlow.value = stateFlow.value.copy(
+            pendingInterpretation = null,
+            errorMessage = null
+        )
     }
 
     fun clearError() {
@@ -170,5 +274,23 @@ class UsdaSearchViewModel @Inject constructor(
 
     fun snackbarShown() {
         snackbarFlow.value = null
+    }
+
+    private fun ImportUsdaFoodFromSearchJsonUseCase.Result.NeedsInterpretationChoice.toPendingInterpretation(
+        searchJson: String
+    ): PendingInterpretationState {
+        return PendingInterpretationState(
+            searchJson = searchJson,
+            selectedFdcId = fdcId,
+            foodId = foodId,
+            candidateLabel = candidateLabel,
+            servingText = servingText,
+            calories = calories,
+            carbs = carbs,
+            protein = protein,
+            fat = fat,
+            sodiumMg = sodiumMg,
+            totalSugarG = totalSugarG
+        )
     }
 }

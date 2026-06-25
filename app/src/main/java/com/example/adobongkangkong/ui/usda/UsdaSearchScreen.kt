@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +55,16 @@ fun UsdaSearchScreen(
         val msg = snackbarMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
         vm.snackbarShown()
+    }
+
+    state.pendingInterpretation?.let { pending ->
+        UsdaInterpretationChoiceDialog(
+            pending = pending,
+            isImporting = state.isImporting,
+            onUsePer100 = vm::confirmPendingInterpretationAsPer100,
+            onUsePerServing = vm::confirmPendingInterpretationAsPerServing,
+            onDismiss = vm::dismissPendingInterpretation
+        )
     }
 
     Scaffold(
@@ -180,6 +191,90 @@ fun UsdaSearchScreen(
         }
     }
 }
+
+
+@Composable
+private fun UsdaInterpretationChoiceDialog(
+    pending: UsdaSearchViewModel.PendingInterpretationState,
+    isImporting: Boolean,
+    onUsePer100: () -> Unit,
+    onUsePerServing: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = {
+            if (!isImporting) onDismiss()
+        },
+        title = {
+            Text("Interpret USDA nutrients")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = pending.candidateLabel,
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                pending.servingText?.takeIf { it.isNotBlank() }?.let { serving ->
+                    Text("Serving: $serving")
+                }
+
+                val preview = buildList {
+                    pending.calories?.let { add("Calories: ${it.trimForDisplay()}") }
+                    pending.carbs?.let { add("Carbs: ${it.trimForDisplay()} g") }
+                    pending.protein?.let { add("Protein: ${it.trimForDisplay()} g") }
+                    pending.fat?.let { add("Fat: ${it.trimForDisplay()} g") }
+                    pending.sodiumMg?.let { add("Sodium: ${it.trimForDisplay()} mg") }
+                    pending.totalSugarG?.let { add("Sugar: ${it.trimForDisplay()} g") }
+                }.joinToString("\n")
+
+                if (preview.isNotBlank()) {
+                    Text(preview)
+                }
+
+                Text(
+                    "USDA returned serving information and nutrient values. " +
+                            "AK should not guess whether these values are per 100g/per 100mL or per serving. " +
+                            "Choose how to import the nutrient values."
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onUsePer100,
+                enabled = !isImporting
+            ) {
+                Text("PER 100g / 100mL")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = onUsePerServing,
+                    enabled = !isImporting
+                ) {
+                    Text("PER serving")
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isImporting
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+private fun Double.trimForDisplay(): String {
+    return if (this % 1.0 == 0.0) {
+        this.toLong().toString()
+    } else {
+        this.toString()
+    }
+}
+
 
 @Composable
 private fun UsdaSearchResultRow(
