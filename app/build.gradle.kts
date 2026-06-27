@@ -59,6 +59,15 @@ android {
             )
         }
     }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md"
+            )
+        }
+    }
 }
 
 tasks.withType<Test>().configureEach {

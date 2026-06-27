@@ -71,6 +71,18 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
+ * Feature gate for the cooked/prepared batch controls inside Quick Add.
+ *
+ * The cooked batch concept is intentionally paused for now: recipe variants are the active
+ * workflow for one-off recipe changes, and the extra batch controls make the Quick Add sheet
+ * tall enough that the Log button can be pushed below the visible screen.
+ *
+ * Keep the batch plumbing in place. Future devs may revive cooked batches later, likely from
+ * a dedicated recipe workflow, when yield-based cooked logging becomes active again.
+ */
+private const val SHOW_COOKED_BATCH_IN_QUICK_ADD = false
+
+/**
  * Quick-add logging sheet.
  *
  * Shows food search + a compact logging form.
@@ -484,7 +496,9 @@ fun QuickAddBottomSheet(
                     val isPrimaryEnabled =
                         !selected.isRecipe ||
                                 !isLoggingByGrams ||
-                                (state.selectedRecipeVariantId == null && state.selectedBatchId != null)
+                                (SHOW_COOKED_BATCH_IN_QUICK_ADD &&
+                                        state.selectedRecipeVariantId == null &&
+                                        state.selectedBatchId != null)
 
                     Box(Modifier.fillMaxWidth()) {
                         bannerBitmapState.value?.let { bmp ->
@@ -554,33 +568,40 @@ fun QuickAddBottomSheet(
                                         onSelected = vm::onRecipeVariantSelected,
                                     )
 
-                                    if (state.selectedRecipeVariantId == null) {
-                                        Spacer(Modifier.height(16.dp))
-                                        Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
-                                        Spacer(Modifier.height(8.dp))
-                                        BatchSelector(
-                                            batches = state.batches,
-                                            selectedBatchId = state.selectedBatchId,
-                                            onSelected = vm::onBatchSelected,
-                                        )
-                                        if (isLoggingByGrams &&
-                                            state.selectedBatchId == null &&
-                                            state.errorMessage == null
-                                        ) {
+                                    if (SHOW_COOKED_BATCH_IN_QUICK_ADD) {
+                                        /*
+                                         * Cooked batch logging is hidden from Quick Add while the concept is paused.
+                                         * Keep this block nearby instead of deleting it so the workflow can be revived
+                                         * without rediscovering the original recipe/batch UI wiring.
+                                         */
+                                        if (state.selectedRecipeVariantId == null) {
+                                            Spacer(Modifier.height(16.dp))
+                                            Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
+                                            Spacer(Modifier.height(8.dp))
+                                            BatchSelector(
+                                                batches = state.batches,
+                                                selectedBatchId = state.selectedBatchId,
+                                                onSelected = vm::onBatchSelected,
+                                            )
+                                            if (isLoggingByGrams &&
+                                                state.selectedBatchId == null &&
+                                                state.errorMessage == null
+                                            ) {
+                                                Spacer(Modifier.height(8.dp))
+                                                Text(
+                                                    "Select or create a cooked batch to log by grams.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        } else {
                                             Spacer(Modifier.height(8.dp))
                                             Text(
-                                                "Select or create a cooked batch to log by grams.",
+                                                "Variant logs use the variant ingredient and serving rules. Cooked batch selection is disabled for variants for now.",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
-                                    } else {
-                                        Spacer(Modifier.height(8.dp))
-                                        Text(
-                                            "Variant logs use the variant ingredient and serving rules. Cooked batch selection is disabled for variants for now.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
                                     }
                                 }
                             }
@@ -590,7 +611,7 @@ fun QuickAddBottomSheet(
 
                 Spacer(Modifier.height(12.dp))
 
-                if (state.isCreateBatchDialogOpen) {
+                if (SHOW_COOKED_BATCH_IN_QUICK_ADD && state.isCreateBatchDialogOpen) {
                     CreateBatchDialog(
                         yieldGramsText = state.yieldGramsText,
                         servingsYieldText = state.servingsYieldText,
