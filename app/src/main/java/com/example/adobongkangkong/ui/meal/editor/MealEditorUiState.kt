@@ -2,6 +2,7 @@ package com.example.adobongkangkong.ui.meal.editor
 
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.model.MacroTotals
+import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
 
 /**
  * Shared editor UI state used by planned meal editor and meal template editor.
@@ -55,11 +56,60 @@ data class MealEditorUiState(
     data class Item(
         val lineId: String,
         val id: Long?,
+
+        /**
+         * Legacy food-shaped fields kept so the shared editor screen and template editor
+         * do not need a broad rewrite yet.
+         *
+         * For sourceType == FOOD:
+         * - foodId == sourceId
+         * - foodName is the food display name
+         *
+         * For sourceType == RECIPE:
+         * - sourceId is the RecipeEntity id
+         * - foodName is the base recipe display name
+         * - foodId is compatibility-only and should not be used for saving the planned item
+         *
+         * New save/display logic should prefer sourceType/sourceId/recipeVariantId.
+         */
         val foodId: Long,
         val foodName: String,
+
         val servings: String,
         val grams: Double? = null,
         val milliliters: Double? = null,
+
+        /**
+         * Generic planned item identity.
+         *
+         * Room persists this as:
+         * - PlannedItemEntity.type
+         * - PlannedItemEntity.refId
+         * - PlannedItemEntity.recipeVariantId
+         *
+         * Default values keep existing food-only construction working.
+         */
+        val sourceType: PlannedItemSource = PlannedItemSource.FOOD,
+        val sourceId: Long = foodId,
+
+        /**
+         * Optional selected recipe variant.
+         *
+         * Meaningful only when sourceType == RECIPE.
+         * Null means base recipe.
+         */
+        val recipeVariantId: Long? = null,
+        val recipeVariantName: String? = null,
+
+        /**
+         * Selectable recipe variants for this item.
+         *
+         * Only populated when sourceType == RECIPE.
+         * The first/default option should usually be:
+         * - id = null
+         * - name = "Base recipe"
+         */
+        val recipeVariantOptions: List<RecipeVariantOption> = emptyList(),
 
         /**
          * Derived preview-only fields.
@@ -72,6 +122,21 @@ data class MealEditorUiState(
         val macroSummaryLine: String? = null,
         val criticalNutrients: List<CriticalNutrientPreview> = emptyList(),
         val hasUnknownCriticalNutrients: Boolean = false
+    ) {
+        val isRecipe: Boolean
+            get() = sourceType == PlannedItemSource.RECIPE
+
+        val selectedVariantLabel: String?
+            get() = recipeVariantOptions
+                .firstOrNull { it.id == recipeVariantId }
+                ?.name
+                ?.takeIf { it.isNotBlank() }
+                ?: recipeVariantName?.takeIf { it.isNotBlank() }
+    }
+
+    data class RecipeVariantOption(
+        val id: Long?,
+        val name: String
     )
 
     /**
@@ -130,4 +195,9 @@ data class MealEditorUiState(
  * - Do not persist or serialize these preview fields as authoritative nutrition.
  * - The owning VM must recompute them from authoritative food data + current editor inputs.
  * - Unknown nutrient values must remain nullable so future UI can distinguish unknown from zero.
+ *
+ * Recipe variant reminder:
+ * - MealEditorUiState.Item now has generic sourceType/sourceId fields.
+ * - Keep foodId/foodName for compatibility while migrating the editor away from food-only logic.
+ * - For planned RECIPE rows, sourceId is RecipeEntity.id and recipeVariantId is optional.
  */

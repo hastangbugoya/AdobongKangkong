@@ -16,6 +16,12 @@ import javax.inject.Inject
  * Transactional for idempotency:
  * - If anything fails, meal insert is rolled back and EnsureSeriesOccurrences can safely retry.
  * - Only used when EnsureSeriesOccurrences has determined the meal does not already exist.
+ *
+ * Recipe variant rule:
+ * - FOOD template rows must create FOOD planned items with recipeVariantId = null.
+ * - RECIPE template rows must copy recipeVariantId into PlannedItemEntity.
+ * - RECIPE_BATCH is intentionally not represented at the series-template layer while
+ *   cooked/prepared batch planning is paused.
  */
 class CreatePlannedMealFromSeriesTemplateUseCase @Inject constructor(
     private val db: NutriDatabase,
@@ -48,13 +54,22 @@ class CreatePlannedMealFromSeriesTemplateUseCase @Inject constructor(
         // Copy template → planned_items ONLY for this newly created meal.
         // This will not run for existing meals (EnsureSeriesOccurrences must enforce that).
         for (t in templates) {
+            val (type, refId, recipeVariantId) = when {
+                t.foodId != null && t.recipeId == null -> {
+                    Triple(
+                        PlannedItemSource.FOOD,
+                        t.foodId,
+                        null
+                    )
+                }
 
-            val (type, refId) = when {
-                t.foodId != null && t.recipeId == null ->
-                    PlannedItemSource.FOOD to t.foodId
-
-                t.recipeId != null && t.foodId == null ->
-                    PlannedItemSource.RECIPE to t.recipeId
+                t.recipeId != null && t.foodId == null -> {
+                    Triple(
+                        PlannedItemSource.RECIPE,
+                        t.recipeId,
+                        t.recipeVariantId
+                    )
+                }
 
                 else -> error(
                     "Invalid PlannedSeriesItemEntity id=${t.id}: " +
@@ -65,7 +80,8 @@ class CreatePlannedMealFromSeriesTemplateUseCase @Inject constructor(
             val item = PlannedItemEntity(
                 mealId = mealId,
                 type = type,
-                refId = refId!!,
+                refId = refId,
+                recipeVariantId = recipeVariantId,
                 grams = t.grams,
                 servings = t.servings,
                 sortOrder = t.sortOrder

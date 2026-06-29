@@ -18,7 +18,8 @@ import com.example.adobongkangkong.domain.planner.model.PlannedItemSource
     ],
     indices = [
         Index(value = ["mealId"]),
-        Index(value = ["mealId", "sortOrder"])
+        Index(value = ["mealId", "sortOrder"]),
+        Index(value = ["recipeVariantId"])
     ]
 )
 data class PlannedItemEntity(
@@ -30,20 +31,40 @@ data class PlannedItemEntity(
     /** FOOD | RECIPE | RECIPE_BATCH */
     val type: PlannedItemSource,
 
-
     /**
-     * Planned item identity rules (Phase 1):
-     * - type=FOOD        => refId = foods.id
-     * - type=RECIPE      => refId = recipes.id
-     * - type=RECIPE_BATCH=> refId = recipe_batches.id
+     * Planned item identity rules:
+     * - type=FOOD         => refId = foods.id
+     * - type=RECIPE       => refId = recipes.id
+     * - type=RECIPE_BATCH => refId = recipe_batches.id
+     *
+     * Recipe variant rule:
+     * - recipeVariantId is meaningful only when type == RECIPE.
+     * - recipeVariantId == null means use the base recipe.
+     * - recipeVariantId != null means use that selected recipe variant for planner display,
+     *   planner nutrition preview, and log snapshot creation.
+     *
+     * Do not replace refId with recipeVariantId.
+     * refId remains the base item identity; recipeVariantId is only an optional modifier.
      *
      * NOTE:
-     * - Recipes have a Food row (RecipeEntity.foodId). For logging/export reconciliation,
-     *   logs should use the recipe's Food.stableId (not recipeId).
-     * - Batch logs should also reconcile to the recipe Food.stableId, while storing recipeBatchId
-     *   for cooked-yield context.
+     * - Recipes have a Food row through RecipeEntity.foodId.
+     * - Logs should still reconcile to the recipe Food.stableId.
+     * - Variant selection changes nutrition resolution/snapshot behavior, not the base recipe identity.
+     * - RECIPE_BATCH is currently paused/shelved; do not expand variant logic into batch logic yet.
      */
     val refId: Long,
+
+    /**
+     * Optional recipe variant selected for this planned recipe item.
+     *
+     * Valid only when type == PlannedItemSource.RECIPE.
+     * Must be null for FOOD.
+     * Should remain null for RECIPE_BATCH while cooked-batch planning is paused.
+     *
+     * This is nullable so all existing planned items migrate cleanly:
+     * null means "base recipe" for recipe rows and "not applicable" for non-recipe rows.
+     */
+    val recipeVariantId: Long? = null,
 
     val grams: Double? = null,
     val servings: Double? = null,

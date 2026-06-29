@@ -5,6 +5,8 @@ import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.data.local.db.dao.RecipeVariantDao
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
+import com.example.adobongkangkong.domain.repository.PlannedItemRepository
+import com.example.adobongkangkong.domain.repository.PlannedSeriesItemRepository
 import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -14,6 +16,8 @@ import javax.inject.Singleton
 class RecipeVariantRepositoryImpl @Inject constructor(
     private val db: NutriDatabase,
     private val recipeVariantDao: RecipeVariantDao,
+    private val plannedItems: PlannedItemRepository,
+    private val plannedSeriesItems: PlannedSeriesItemRepository,
 ) : RecipeVariantRepository {
 
     override fun observeVariantsForRecipe(
@@ -90,6 +94,27 @@ class RecipeVariantRepositoryImpl @Inject constructor(
 
             require(variant.isArchived) {
                 "Only archived variants can be permanently deleted."
+            }
+
+            val plannedItemCount = plannedItems.countByRecipeVariantId(variantId)
+            val plannedSeriesItemCount = plannedSeriesItems.countByRecipeVariantId(variantId)
+            val totalPlannerReferences = plannedItemCount + plannedSeriesItemCount
+
+            require(totalPlannerReferences == 0) {
+                buildString {
+                    append("Cannot permanently delete this variant because it is still used by the planner.")
+                    if (plannedItemCount > 0) {
+                        append(" Planned meals: ")
+                        append(plannedItemCount)
+                        append(".")
+                    }
+                    if (plannedSeriesItemCount > 0) {
+                        append(" Recurring meal templates: ")
+                        append(plannedSeriesItemCount)
+                        append(".")
+                    }
+                    append(" Keep it archived instead.")
+                }
             }
 
             recipeVariantDao.deleteChangesForVariant(variantId)

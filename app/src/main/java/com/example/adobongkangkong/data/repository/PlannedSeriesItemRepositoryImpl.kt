@@ -24,4 +24,7 @@ class PlannedSeriesItemRepositoryImpl @Inject constructor(
 
     override suspend fun deleteById(id: Long) =
         dao.deleteById(id)
+
+    override suspend fun countByRecipeVariantId(recipeVariantId: Long): Int =
+        dao.countByRecipeVariantId(recipeVariantId)
 }

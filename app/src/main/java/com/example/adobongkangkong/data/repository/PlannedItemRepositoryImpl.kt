@@ -36,4 +36,7 @@ class PlannedItemRepositoryImpl @Inject constructor(
 
     override suspend fun getMaxSortOrderForMeal(mealId: Long): Int =
         dao.getMaxSortOrderForMeal(mealId)
+
+    override suspend fun countByRecipeVariantId(recipeVariantId: Long): Int =
+        dao.countByRecipeVariantId(recipeVariantId)
 }

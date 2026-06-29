@@ -23,4 +23,5 @@ interface PlannedItemRepository {
 
     suspend fun getMaxSortOrderForMeal(mealId: Long): Int
 
+    suspend fun countByRecipeVariantId(recipeVariantId: Long): Int
 }

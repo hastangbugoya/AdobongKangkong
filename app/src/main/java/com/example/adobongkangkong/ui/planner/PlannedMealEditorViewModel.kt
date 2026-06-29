@@ -34,6 +34,14 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.adobongkangkong.domain.nutrition.MacroKeys
+import com.example.adobongkangkong.domain.nutrition.NutrientKey
+import com.example.adobongkangkong.domain.nutrition.NutrientMap
+import com.example.adobongkangkong.domain.repository.RecipeHeader
+import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
+import com.example.adobongkangkong.domain.usecase.recipevariant.ComputeRecipeVariantNutritionUseCase
+import kotlinx.coroutines.flow.first
 
 /**
  * Planned Meal editor ViewModel.
@@ -56,6 +64,9 @@ class PlannedMealEditorViewModel @Inject constructor(
     private val mealTemplateItems: MealTemplateItemRepository,
     private val getFoodNutrients: GetFoodNutrientsWithMetaUseCase,
     private val userPinnedNutrientRepository: UserPinnedNutrientRepository,
+    private val recipes: RecipeRepository,
+    private val recipeVariants: RecipeVariantRepository,
+    private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase,
 ) : ViewModel(), MealEditorContract {
 
     private val _state = MutableStateFlow(
@@ -91,6 +102,10 @@ class PlannedMealEditorViewModel @Inject constructor(
     // Simple in-VM caches to reduce repeat DB reads during rebuilds.
     private val foodCache = mutableMapOf<Long, Food?>()
     private val nutrientCache = mutableMapOf<Long, List<FoodNutrientWithMetaRow>>()
+
+    private val recipeHeaderCache = mutableMapOf<Long, RecipeHeader?>()
+
+    private val recipeVariantNameCache = mutableMapOf<Long, String?>()
 
     init {
         viewModelScope.launch {
@@ -177,7 +192,11 @@ class PlannedMealEditorViewModel @Inject constructor(
                             foodName = foodName,
                             servings = entity.servings?.toString() ?: "",
                             grams = entity.grams,
-                            milliliters = null
+                            milliliters = null,
+                            sourceType = PlannedItemSource.FOOD,
+                            sourceId = entity.refId,
+                            recipeVariantId = null,
+                            recipeVariantName = null
                         )
                     }
 
@@ -225,16 +244,7 @@ class PlannedMealEditorViewModel @Inject constructor(
                 val existing = plannedItems.getItemsForMeal(mealId).sortedBy { it.sortOrder }
 
                 val uiItems = existing.map { entity ->
-                    val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
-                    MealEditorUiState.Item(
-                        lineId = UUID.randomUUID().toString(),
-                        id = entity.id,
-                        foodId = entity.refId,
-                        foodName = foodName,
-                        servings = entity.servings?.toString() ?: "",
-                        grams = entity.grams,
-                        milliliters = null
-                    )
+                    entity.toUiItem()
                 }
 
                 val resolvedName = if (meal != null) {
@@ -268,20 +278,95 @@ class PlannedMealEditorViewModel @Inject constructor(
 
     override fun addFood(foodId: Long) {
         viewModelScope.launch {
-            val foodName = getCachedFood(foodId)?.name ?: "Food #$foodId"
+            val pickedFood = getCachedFood(foodId)
 
-            val newItem = MealEditorUiState.Item(
-                lineId = UUID.randomUUID().toString(),
-                id = null,
-                foodId = foodId,
-                foodName = foodName,
+            val recipeHeader = recipes.getRecipeByFoodId(foodId)
+
+            val newItem = if (pickedFood?.isRecipe == true && recipeHeader != null) {
+                buildRecipeUiItem(
+                    entityId = null,
+                    recipeId = recipeHeader.recipeId,
+                    recipeVariantId = null,
+                    servings = "1",
+                    grams = null
+                )
+            } else {
+                val foodName = pickedFood?.name ?: "Food #$foodId"
+
+                MealEditorUiState.Item(
+                    lineId = UUID.randomUUID().toString(),
+                    id = null,
+                    foodId = foodId,
+                    foodName = foodName,
+                    servings = "1",
+                    grams = null,
+                    milliliters = null,
+                    sourceType = PlannedItemSource.FOOD,
+                    sourceId = foodId,
+                    recipeVariantId = null,
+                    recipeVariantName = null
+                )
+            }
+
+            _state.value = _state.value.copy(
+                items = _state.value.items + newItem,
+                errorMessage = null,
+                isDirty = true
+            )
+
+            rebuildDerivedNutrition()
+        }
+    }
+
+    override fun addRecipe(
+        recipeId: Long,
+        recipeVariantId: Long?,
+    ) {
+        viewModelScope.launch {
+            val newItem = buildRecipeUiItem(
+                entityId = null,
+                recipeId = recipeId,
+                recipeVariantId = recipeVariantId,
                 servings = "1",
                 grams = null,
-                milliliters = null
             )
 
             _state.value = _state.value.copy(
                 items = _state.value.items + newItem,
+                errorMessage = null,
+                isDirty = true
+            )
+
+            rebuildDerivedNutrition()
+        }
+    }
+
+    override fun setRecipeVariant(
+        lineId: String,
+        recipeVariantId: Long?,
+    ) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(
+                items = _state.value.items.map { item ->
+                    if (item.lineId != lineId || item.sourceType != PlannedItemSource.RECIPE) {
+                        item
+                    } else {
+                        val selectedName = if (recipeVariantId == null) {
+                            null
+                        } else {
+                            item.recipeVariantOptions
+                                .firstOrNull { it.id == recipeVariantId }
+                                ?.name
+                                ?.takeIf { it.isNotBlank() }
+                                ?: getCachedRecipeVariantName(recipeVariantId)
+                        }
+
+                        item.copy(
+                            recipeVariantId = recipeVariantId,
+                            recipeVariantName = selectedName
+                        )
+                    }
+                },
                 errorMessage = null,
                 isDirty = true
             )
@@ -400,8 +485,13 @@ class PlannedMealEditorViewModel @Inject constructor(
                         PlannedItemEntity(
                             id = 0L,
                             mealId = resolvedMealId,
-                            type = PlannedItemSource.FOOD,
-                            refId = ui.foodId,
+                            type = ui.sourceType,
+                            refId = ui.sourceId,
+                            recipeVariantId = if (ui.sourceType == PlannedItemSource.RECIPE) {
+                                ui.recipeVariantId
+                            } else {
+                                null
+                            },
                             grams = ui.grams,
                             servings = ui.servings.toDoubleOrNull(),
                             sortOrder = index
@@ -446,16 +536,7 @@ class PlannedMealEditorViewModel @Inject constructor(
                 val existing = plannedItems.getItemsForMeal(mealId).sortedBy { it.sortOrder }
 
                 val uiItems = existing.map { entity ->
-                    val foodName = getCachedFood(entity.refId)?.name ?: "Food #${entity.refId}"
-                    MealEditorUiState.Item(
-                        lineId = UUID.randomUUID().toString(),
-                        id = entity.id,
-                        foodId = entity.refId,
-                        foodName = foodName,
-                        servings = entity.servings?.toString() ?: "",
-                        grams = entity.grams,
-                        milliliters = null
-                    )
+                    entity.toUiItem()
                 }
 
                 _state.value = _state.value.copy(
@@ -470,6 +551,177 @@ class PlannedMealEditorViewModel @Inject constructor(
                 _state.value = _state.value.copy(errorMessage = t.message ?: "Discard failed")
             }
         }
+    }
+
+    private suspend fun PlannedItemEntity.toUiItem(): MealEditorUiState.Item {
+        return when (type) {
+            PlannedItemSource.FOOD -> {
+                val foodName = getCachedFood(refId)?.name ?: "Food #$refId"
+
+                MealEditorUiState.Item(
+                    lineId = UUID.randomUUID().toString(),
+                    id = id,
+                    foodId = refId,
+                    foodName = foodName,
+                    servings = servings?.toString() ?: "",
+                    grams = grams,
+                    milliliters = null,
+                    sourceType = PlannedItemSource.FOOD,
+                    sourceId = refId,
+                    recipeVariantId = null,
+                    recipeVariantName = null
+                )
+            }
+
+            PlannedItemSource.RECIPE -> {
+                buildRecipeUiItem(
+                    entityId = id,
+                    recipeId = refId,
+                    recipeVariantId = recipeVariantId,
+                    servings = servings?.toString() ?: "",
+                    grams = grams,
+                )
+            }
+
+            PlannedItemSource.RECIPE_BATCH -> {
+                MealEditorUiState.Item(
+                    lineId = UUID.randomUUID().toString(),
+                    id = id,
+                    foodId = 0L,
+                    foodName = "Recipe batch #$refId",
+                    servings = servings?.toString() ?: "",
+                    grams = grams,
+                    milliliters = null,
+                    sourceType = PlannedItemSource.RECIPE_BATCH,
+                    sourceId = refId,
+                    recipeVariantId = null,
+                    recipeVariantName = null
+                )
+            }
+        }
+    }
+
+    private suspend fun buildRecipeUiItem(
+        entityId: Long?,
+        recipeId: Long,
+        recipeVariantId: Long?,
+        servings: String,
+        grams: Double?,
+    ): MealEditorUiState.Item {
+        val header = getCachedRecipeHeader(recipeId)
+        val recipeFoodId = header?.foodId ?: 0L
+        val recipeName = if (recipeFoodId > 0L) {
+            getCachedFood(recipeFoodId)?.name ?: "Recipe #$recipeId"
+        } else {
+            "Recipe #$recipeId"
+        }
+
+        val variantOptions = getRecipeVariantOptions(
+            recipeFoodId = recipeFoodId,
+            selectedVariantId = recipeVariantId
+        )
+
+        val selectedVariantName = if (recipeVariantId == null) {
+            null
+        } else {
+            variantOptions
+                .firstOrNull { it.id == recipeVariantId }
+                ?.name
+                ?.takeIf { it.isNotBlank() }
+                ?: getCachedRecipeVariantName(recipeVariantId)
+        }
+
+        return MealEditorUiState.Item(
+            lineId = UUID.randomUUID().toString(),
+            id = entityId,
+            foodId = recipeFoodId,
+            foodName = recipeName,
+            servings = servings,
+            grams = grams,
+            milliliters = null,
+            sourceType = PlannedItemSource.RECIPE,
+            sourceId = recipeId,
+            recipeVariantId = recipeVariantId,
+            recipeVariantName = selectedVariantName,
+            recipeVariantOptions = variantOptions
+        )
+    }
+
+    private suspend fun getRecipeVariantOptions(
+        recipeFoodId: Long,
+        selectedVariantId: Long?,
+    ): List<MealEditorUiState.RecipeVariantOption> {
+        val baseOption = MealEditorUiState.RecipeVariantOption(
+            id = null,
+            name = "Base recipe"
+        )
+
+        if (recipeFoodId <= 0L) {
+            return listOf(baseOption)
+        }
+
+        val activeOptions = recipeVariants
+            .observeActiveVariantsForRecipe(recipeFoodId)
+            .first()
+            .map { variant ->
+                MealEditorUiState.RecipeVariantOption(
+                    id = variant.id,
+                    name = variant.name
+                )
+            }
+
+        val withBase = listOf(baseOption) + activeOptions
+
+        if (selectedVariantId == null || withBase.any { it.id == selectedVariantId }) {
+            return withBase
+        }
+
+        /*
+         * If an older planned item references an archived variant, keep that variant visible
+         * in the editor so the row can display and preserve the existing selection.
+         *
+         * New selection choices still come from active variants.
+         */
+        val selectedArchivedOption = recipeVariants
+            .getVariantById(selectedVariantId)
+            ?.let { variant ->
+                MealEditorUiState.RecipeVariantOption(
+                    id = variant.id,
+                    name = if (variant.isArchived) {
+                        "${variant.name} (archived)"
+                    } else {
+                        variant.name
+                    }
+                )
+            }
+
+        return if (selectedArchivedOption != null) {
+            withBase + selectedArchivedOption
+        } else {
+            withBase
+        }
+    }
+
+    private suspend fun getCachedRecipeHeader(recipeId: Long): RecipeHeader? {
+        if (recipeHeaderCache.containsKey(recipeId)) return recipeHeaderCache[recipeId]
+        val loaded = recipes.getHeaderByRecipeId(recipeId)
+        recipeHeaderCache[recipeId] = loaded
+        return loaded
+    }
+
+    private suspend fun getCachedRecipeVariantName(recipeVariantId: Long?): String? {
+        recipeVariantId ?: return null
+
+        if (recipeVariantNameCache.containsKey(recipeVariantId)) {
+            return recipeVariantNameCache[recipeVariantId]
+        }
+
+        val loaded = recipeVariants.getVariantById(recipeVariantId)
+            ?.name
+            ?.takeIf { it.isNotBlank() }
+
+        recipeVariantNameCache[recipeVariantId] = loaded
+        return loaded
     }
 
     private suspend fun getCachedFood(foodId: Long): Food? {
@@ -497,18 +749,35 @@ class PlannedMealEditorViewModel @Inject constructor(
     private fun rebuildDerivedNutrition() {
         viewModelScope.launch {
             val current = _state.value
-            val foodIds = current.items.map { it.foodId }
+            val foodIds = current.items
+                .map { it.foodId }
+                .filter { it > 0L }
+
             prefetchFor(foodIds)
 
-            val updatedItems = current.items.map { item ->
-                val food = getCachedFood(item.foodId)
-                val nutrients = getCachedNutrients(item.foodId)
+            val updatedItems = mutableListOf<MealEditorUiState.Item>()
 
-                val macros = computeMacros(item = item, food = food, rows = nutrients)
+            for (item in current.items) {
+                val variantNutrients = scaleRecipeVariantNutrients(item)
+
+                val food = if (item.foodId > 0L) getCachedFood(item.foodId) else null
+                val nutrients = if (item.foodId > 0L) getCachedNutrients(item.foodId) else emptyList()
+
+                val macros = if (variantNutrients != null) {
+                    computeMacrosFromNutrientMap(variantNutrients)
+                } else {
+                    computeMacros(item = item, food = food, rows = nutrients)
+                }
+
                 val macroLine = buildMacroSummaryLine(macros)
-                val critical = computeCritical(item = item, food = food, rows = nutrients)
 
-                item.copy(
+                val critical = if (variantNutrients != null) {
+                    computeCriticalFromNutrientMap(variantNutrients)
+                } else {
+                    computeCritical(item = item, food = food, rows = nutrients)
+                }
+
+                updatedItems += item.copy(
                     effectiveQuantityText = buildQuantityText(item, food),
                     macroPreview = macros,
                     macroSummaryLine = macroLine,
@@ -531,6 +800,58 @@ class PlannedMealEditorViewModel @Inject constructor(
                     hasUnknownCriticalNutrients = hasUnknownCritical
                 )
             }
+        }
+    }
+
+    private suspend fun scaleRecipeVariantNutrients(
+        item: MealEditorUiState.Item,
+    ): NutrientMap? {
+        if (item.sourceType != PlannedItemSource.RECIPE) return null
+
+        val variantId = item.recipeVariantId ?: return null
+        val computed = computeRecipeVariantNutrition(variantId)
+
+        item.grams
+            ?.takeIf { it > 0.0 }
+            ?.let { grams ->
+                return computed.perCookedGram?.scaledBy(grams)
+            }
+
+        val servings = item.servings
+            .toDoubleOrNull()
+            ?.takeIf { it > 0.0 }
+
+        if (servings != null) {
+            return computed.perServing?.scaledBy(servings)
+        }
+
+        return null
+    }
+
+    private fun computeMacrosFromNutrientMap(
+        nutrients: NutrientMap,
+    ): MealEditorUiState.MacroPreview {
+        return MealEditorUiState.MacroPreview(
+            caloriesKcal = nutrients[MacroKeys.CALORIES],
+            proteinG = nutrients[MacroKeys.PROTEIN],
+            carbsG = nutrients[MacroKeys.CARBS],
+            fatG = nutrients[MacroKeys.FAT]
+        )
+    }
+
+    private fun computeCriticalFromNutrientMap(
+        nutrients: NutrientMap,
+    ): List<MealEditorUiState.CriticalNutrientPreview> {
+        return criticalNutrientKeys.map { code ->
+            val key = NutrientKey(code)
+
+            MealEditorUiState.CriticalNutrientPreview(
+                nutrientId = 0L,
+                nutrientName = code,
+                unitName = null,
+                value = nutrients[key],
+                isMissing = false
+            )
         }
     }
 

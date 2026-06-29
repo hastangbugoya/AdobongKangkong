@@ -15,7 +15,7 @@ import androidx.room.PrimaryKey
  * occurrence, these rows are copied into planned_items for that meal.
  *
  * --------------------------------------------
- * FOOD / RECIPE / RECIPE-BATCH HANDLING MODEL
+ * FOOD / RECIPE / VARIANT HANDLING MODEL
  * --------------------------------------------
  *
  * Exactly one of:
@@ -27,22 +27,26 @@ import androidx.room.PrimaryKey
  *
  * 1) Food (foodId != null)
  *    - References a concrete FoodEntity.
- *    - When occurrence is created, this is copied directly into planned_items.
+ *    - When an occurrence is created, this is copied into planned_items as:
+ *      type = FOOD, refId = foodId, recipeVariantId = null.
  *
  * 2) Recipe (recipeId != null)
- *    - References a Recipe (logical definition).
- *    - At logging time, the user must select or create a RecipeBatch.
- *    - Recipe batches produce a snapshot Food (immutable nutrition at cook time).
+ *    - References a RecipeEntity logical recipe definition.
+ *    - recipeVariantId may optionally point to a RecipeVariantEntity.
+ *    - recipeVariantId == null means use the base recipe.
+ *    - recipeVariantId != null means future generated occurrences should use that
+ *      selected variant for display, planner nutrition preview, and log snapshot creation.
  *
- * 3) Recipe Batch (NOT stored here)
- *    - We do NOT store recipeBatchId at the series template layer.
- *    - Batches are runtime constructs created when cooking.
- *    - Logging resolves recipe → batch → snapshot food.
+ * 3) Recipe Batch
+ *    - RECIPE_BATCH is intentionally NOT stored at the recurring template layer.
+ *    - Cooked/prepared batch planning is currently paused/shelved.
+ *    - Do not expand batch behavior here unless the batch concept is deliberately revived.
  *
  * Rationale:
  * - Series templates represent intent ("have chili every Monday").
- * - Batches represent cooked instances ("this specific pot of chili").
- * - Batches must not be pre-baked into recurrence rules.
+ * - Recipe variants represent planned recipe modifications ("less oil version").
+ * - Existing generated meals are never overwritten; variant changes to a template only affect
+ *   future occurrences that have not yet been materialized.
  *
  * --------------------------------------------
  * Quantity Model
@@ -81,7 +85,8 @@ import androidx.room.PrimaryKey
     ],
     indices = [
         Index(value = ["seriesId"]),
-        Index(value = ["seriesId", "sortOrder", "id"])
+        Index(value = ["seriesId", "sortOrder", "id"]),
+        Index(value = ["recipeVariantId"])
     ]
 )
 data class PlannedSeriesItemEntity(
@@ -91,9 +96,20 @@ data class PlannedSeriesItemEntity(
     val seriesId: Long,
 
     // Mirror planned_items “what is this item?” fields.
-    // Keep as nullable longs (typical pattern: exactly one is non-null).
+    // Keep as nullable longs: exactly one should be non-null.
     val foodId: Long? = null,
     val recipeId: Long? = null,
+
+    /**
+     * Optional recipe variant selected for this recurring recipe template item.
+     *
+     * Valid only when recipeId != null and foodId == null.
+     * Null means the base recipe.
+     *
+     * When this template creates a concrete planned item, this value must be copied into
+     * PlannedItemEntity.recipeVariantId.
+     */
+    val recipeVariantId: Long? = null,
 
     // Quantity (mirror planned_items)
     val grams: Double? = null,

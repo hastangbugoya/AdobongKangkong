@@ -3,6 +3,7 @@ package com.example.adobongkangkong.domain.planner.usecase
 import com.example.adobongkangkong.data.local.db.dao.FoodDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeVariantDao
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
@@ -151,7 +152,8 @@ class ObservePlannedDaysUseCase @Inject constructor(
     // Title resolution (derived) — no planner schema changes
     private val foodDao: FoodDao,
     private val recipeBatchDao: RecipeBatchDao,
-    private val recipeDao: RecipeDao
+    private val recipeDao: RecipeDao,
+    private val recipeVariantDao: RecipeVariantDao
 ) {
     /**
      * Observe a derived list of [PlannedDay] for an inclusive ISO date range (yyyy-MM-dd).
@@ -225,7 +227,7 @@ class ObservePlannedDaysUseCase @Inject constructor(
                                 .thenBy { it.meal.id }
                         )
 
-                    val titleByItemId: Map<Long, String> = resolveItemTitles(rows)
+                    val labelsByItemId: Map<Long, PlannedItemLabels> = resolveItemLabels(rows)
 
                     val iousByDate: Map<LocalDate, List<Iou>> =
                         iouEntities
@@ -239,7 +241,7 @@ class ObservePlannedDaysUseCase @Inject constructor(
                             val plannedMeals: List<PlannedMeal> = mealsForDayRows
                                 .sortedWith(compareBy<MealAndItems> { it.meal.sortOrder }.thenBy { it.meal.id })
                                 .map { (mealEntity, itemEntities) ->
-                                    mapMeal(mealEntity, itemEntities, titleByItemId)
+                                    mapMeal(mealEntity, itemEntities, labelsByItemId)
                                 }
 
                             PlannedDay(
@@ -307,10 +309,15 @@ class ObservePlannedDaysUseCase @Inject constructor(
         val items: List<PlannedItemEntity>
     )
 
+    private data class PlannedItemLabels(
+        val title: String?,
+        val variantTitle: String?
+    )
+
     private fun mapMeal(
         meal: PlannedMealEntity,
         itemEntities: List<PlannedItemEntity>,
-        titleByItemId: Map<Long, String>
+        labelsByItemId: Map<Long, PlannedItemLabels>
     ): PlannedMeal {
         val parsedDate = LocalDate.parse(meal.date)
         val slot = meal.slot
@@ -318,7 +325,7 @@ class ObservePlannedDaysUseCase @Inject constructor(
         val plannedItems: List<PlannedItem> = itemEntities
             .sortedWith(compareBy<PlannedItemEntity> { it.sortOrder }.thenBy { it.id })
             .map { entity ->
-                mapItem(entity, titleByItemId[entity.id])
+                mapItem(entity, labelsByItemId[entity.id])
             }
 
         val title: String? =
@@ -343,18 +350,27 @@ class ObservePlannedDaysUseCase @Inject constructor(
         )
     }
 
-    private fun mapItem(entity: PlannedItemEntity, resolvedTitle: String?): PlannedItem {
+    private fun mapItem(
+        entity: PlannedItemEntity,
+        labels: PlannedItemLabels?
+    ): PlannedItem {
         return PlannedItem(
             id = entity.id,
             sourceType = entity.type,
             sourceId = entity.refId,
             qtyGrams = entity.grams,
             qtyServings = entity.servings,
-            title = resolvedTitle
+            title = labels?.title,
+            recipeVariantId = if (entity.type == PlannedItemSource.RECIPE) {
+                entity.recipeVariantId
+            } else {
+                null
+            },
+            variantTitle = labels?.variantTitle
         )
     }
 
-    private suspend fun resolveItemTitles(rows: List<MealAndItems>): Map<Long, String> {
+    private suspend fun resolveItemLabels(rows: List<MealAndItems>): Map<Long, PlannedItemLabels> {
         val allItems: List<PlannedItemEntity> = rows.flatMap { it.items }
 
         val foodIds: List<Long> = allItems
@@ -378,6 +394,13 @@ class ObservePlannedDaysUseCase @Inject constructor(
             .distinct()
             .toList()
 
+        val recipeVariantIds: List<Long> = allItems
+            .asSequence()
+            .filter { it.type == PlannedItemSource.RECIPE }
+            .mapNotNull { it.recipeVariantId }
+            .distinct()
+            .toList()
+
         val foodTitleById: Map<Long, String> =
             if (foodIds.isEmpty()) emptyMap()
             else foodDao.getByIds(foodIds).associate { it.id to it.name }
@@ -395,13 +418,33 @@ class ObservePlannedDaysUseCase @Inject constructor(
             recipeTitleByBatchId[batchId] = recipe.name
         }
 
+        val variantTitleById: MutableMap<Long, String> = mutableMapOf()
+        for (variantId in recipeVariantIds) {
+            val variant = recipeVariantDao.getVariantById(variantId) ?: continue
+            variantTitleById[variantId] = variant.name
+        }
+
         return allItems.associateNotNull { item ->
             val title = when (item.type) {
                 PlannedItemSource.FOOD -> foodTitleById[item.refId]
                 PlannedItemSource.RECIPE -> recipeTitleById[item.refId]
                 PlannedItemSource.RECIPE_BATCH -> recipeTitleByBatchId[item.refId]
             }
-            if (title.isNullOrBlank()) null else (item.id to title)
+
+            val variantTitle = if (item.type == PlannedItemSource.RECIPE) {
+                item.recipeVariantId?.let { variantTitleById[it] }
+            } else {
+                null
+            }
+
+            if (title.isNullOrBlank() && variantTitle.isNullOrBlank()) {
+                null
+            } else {
+                item.id to PlannedItemLabels(
+                    title = title?.takeIf { it.isNotBlank() },
+                    variantTitle = variantTitle?.takeIf { it.isNotBlank() }
+                )
+            }
         }
     }
 

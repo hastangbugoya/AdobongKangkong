@@ -14,4 +14,6 @@ interface PlannedSeriesItemRepository {
     suspend fun deleteForSeries(seriesId: Long)
 
     suspend fun deleteById(id: Long)
+
+    suspend fun countByRecipeVariantId(recipeVariantId: Long): Int
 }

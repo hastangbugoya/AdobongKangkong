@@ -17,6 +17,12 @@ import javax.inject.Inject
 
 /**
  * Promotes an existing planned meal into a reusable recurrence series template.
+ *
+ * Important planner variant rule:
+ * - PlannedItemSource.RECIPE keeps its optional recipeVariantId.
+ * - PlannedItemSource.FOOD must not carry a recipe variant.
+ * - PlannedItemSource.RECIPE_BATCH is converted back to the base recipe template and
+ *   intentionally drops recipeVariantId while cooked/prepared batch planning is paused.
  */
 class CreateSeriesFromPlannedMealUseCase @Inject constructor(
     private val db: NutriDatabase,
@@ -103,15 +109,20 @@ class CreateSeriesFromPlannedMealUseCase @Inject constructor(
         seriesRepo.replaceSlotRules(seriesId, rules)
 
         for (mi in mealItems) {
-            val (foodId, recipeId) = when (mi.type) {
-                PlannedItemSource.FOOD -> mi.refId to null
+            val (foodId, recipeId, recipeVariantId) = when (mi.type) {
+                PlannedItemSource.FOOD -> {
+                    Triple(mi.refId, null, null)
+                }
 
-                PlannedItemSource.RECIPE -> null to mi.refId
+                PlannedItemSource.RECIPE -> {
+                    Triple(null, mi.refId, mi.recipeVariantId)
+                }
 
                 PlannedItemSource.RECIPE_BATCH -> {
                     val batch = recipeBatchLookup.getBatchById(mi.refId)
                         ?: error("Recipe batch not found: batchId=${mi.refId}")
-                    null to batch.recipeId
+
+                    Triple(null, batch.recipeId, null)
                 }
             }
 
@@ -119,6 +130,7 @@ class CreateSeriesFromPlannedMealUseCase @Inject constructor(
                 seriesId = seriesId,
                 foodId = foodId,
                 recipeId = recipeId,
+                recipeVariantId = recipeVariantId,
                 grams = mi.grams,
                 servings = mi.servings,
                 note = null,

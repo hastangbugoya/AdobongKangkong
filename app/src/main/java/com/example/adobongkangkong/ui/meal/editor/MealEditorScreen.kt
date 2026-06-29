@@ -194,7 +194,7 @@ fun MealEditorScreen(
                 content = {
                     Icon(
                         painter = painterResource(R.drawable.ms_add_circle),
-                        contentDescription = "Add food"
+                        contentDescription = "Add item"
                     )
                 }
             )
@@ -298,7 +298,13 @@ fun MealEditorScreen(
                         onMillilitersChanged = { text -> contract.updateMilliliters(item.lineId, text) },
                         onRemove = { contract.removeItem(item.lineId) },
                         onMoveUp = if (index > 0) ({ contract.moveItem(index, index - 1) }) else null,
-                        onMoveDown = if (index < state.items.lastIndex) ({ contract.moveItem(index, index + 1) }) else null
+                        onMoveDown = if (index < state.items.lastIndex) ({ contract.moveItem(index, index + 1) }) else null,
+                        onRecipeVariantSelected = { variantId ->
+                            contract.setRecipeVariant(
+                                lineId = item.lineId,
+                                recipeVariantId = variantId
+                            )
+                        }
                     )
                 }
                 item { Spacer(modifier = Modifier.height(12.dp)) }
@@ -457,9 +463,9 @@ private fun EmptyState(
     ) {
         Text(text = "No items yet.", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "Add a food to start building this meal.", style = MaterialTheme.typography.bodyMedium)
+        Text(text = "Add a food or recipe to start building this meal.", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedButton(onClick = onAddFood) { Text("Add food") }
+        OutlinedButton(onClick = onAddFood) { Text("Add item") }
     }
 }
 

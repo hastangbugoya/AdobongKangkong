@@ -965,6 +965,7 @@ private fun PlannedMealCard(
                     visible.forEach { item ->
                         PlannedItemRow(
                             title = item.title?.takeIf { it.isNotBlank() } ?: fallbackItemTitle(item),
+                            variantTitle = item.variantTitle?.takeIf { it.isNotBlank() },
                             qtySummary = qtySummary(item),
                             onLog = { onLogItem(item.id) },
                             onRemove = { onRemoveItem(item.id) }
@@ -982,6 +983,7 @@ private fun PlannedMealCard(
 @Composable
 private fun PlannedItemRow(
     title: String,
+    variantTitle: String?,
     qtySummary: String,
     onLog: () -> Unit,
     onRemove: () -> Unit
@@ -991,10 +993,27 @@ private fun PlannedItemRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(qtySummary, style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (!variantTitle.isNullOrBlank()) {
+                Text(
+                    text = "Variant: $variantTitle",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Text(
+                text = qtySummary,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
+
         Spacer(Modifier.width(8.dp))
+
         IconButton(onClick = onLog) {
             Icon(
                 painter = painterResource(R.drawable.ms_save),
@@ -1002,6 +1021,7 @@ private fun PlannedItemRow(
                 modifier = Modifier.size(AppIconSize.CardAction)
             )
         }
+
         IconButton(onClick = onRemove) {
             Icon(
                 painter = painterResource(R.drawable.ms_delete),

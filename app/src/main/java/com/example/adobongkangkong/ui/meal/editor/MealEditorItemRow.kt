@@ -1,6 +1,7 @@
 package com.example.adobongkangkong.ui.meal.editor
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,12 +9,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -32,8 +40,19 @@ fun MealEditorItemRow(
     onMillilitersChanged: (String) -> Unit,
     onRemove: () -> Unit,
     onMoveUp: (() -> Unit)?,
-    onMoveDown: (() -> Unit)?
+    onMoveDown: (() -> Unit)?,
+    onRecipeVariantSelected: ((Long?) -> Unit)? = null
 ) {
+    var showVariantMenu by remember(
+        item.lineId,
+        item.recipeVariantId,
+        item.recipeVariantOptions
+    ) {
+        mutableStateOf(false)
+    }
+
+    val selectedVariantLabel = item.selectedVariantLabel ?: "Base recipe"
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -53,6 +72,19 @@ fun MealEditorItemRow(
                     text = item.foodName,
                     style = MaterialTheme.typography.titleLarge
                 )
+
+                if (item.isRecipe) {
+                    Text(
+                        text = if (item.recipeVariantId == null) {
+                            selectedVariantLabel
+                        } else {
+                            "Variant: $selectedVariantLabel"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
 
                 item.effectiveQuantityText
                     ?.takeIf { it.isNotBlank() }
@@ -130,6 +162,40 @@ fun MealEditorItemRow(
 
         if (isExpanded) {
             Spacer(modifier = Modifier.padding(top = 8.dp))
+
+            if (item.isRecipe && item.recipeVariantOptions.isNotEmpty()) {
+                Text(
+                    text = "Recipe version",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = { showVariantMenu = true },
+                        enabled = onRecipeVariantSelected != null
+                    ) {
+                        Text(selectedVariantLabel)
+                    }
+
+                    DropdownMenu(
+                        expanded = showVariantMenu,
+                        onDismissRequest = { showVariantMenu = false }
+                    ) {
+                        item.recipeVariantOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.name) },
+                                onClick = {
+                                    showVariantMenu = false
+                                    onRecipeVariantSelected?.invoke(option.id)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.padding(top = 8.dp))
+            }
 
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),

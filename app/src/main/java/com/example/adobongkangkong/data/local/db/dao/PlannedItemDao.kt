@@ -25,20 +25,24 @@ interface PlannedItemDao {
     @Query("SELECT * FROM planned_items WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): PlannedItemEntity?
 
-    @Query("""
+    @Query(
+        """
         SELECT *
         FROM planned_items
         WHERE mealId = :mealId
         ORDER BY sortOrder ASC, id ASC
-    """)
+        """
+    )
     fun observeItemsForMeal(mealId: Long): Flow<List<PlannedItemEntity>>
 
-    @Query("""
+    @Query(
+        """
         SELECT *
         FROM planned_items
         WHERE mealId = :mealId
         ORDER BY sortOrder ASC, id ASC
-    """)
+        """
+    )
     suspend fun getItemsForMeal(mealId: Long): List<PlannedItemEntity>
 
     @Query("DELETE FROM planned_items WHERE mealId = :mealId")
@@ -56,4 +60,13 @@ interface PlannedItemDao {
 
     @Query("SELECT COUNT(*) FROM planned_items WHERE type = :type AND refId = :refId")
     suspend fun countByTypeAndRefId(type: PlannedItemSource, refId: Long): Int
+
+    /**
+     * Counts concrete planned meal occurrence items that reference a recipe variant.
+     *
+     * Used to prevent permanently deleting an archived variant while existing planned
+     * meals still point to it.
+     */
+    @Query("SELECT COUNT(*) FROM planned_items WHERE recipeVariantId = :recipeVariantId")
+    suspend fun countByRecipeVariantId(recipeVariantId: Long): Int
 }

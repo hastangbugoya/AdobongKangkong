@@ -10,18 +10,22 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PlannedSeriesItemDao {
 
-    @Query("""
+    @Query(
+        """
         SELECT * FROM planned_series_items
         WHERE seriesId = :seriesId
         ORDER BY sortOrder ASC, id ASC
-    """)
+        """
+    )
     fun observeForSeries(seriesId: Long): Flow<List<PlannedSeriesItemEntity>>
 
-    @Query("""
+    @Query(
+        """
         SELECT * FROM planned_series_items
         WHERE seriesId = :seriesId
         ORDER BY sortOrder ASC, id ASC
-    """)
+        """
+    )
     suspend fun getForSeries(seriesId: Long): List<PlannedSeriesItemEntity>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -32,4 +36,13 @@ interface PlannedSeriesItemDao {
 
     @Query("DELETE FROM planned_series_items WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /**
+     * Counts recurring series template items that reference a recipe variant.
+     *
+     * Used to prevent permanently deleting an archived variant while recurring
+     * planner templates still point to it.
+     */
+    @Query("SELECT COUNT(*) FROM planned_series_items WHERE recipeVariantId = :recipeVariantId")
+    suspend fun countByRecipeVariantId(recipeVariantId: Long): Int
 }
