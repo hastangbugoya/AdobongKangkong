@@ -271,7 +271,7 @@ fun QuickAddBottomSheet(
                         }
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.ms_barcode_reader),
+                            painter = painterResource(R.drawable.ms_frame_inspect),
                             contentDescription = "Check product"
                         )
                     }
