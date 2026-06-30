@@ -61,10 +61,20 @@ sealed interface PlannerDayEvent {
     // Duplicate -> choose date(s)
     data class OpenDuplicateSheet(val mealId: Long) : PlannerDayEvent
     data object DismissDuplicateSheet : PlannerDayEvent
+
     data object DuplicateAddToday : PlannerDayEvent
     data object DuplicateAddTomorrow : PlannerDayEvent
     data class DuplicateAddDate(val dateIso: String) : PlannerDayEvent
     data class DuplicateRemoveDate(val dateIso: String) : PlannerDayEvent
+
+    /**
+     * Change the meal slot that the duplicate will be copied into.
+     *
+     * Date selection already exists. This adds the missing target-slot selection so the user can
+     * duplicate a meal to a different slot, e.g. Lunch → Dinner.
+     */
+    data class UpdateDuplicateTargetSlot(val slot: MealSlot) : PlannerDayEvent
+
     data object ConfirmDuplicateDates : PlannerDayEvent
 
     // Debug: create a sample recurring series

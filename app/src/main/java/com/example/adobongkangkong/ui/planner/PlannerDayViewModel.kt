@@ -206,20 +206,30 @@ class PlannerDayViewModel @Inject constructor(
 
             PlannerDayEvent.DuplicateAddToday -> {
                 val date = _state.value.date
+
                 _state.update { s ->
                     val sheet = s.duplicateSheet ?: return@update s
-                    s.copy(duplicateSheet = sheet.copy(selectedDates = listOf(date), errorMessage = null))
+                    s.copy(
+                        duplicateSheet = sheet.copy(
+                            selectedDates = listOf(date),
+                            errorMessage = null
+                        )
+                    )
                 }
-                confirmDuplicateDates()
             }
 
             PlannerDayEvent.DuplicateAddTomorrow -> {
                 val date = _state.value.date.plusDays(1)
+
                 _state.update { s ->
                     val sheet = s.duplicateSheet ?: return@update s
-                    s.copy(duplicateSheet = sheet.copy(selectedDates = listOf(date), errorMessage = null))
+                    s.copy(
+                        duplicateSheet = sheet.copy(
+                            selectedDates = listOf(date),
+                            errorMessage = null
+                        )
+                    )
                 }
-                confirmDuplicateDates()
             }
 
             is PlannerDayEvent.DuplicateAddDate -> {
@@ -234,12 +244,22 @@ class PlannerDayViewModel @Inject constructor(
                         )
                     )
                 }
-
-                confirmDuplicateDates()
             }
 
             is PlannerDayEvent.DuplicateRemoveDate -> {
                 removeDuplicateDate(LocalDate.parse(event.dateIso))
+            }
+
+            is PlannerDayEvent.UpdateDuplicateTargetSlot -> {
+                _state.update { s ->
+                    val sheet = s.duplicateSheet ?: return@update s
+                    s.copy(
+                        duplicateSheet = sheet.copy(
+                            targetSlot = event.slot,
+                            errorMessage = null
+                        )
+                    )
+                }
             }
 
             PlannerDayEvent.ConfirmDuplicateDates -> {
@@ -936,11 +956,22 @@ class PlannerDayViewModel @Inject constructor(
         if (mealId <= 0L) return
 
         val today = _state.value.date
+
+        val sourceMeal = _state.value.day
+            ?.mealsBySlot
+            ?.values
+            ?.asSequence()
+            ?.flatten()
+            ?.firstOrNull { it.id == mealId }
+
+        val defaultTargetSlot = sourceMeal?.slot ?: MealSlot.LUNCH
+
         _state.update { s ->
             s.copy(
                 duplicateSheet = DuplicateSheetState(
                     sourceMealId = mealId,
-                    selectedDates = listOf(today)
+                    selectedDates = listOf(today),
+                    targetSlot = defaultTargetSlot
                 ),
                 errorMessage = null
             )
@@ -970,7 +1001,8 @@ class PlannerDayViewModel @Inject constructor(
                 for (d in snapshot.selectedDates) {
                     duplicateMeal(
                         sourceMealId = snapshot.sourceMealId,
-                        targetDateIso = d.toString()
+                        targetDateIso = d.toString(),
+                        targetSlot = snapshot.targetSlot
                     )
                 }
                 _state.update { it.copy(duplicateSheet = null) }

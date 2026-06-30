@@ -268,6 +268,7 @@ fun PlannerDayScreen(
     if (dupSheet != null) {
         DuplicateMealBottomSheet(
             sheet = dupSheet,
+            currentDate = s.date,
             onEvent = onEvent
         )
     }
@@ -1056,9 +1057,24 @@ private fun formatNumber(value: Double): String {
 @Composable
 private fun DuplicateMealBottomSheet(
     sheet: DuplicateSheetState,
+    currentDate: LocalDate,
     onEvent: (PlannerDayEvent) -> Unit
 ) {
     var showPicker by remember { mutableStateOf(false) }
+    var showSlotMenu by remember(sheet.targetSlot) { mutableStateOf(false) }
+
+    val selectedDate = sheet.selectedDates.firstOrNull()
+    val tomorrow = currentDate.plusDays(1)
+
+    val isTodaySelected = selectedDate == currentDate
+    val isTomorrowSelected = selectedDate == tomorrow
+    val isPickedDateSelected = selectedDate != null &&
+            selectedDate != currentDate &&
+            selectedDate != tomorrow
+
+    val selectedDateText = selectedDate
+        ?.format(DateTimeFormatter.ofPattern("EEE, yyyy-M-d"))
+        ?: "No date selected"
 
     ModalBottomSheet(
         onDismissRequest = { onEvent(PlannerDayEvent.DismissDuplicateSheet) }
@@ -1072,47 +1088,103 @@ private fun DuplicateMealBottomSheet(
             Text("Duplicate meal", style = MaterialTheme.typography.titleLarge)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { onEvent(PlannerDayEvent.DuplicateAddToday) }) { Text("Today") }
-                TextButton(onClick = { onEvent(PlannerDayEvent.DuplicateAddTomorrow) }) { Text("Tomorrow") }
-                TextButton(onClick = { showPicker = true }) { Text("Pick date…") }
+                DateShortcutChip(
+                    text = "Today",
+                    selected = isTodaySelected,
+                    onClick = { onEvent(PlannerDayEvent.DuplicateAddToday) }
+                )
+
+                DateShortcutChip(
+                    text = "Tomorrow",
+                    selected = isTomorrowSelected,
+                    onClick = { onEvent(PlannerDayEvent.DuplicateAddTomorrow) }
+                )
+
+                DateShortcutChip(
+                    text = "Pick date",
+                    selected = isPickedDateSelected,
+                    onClick = { showPicker = true }
+                )
             }
 
-            if (sheet.selectedDates.isEmpty()) {
-                Text("Select at least one date.", style = MaterialTheme.typography.bodySmall)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    sheet.selectedDates.forEach { d ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(d.toString(), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(
-                                onClick = { onEvent(PlannerDayEvent.DuplicateRemoveDate(d.toString())) }
-                            ) { Text("Remove") }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Target date",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = selectedDateText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Meal slot",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Box {
+                    TextButton(onClick = { showSlotMenu = true }) {
+                        Text(sheet.targetSlot.display)
+                    }
+
+                    DropdownMenu(
+                        expanded = showSlotMenu,
+                        onDismissRequest = { showSlotMenu = false }
+                    ) {
+                        MealSlot.entries.forEach { slot ->
+                            DropdownMenuItem(
+                                text = { Text(slot.display) },
+                                onClick = {
+                                    showSlotMenu = false
+                                    onEvent(
+                                        PlannerDayEvent.UpdateDuplicateTargetSlot(
+                                            slot = slot
+                                        )
+                                    )
+                                }
+                            )
                         }
                     }
                 }
             }
 
             sheet.errorMessage?.let { msg ->
-                Text(msg, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
 
             Spacer(Modifier.height(8.dp))
 
             TextButton(
                 modifier = Modifier.fillMaxWidth(),
-                enabled = sheet.selectedDates.isNotEmpty() && !sheet.isDuplicating,
+                enabled = selectedDate != null && !sheet.isDuplicating,
                 onClick = { onEvent(PlannerDayEvent.ConfirmDuplicateDates) }
             ) {
-                Text(if (sheet.isDuplicating) "Saving duplicate(s)…" else "Save duplicate(s)")
+                Text(
+                    if (sheet.isDuplicating) {
+                        "Saving duplicate…"
+                    } else {
+                        "Save duplicate"
+                    }
+                )
             }
         }
     }
 
     if (showPicker) {
         val pickerState = rememberDatePickerState()
+
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
@@ -1123,18 +1195,57 @@ private fun DuplicateMealBottomSheet(
                             val picked = Instant.ofEpochMilli(millis)
                                 .atZone(ZoneOffset.UTC)
                                 .toLocalDate()
-                            onEvent(PlannerDayEvent.DuplicateAddDate(picked.toString()))
+
+                            onEvent(
+                                PlannerDayEvent.DuplicateAddDate(
+                                    picked.toString()
+                                )
+                            )
                         }
                         showPicker = false
                     }
-                ) { Text("OK") }
+                ) {
+                    Text("OK")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showPicker = false }) {
+                    Text("Cancel")
+                }
             }
         ) {
             DatePicker(state = pickerState)
         }
+    }
+}
+
+@Composable
+private fun DateShortcutChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
     }
 }
 

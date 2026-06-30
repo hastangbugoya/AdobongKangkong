@@ -15,6 +15,11 @@ import javax.inject.Inject
  * - New item rows (new IDs)
  * - Same content, no linkage
  * - No recurrence, no propagation
+ * - Optional target slot override
+ *
+ * Important:
+ * - Duplicates must preserve recipeVariantId so planned recipe variants survive copying.
+ * - Duplicates must not keep recurrence/series linkage from the source meal.
  */
 class DuplicatePlannedMealUseCase @Inject constructor(
     private val meals: PlannedMealRepository,
@@ -39,8 +44,7 @@ class DuplicatePlannedMealUseCase @Inject constructor(
         val finalSlot = targetSlot ?: sourceMeal.slot
 
         val finalCustomLabel = when (finalSlot) {
-            MealSlot.CUSTOM -> sourceMeal.customLabel
-                ?: throw IllegalStateException("CUSTOM meal must have customLabel (mealId=$sourceMealId)")
+            MealSlot.CUSTOM -> sourceMeal.customLabel ?: "Custom"
             else -> null
         }
 
@@ -50,13 +54,27 @@ class DuplicatePlannedMealUseCase @Inject constructor(
             date = targetDateIso,
             slot = finalSlot,
             customLabel = finalCustomLabel,
+
+            /*
+             * Keep the user's visible meal name for now.
+             *
+             * If this was an auto-generated name like Lunch(Jun-30-2026), a future polish pass
+             * can recompute it for the new date/slot. For now, preserve user-visible naming
+             * rather than guessing whether it was custom or generated.
+             */
             nameOverride = sourceMeal.nameOverride,
-            sortOrder = newMealSortOrder
+
+            sortOrder = newMealSortOrder,
+
+            /*
+             * Intentionally do not copy seriesId.
+             * A duplicated meal is a standalone planned meal, not a new occurrence of the series.
+             */
+            seriesId = null
         )
 
         val newMealId = meals.insert(newMeal)
 
-        // Preserve item order exactly
         sourceItems
             .sortedWith(compareBy<PlannedItemEntity> { it.sortOrder }.thenBy { it.id })
             .forEach { src ->
@@ -65,6 +83,7 @@ class DuplicatePlannedMealUseCase @Inject constructor(
                         mealId = newMealId,
                         type = src.type,
                         refId = src.refId,
+                        recipeVariantId = src.recipeVariantId,
                         grams = src.grams,
                         servings = src.servings,
                         sortOrder = src.sortOrder

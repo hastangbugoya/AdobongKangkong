@@ -67,6 +67,15 @@ data class IouEditorState(
 data class DuplicateSheetState(
     val sourceMealId: Long,
     val selectedDates: List<LocalDate>,
+
+    /**
+     * Target slot for the duplicated meal.
+     *
+     * Defaults to the source meal's current slot when the sheet opens.
+     * User may change this before confirming the duplicate.
+     */
+    val targetSlot: MealSlot,
+
     val isDuplicating: Boolean = false,
     val errorMessage: String? = null
 )
