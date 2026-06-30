@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,6 +100,14 @@ fun MealEditorItemRow(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        painter = painterResource(R.drawable.ms_delete),
+                        contentDescription = "Remove",
+                        modifier = Modifier.size(AppIconSize.CardAction),
+                    )
+                }
+                VerticalDivider()
                 IconButton(onClick = onToggleExpanded) {
                     Icon(
                         painter = painterResource(
@@ -110,18 +119,10 @@ fun MealEditorItemRow(
                     )
                 }
 
-                IconButton(onClick = onRemove) {
-                    Icon(
-                        painter = painterResource(R.drawable.ms_delete),
-                        contentDescription = "Remove",
-                        modifier = Modifier.size(AppIconSize.CardAction),
-                    )
-                }
-
                 if (onMoveUp != null) {
                     IconButton(onClick = onMoveUp) {
                         Icon(
-                            painter = painterResource(R.drawable.ms_keyboard_double_arrow_down),
+                            painter = painterResource(R.drawable.ms_keyboard_double_arrow_up),
                             contentDescription = "Move up",
                             modifier = Modifier.size(AppIconSize.CardAction),
                         )
@@ -133,7 +134,7 @@ fun MealEditorItemRow(
                 if (onMoveDown != null) {
                     IconButton(onClick = onMoveDown) {
                         Icon(
-                            painter = painterResource(R.drawable.ms_keyboard_double_arrow_up),
+                            painter = painterResource(R.drawable.ms_keyboard_double_arrow_down),
                             contentDescription = "Move down",
                             modifier = Modifier.size(AppIconSize.CardAction),
                         )

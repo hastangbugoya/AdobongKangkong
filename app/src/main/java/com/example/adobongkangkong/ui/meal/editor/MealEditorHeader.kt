@@ -1,6 +1,9 @@
 package com.example.adobongkangkong.ui.meal.editor
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.adobongkangkong.data.local.db.entity.MealSlot
@@ -38,14 +42,14 @@ fun MealEditorHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         if (!state.subtitle.isNullOrBlank()) {
             Text(
                 text = state.subtitle,
                 style = MaterialTheme.typography.labelLarge
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         OutlinedTextField(
@@ -62,12 +66,12 @@ fun MealEditorHeader(
         )
 
         if (state.mode == MealEditorMode.TEMPLATE) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
             TemplateDefaultSlotField(
                 selected = state.templateDefaultSlot,
                 onSelected = onTemplateDefaultSlotChanged
             )
-
         }
     }
 }
@@ -79,40 +83,47 @@ private fun TemplateDefaultSlotField(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 0.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
             text = "Default meal slot",
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f)
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Box {
+            TextButton(
+                onClick = { expanded = true },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+            ) {
+                Text(selected?.display ?: "None")
+            }
 
-        TextButton(
-            onClick = { expanded = true },
-            modifier = Modifier.padding(start = 0.dp)
-        ) {
-            Text(selected?.display ?: "None")
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("None") },
-                onClick = {
-                    expanded = false
-                    onSelected(null)
-                }
-            )
-            MealSlot.entries.forEach { slot ->
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
                 DropdownMenuItem(
-                    text = { Text(slot.display) },
+                    text = { Text("None") },
                     onClick = {
                         expanded = false
-                        onSelected(slot)
+                        onSelected(null)
                     }
                 )
+                MealSlot.entries.forEach { slot ->
+                    DropdownMenuItem(
+                        text = { Text(slot.display) },
+                        onClick = {
+                            expanded = false
+                            onSelected(slot)
+                        }
+                    )
+                }
             }
         }
     }

@@ -171,6 +171,23 @@ fun MealEditorScreen(
         )
     }
 
+    state.infoDialogMessage
+        ?.takeIf { it.isNotBlank() }
+        ?.let { message ->
+            AlertDialog(
+                onDismissRequest = { contract.dismissInfoDialog() },
+                title = { Text("Note") },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(
+                        onClick = { contract.dismissInfoDialog() }
+                    ) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -318,24 +335,28 @@ private fun MealMacroSummaryCard(summary: String) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 1.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "Meal total",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
             Text(
                 text = summary,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 2.dp)
+                modifier = Modifier.weight(1f),
+                maxLines = 1
             )
         }
     }

@@ -27,7 +27,19 @@ data class MealEditorUiState(
     val items: List<Item> = emptyList(),
     val isSaving: Boolean = false,
     val canSave: Boolean = true,
+
     val errorMessage: String? = null,
+
+    /**
+     * One-shot informational dialog message for editor-specific guidance.
+     *
+     * Example:
+     * - Meal templates may keep recipe items as the base recipe only.
+     *
+     * This is UI state only. The owning VM should clear it when the dialog is dismissed.
+     */
+    val infoDialogMessage: String? = null,
+
     val isDirty: Boolean = false,
     val warnings: List<String> = emptyList(),
     val templateDefaultSlot: MealSlot? = null,

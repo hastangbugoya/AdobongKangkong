@@ -28,6 +28,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val TEMPLATE_BASE_RECIPE_INFO_MESSAGE =
+    "Meal templates keep recipes as the base recipe for now. " +
+            "You can choose a recipe variant later when editing the planned meal."
+
 /**
  * ViewModel backing the meal template editor.
  *
@@ -116,7 +120,10 @@ class MealTemplateEditorViewModel @Inject constructor(
 
     override fun addFood(foodId: Long) {
         viewModelScope.launch {
-            val foodName = getCachedFood(foodId)?.name ?: "Food #$foodId"
+            val food = getCachedFood(foodId)
+            val foodName = food?.name ?: "Food #$foodId"
+            val isRecipeFood = food?.isRecipe == true
+
             val newItem = MealEditorUiState.Item(
                 lineId = UUID.randomUUID().toString(),
                 id = null,
@@ -124,15 +131,38 @@ class MealTemplateEditorViewModel @Inject constructor(
                 foodName = foodName,
                 servings = "1",
                 grams = null,
-                milliliters = null
+                milliliters = null,
+
+                /*
+                 * Meal templates are intentionally base-recipe only for now.
+                 *
+                 * Even when the picked food is recipe-backed, do not attach a recipeVariantId here.
+                 * The user can choose a specific variant later after this template creates a planned meal.
+                 */
+                sourceType = if (isRecipeFood) PlannedItemSource.RECIPE else PlannedItemSource.FOOD,
+                sourceId = foodId,
+                recipeVariantId = null,
+                recipeVariantName = null,
+                recipeVariantOptions = emptyList()
             )
+
             _state.value = _state.value.copy(
                 items = _state.value.items + newItem,
                 errorMessage = null,
+                infoDialogMessage = if (isRecipeFood) {
+                    TEMPLATE_BASE_RECIPE_INFO_MESSAGE
+                } else {
+                    _state.value.infoDialogMessage
+                },
                 isDirty = true
             )
+
             rebuildDerivedNutrition()
         }
+    }
+
+    override fun dismissInfoDialog() {
+        _state.value = _state.value.copy(infoDialogMessage = null)
     }
 
     override fun updateServings(lineId: String, servingsText: String) {

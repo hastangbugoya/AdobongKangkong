@@ -56,6 +56,13 @@ interface MealEditorContract {
     fun save()
     fun discardChanges()
 
+    /**
+     * Clears a one-shot informational dialog message from the editor state.
+     *
+     * Default no-op keeps this safe for editor VMs that do not currently surface info dialogs.
+     */
+    fun dismissInfoDialog() = Unit
+
     /** Template-only hook. Planned-meal implementations can keep the default no-op. */
     fun setTemplateDefaultSlot(slot: MealSlot?) = Unit
 }
