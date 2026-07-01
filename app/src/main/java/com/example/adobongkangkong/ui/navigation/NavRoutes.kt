@@ -127,6 +127,21 @@ object NavRoutes {
         const val templateEditorNew: String = "planner/templateEditorNew"
     }
 
+    object Reports {
+        private const val BASE = "reports"
+        private const val ARG_MODE = "mode"
+        private const val ARG_ANCHOR_DATE = "anchorDateIso"
+
+        const val route: String = "$BASE/{$ARG_MODE}/{$ARG_ANCHOR_DATE}"
+
+        fun reports(
+            mode: String,
+            anchorDateIso: String
+        ): String {
+            return "$BASE/$mode/$anchorDateIso"
+        }
+    }
+
     object Shopping {
         private const val BASE = "shopping"
         private const val ARG_START = "start"

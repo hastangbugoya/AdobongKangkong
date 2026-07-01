@@ -32,6 +32,7 @@ import com.example.adobongkangkong.ui.productcheck.ProductCheckScreen
 import com.example.adobongkangkong.ui.recipe.RecipeBuilderScreen
 import com.example.adobongkangkong.ui.recipevariant.RecipeVariantListRoute
 import com.example.adobongkangkong.ui.recipevariant.RecipeVariantEditorRoute
+import com.example.adobongkangkong.ui.reports.ReportsScreen
 import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
@@ -219,6 +220,26 @@ fun AppNavHost(
                 onNavigateToTemplates = { _ ->
                     navController.navigate(NavRoutes.Planner.templates)
                 },
+                onNavigateToReports = { mode, anchorDate ->
+                    navController.navigate(
+                        NavRoutes.Reports.reports(
+                            mode = mode,
+                            anchorDateIso = anchorDate.toString()
+                        )
+                    )
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = NavRoutes.Reports.route,
+            arguments = listOf(
+                navArgument("mode") { type = NavType.StringType },
+                navArgument("anchorDateIso") { type = NavType.StringType }
+            )
+        ) {
+            ReportsScreen(
                 onBack = { navController.popBackStack() }
             )
         }

@@ -35,7 +35,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.adobongkangkong.R
 import java.time.LocalDate
-
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
@@ -44,6 +46,7 @@ fun CalendarScreen(
     onNavigateToShopping: (LocalDate) -> Unit = {},
     onNavigateToDashboard: (LocalDate) -> Unit = {},
     onNavigateToTemplates: (LocalDate) -> Unit = {},
+    onNavigateToReports: (mode: String, anchorDate: LocalDate) -> Unit = { _, _ -> },
     onBack: () -> Unit,
     vm: CalendarViewModel = hiltViewModel()
 ) {
@@ -61,6 +64,8 @@ fun CalendarScreen(
 
     val daySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var reportRangeSheetOpen by remember { mutableStateOf(false) }
+    val reportRangeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(selectedDate) {
         if (selectedDate != null) daySheetState.show()
@@ -115,9 +120,11 @@ fun CalendarScreen(
                 MonthHeader(
                     month = month,
                     onPrevMonth = vm::goPrevMonth,
-                    onNextMonth = vm::goNextMonth
+                    onNextMonth = vm::goNextMonth,
+                    onMonthClick = {
+                        reportRangeSheetOpen = true
+                    }
                 )
-
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -245,6 +252,56 @@ fun CalendarScreen(
                         onClearAll = vm::clearCalendarSuccessSelectedKeys,
                         onDismiss = vm::dismissSettingsSheet
                     )
+                }
+            }
+
+            if (reportRangeSheetOpen) {
+                ModalBottomSheet(
+                    sheetState = reportRangeSheetState,
+                    onDismissRequest = { reportRangeSheetOpen = false }
+                ) {
+                    val rollingAnchor =
+                        if (month.year == currentDate.year && month.month == currentDate.month) {
+                            currentDate
+                        } else {
+                            month.atEndOfMonth()
+                        }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 18.dp)
+                    ) {
+                        Text(
+                            text = "Open reports",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+
+                        Spacer(Modifier.size(12.dp))
+
+                        Button(
+                            onClick = {
+                                reportRangeSheetOpen = false
+                                onNavigateToReports("ROLLING_30", rollingAnchor)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Rolling 30 days")
+                        }
+
+                        Spacer(Modifier.size(8.dp))
+
+                        Button(
+                            onClick = {
+                                reportRangeSheetOpen = false
+                                onNavigateToReports("MONTH", month.atDay(1))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("This month")
+                        }
+                    }
                 }
             }
         }
