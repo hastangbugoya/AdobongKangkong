@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 import kotlinx.coroutines.flow.flow
+import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
 
 /**
  * Quick Add view model for both creating and editing log entries.
@@ -102,6 +103,7 @@ class QuickAddViewModel @Inject constructor(
 
     // From Day Planner
     private val observeTodayPlannedItemsForQuickAddUseCase: ObserveTodayPlannedItemsForQuickAddUseCase,
+    private val logPlannedMeal: LogPlannedMealUseCase,
 
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -1186,6 +1188,77 @@ class QuickAddViewModel @Inject constructor(
         isTodayPlanPickerOpenFlow.value = false
     }
 
+    fun logPlannedMealFromTodayPlan(
+        mealId: Long,
+        logDate: LocalDate,
+        onDone: () -> Unit
+    ) {
+        if (modeFlow.value == QuickAddMode.EDIT) return
+        if (mealId <= 0L) {
+            errorFlow.value = "Planned meal is missing."
+            return
+        }
+        if (isSavingFlow.value) return
+
+        val slot = todayPlanSectionsFlow.value
+            .asSequence()
+            .firstOrNull { (_, candidates) ->
+                candidates.any { it.plannedMealId == mealId }
+            }
+            ?.key
+
+        viewModelScope.launch {
+            isSavingFlow.value = true
+            errorFlow.value = null
+
+            try {
+                val timestamp = ZonedDateTime.of(
+                    logDate,
+                    LocalTime.now(),
+                    ZoneId.systemDefault()
+                ).toInstant()
+
+                val result = logPlannedMeal.execute(
+                    mealId = mealId,
+                    timestamp = timestamp,
+                    mealSlot = slot,
+                    logDateIso = logDate.toString()
+                )
+
+                val alreadyLogged = result.loggedCount == 0 &&
+                        result.blockedCount == 0 &&
+                        result.errorCount == 1 &&
+                        result.outcomes.size == 1 &&
+                        result.outcomes.firstOrNull()
+                            ?.message
+                            ?.contains("already been logged", ignoreCase = true) == true
+
+                if (alreadyLogged) {
+                    errorFlow.value = "Already logged."
+                    return@launch
+                }
+
+                val message = buildString {
+                    append("Logged ${result.loggedCount}")
+                    if (result.blockedCount > 0) append(" • Blocked ${result.blockedCount}")
+                    if (result.errorCount > 0) append(" • Errors ${result.errorCount}")
+                }
+
+                if (result.errorCount == 0 && result.blockedCount == 0 && result.loggedCount > 0) {
+                    requestCaffeineWidgetRefresh()
+                    isTodayPlanPickerOpenFlow.value = false
+                    onDone()
+                } else {
+                    errorFlow.value = message
+                }
+            } catch (t: Throwable) {
+                errorFlow.value = t.message ?: "Failed to log planned meal."
+            } finally {
+                isSavingFlow.value = false
+            }
+        }
+    }
+
     private fun stopTodayPlanObservation() {
         todayPlanJob?.cancel()
         todayPlanJob = null
@@ -1221,6 +1294,18 @@ class QuickAddViewModel @Inject constructor(
             )
 
             onMealSlotChanged(candidate.slot)
+
+            /*
+             * Preserve planner recipe variant intent for item-level Quick Add.
+             *
+             * Without this, tapping a planned recipe variant from Today Plan would prefill the
+             * base recipe and silently lose the selected variant.
+             */
+            selectedRecipeVariantIdFlow.value = candidate.recipeVariantId
+
+            if (candidate.recipeVariantId != null) {
+                selectedBatchIdFlow.value = null
+            }
 
             candidate.plannedServings?.let { onServingsChanged(it) }
             candidate.plannedGrams?.let { onGramsChanged(it) }

@@ -43,7 +43,11 @@ class ObserveTodayPlannedItemsForQuickAddUseCase @Inject constructor(
                         slot = slot,
                     ) ?: return@forEach
 
-                    list += candidate
+                    list += candidate.copy(
+                        plannedMealId = meal.id,
+                        plannedMealTitle = meal.title?.takeIf { it.isNotBlank() }
+                            ?: meal.slot.display
+                    )
                 }
             }
         }

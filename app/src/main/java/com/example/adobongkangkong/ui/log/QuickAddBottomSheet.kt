@@ -307,8 +307,26 @@ fun QuickAddBottomSheet(
                         onItemSelected = { candidate ->
                             focus.clearFocus()
                             vm.onPlannedItemSelected(candidate)
+                        },
+                        onLogMeal = { mealId ->
+                            focus.clearFocus()
+                            vm.logPlannedMealFromTodayPlan(
+                                mealId = mealId,
+                                logDate = logDate,
+                                onDone = onDismiss
+                            )
                         }
                     )
+
+                    state.errorMessage?.let { message ->
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))

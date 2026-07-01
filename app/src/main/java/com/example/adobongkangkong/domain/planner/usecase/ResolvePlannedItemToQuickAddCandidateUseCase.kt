@@ -20,6 +20,10 @@ import javax.inject.Inject
  * - FOOD -> direct foodId
  * - RECIPE -> recipeId + resolved recipe.foodId
  * - RECIPE_BATCH -> batchId + recipeId + resolved recipe.foodId
+ *
+ * Important:
+ * - Recipe planned items must preserve recipeVariantId so item-level Quick Add logs the
+ *   selected planned variant instead of silently falling back to the base recipe.
  */
 class ResolvePlannedItemToQuickAddCandidateUseCase @Inject constructor(
     private val recipeRepository: RecipeRepository,
@@ -40,6 +44,7 @@ class ResolvePlannedItemToQuickAddCandidateUseCase @Inject constructor(
                     foodId = item.sourceId,
                     recipeId = null,
                     batchId = null,
+                    recipeVariantId = null,
                     plannedServings = item.qtyServings,
                     plannedGrams = item.qtyGrams,
                 )
@@ -57,6 +62,7 @@ class ResolvePlannedItemToQuickAddCandidateUseCase @Inject constructor(
                     foodId = recipeHeader.foodId,
                     recipeId = recipeId,
                     batchId = null,
+                    recipeVariantId = item.recipeVariantId,
                     plannedServings = item.qtyServings,
                     plannedGrams = item.qtyGrams,
                 )
@@ -75,6 +81,7 @@ class ResolvePlannedItemToQuickAddCandidateUseCase @Inject constructor(
                     foodId = recipeHeader.foodId,
                     recipeId = batch.recipeId,
                     batchId = batchId,
+                    recipeVariantId = null,
                     plannedServings = item.qtyServings,
                     plannedGrams = item.qtyGrams,
                 )
