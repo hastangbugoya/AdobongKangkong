@@ -511,12 +511,34 @@ fun QuickAddBottomSheet(
                     }
 
                     val isLoggingByGrams = state.inputMode == InputMode.GRAMS
+
                     val isPrimaryEnabled =
-                        !selected.isRecipe ||
-                                !isLoggingByGrams ||
-                                (SHOW_COOKED_BATCH_IN_QUICK_ADD &&
-                                        state.selectedRecipeVariantId == null &&
-                                        state.selectedBatchId != null)
+                        when (state.mode) {
+                            QuickAddMode.EDIT -> {
+                                /*
+                                 * Edit mode updates the existing log row through UpdateLogEntryUseCase.
+                                 *
+                                 * Do not apply create-mode recipe/batch restrictions here. Those restrictions are for
+                                 * creating a new recipe log, especially the paused cooked-batch-by-grams workflow.
+                                 *
+                                 * Without this exception, an existing recipe variant log can reopen with derived grams
+                                 * visible/active, causing the Save button to stay disabled even when the user only
+                                 * changes meal slot.
+                                 */
+                                !state.isSaving
+                            }
+
+                            QuickAddMode.CREATE -> {
+                                !state.isSaving &&
+                                        (
+                                                !selected.isRecipe ||
+                                                        !isLoggingByGrams ||
+                                                        (SHOW_COOKED_BATCH_IN_QUICK_ADD &&
+                                                                state.selectedRecipeVariantId == null &&
+                                                                state.selectedBatchId != null)
+                                                )
+                            }
+                        }
 
                     Box(Modifier.fillMaxWidth()) {
                         bannerBitmapState.value?.let { bmp ->

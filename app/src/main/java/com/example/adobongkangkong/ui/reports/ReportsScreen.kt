@@ -177,21 +177,79 @@ private fun MacroReportCard(
                 }
             }
 
-            MacroBarcodeChart(
-                values = metric.dailyValues
-            )
+            MacroGraphRangeLegend(metric)
 
+            MacroBarcodeChart(
+                values = metric.dailyValues,
+                referenceValue = metric.referenceValue
+            )
             ReportStatsBlock(metric)
         }
     }
 }
 
 @Composable
+private fun MacroGraphRangeLegend(
+    metric: MacroReportMetric
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        GraphLegendValue(
+            label = "Min",
+            value = metric.stats.low.formatMetric(metric.unit)
+        )
+
+        GraphLegendValue(
+            label = "Avg",
+            value = metric.stats.average.formatMetric(metric.unit)
+        )
+
+        GraphLegendValue(
+            label = "Max",
+            value = metric.stats.high.formatMetric(metric.unit)
+        )
+
+        metric.referenceValue?.let { reference ->
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "${metric.referenceLabel ?: "Reference"}: ${reference.formatMetric(metric.unit)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraphLegendValue(
+    label: String,
+    value: String
+) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
 private fun MacroBarcodeChart(
-    values: List<MacroDailyValue>
+    values: List<MacroDailyValue>,
+    referenceValue: Double?
 ) {
     val loggedColor = MaterialTheme.colorScheme.primary
     val missingColor = MaterialTheme.colorScheme.surfaceVariant
+    val referenceColor = MaterialTheme.colorScheme.error
 
     Canvas(
         modifier = Modifier
@@ -200,9 +258,12 @@ private fun MacroBarcodeChart(
     ) {
         if (values.isEmpty()) return@Canvas
 
-        val maxValue = values.maxOfOrNull { it.value }
-            ?.takeIf { it > 0.0 }
-            ?: 1.0
+        val maxDailyValue = values.maxOfOrNull { it.value } ?: 0.0
+        val maxValue = maxOf(
+            maxDailyValue,
+            referenceValue ?: 0.0,
+            1.0
+        )
 
         val gap = 2.dp.toPx()
         val count = values.size
@@ -231,6 +292,22 @@ private fun MacroBarcodeChart(
                 )
             )
         }
+
+        referenceValue
+            ?.takeIf { it > 0.0 }
+            ?.let { reference ->
+                val y = size.height -
+                        ((reference / maxValue) * size.height).toFloat()
+
+                drawLine(
+                    color = referenceColor,
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect
+                        .dashPathEffect(floatArrayOf(10f, 8f), 0f)
+                )
+            }
     }
 }
 

@@ -21,7 +21,17 @@ data class MacroReportMetric(
     val unit: String,
     val nutrientCode: String,
     val dailyValues: List<MacroDailyValue>,
-    val stats: MacroReportStats
+    val stats: MacroReportStats,
+
+    /**
+     * Optional goal / limit line shown on the report graph.
+     *
+     * Examples:
+     * - Calories: "Limit" at 2100 kcal
+     * - Protein: "Goal" at 160 g
+     */
+    val referenceValue: Double? = null,
+    val referenceLabel: String? = null
 )
 
 data class MacroDailyValue(
