@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -18,6 +19,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -54,6 +56,8 @@ fun CalendarScreen(
     val plannedDates by vm.plannedDates.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
     val dayIconStatusByDate by vm.dayIconStatusByDate.collectAsState()
+    val selectedDateIsLaxRuleDay by vm.selectedDateIsLaxRuleDay.collectAsState()
+    val pendingLaxRuleWeekWarning by vm.pendingLaxRuleWeekWarning.collectAsState()
     val graphWeekStart by vm.graphWeekStart.collectAsState()
     val graphBars by vm.graphBars.collectAsState()
     val caloriesReference by vm.graphCaloriesReference.collectAsState()
@@ -175,6 +179,21 @@ fun CalendarScreen(
                         Spacer(Modifier.size(12.dp))
 
                         Button(
+                            onClick = { vm.onLaxRuleDayToggleClicked(date) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (selectedDateIsLaxRuleDay) {
+                                    "Remove lax rules day"
+                                } else {
+                                    "Mark as lax rules day"
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.size(8.dp))
+
+                        Button(
                             onClick = {
                                 vm.dismissDayDetails()
                                 onNavigateToDashboard(date)
@@ -238,6 +257,30 @@ fun CalendarScreen(
                         }
                     }
                 }
+            }
+
+            val laxRuleWarning = pendingLaxRuleWeekWarning
+            if (laxRuleWarning != null) {
+                AlertDialog(
+                    onDismissRequest = vm::dismissLaxRuleDayWarning,
+                    title = { Text("Lax rules day already marked") },
+                    text = {
+                        Text(
+                            text = "This week already has ${laxRuleWarning.existingMarkedCount} " +
+                                    "lax rules day marked. You can still mark this date."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = vm::confirmLaxRuleDayAfterWarning) {
+                            Text("Mark anyway")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = vm::dismissLaxRuleDayWarning) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             if (settingsSheetOpen) {

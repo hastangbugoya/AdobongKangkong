@@ -148,6 +148,18 @@ fun DashboardSettingsSheet(
     plannerDailySugarLimitG: Double,
     onPlannerDailySodiumLimitMgChange: (Double) -> Unit,
     onPlannerDailySugarLimitGChange: (Double) -> Unit,
+    laxDayCaloriesLimitKcal: Double,
+    laxDayProteinGoalG: Double,
+    laxDayCarbsLimitG: Double,
+    laxDayFatLimitG: Double,
+    laxDaySodiumLimitMg: Double,
+    laxDaySugarLimitG: Double,
+    onLaxDayCaloriesLimitKcalChange: (Double) -> Unit,
+    onLaxDayProteinGoalGChange: (Double) -> Unit,
+    onLaxDayCarbsLimitGChange: (Double) -> Unit,
+    onLaxDayFatLimitGChange: (Double) -> Unit,
+    onLaxDaySodiumLimitMgChange: (Double) -> Unit,
+    onLaxDaySugarLimitGChange: (Double) -> Unit,
 ) {
     var caffeinePickerSlotIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -422,6 +434,72 @@ fun DashboardSettingsSheet(
             unit = "g",
             onValueChange = onPlannerDailySugarLimitGChange
         )
+
+        Spacer(Modifier.height(20.dp))
+
+        Text("Lax rules day goals", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Alternate daily values for dates marked as lax rules days. These values do not edit food logs or nutrition snapshots.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        ThresholdNumberField(
+            label = "Calories per lax day",
+            value = laxDayCaloriesLimitKcal,
+            unit = "kcal",
+            onValueChange = onLaxDayCaloriesLimitKcalChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Protein goal per lax day",
+            value = laxDayProteinGoalG,
+            unit = "g",
+            onValueChange = onLaxDayProteinGoalGChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Carbs per lax day",
+            value = laxDayCarbsLimitG,
+            unit = "g",
+            onValueChange = onLaxDayCarbsLimitGChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Fat per lax day",
+            value = laxDayFatLimitG,
+            unit = "g",
+            onValueChange = onLaxDayFatLimitGChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Sodium per lax day",
+            value = laxDaySodiumLimitMg,
+            unit = "mg",
+            onValueChange = onLaxDaySodiumLimitMgChange
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        ThresholdNumberField(
+            label = "Total sugar per lax day",
+            value = laxDaySugarLimitG,
+            unit = "g",
+            onValueChange = onLaxDaySugarLimitGChange
+        )
+
         Spacer(Modifier.height(8.dp))
         HorizontalDivider()
         Spacer(Modifier.height(20.dp))

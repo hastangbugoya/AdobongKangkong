@@ -16,6 +16,7 @@ import com.example.adobongkangkong.data.local.db.dao.ImportIssueDao
 import com.example.adobongkangkong.data.local.db.dao.ImportRunDao
 import com.example.adobongkangkong.data.local.db.dao.IouDao
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
+import com.example.adobongkangkong.data.local.db.dao.LaxRuleDayDao
 import com.example.adobongkangkong.data.local.db.dao.MealTemplateDao
 import com.example.adobongkangkong.data.local.db.dao.MealTemplateItemDao
 import com.example.adobongkangkong.data.local.db.dao.MealTemplatePrefsDao
@@ -64,6 +65,7 @@ object DatabaseModule {
             .addMigrations(NutriDatabase.MIGRATION_6_7)
             .addMigrations(NutriDatabase.MIGRATION_7_8)
             .addMigrations(NutriDatabase.MIGRATION_8_9)
+            .addMigrations(NutriDatabase.MIGRATION_9_10)
             .build()
     }
 
@@ -173,4 +175,8 @@ object DatabaseModule {
     @Provides
     fun provideRecipeVariantDao(db: NutriDatabase): RecipeVariantDao =
         db.recipeVariantDao()
+
+    @Provides
+    fun provideLaxRuleDayDao(db: NutriDatabase): LaxRuleDayDao =
+        db.laxRuleDayDao()
 }

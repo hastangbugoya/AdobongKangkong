@@ -36,6 +36,8 @@ import kotlinx.coroutines.flow.StateFlow
  * 5) Nutrition Thresholds
  *    - Product Check thresholds (scan flow)
  *    - Quick Add thresholds (logging flow)
+ *    - Planner daily thresholds
+ *    - Lax rules day alternate goals
  *
  * IMPORTANT DESIGN DISTINCTION:
  *
@@ -71,6 +73,11 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * quickAdd*:
  *   - evaluated against scaled nutrient totals for the current log entry
+ *
+ * Lax rules day goals:
+ *   - used only when a date has been explicitly marked as a lax rules day
+ *   - do NOT change logged food records or persisted nutrient snapshots
+ *   - are alternate evaluation values for dashboard/report logic
  *
  * Future expansion may include:
  * - per-meal goals
@@ -276,6 +283,62 @@ interface UserPreferencesRepository {
     fun setPlannerDailySodiumLimitMg(value: Double)
 
     fun setPlannerDailySugarLimitG(value: Double)
+
+    // ============================================================
+    // 🍽️ Lax Rules Day Alternate Goals
+    // ============================================================
+
+    /**
+     * Lax rules day: calorie limit for a marked lax rules day (kcal).
+     *
+     * This is an alternate evaluation value used only when the date is marked
+     * as a lax rules day. It does not edit logs, snapshots, or normal daily
+     * targets.
+     */
+    val laxDayCaloriesLimitKcal: StateFlow<Double>
+
+    /**
+     * Lax rules day: protein goal for a marked lax rules day (g).
+     *
+     * Protein is treated as a goal rather than a caution limit because users
+     * often still want to protect minimum protein intake on flexible eating days.
+     */
+    val laxDayProteinGoalG: StateFlow<Double>
+
+    /**
+     * Lax rules day: carbohydrate limit for a marked lax rules day (g).
+     */
+    val laxDayCarbsLimitG: StateFlow<Double>
+
+    /**
+     * Lax rules day: fat limit for a marked lax rules day (g).
+     */
+    val laxDayFatLimitG: StateFlow<Double>
+
+    /**
+     * Lax rules day: sodium limit for a marked lax rules day (mg).
+     *
+     * Kept explicit because sodium may remain critical even when other nutrition
+     * rules are relaxed.
+     */
+    val laxDaySodiumLimitMg: StateFlow<Double>
+
+    /**
+     * Lax rules day: total sugar limit for a marked lax rules day (g).
+     */
+    val laxDaySugarLimitG: StateFlow<Double>
+
+    fun setLaxDayCaloriesLimitKcal(value: Double)
+
+    fun setLaxDayProteinGoalG(value: Double)
+
+    fun setLaxDayCarbsLimitG(value: Double)
+
+    fun setLaxDayFatLimitG(value: Double)
+
+    fun setLaxDaySodiumLimitMg(value: Double)
+
+    fun setLaxDaySugarLimitG(value: Double)
 }
 
 enum class MealReminderIntensity {

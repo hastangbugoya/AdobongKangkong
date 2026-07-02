@@ -3,6 +3,8 @@ package com.example.adobongkangkong.ui.calendar
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.dao.LaxRuleDayDao
+import com.example.adobongkangkong.data.local.db.entity.LaxRuleDayEntity
 import com.example.adobongkangkong.domain.model.Nutrient
 import com.example.adobongkangkong.domain.nutrition.MacroKeys
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
@@ -64,6 +66,18 @@ data class CalendarSuccessOption(
     val sortCategoryOrdinal: Int
 )
 
+/**
+ * UI warning state shown when the user marks another lax rules day in the same week.
+ *
+ * This is intentionally a warning, not a blocker. The user may still confirm the mark
+ * because honest logging is preferred over forcing fake or hidden intake data.
+ */
+data class LaxRuleWeekWarningUi(
+    val date: LocalDate,
+    val weekStart: LocalDate,
+    val existingMarkedCount: Int
+)
+
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
     private val observePlannedDaysInMonth: ObservePlannedDaysInMonthUseCase,
@@ -75,6 +89,7 @@ class CalendarViewModel @Inject constructor(
     private val calendarSuccessNutrientRepository: CalendarSuccessNutrientRepository,
     private val nutrientRepository: NutrientRepository,
     private val observeDashboardNutrients: ObserveDashboardNutrientsUseCase,
+    private val laxRuleDayDao: LaxRuleDayDao,
 ) : ViewModel() {
 
     private val _month = MutableStateFlow(YearMonth.now())
@@ -157,6 +172,36 @@ class CalendarViewModel @Inject constructor(
         _month
             .flatMapLatest { m -> observePlannedDaysInMonth(m) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * Lax rules days marked in the currently visible month.
+     *
+     * These are user-selected calendar dates that should later use alternate goal
+     * handling. They do not alter logged foods, stored nutrient snapshots, or totals.
+     */
+    val laxRuleDates: StateFlow<Set<LocalDate>> =
+        _month
+            .flatMapLatest { ym ->
+                laxRuleDayDao.observeMarkedDatesBetween(
+                    startEpochDay = ym.atDay(1).toEpochDay(),
+                    endEpochDay = ym.atEndOfMonth().toEpochDay()
+                )
+            }
+            .map { epochDays ->
+                epochDays
+                    .map(LocalDate::ofEpochDay)
+                    .toSet()
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    val selectedDateIsLaxRuleDay: StateFlow<Boolean> =
+        combine(_selectedDate, laxRuleDates) { selected, markedDates ->
+            selected != null && selected in markedDates
+        }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    private val _pendingLaxRuleWeekWarning = MutableStateFlow<LaxRuleWeekWarningUi?>(null)
+    val pendingLaxRuleWeekWarning: StateFlow<LaxRuleWeekWarningUi?> = _pendingLaxRuleWeekWarning
 
     /**
      * Month grid icon status map.
@@ -290,6 +335,55 @@ class CalendarViewModel @Inject constructor(
 
     fun dismissDayDetails() {
         _selectedDate.value = null
+    }
+
+    fun onLaxRuleDayToggleClicked(date: LocalDate) {
+        viewModelScope.launch {
+            if (date in laxRuleDates.value) {
+                laxRuleDayDao.deleteForDate(date.toEpochDay())
+                return@launch
+            }
+
+            val weekStart = startOfWeek(date)
+            val existingMarkedCount = laxRuleDayDao.countMarkedDaysInWeek(
+                weekStartEpochDay = weekStart.toEpochDay(),
+                weekEndEpochDay = weekStart.plusDays(6).toEpochDay()
+            )
+
+            if (existingMarkedCount > 0) {
+                _pendingLaxRuleWeekWarning.value = LaxRuleWeekWarningUi(
+                    date = date,
+                    weekStart = weekStart,
+                    existingMarkedCount = existingMarkedCount
+                )
+            } else {
+                markLaxRuleDay(date)
+            }
+        }
+    }
+
+    fun confirmLaxRuleDayAfterWarning() {
+        val warning = _pendingLaxRuleWeekWarning.value ?: return
+        _pendingLaxRuleWeekWarning.value = null
+
+        viewModelScope.launch {
+            markLaxRuleDay(warning.date)
+        }
+    }
+
+    fun dismissLaxRuleDayWarning() {
+        _pendingLaxRuleWeekWarning.value = null
+    }
+
+    private suspend fun markLaxRuleDay(date: LocalDate) {
+        val now = System.currentTimeMillis()
+        laxRuleDayDao.upsert(
+            LaxRuleDayEntity(
+                dateEpochDay = date.toEpochDay(),
+                createdAtEpochMillis = now,
+                updatedAtEpochMillis = now
+            )
+        )
     }
 
     fun openSettingsSheet() {

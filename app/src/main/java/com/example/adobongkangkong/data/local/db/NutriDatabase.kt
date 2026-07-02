@@ -19,6 +19,7 @@ import com.example.adobongkangkong.data.local.db.dao.ImportIssueDao
 import com.example.adobongkangkong.data.local.db.dao.ImportRunDao
 import com.example.adobongkangkong.data.local.db.dao.IouDao
 import com.example.adobongkangkong.data.local.db.dao.LogEntryDao
+import com.example.adobongkangkong.data.local.db.dao.LaxRuleDayDao
 import com.example.adobongkangkong.data.local.db.dao.MealTemplateDao
 import com.example.adobongkangkong.data.local.db.dao.MealTemplateItemDao
 import com.example.adobongkangkong.data.local.db.dao.MealTemplatePrefsDao
@@ -50,6 +51,7 @@ import com.example.adobongkangkong.data.local.db.entity.ImportIssueEntity
 import com.example.adobongkangkong.data.local.db.entity.ImportRunEntity
 import com.example.adobongkangkong.data.local.db.entity.IouEntity
 import com.example.adobongkangkong.data.local.db.entity.LogEntryEntity
+import com.example.adobongkangkong.data.local.db.entity.LaxRuleDayEntity
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateEntity
 import com.example.adobongkangkong.data.local.db.entity.MealTemplateItemEntity
 import com.example.adobongkangkong.data.local.db.entity.MealTemplatePrefsEntity
@@ -99,6 +101,7 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientC
         NutrientEntity::class,
         FoodNutrientEntity::class,
         LogEntryEntity::class,
+        LaxRuleDayEntity::class,
         RecipeIngredientEntity::class,
         RecipeEntity::class,
         NutrientAliasEntity::class,
@@ -129,7 +132,7 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientC
         RecipeVariantEntity::class,
         RecipeVariantIngredientChangeEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -139,6 +142,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun nutrientDao(): NutrientDao
     abstract fun foodNutrientDao(): FoodNutrientDao
     abstract fun logEntryDao(): LogEntryDao
+    abstract fun laxRuleDayDao(): LaxRuleDayDao
     abstract fun recipeDao(): RecipeDao
     abstract fun summaryDao(): SummaryDao
     abstract fun recipeIngredientDao(): RecipeIngredientDao
@@ -589,6 +593,40 @@ abstract class NutriDatabase : RoomDatabase() {
                     MeowLog.d("DB> MIGRATION 8→9 SUCCESS")
                 } catch (t: Throwable) {
                     MeowLog.e("DB> MIGRATION 8→9 FAILED", t)
+                    throw t
+                }
+            }
+        }
+
+
+        /**
+         * Migration 9 -> 10
+         *
+         * Adds:
+         * - lax_rule_days
+         *
+         * This table stores per-date markers for days where the user wants the app to
+         * apply relaxed/lax goal rules. It intentionally does not alter, delete, or
+         * rewrite meal log entries; it only adds a reporting/scoring marker for the day.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 9→10 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS lax_rule_days (
+                            dateEpochDay INTEGER PRIMARY KEY NOT NULL,
+                            createdAtEpochMillis INTEGER NOT NULL,
+                            updatedAtEpochMillis INTEGER NOT NULL
+                        )
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 9→10 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 9→10 FAILED", t)
                     throw t
                 }
             }

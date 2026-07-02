@@ -49,6 +49,12 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - Quick Add sugar: 15 g per logged entry
  * - Planner Day sodium: 2300 mg per planned day
  * - Planner Day total sugar: 36 g per planned day
+ * - Lax rules day calories: 3000 kcal
+ * - Lax rules day protein: 160 g
+ * - Lax rules day carbs: 400 g
+ * - Lax rules day fat: 120 g
+ * - Lax rules day sodium: 2300 mg
+ * - Lax rules day total sugar: 80 g
  *
  * Weight-log reminder defaults:
  * - Mode: NO_WARNING
@@ -73,7 +79,9 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * Weight logs themselves are historical records and belong in Room.
  * Only the dashboard reminder/ribbon preference state belongs here.
  *
- * Keep the two threshold groups separate.
+ * Keep the threshold groups separate. Lax rules day goal values are alternate
+ * evaluation preferences for marked days; they do not edit stored logs or normal
+ * daily nutrient targets.
  * ============================================================
  */
 @Singleton
@@ -316,6 +324,78 @@ class DataStoreUserPreferencesRepository @Inject constructor(
                 initialValue = DEFAULT_PLANNER_DAILY_SUGAR_LIMIT_G
             )
 
+    override val laxDayCaloriesLimitKcal: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[LAX_DAY_CALORIES_LIMIT_KCAL_KEY]
+                    ?: DEFAULT_LAX_DAY_CALORIES_LIMIT_KCAL
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_LAX_DAY_CALORIES_LIMIT_KCAL
+            )
+
+    override val laxDayProteinGoalG: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[LAX_DAY_PROTEIN_GOAL_G_KEY]
+                    ?: DEFAULT_LAX_DAY_PROTEIN_GOAL_G
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_LAX_DAY_PROTEIN_GOAL_G
+            )
+
+    override val laxDayCarbsLimitG: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[LAX_DAY_CARBS_LIMIT_G_KEY]
+                    ?: DEFAULT_LAX_DAY_CARBS_LIMIT_G
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_LAX_DAY_CARBS_LIMIT_G
+            )
+
+    override val laxDayFatLimitG: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[LAX_DAY_FAT_LIMIT_G_KEY]
+                    ?: DEFAULT_LAX_DAY_FAT_LIMIT_G
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_LAX_DAY_FAT_LIMIT_G
+            )
+
+    override val laxDaySodiumLimitMg: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[LAX_DAY_SODIUM_LIMIT_MG_KEY]
+                    ?: DEFAULT_LAX_DAY_SODIUM_LIMIT_MG
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_LAX_DAY_SODIUM_LIMIT_MG
+            )
+
+    override val laxDaySugarLimitG: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[LAX_DAY_SUGAR_LIMIT_G_KEY]
+                    ?: DEFAULT_LAX_DAY_SUGAR_LIMIT_G
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_LAX_DAY_SUGAR_LIMIT_G
+            )
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         scope.launch {
             context.userPreferencesDataStore.edit { preferences ->
@@ -478,6 +558,60 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    override fun setLaxDayCaloriesLimitKcal(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[LAX_DAY_CALORIES_LIMIT_KCAL_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
+    override fun setLaxDayProteinGoalG(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[LAX_DAY_PROTEIN_GOAL_G_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
+    override fun setLaxDayCarbsLimitG(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[LAX_DAY_CARBS_LIMIT_G_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
+    override fun setLaxDayFatLimitG(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[LAX_DAY_FAT_LIMIT_G_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
+    override fun setLaxDaySodiumLimitMg(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[LAX_DAY_SODIUM_LIMIT_MG_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
+    override fun setLaxDaySugarLimitG(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[LAX_DAY_SUGAR_LIMIT_G_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
     private companion object {
         const val DEFAULT_MEAL_REMINDER_START_MINUTES = 8 * 60
         const val DEFAULT_MEAL_REMINDER_INTERVAL_MINUTES = 3 * 60
@@ -492,6 +626,13 @@ class DataStoreUserPreferencesRepository @Inject constructor(
 
         const val DEFAULT_PLANNER_DAILY_SODIUM_LIMIT_MG = 2300.0
         const val DEFAULT_PLANNER_DAILY_SUGAR_LIMIT_G = 36.0
+
+        const val DEFAULT_LAX_DAY_CALORIES_LIMIT_KCAL = 3000.0
+        const val DEFAULT_LAX_DAY_PROTEIN_GOAL_G = 160.0
+        const val DEFAULT_LAX_DAY_CARBS_LIMIT_G = 400.0
+        const val DEFAULT_LAX_DAY_FAT_LIMIT_G = 120.0
+        const val DEFAULT_LAX_DAY_SODIUM_LIMIT_MG = 2300.0
+        const val DEFAULT_LAX_DAY_SUGAR_LIMIT_G = 80.0
 
         val LOCK_PORTRAIT_KEY = booleanPreferencesKey("lock_portrait")
         val PRIVACY_LOCK_ENABLED_KEY = booleanPreferencesKey("privacy_lock_enabled")
@@ -530,5 +671,18 @@ class DataStoreUserPreferencesRepository @Inject constructor(
             doublePreferencesKey("planner_daily_sodium_limit_mg")
         val PLANNER_DAILY_SUGAR_LIMIT_G_KEY =
             doublePreferencesKey("planner_daily_sugar_limit_g")
+
+        val LAX_DAY_CALORIES_LIMIT_KCAL_KEY =
+            doublePreferencesKey("lax_day_calories_limit_kcal")
+        val LAX_DAY_PROTEIN_GOAL_G_KEY =
+            doublePreferencesKey("lax_day_protein_goal_g")
+        val LAX_DAY_CARBS_LIMIT_G_KEY =
+            doublePreferencesKey("lax_day_carbs_limit_g")
+        val LAX_DAY_FAT_LIMIT_G_KEY =
+            doublePreferencesKey("lax_day_fat_limit_g")
+        val LAX_DAY_SODIUM_LIMIT_MG_KEY =
+            doublePreferencesKey("lax_day_sodium_limit_mg")
+        val LAX_DAY_SUGAR_LIMIT_G_KEY =
+            doublePreferencesKey("lax_day_sugar_limit_g")
     }
 }

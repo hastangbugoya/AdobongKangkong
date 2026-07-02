@@ -140,6 +140,13 @@ fun DashboardScreen(
     val quickAddSugarCautionG by vm.quickAddSugarCautionG.collectAsState()
     val plannerDailySodiumLimitMg by vm.plannerDailySodiumLimitMg.collectAsState()
     val plannerDailySugarLimitG by vm.plannerDailySugarLimitG.collectAsState()
+    val laxDayCaloriesLimitKcal by vm.laxDayCaloriesLimitKcal.collectAsState()
+    val laxDayProteinGoalG by vm.laxDayProteinGoalG.collectAsState()
+    val laxDayCarbsLimitG by vm.laxDayCarbsLimitG.collectAsState()
+    val laxDayFatLimitG by vm.laxDayFatLimitG.collectAsState()
+    val laxDaySodiumLimitMg by vm.laxDaySodiumLimitMg.collectAsState()
+    val laxDaySugarLimitG by vm.laxDaySugarLimitG.collectAsState()
+    val selectedDateIsLaxRuleDay by vm.selectedDateIsLaxRuleDay.collectAsState()
 
     DisposableEffect(lifecycleOwner, vm) {
         val observer = LifecycleEventObserver { _, event ->
@@ -335,6 +342,18 @@ fun DashboardScreen(
                 plannerDailySugarLimitG = plannerDailySugarLimitG,
                 onPlannerDailySodiumLimitMgChange = vm::setPlannerDailySodiumLimitMg,
                 onPlannerDailySugarLimitGChange = vm::setPlannerDailySugarLimitG,
+                laxDayCaloriesLimitKcal = laxDayCaloriesLimitKcal,
+                laxDayProteinGoalG = laxDayProteinGoalG,
+                laxDayCarbsLimitG = laxDayCarbsLimitG,
+                laxDayFatLimitG = laxDayFatLimitG,
+                laxDaySodiumLimitMg = laxDaySodiumLimitMg,
+                laxDaySugarLimitG = laxDaySugarLimitG,
+                onLaxDayCaloriesLimitKcalChange = vm::setLaxDayCaloriesLimitKcal,
+                onLaxDayProteinGoalGChange = vm::setLaxDayProteinGoalG,
+                onLaxDayCarbsLimitGChange = vm::setLaxDayCarbsLimitG,
+                onLaxDayFatLimitGChange = vm::setLaxDayFatLimitG,
+                onLaxDaySodiumLimitMgChange = vm::setLaxDaySodiumLimitMg,
+                onLaxDaySugarLimitGChange = vm::setLaxDaySugarLimitG,
             )
         }
     }
@@ -499,15 +518,34 @@ fun DashboardScreen(
                         )
                     }
 
-                    Text(
-                        text = buildDashboardDateLabel(
-                            selectedDate = selectedDate,
-                            currentDate = currentDate,
-                            fallbackFormattedDate = dateLabel
-                        ),
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = buildDashboardDateLabel(
+                                selectedDate = selectedDate,
+                                currentDate = currentDate,
+                                fallbackFormattedDate = dateLabel
+                            ),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        if (selectedDateIsLaxRuleDay) {
+                            Spacer(Modifier.width(8.dp))
+
+                            Icon(
+                                painter = painterResource(R.drawable.ms_spa),
+                                contentDescription = "Lax day",
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
 
                     IconButton(
                         onClick = vm::showNextDay,

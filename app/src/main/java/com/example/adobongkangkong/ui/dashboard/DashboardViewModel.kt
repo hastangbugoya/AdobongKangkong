@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.dao.LaxRuleDayDao
 import com.example.adobongkangkong.domain.debug.DebugResetUseCase
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
@@ -111,6 +112,7 @@ class DashboardViewModel @Inject constructor(
 
     private val userPinnedNutrientRepository: UserPinnedNutrientRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
+    private val laxRuleDayDao: LaxRuleDayDao,
     private val observeWeightLogReminderRibbonUseCase: ObserveWeightLogReminderRibbonUseCase,
     private val dismissWeightLogReminderUseCase: DismissWeightLogReminderUseCase,
     private val setPinnedDashboardNutrientsUseCase: SetPinnedDashboardNutrientsUseCase,
@@ -134,6 +136,24 @@ class DashboardViewModel @Inject constructor(
 
     val selectedDate: StateFlow<LocalDate> =
         selectedDateFlow.asStateFlow()
+
+    /**
+     * True when the currently selected dashboard date is marked as a lax rules day.
+     *
+     * UI use only: this drives the small dashboard date badge. The actual goal
+     * substitution is handled separately by ObserveDashboardNutrientCardsUseCase.
+     */
+    val selectedDateIsLaxRuleDay: StateFlow<Boolean> =
+        selectedDateFlow
+            .flatMapLatest { date ->
+                laxRuleDayDao.observeForDate(date.toEpochDay())
+                    .map { entity -> entity != null }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = false
+            )
 
     val privacyLockEnabled: StateFlow<Boolean> =
         userPreferencesRepository.privacyLockEnabled
@@ -288,6 +308,24 @@ class DashboardViewModel @Inject constructor(
 
     val plannerDailySugarLimitG: StateFlow<Double> =
         userPreferencesRepository.plannerDailySugarLimitG
+
+    val laxDayCaloriesLimitKcal: StateFlow<Double> =
+        userPreferencesRepository.laxDayCaloriesLimitKcal
+
+    val laxDayProteinGoalG: StateFlow<Double> =
+        userPreferencesRepository.laxDayProteinGoalG
+
+    val laxDayCarbsLimitG: StateFlow<Double> =
+        userPreferencesRepository.laxDayCarbsLimitG
+
+    val laxDayFatLimitG: StateFlow<Double> =
+        userPreferencesRepository.laxDayFatLimitG
+
+    val laxDaySodiumLimitMg: StateFlow<Double> =
+        userPreferencesRepository.laxDaySodiumLimitMg
+
+    val laxDaySugarLimitG: StateFlow<Double> =
+        userPreferencesRepository.laxDaySugarLimitG
 
     val rollingStats: StateFlow<RollingNutritionStats> =
         combine(selectedDateFlow, rollingDaysFlow) { date, days -> date to days }
@@ -458,6 +496,30 @@ class DashboardViewModel @Inject constructor(
 
     fun setPlannerDailySugarLimitG(value: Double) {
         userPreferencesRepository.setPlannerDailySugarLimitG(value)
+    }
+
+    fun setLaxDayCaloriesLimitKcal(value: Double) {
+        userPreferencesRepository.setLaxDayCaloriesLimitKcal(value)
+    }
+
+    fun setLaxDayProteinGoalG(value: Double) {
+        userPreferencesRepository.setLaxDayProteinGoalG(value)
+    }
+
+    fun setLaxDayCarbsLimitG(value: Double) {
+        userPreferencesRepository.setLaxDayCarbsLimitG(value)
+    }
+
+    fun setLaxDayFatLimitG(value: Double) {
+        userPreferencesRepository.setLaxDayFatLimitG(value)
+    }
+
+    fun setLaxDaySodiumLimitMg(value: Double) {
+        userPreferencesRepository.setLaxDaySodiumLimitMg(value)
+    }
+
+    fun setLaxDaySugarLimitG(value: Double) {
+        userPreferencesRepository.setLaxDaySugarLimitG(value)
     }
 
     fun buildSharedSnapshotJson() {

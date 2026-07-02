@@ -21,6 +21,12 @@ import kotlinx.coroutines.flow.StateFlow
  * - Quick Add sugar: 15 g per logged entry
  * - Planner Day sodium: 2300 mg per planned day
  * - Planner Day total sugar: 36 g per planned day
+ * - Lax rules day calories: 3000 kcal
+ * - Lax rules day protein: 160 g
+ * - Lax rules day carbs: 400 g
+ * - Lax rules day fat: 120 g
+ * - Lax rules day sodium: 2300 mg
+ * - Lax rules day total sugar: 80 g
  *
  * Caffeine widget defaults:
  * - All 3 quick-log food slots start unconfigured.
@@ -111,6 +117,30 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override val plannerDailySugarLimitG: StateFlow<Double> =
         _plannerDailySugarLimitG
 
+    private val _laxDayCaloriesLimitKcal = MutableStateFlow(3000.0)
+    override val laxDayCaloriesLimitKcal: StateFlow<Double> =
+        _laxDayCaloriesLimitKcal
+
+    private val _laxDayProteinGoalG = MutableStateFlow(160.0)
+    override val laxDayProteinGoalG: StateFlow<Double> =
+        _laxDayProteinGoalG
+
+    private val _laxDayCarbsLimitG = MutableStateFlow(400.0)
+    override val laxDayCarbsLimitG: StateFlow<Double> =
+        _laxDayCarbsLimitG
+
+    private val _laxDayFatLimitG = MutableStateFlow(120.0)
+    override val laxDayFatLimitG: StateFlow<Double> =
+        _laxDayFatLimitG
+
+    private val _laxDaySodiumLimitMg = MutableStateFlow(2300.0)
+    override val laxDaySodiumLimitMg: StateFlow<Double> =
+        _laxDaySodiumLimitMg
+
+    private val _laxDaySugarLimitG = MutableStateFlow(80.0)
+    override val laxDaySugarLimitG: StateFlow<Double> =
+        _laxDaySugarLimitG
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled
     }
@@ -183,5 +213,30 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
 
     override fun setPlannerDailySugarLimitG(value: Double) {
         _plannerDailySugarLimitG.value = value.coerceAtLeast(0.0)
+    }
+
+
+    override fun setLaxDayCaloriesLimitKcal(value: Double) {
+        _laxDayCaloriesLimitKcal.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setLaxDayProteinGoalG(value: Double) {
+        _laxDayProteinGoalG.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setLaxDayCarbsLimitG(value: Double) {
+        _laxDayCarbsLimitG.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setLaxDayFatLimitG(value: Double) {
+        _laxDayFatLimitG.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setLaxDaySodiumLimitMg(value: Double) {
+        _laxDaySodiumLimitMg.value = value.coerceAtLeast(0.0)
+    }
+
+    override fun setLaxDaySugarLimitG(value: Double) {
+        _laxDaySugarLimitG.value = value.coerceAtLeast(0.0)
     }
 }
