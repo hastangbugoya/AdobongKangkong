@@ -56,6 +56,7 @@ fun CalendarScreen(
     val plannedDates by vm.plannedDates.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
     val dayIconStatusByDate by vm.dayIconStatusByDate.collectAsState()
+    val laxRuleDates by vm.laxRuleDates.collectAsState()
     val selectedDateIsLaxRuleDay by vm.selectedDateIsLaxRuleDay.collectAsState()
     val pendingLaxRuleWeekWarning by vm.pendingLaxRuleWeekWarning.collectAsState()
     val graphWeekStart by vm.graphWeekStart.collectAsState()
@@ -141,6 +142,7 @@ fun CalendarScreen(
                         month = month,
                         plannedDates = plannedDates,
                         dayIconStatusByDate = dayIconStatusByDate,
+                        laxRuleDates = laxRuleDates,
                         selectedDate = selectedDate,
                         onDateClick = vm::onDateClicked,
                         modifier = Modifier.padding(horizontal = 12.dp),

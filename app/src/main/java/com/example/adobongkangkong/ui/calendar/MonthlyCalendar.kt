@@ -1,26 +1,20 @@
 package com.example.adobongkangkong.ui.calendar
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,47 +64,18 @@ fun MonthlyCalendar(
                 val isToday = (date != null && date == currentDate)
                 val isLaxRuleDay = date != null && date in laxRuleDates
 
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    CalendarDayCell(
-                        cell = cell,
-                        isSelected = isSelected,
-                        isToday = isToday,
-                        iconStatus = date?.let { dayIconStatusByDate[it] },
-                        onClick = {
-                            val d = date ?: return@CalendarDayCell
-                            onDateClick(d)
-                        }
-                    )
-
-                    if (isLaxRuleDay) {
-                        LaxRuleDayBadge(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 2.dp, end = 2.dp)
-                        )
+                CalendarDayCell(
+                    cell = cell,
+                    isSelected = isSelected,
+                    isToday = isToday,
+                    iconStatus = date?.let { dayIconStatusByDate[it] },
+                    isLaxRuleDay = isLaxRuleDay,
+                    onClick = {
+                        val d = date ?: return@CalendarDayCell
+                        onDateClick(d)
                     }
-                }
+                )
             }
-        }
-    }
-}
-
-@Composable
-private fun LaxRuleDayBadge(
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.size(16.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = "L",
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center
-            )
         }
     }
 }
