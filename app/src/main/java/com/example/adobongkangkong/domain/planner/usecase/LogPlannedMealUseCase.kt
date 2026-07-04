@@ -68,7 +68,9 @@ import javax.inject.Inject
  *          logs directly via CreateLogEntryUseCase with FoodRef.Food
  *
  *      - RECIPE:
- *          BLOCKED (requires cooked batch to log; phase-1 rule)
+ *          resolves recipe header -> recipe food, then logs by servings via FoodRef.Recipe.
+ *          If the planned recipe item is stored by grams, it is blocked because gram-based
+ *          recipe logging still requires a cooked-batch yield context.
  *
  *      - RECIPE_BATCH:
  *          resolves batch -> recipe header -> recipe food
@@ -120,8 +122,8 @@ import javax.inject.Inject
  * - logDateIso is authoritative for day membership.
  *   Do not derive log day from timestamp windows (Day Log bug prevention).
  *
- * - This use case intentionally blocks RECIPE (non-batch) logging.
- *   Logging recipes requires a cooked batch snapshot to preserve immutability.
+ * - This use case supports RECIPE logging by servings.
+ *   Recipe gram logging still requires RECIPE_BATCH context because grams need a yield basis.
  *
  * - markLoggedIfNotYet is an atomic write.
  *   If later item logging fails, the meal remains marked logged.
@@ -247,12 +249,60 @@ class LogPlannedMealUseCase @Inject constructor(
                 }
 
                 PlannedItemSource.RECIPE -> {
-                    blocked++
-                    outcomes += ItemOutcome(
-                        plannedItemId = it.id,
-                        status = ItemOutcome.Status.BLOCKED,
-                        message = "Recipe requires a cooked batch to log."
+                    if (amountInput is AmountInput.ByGrams) {
+                        blocked++
+                        outcomes += ItemOutcome(
+                            plannedItemId = it.id,
+                            status = ItemOutcome.Status.BLOCKED,
+                            message = "Recipe grams require a cooked batch to log."
+                        )
+                        continue
+                    }
+
+                    val header = recipes.getHeaderByRecipeId(it.refId)
+                    if (header == null) {
+                        errored++
+                        outcomes += ItemOutcome(it.id, ItemOutcome.Status.ERROR, "Recipe not found.")
+                        continue
+                    }
+
+                    val recipeFood = foods.getById(header.foodId)
+                    if (recipeFood == null) {
+                        errored++
+                        outcomes += ItemOutcome(it.id, ItemOutcome.Status.ERROR, "Recipe food not found.")
+                        continue
+                    }
+
+                    val ref = FoodRef.Recipe(
+                        recipeId = header.recipeId,
+                        stableId = recipeFood.stableId,
+                        displayName = recipeFood.name,
+                        servingsYieldDefault = header.servingsYield
                     )
+
+                    val res = createLogEntry.execute(
+                        ref = ref,
+                        timestamp = timestamp,
+                        amountInput = amountInput,
+                        recipeBatchId = null,
+                        mealSlot = mealSlot,
+                        logDateIso = logDateIso
+                    )
+
+                    when (res) {
+                        is CreateLogEntryUseCase.Result.Success -> {
+                            logged++
+                            outcomes += ItemOutcome(it.id, ItemOutcome.Status.LOGGED)
+                        }
+                        is CreateLogEntryUseCase.Result.Blocked -> {
+                            blocked++
+                            outcomes += ItemOutcome(it.id, ItemOutcome.Status.BLOCKED, res.message)
+                        }
+                        is CreateLogEntryUseCase.Result.Error -> {
+                            errored++
+                            outcomes += ItemOutcome(it.id, ItemOutcome.Status.ERROR, res.message)
+                        }
+                    }
                 }
 
                 PlannedItemSource.RECIPE_BATCH -> {
@@ -356,8 +406,9 @@ class LogPlannedMealUseCase @Inject constructor(
  *   - clear UX for partial failures
  *
  * Recipe vs recipe batch
- * - RECIPE (definition) is blocked intentionally.
- * - Only RECIPE_BATCH can be logged because batch context produces stable snapshots.
+ * - RECIPE can be logged by servings because CreateLogEntryUseCase snapshots recipe nutrition.
+ * - RECIPE by grams is still blocked unless the item is a RECIPE_BATCH, because grams require
+ *   cooked-yield context.
  *
  * Performance considerations
  * - This is IO-heavy by nature (iterates items and may resolve batch/header/food).
