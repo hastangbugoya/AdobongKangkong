@@ -71,7 +71,10 @@ import java.time.Instant
         Index(value = ["recipeBatchId"]),
 
         // For recipe variant provenance and future variant usage queries.
-        Index(value = ["recipeVariantId"])
+        Index(value = ["recipeVariantId"]),
+
+        // For measured-yield recipe gram logs and future audit/debug queries.
+        Index(value = ["measuredYieldIdUsed"])
     ]
 )
 data class LogEntryEntity(
@@ -185,6 +188,34 @@ data class LogEntryEntity(
      * even if batch/recipe metadata changes later.
      */
     val gramsPerServingCooked: Double? = null,
+
+    /**
+     * RecipeMeasuredYield row id used for recipe gram logging.
+     *
+     * Null for normal food logs, serving-based recipe logs, variant logs for now,
+     * and legacy cooked-batch logs.
+     */
+    val measuredYieldIdUsed: Long? = null,
+
+    /**
+     * Measured cooked yield, in grams, frozen at log time.
+     *
+     * This protects historical recipe gram logs from later active-yield edits.
+     */
+    val measuredYieldGramsUsed: Double? = null,
+
+    /**
+     * User-entered/logged grams for measured-yield recipe gram logs.
+     */
+    val gramsLogged: Double? = null,
+
+    /**
+     * Recipe servings equivalent computed from the measured yield used at log time.
+     *
+     * Formula:
+     *     gramsLogged / measuredYieldGramsUsed * recipeServingsYield
+     */
+    val servingsEquivalent: Double? = null,
 
     /**
      * JSON-serialized immutable nutrient totals for this log event.

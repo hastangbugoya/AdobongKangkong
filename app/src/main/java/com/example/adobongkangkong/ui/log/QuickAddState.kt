@@ -60,6 +60,39 @@ data class QuickAddState(
     val recipeVariants: List<QuickAddRecipeVariantUi> = emptyList(),
     val selectedRecipeVariantId: Long? = null,
 
+    /**
+     * Active measured cooked yield for the selected recipe form.
+     *
+     * Recipe form means:
+     * - selected base recipe when selectedRecipeVariantId is null
+     * - selected recipe variant when selectedRecipeVariantId is non-null
+     *
+     * This value is used only as the visible basis for future gram-based recipe logging.
+     * It is not cooked-batch inventory and does not mean a physical batch still exists.
+     */
+    val activeMeasuredYieldGrams: Double? = null,
+
+    /**
+     * Last time the active measured yield was entered or confirmed.
+     *
+     * UX rule:
+     * Whenever the user has an option to use grams/weight to log a recipe or variant,
+     * the UI must show this timestamp with the active measured yield.
+     */
+    val activeMeasuredYieldUpdatedAtEpochMs: Long? = null,
+
+    /**
+     * Optional note attached to the active measured yield, such as "large pot",
+     * "air fryer", or "less water".
+     */
+    val activeMeasuredYieldNote: String? = null,
+
+    /**
+     * True when the selected recipe or recipe variant has an active measured yield
+     * that can support gram-based logging.
+     */
+    val recipeGramLoggingAvailable: Boolean = false,
+
     val mealSlot: MealSlot? = null,
 
     val yieldGramsText: String = "",

@@ -31,6 +31,7 @@ import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeInstructionStepDao
+import com.example.adobongkangkong.data.local.db.dao.RecipeMeasuredYieldDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeVariantDao
 import com.example.adobongkangkong.data.local.db.dao.StoreDao
 import com.example.adobongkangkong.data.local.db.dao.SummaryDao
@@ -66,6 +67,8 @@ object DatabaseModule {
             .addMigrations(NutriDatabase.MIGRATION_7_8)
             .addMigrations(NutriDatabase.MIGRATION_8_9)
             .addMigrations(NutriDatabase.MIGRATION_9_10)
+            .addMigrations(NutriDatabase.MIGRATION_10_11)
+            .addMigrations(NutriDatabase.MIGRATION_11_12)
             .build()
     }
 
@@ -179,4 +182,9 @@ object DatabaseModule {
     @Provides
     fun provideLaxRuleDayDao(db: NutriDatabase): LaxRuleDayDao =
         db.laxRuleDayDao()
+
+    @Provides
+    fun provideRecipeMeasuredYieldDao(
+        db: NutriDatabase
+    ): RecipeMeasuredYieldDao = db.recipeMeasuredYieldDao()
 }

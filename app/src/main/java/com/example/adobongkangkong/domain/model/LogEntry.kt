@@ -28,5 +28,34 @@ data class LogEntry(
     val recipeBatchId: Long? = null,
     val recipeVariantId: Long? = null,
     val gramsPerServingCooked: Double? = null,
+
+    /**
+     * Active measured-yield row used when this was logged.
+     *
+     * This is only populated for recipe gram logs that used RecipeMeasuredYield instead
+     * of the legacy cooked-batch path. It lets old logs explain exactly which yield
+     * assumption was used even after the recipe's active yield is updated later.
+     */
+    val measuredYieldIdUsed: Long? = null,
+
+    /**
+     * Measured cooked yield, in grams, frozen at log time.
+     */
+    val measuredYieldGramsUsed: Double? = null,
+
+    /**
+     * User-entered/logged grams for measured-yield recipe gram logs.
+     */
+    val gramsLogged: Double? = null,
+
+    /**
+     * Recipe servings equivalent computed from:
+     *
+     *     gramsLogged / measuredYieldGramsUsed * recipeServingsYield
+     *
+     * Stored for audit/debug display so future UI does not have to reverse-engineer it.
+     */
+    val servingsEquivalent: Double? = null,
+
     val mealSlot: MealSlot? = null
 )

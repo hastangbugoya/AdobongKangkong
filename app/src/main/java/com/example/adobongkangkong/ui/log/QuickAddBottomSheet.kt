@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -66,7 +69,9 @@ import com.example.adobongkangkong.ui.food.FoodGoalFlagsStrip
 import com.example.adobongkangkong.ui.food.FoodListItemUiModel
 import com.example.adobongkangkong.ui.food.SelectedFoodPanel
 import com.example.adobongkangkong.ui.food.editor.BarcodeScannerSheet
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -120,6 +125,7 @@ fun QuickAddBottomSheet(
 ) {
     val focus = LocalFocusManager.current
     val state by vm.state.collectAsState()
+    val selectedContentScrollState = rememberScrollState()
 
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
@@ -252,6 +258,19 @@ fun QuickAddBottomSheet(
                 .fillMaxWidth()
                 .padding(16.dp)
                 .navigationBarsPadding()
+                /*
+                 * Selected recipe/food logging can become taller than the bottom-sheet viewport,
+                 * especially when nutrient cautions, recipe variants, and measured-yield details
+                 * are visible. Only apply vertical scrolling in the selected-item state so we do
+                 * not nest the search/results LazyColumn inside another vertical scroller.
+                 */
+                .then(
+                    if (state.selectedFood != null) {
+                        Modifier.verticalScroll(selectedContentScrollState)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -512,6 +531,36 @@ fun QuickAddBottomSheet(
 
                     val isLoggingByGrams = state.inputMode == InputMode.GRAMS
 
+                    val gramsAmountForMeasuredYieldDisplay = state.gramsAmount
+                    val servingsForMeasuredYieldDisplay = state.servings
+
+                    val measuredYieldGramsPerServingForDisplay =
+                        if (
+                            selected.isRecipe &&
+                            state.selectedRecipeVariantId == null &&
+                            state.activeMeasuredYieldGrams != null &&
+                            gramsAmountForMeasuredYieldDisplay != null &&
+                            servingsForMeasuredYieldDisplay > 0.0
+                        ) {
+                            gramsAmountForMeasuredYieldDisplay / servingsForMeasuredYieldDisplay
+                        } else {
+                            null
+                        }
+
+                    /*
+                     * SelectedFoodPanel derives the small subtitle under the food/recipe name
+                     * from the Food model's serving bridge. For measured-yield recipe logging,
+                     * the persisted recipe-as-food bridge may still be the old ingredient-sum
+                     * estimate, which is confusing next to the correct measured-yield grams box.
+                     *
+                     * Use a display-only copy so the subtitle matches the active measured yield
+                     * path without mutating stored food/recipe data.
+                     */
+                    val selectedForDisplay =
+                        measuredYieldGramsPerServingForDisplay?.let { gramsPerServing ->
+                            selected.copy(gramsPerServingUnit = gramsPerServing)
+                        } ?: selected
+
                     val isPrimaryEnabled =
                         when (state.mode) {
                             QuickAddMode.EDIT -> {
@@ -533,6 +582,10 @@ fun QuickAddBottomSheet(
                                         (
                                                 !selected.isRecipe ||
                                                         !isLoggingByGrams ||
+                                                        (
+                                                                state.selectedRecipeVariantId == null &&
+                                                                        state.recipeGramLoggingAvailable
+                                                                ) ||
                                                         (SHOW_COOKED_BATCH_IN_QUICK_ADD &&
                                                                 state.selectedRecipeVariantId == null &&
                                                                 state.selectedBatchId != null)
@@ -551,101 +604,123 @@ fun QuickAddBottomSheet(
                             )
                         }
 
-                        SelectedFoodPanel(
-                            food = selected,
-                            servings = state.servings,
-                            servingUnitAmount = state.servingUnitAmount ?: selected.servingSize,
-                            gramsAmount = state.gramsAmount,
-                            inputUnit = state.inputUnit,
-                            inputAmount = state.inputAmount,
-                            errorMessage = state.errorMessage,
-                            onBack = {
-                                if (state.mode == QuickAddMode.EDIT) {
-                                    onDismiss()
-                                } else {
-                                    vm.clearSelection()
-                                }
-                            },
-                            onServingsChanged = vm::onServingsChanged,
-                            onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
-                            onGramsChanged = vm::onGramsChanged,
-                            onInputUnitChanged = vm::onInputUnitChanged,
-                            onInputAmountChanged = { amount ->
-                                amount?.let { vm.onInputAmountChanged(it) }
-                            },
-                            onPackage = vm::onPackageClicked,
-                            onEditFoodInEditor = {
-                                if (state.mode == QuickAddMode.CREATE) {
-                                    onOpenFoodEditor(selected.id)
-                                }
-                            },
-                            primaryButtonLabel = if (state.mode == QuickAddMode.EDIT) "Save" else "Log",
-                            isPrimaryEnabled = isPrimaryEnabled,
-                            onPrimaryAction = { vm.save(onDone = onDismiss, logDate = logDate) },
-                            extraContent = {
-                                if (state.nutrientCautions.isNotEmpty()) {
-                                    QuickAddNutrientCautions(
-                                        cautions = state.nutrientCautions
-                                    )
-                                }
+                        Column(Modifier.fillMaxWidth()) {
+                            if (
+                                selected.isRecipe &&
+                                state.selectedRecipeVariantId == null &&
+                                state.activeMeasuredYieldGrams != null
+                            ) {
+                                RecipeMeasuredYieldPortionTip(
+                                    yieldGrams = state.activeMeasuredYieldGrams,
+                                    updatedAtEpochMs = state.activeMeasuredYieldUpdatedAtEpochMs,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
 
-                                if (state.isIdentityLocked) {
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = "Food identity is locked for log edits.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                            SelectedFoodPanel(
+                                food = selectedForDisplay,
+                                servings = state.servings,
+                                servingUnitAmount = state.servingUnitAmount ?: selectedForDisplay.servingSize,
+                                gramsAmount = state.gramsAmount,
+                                inputUnit = state.inputUnit,
+                                inputAmount = state.inputAmount,
+                                errorMessage = state.errorMessage,
+                                onBack = {
+                                    if (state.mode == QuickAddMode.EDIT) {
+                                        onDismiss()
+                                    } else {
+                                        vm.clearSelection()
+                                    }
+                                },
+                                onServingsChanged = vm::onServingsChanged,
+                                onServingUnitAmountChanged = vm::onServingUnitAmountChanged,
+                                onGramsChanged = vm::onGramsChanged,
+                                onInputUnitChanged = vm::onInputUnitChanged,
+                                onInputAmountChanged = { amount ->
+                                    amount?.let { vm.onInputAmountChanged(it) }
+                                },
+                                onPackage = vm::onPackageClicked,
+                                onEditFoodInEditor = {
+                                    if (state.mode == QuickAddMode.CREATE) {
+                                        onOpenFoodEditor(selected.id)
+                                    }
+                                },
+                                primaryButtonLabel = if (state.mode == QuickAddMode.EDIT) "Save" else "Log",
+                                isPrimaryEnabled = isPrimaryEnabled,
+                                onPrimaryAction = { vm.save(onDone = onDismiss, logDate = logDate) },
+                                extraContent = {
+                                    if (state.nutrientCautions.isNotEmpty()) {
+                                        QuickAddNutrientCautions(
+                                            cautions = state.nutrientCautions
+                                        )
+                                    }
 
-                                if (selected.isRecipe) {
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("Recipe version", style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.height(8.dp))
-                                    RecipeVariantSelector(
-                                        variants = state.recipeVariants,
-                                        selectedVariantId = state.selectedRecipeVariantId,
-                                        onSelected = vm::onRecipeVariantSelected,
-                                    )
+                                    if (state.isIdentityLocked) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            text = "Food identity is locked for log edits.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
 
-                                    if (SHOW_COOKED_BATCH_IN_QUICK_ADD) {
-                                        /*
-                                         * Cooked batch logging is hidden from Quick Add while the concept is paused.
-                                         * Keep this block nearby instead of deleting it so the workflow can be revived
-                                         * without rediscovering the original recipe/batch UI wiring.
-                                         */
-                                        if (state.selectedRecipeVariantId == null) {
-                                            Spacer(Modifier.height(16.dp))
-                                            Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
-                                            Spacer(Modifier.height(8.dp))
-                                            BatchSelector(
-                                                batches = state.batches,
-                                                selectedBatchId = state.selectedBatchId,
-                                                onSelected = vm::onBatchSelected,
-                                            )
-                                            if (isLoggingByGrams &&
-                                                state.selectedBatchId == null &&
-                                                state.errorMessage == null
-                                            ) {
+                                    if (selected.isRecipe) {
+                                        Spacer(Modifier.height(16.dp))
+                                        Text("Recipe version", style = MaterialTheme.typography.titleMedium)
+                                        Spacer(Modifier.height(8.dp))
+                                        RecipeVariantSelector(
+                                            variants = state.recipeVariants,
+                                            selectedVariantId = state.selectedRecipeVariantId,
+                                            onSelected = vm::onRecipeVariantSelected,
+                                        )
+
+                                        Spacer(Modifier.height(16.dp))
+                                        RecipeMeasuredYieldInfo(
+                                            yieldGrams = state.activeMeasuredYieldGrams,
+                                            updatedAtEpochMs = state.activeMeasuredYieldUpdatedAtEpochMs,
+                                            note = state.activeMeasuredYieldNote,
+                                            isLoggingByGrams = isLoggingByGrams,
+                                        )
+
+                                        if (SHOW_COOKED_BATCH_IN_QUICK_ADD) {
+                                            /*
+                                             * Cooked batch logging is hidden from Quick Add while the concept is paused.
+                                             * Keep this block nearby instead of deleting it so the workflow can be revived
+                                             * without rediscovering the original recipe/batch UI wiring.
+                                             */
+                                            if (state.selectedRecipeVariantId == null) {
+                                                Spacer(Modifier.height(16.dp))
+                                                Text("Cooked batch", style = MaterialTheme.typography.titleMedium)
+                                                Spacer(Modifier.height(8.dp))
+                                                BatchSelector(
+                                                    batches = state.batches,
+                                                    selectedBatchId = state.selectedBatchId,
+                                                    onSelected = vm::onBatchSelected,
+                                                )
+                                                if (isLoggingByGrams &&
+                                                    state.selectedBatchId == null &&
+                                                    state.errorMessage == null
+                                                ) {
+                                                    Spacer(Modifier.height(8.dp))
+                                                    Text(
+                                                        "Select or create a cooked batch to log by grams.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            } else {
                                                 Spacer(Modifier.height(8.dp))
                                                 Text(
-                                                    "Select or create a cooked batch to log by grams.",
+                                                    "Variant logs use the variant ingredient and serving rules. Cooked batch selection is disabled for variants for now.",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
-                                        } else {
-                                            Spacer(Modifier.height(8.dp))
-                                            Text(
-                                                "Variant logs use the variant ingredient and serving rules. Cooked batch selection is disabled for variants for now.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
 
@@ -933,6 +1008,94 @@ private fun RecipeVariantSelector(
 }
 
 @Composable
+private fun RecipeMeasuredYieldPortionTip(
+    yieldGrams: Double?,
+    updatedAtEpochMs: Long?,
+) {
+    if (yieldGrams == null || updatedAtEpochMs == null) return
+
+    Surface(
+        tonalElevation = 1.dp,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Recipe weight logging",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "Whole recipe yield: ${yieldGrams.clean()} g • Updated ${formatMeasuredYieldDate(updatedAtEpochMs)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Use the Grams (g) box below for the cooked portion you are eating.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecipeMeasuredYieldInfo(
+    yieldGrams: Double?,
+    updatedAtEpochMs: Long?,
+    note: String?,
+    isLoggingByGrams: Boolean,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Whole recipe measured yield",
+            style = MaterialTheme.typography.titleMedium,
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        if (yieldGrams != null && updatedAtEpochMs != null) {
+            Text(
+                text = "Whole recipe yield: ${yieldGrams.clean()} g",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Text(
+                text = "Last updated: ${formatMeasuredYieldDate(updatedAtEpochMs)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            note?.takeIf { it.isNotBlank() }?.let { noteText ->
+                Text(
+                    text = "Note: $noteText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (isLoggingByGrams) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Enter the cooked portion you ate in the Grams (g) field above. This whole-recipe yield is only the conversion reference.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Text(
+                text = "No measured yield set. Recipes can be logged by servings. Gram logging needs a measured cooked yield first.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun BatchSelector(
     batches: List<BatchSummary>,
     selectedBatchId: Long?,
@@ -1015,6 +1178,20 @@ private fun CreateBatchDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
+    )
+}
+
+private fun formatMeasuredYieldDate(epochMs: Long): String {
+    val date = Instant
+        .ofEpochMilli(epochMs)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+
+    return date.format(
+        DateTimeFormatter.ofPattern(
+            "MMM d, yyyy",
+            Locale.getDefault()
+        )
     )
 }
 

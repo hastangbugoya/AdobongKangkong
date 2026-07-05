@@ -82,6 +82,35 @@ data class RecipeBuilderState(
     // Existing total-yield support
     val totalYieldGrams: Double? = null,
 
+    /**
+     * Active measured cooked yield for the base recipe.
+     *
+     * This is the current yield assumption used by recipe gram logging.
+     * It is not cooked-batch inventory and does not imply a physical batch still exists.
+     */
+    val activeMeasuredYieldGrams: Double? = null,
+
+    /**
+     * Last time the active measured yield was entered or confirmed.
+     *
+     * UI rule:
+     * Whenever the user can use weight/grams to log this recipe, the app must show
+     * the active measured yield and when it was last updated.
+     */
+    val activeMeasuredYieldUpdatedAtEpochMs: Long? = null,
+
+    /**
+     * Optional note for the active measured yield, such as "large pot",
+     * "air fryer", or "less water".
+     */
+    val activeMeasuredYieldNote: String? = null,
+
+    // Measured-yield edit dialog state
+    val isMeasuredYieldDialogOpen: Boolean = false,
+    val measuredYieldGramsText: String = "",
+    val measuredYieldNoteText: String = "",
+    val measuredYieldErrorMessage: String? = null,
+
     val categories: List<FoodCategoryUi> = emptyList(),
     val selectedCategoryIds: Set<Long> = emptySet(),
     val newCategoryName: String = "",

@@ -73,6 +73,8 @@ import com.example.adobongkangkong.data.local.db.entity.UserPinnedNutrientEntity
 import com.example.adobongkangkong.data.local.db.dao.RecipeVariantDao
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantEntity
 import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientChangeEntity
+import com.example.adobongkangkong.data.local.db.dao.RecipeMeasuredYieldDao
+import com.example.adobongkangkong.data.local.db.entity.RecipeMeasuredYieldEntity
 
 /**
  * Primary Room database for AdobongKangkong.
@@ -131,8 +133,9 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeVariantIngredientC
         BodyWeightLogEntity::class,
         RecipeVariantEntity::class,
         RecipeVariantIngredientChangeEntity::class,
+        RecipeMeasuredYieldEntity::class,
     ],
-    version = 10,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -171,6 +174,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun foodStorePriceDao(): FoodStorePriceDao
     abstract fun bodyWeightLogDao(): BodyWeightLogDao
     abstract fun recipeVariantDao(): RecipeVariantDao
+    abstract fun recipeMeasuredYieldDao(): RecipeMeasuredYieldDao
 
     companion object {
 
@@ -627,6 +631,122 @@ abstract class NutriDatabase : RoomDatabase() {
                     MeowLog.d("DB> MIGRATION 9→10 SUCCESS")
                 } catch (t: Throwable) {
                     MeowLog.e("DB> MIGRATION 9→10 FAILED", t)
+                    throw t
+                }
+            }
+        }
+        /**
+         * Migration 10 -> 11
+         *
+         * Adds:
+         * - recipe_measured_yields
+         *
+         * This table stores the active measured cooked yield for a base recipe or recipe
+         * variant. It supports gram-based recipe logging without reviving cooked-batch
+         * inventory/lifetime tracking.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 10→11 START")
+
+                try {
+                    db.execSQL(
+                        """
+                CREATE TABLE IF NOT EXISTS recipe_measured_yields (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    recipeId INTEGER NOT NULL,
+                    variantId INTEGER,
+                    yieldGrams REAL NOT NULL,
+                    updatedAtEpochMs INTEGER NOT NULL,
+                    note TEXT,
+                    isActive INTEGER NOT NULL DEFAULT 1,
+                    FOREIGN KEY(recipeId) REFERENCES recipes(id) ON DELETE CASCADE,
+                    FOREIGN KEY(variantId) REFERENCES recipe_variant(id) ON DELETE CASCADE
+                )
+                """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                CREATE INDEX IF NOT EXISTS index_recipe_measured_yields_recipeId
+                ON recipe_measured_yields(recipeId)
+                """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                CREATE INDEX IF NOT EXISTS index_recipe_measured_yields_variantId
+                ON recipe_measured_yields(variantId)
+                """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                CREATE INDEX IF NOT EXISTS index_recipe_measured_yields_recipeId_variantId
+                ON recipe_measured_yields(recipeId, variantId)
+                """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 10→11 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 10→11 FAILED", t)
+                    throw t
+                }
+            }
+        }
+
+        /**
+         * Migration 11 -> 12
+         *
+         * Adds measured-yield audit metadata to log_entries.
+         *
+         * These nullable columns freeze the yield assumption used for base recipe gram logs
+         * that are backed by recipe_measured_yields rather than the legacy cooked-batch path.
+         * Existing logs keep null values and remain valid.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 11→12 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        ALTER TABLE log_entries
+                        ADD COLUMN measuredYieldIdUsed INTEGER
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        ALTER TABLE log_entries
+                        ADD COLUMN measuredYieldGramsUsed REAL
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        ALTER TABLE log_entries
+                        ADD COLUMN gramsLogged REAL
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        ALTER TABLE log_entries
+                        ADD COLUMN servingsEquivalent REAL
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_log_entries_measuredYieldIdUsed
+                        ON log_entries(measuredYieldIdUsed)
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 11→12 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 11→12 FAILED", t)
                     throw t
                 }
             }

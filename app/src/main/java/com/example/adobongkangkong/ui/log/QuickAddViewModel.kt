@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.example.adobongkangkong.domain.nutrition.NutrientKey
 import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
+import com.example.adobongkangkong.domain.recipes.ObserveActiveRecipeMeasuredYieldUseCase
 import kotlinx.coroutines.flow.flow
 import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
 
@@ -92,6 +93,7 @@ class QuickAddViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
     private val logRepository: LogRepository,
     private val recipeVariantRepository: RecipeVariantRepository,
+    private val observeActiveRecipeMeasuredYield: ObserveActiveRecipeMeasuredYieldUseCase,
 
     // validation + snapshot access for preflight gating
     private val snapshotRepo: FoodNutritionSnapshotRepository,
@@ -248,6 +250,27 @@ class QuickAddViewModel @Inject constructor(
                     }
             }
         }
+
+    private val activeMeasuredYieldFlow =
+        combine(
+            selectedRecipeIdFlow,
+            selectedRecipeVariantIdFlow
+        ) { recipeId, variantId ->
+            recipeId to variantId
+        }.flatMapLatest { (recipeId, variantId) ->
+            if (recipeId == null) {
+                flowOf(null)
+            } else {
+                observeActiveRecipeMeasuredYield.execute(
+                    recipeId = recipeId,
+                    variantId = variantId
+                )
+            }
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            null
+        )
 
     // -----------------------------
     // Barcode scan (QuickLog only)
@@ -652,6 +675,11 @@ class QuickAddViewModel @Inject constructor(
         val servingsYieldText: String,
         val recipeVariants: List<QuickAddRecipeVariantUi>,
         val selectedRecipeVariantId: Long?,
+        val activeMeasuredYieldGrams: Double?,
+        val activeMeasuredYieldUpdatedAtEpochMs: Long?,
+        val activeMeasuredYieldNote: String?,
+        val recipeGramLoggingAvailable: Boolean,
+        val recipeServingsYieldDefault: Double?,
     )
 
     private data class UiFlags(
@@ -794,8 +822,9 @@ class QuickAddViewModel @Inject constructor(
             batchesFlow,
             selectedBatchIdFlow,
             yieldGramsTextFlow,
-            servingsYieldTextFlow
-        ) { batches, selectedBatchId, yieldGramsText, servingsYieldText ->
+            servingsYieldTextFlow,
+            selectedRecipeServingsYieldDefaultFlow
+        ) { batches, selectedBatchId, yieldGramsText, servingsYieldText, servingsYieldDefault ->
             RecipeInputs(
                 batches = batches,
                 selectedBatchId = selectedBatchId,
@@ -803,17 +832,31 @@ class QuickAddViewModel @Inject constructor(
                 servingsYieldText = servingsYieldText,
                 recipeVariants = emptyList(),
                 selectedRecipeVariantId = null,
+                activeMeasuredYieldGrams = null,
+                activeMeasuredYieldUpdatedAtEpochMs = null,
+                activeMeasuredYieldNote = null,
+                recipeGramLoggingAvailable = false,
+                recipeServingsYieldDefault = servingsYieldDefault,
             )
         }
 
         val recipeFlow = combine(
             recipeBaseFlow,
             recipeVariantsFlow,
-            selectedRecipeVariantIdFlow
-        ) { recipe, recipeVariants, selectedRecipeVariantId ->
+            selectedRecipeVariantIdFlow,
+            activeMeasuredYieldFlow
+        ) { recipe, recipeVariants, selectedRecipeVariantId, activeMeasuredYield ->
+            val activeYieldGrams = activeMeasuredYield
+                ?.yieldGrams
+                ?.takeIf { it > 0.0 }
+
             recipe.copy(
                 recipeVariants = recipeVariants,
                 selectedRecipeVariantId = selectedRecipeVariantId,
+                activeMeasuredYieldGrams = activeYieldGrams,
+                activeMeasuredYieldUpdatedAtEpochMs = activeMeasuredYield?.updatedAtEpochMs,
+                activeMeasuredYieldNote = activeMeasuredYield?.note,
+                recipeGramLoggingAvailable = activeYieldGrams != null,
             )
         }
 
@@ -916,13 +959,33 @@ class QuickAddViewModel @Inject constructor(
                 val iou = triple.third.first
                 val todayPlan = triple.third.second
 
+                val measuredYieldGramsPerServing: Double? =
+                    if (
+                        core.selected?.isRecipe == true &&
+                        recipe.selectedRecipeVariantId == null
+                    ) {
+                        val activeYieldGrams = recipe.activeMeasuredYieldGrams
+                            ?.takeIf { it > 0.0 }
+                        val servingsYield = recipe.recipeServingsYieldDefault
+                            ?.takeIf { it > 0.0 }
+
+                        if (activeYieldGrams != null && servingsYield != null) {
+                            activeYieldGrams / servingsYield
+                        } else {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+
                 val gramsAmount: Double? = core.selected?.let { food ->
                     computeGramsAmount(
                         food = food,
                         servings = core.servings,
                         inputMode = core.inputMode,
                         inputUnit = core.inputUnit,
-                        inputAmount = core.inputAmount
+                        inputAmount = core.inputAmount,
+                        measuredYieldGramsPerServing = measuredYieldGramsPerServing
                     )
                 }
 
@@ -932,7 +995,9 @@ class QuickAddViewModel @Inject constructor(
                         InputMode.GRAMS,
                         InputMode.SERVING_UNIT -> {
                             val grams = gramsAmount ?: return@let null
-                            val gPerServing = gramsPerServingResolved(food) ?: return@let null
+                            val gPerServing = measuredYieldGramsPerServing
+                                ?: gramsPerServingResolved(food)
+                                ?: return@let null
                             if (gPerServing <= 0.0) return@let null
                             grams / gPerServing
                         }
@@ -978,6 +1043,10 @@ class QuickAddViewModel @Inject constructor(
                     selectedBatchId = recipe.selectedBatchId,
                     recipeVariants = recipe.recipeVariants,
                     selectedRecipeVariantId = recipe.selectedRecipeVariantId,
+                    activeMeasuredYieldGrams = recipe.activeMeasuredYieldGrams,
+                    activeMeasuredYieldUpdatedAtEpochMs = recipe.activeMeasuredYieldUpdatedAtEpochMs,
+                    activeMeasuredYieldNote = recipe.activeMeasuredYieldNote,
+                    recipeGramLoggingAvailable = recipe.recipeGramLoggingAvailable,
                     mealSlot = core.mealSlot,
                     yieldGramsText = recipe.yieldGramsText,
                     servingsYieldText = recipe.servingsYieldText,
@@ -1617,11 +1686,14 @@ class QuickAddViewModel @Inject constructor(
         servings: Double,
         inputMode: InputMode,
         inputUnit: ServingUnit,
-        inputAmount: Double?
+        inputAmount: Double?,
+        measuredYieldGramsPerServing: Double? = null
     ): Double? {
         return when (inputMode) {
             InputMode.SERVINGS -> {
-                val gPerServing = gramsPerServingResolved(food) ?: return null
+                val gPerServing = measuredYieldGramsPerServing
+                    ?: gramsPerServingResolved(food)
+                    ?: return null
                 if (gPerServing <= 0.0) return null
                 servings * gPerServing
             }
@@ -1629,6 +1701,16 @@ class QuickAddViewModel @Inject constructor(
             InputMode.GRAMS,
             InputMode.SERVING_UNIT -> {
                 val amount = inputAmount ?: return null
+
+                if (
+                    inputMode == InputMode.SERVING_UNIT &&
+                    measuredYieldGramsPerServing != null &&
+                    inputUnit == food.servingUnit
+                ) {
+                    val servingSize = food.servingSize.takeIf { it > 0.0 } ?: 1.0
+                    return (amount / servingSize) * measuredYieldGramsPerServing
+                }
+
                 computeGramsFromAmountAndUnit(food, amount, inputUnit)
             }
         }
@@ -1666,6 +1748,23 @@ class QuickAddViewModel @Inject constructor(
         return ml * densityGPerMl
     }
 
+    private fun activeMeasuredYieldGramsPerServingForSelectedBaseRecipe(): Double? {
+        val food = selectedFoodFlow.value
+        if (food?.isRecipe != true) return null
+        if (selectedRecipeVariantIdFlow.value != null) return null
+
+        val activeYieldGrams = activeMeasuredYieldFlow.value
+            ?.yieldGrams
+            ?.takeIf { it > 0.0 }
+            ?: return null
+
+        val servingsYield = selectedRecipeServingsYieldDefaultFlow.value
+            ?.takeIf { it > 0.0 }
+            ?: return null
+
+        return activeYieldGrams / servingsYield
+    }
+
     private fun buildAmountInputForSave(): AmountInput? {
         val food = selectedFoodFlow.value ?: return null
         val servings = servingsFlow.value
@@ -1675,7 +1774,8 @@ class QuickAddViewModel @Inject constructor(
             servings = servings,
             inputMode = inputModeFlow.value,
             inputUnit = inputUnitFlow.value,
-            inputAmount = inputAmountFlow.value
+            inputAmount = inputAmountFlow.value,
+            measuredYieldGramsPerServing = activeMeasuredYieldGramsPerServingForSelectedBaseRecipe()
         )
 
         return if (gramsForSave != null &&
@@ -1826,15 +1926,36 @@ class QuickAddViewModel @Inject constructor(
                             mealSlot = mealSlot,
                         )
                     } else {
+                        val selectedBatchId = selectedBatchIdFlow.value
+
+                        /*
+                         * Base recipe gram logging now uses RecipeMeasuredYield.
+                         *
+                         * Cooked batches are still supported as a legacy path when a batch id is
+                         * already present, but normal Quick Add recipe grams should no longer route
+                         * the user toward creating/selecting a cooked batch.
+                         */
                         val batchId =
                             when (inputModeFlow.value) {
-                                InputMode.GRAMS -> selectedBatchIdFlow.value
-                                    ?: run {
-                                        errorFlow.value = "Select or create a cooked batch (yield grams) to log by grams."
-                                        return@launch
-                                    }
+                                InputMode.GRAMS -> {
+                                    if (selectedBatchId != null) {
+                                        selectedBatchId
+                                    } else {
+                                        val activeYieldGrams = activeMeasuredYieldFlow.value
+                                            ?.yieldGrams
+                                            ?.takeIf { it > 0.0 }
 
-                                else -> selectedBatchIdFlow.value
+                                        if (activeYieldGrams == null) {
+                                            errorFlow.value =
+                                                "Set a measured cooked yield for this recipe before logging by grams."
+                                            return@launch
+                                        }
+
+                                        null
+                                    }
+                                }
+
+                                else -> selectedBatchId
                             }
 
                         createLogEntry.execute(

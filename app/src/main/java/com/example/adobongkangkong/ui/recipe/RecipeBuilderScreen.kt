@@ -101,6 +101,10 @@ import com.example.adobongkangkong.ui.food.editor.NutrientRowUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import java.io.File
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
@@ -516,6 +520,17 @@ fun RecipeBuilderScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true
                 )
+            }
+
+            if (editFoodId != null) {
+                item {
+                    MeasuredRecipeYieldCard(
+                        yieldGrams = state.activeMeasuredYieldGrams,
+                        updatedAtEpochMs = state.activeMeasuredYieldUpdatedAtEpochMs,
+                        note = state.activeMeasuredYieldNote,
+                        onEdit = vm::openMeasuredYieldDialog
+                    )
+                }
             }
 
             item { Spacer(Modifier.height(4.dp)) }
@@ -968,6 +983,64 @@ fun RecipeBuilderScreen(
         }
     }
 
+    if (state.isMeasuredYieldDialogOpen) {
+        AlertDialog(
+            onDismissRequest = vm::closeMeasuredYieldDialog,
+            title = { Text("Measured cooked yield") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Enter the current measured cooked yield for this recipe. This is used for future gram-based recipe logging. It is not inventory tracking.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = state.measuredYieldGramsText,
+                        onValueChange = vm::onMeasuredYieldGramsTextChange,
+                        label = { Text("Yield grams") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        isError = state.measuredYieldErrorMessage != null
+                    )
+
+                    OutlinedTextField(
+                        value = state.measuredYieldNoteText,
+                        onValueChange = vm::onMeasuredYieldNoteTextChange,
+                        label = { Text("Note (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    state.measuredYieldErrorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = vm::saveMeasuredYield,
+                    enabled = state.measuredYieldGramsText
+                        .trim()
+                        .toDoubleOrNull()
+                        ?.let { it > 0.0 } == true
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::closeMeasuredYieldDialog) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     if (showMockImportPreviewDialog) {
         AlertDialog(
             onDismissRequest = { showMockImportPreviewDialog = false },
@@ -1043,6 +1116,76 @@ fun RecipeBuilderScreen(
                 ) { Text("Cancel") }
             }
         )
+    }
+}
+
+@Composable
+private fun MeasuredRecipeYieldCard(
+    yieldGrams: Double?,
+    updatedAtEpochMs: Long?,
+    note: String?,
+    onEdit: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Measured cooked yield",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            if (yieldGrams != null && updatedAtEpochMs != null) {
+                Text(
+                    text = "Active yield: ${yieldGrams.cleanMeasuredYield()} g",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = "Last updated: ${formatMeasuredYieldDate(updatedAtEpochMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                note?.takeIf { it.isNotBlank() }?.let { noteText ->
+                    Text(
+                        text = "Note: $noteText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Text(
+                    text = "Future recipe gram logs use this yield to convert grams into recipe servings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = "Not set.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = "Enter a measured yield to enable future recipe gram logging.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            OutlinedButton(onClick = onEdit) {
+                Text(if (yieldGrams == null) "Set measured yield" else "Update measured yield")
+            }
+        }
     }
 }
 
@@ -1144,6 +1287,28 @@ private fun NutrientTallyList(
                 }
             }
         }
+    }
+}
+
+private fun formatMeasuredYieldDate(epochMs: Long): String {
+    val date = Instant
+        .ofEpochMilli(epochMs)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+
+    return date.format(
+        DateTimeFormatter.ofPattern(
+            "MMM d, yyyy",
+            Locale.getDefault()
+        )
+    )
+}
+
+private fun Double.cleanMeasuredYield(): String {
+    return if (this % 1.0 == 0.0) {
+        String.format(Locale.US, "%,.0f", this)
+    } else {
+        String.format(Locale.US, "%,.2f", this).trimEnd('0').trimEnd('.')
     }
 }
 

@@ -11,6 +11,7 @@ import com.example.adobongkangkong.domain.model.isVolumeUnit
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.ComputeRecipeBatchNutritionUseCase
 import com.example.adobongkangkong.domain.recipes.ComputeLoggedRecipeNutritionUseCase
+import com.example.adobongkangkong.domain.recipes.GetActiveRecipeMeasuredYieldUseCase
 import com.example.adobongkangkong.domain.recipes.toRecipe
 import com.example.adobongkangkong.domain.repository.FoodNutritionSnapshotRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -32,8 +33,13 @@ import javax.inject.Inject
 //
 // Logging concept:
 // - FoodRef.Food   -> direct food log
-// - FoodRef.Recipe -> recipe-estimate log when recipeBatchId == null
-// - FoodRef.Recipe -> batch-anchored recipe log when recipeBatchId != null
+// - FoodRef.Recipe -> recipe-estimate log by servings when recipeBatchId == null
+// - FoodRef.Recipe -> measured-yield recipe log by grams when recipeBatchId == null
+// - FoodRef.Recipe -> legacy batch-anchored recipe log when recipeBatchId != null
+//
+// Cooked batches remain a legacy/shelved path. Normal recipe gram logging should use the
+// active RecipeMeasuredYield value, which freezes the used yield through the logged nutrient
+// snapshot and gramsPerServingCooked metadata.
 class CreateLogEntryUseCase @Inject constructor(
     private val foodRepository: FoodRepository,
     private val snapshotRepository: FoodNutritionSnapshotRepository,
@@ -44,6 +50,12 @@ class CreateLogEntryUseCase @Inject constructor(
     private val computeRecipeBatchNutritionUseCase: ComputeRecipeBatchNutritionUseCase,
     private val computeLoggedRecipeNutrition: ComputeLoggedRecipeNutritionUseCase,
     private val computeRecipeVariantNutrition: ComputeRecipeVariantNutritionUseCase,
+
+    /*
+     * Default keeps older unit tests compiling when they manually construct this use case.
+     * Production/Hilt injection still supplies the real measured-yield use case.
+     */
+    private val getActiveRecipeMeasuredYield: GetActiveRecipeMeasuredYieldUseCase? = null,
 ) {
 
     sealed interface Result {
@@ -201,12 +213,44 @@ class CreateLogEntryUseCase @Inject constructor(
             resolvedBatch
         } else null
 
-        val effectiveDraft = if (batch != null) {
-            baseDraft.copy(
-                totalYieldGrams = batch.cookedYieldGrams,
-                servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
+        val activeMeasuredYield =
+            if (batch == null && amountInput is AmountInput.ByGrams) {
+                getActiveRecipeMeasuredYield?.execute(
+                    recipeId = recipeRef.recipeId,
+                    variantId = null
+                ) ?: return Result.Blocked(
+                    "Set a measured cooked yield for this recipe before logging by grams."
+                )
+            } else {
+                null
+            }
+
+        val measuredYieldGrams = activeMeasuredYield
+            ?.yieldGrams
+            ?.takeIf { it > 0.0 }
+
+        if (batch == null && amountInput is AmountInput.ByGrams && measuredYieldGrams == null) {
+            return Result.Blocked(
+                "Set a measured cooked yield for this recipe before logging by grams."
             )
-        } else baseDraft
+        }
+
+        val effectiveDraft = when {
+            batch != null -> {
+                baseDraft.copy(
+                    totalYieldGrams = batch.cookedYieldGrams,
+                    servingsYield = batch.servingsYieldUsed ?: baseDraft.servingsYield
+                )
+            }
+
+            measuredYieldGrams != null -> {
+                baseDraft.copy(
+                    totalYieldGrams = measuredYieldGrams
+                )
+            }
+
+            else -> baseDraft
+        }
 
         val computed = computeRecipeBatchNutritionUseCase(effectiveDraft.toRecipe())
             ?: return Result.Error("Recipe nutrition unavailable")
@@ -222,11 +266,39 @@ class CreateLogEntryUseCase @Inject constructor(
             return Result.Blocked(reason)
         }
 
-        val gramsPerServingCooked = if (batch != null) {
-            batch.gramsPerServingCooked(
-                fallbackServings = effectiveDraft.servingsYield
-            )
-        } else null
+        val gramsPerServingCooked = when {
+            batch != null -> {
+                batch.gramsPerServingCooked(
+                    fallbackServings = effectiveDraft.servingsYield
+                )
+            }
+
+            measuredYieldGrams != null -> {
+                val servingsYield = effectiveDraft.servingsYield
+                if (servingsYield > 0.0) measuredYieldGrams / servingsYield else null
+            }
+
+            else -> null
+        }
+
+        val measuredYieldGramsLogged =
+            if (activeMeasuredYield != null && amountInput is AmountInput.ByGrams) {
+                amountInput.grams
+            } else {
+                null
+            }
+
+        val measuredYieldServingsEquivalent =
+            if (
+                measuredYieldGramsLogged != null &&
+                measuredYieldGrams != null &&
+                measuredYieldGrams > 0.0 &&
+                effectiveDraft.servingsYield > 0.0
+            ) {
+                measuredYieldGramsLogged / measuredYieldGrams * effectiveDraft.servingsYield
+            } else {
+                null
+            }
 
         val (storedAmount, storedUnit) = toStoredAmountAndUnit(amountInput)
 
@@ -244,6 +316,10 @@ class CreateLogEntryUseCase @Inject constructor(
             unit = storedUnit,
             recipeBatchId = batch?.batchId,
             gramsPerServingCooked = gramsPerServingCooked,
+            measuredYieldIdUsed = activeMeasuredYield?.id,
+            measuredYieldGramsUsed = measuredYieldGrams,
+            gramsLogged = measuredYieldGramsLogged,
+            servingsEquivalent = measuredYieldServingsEquivalent,
             mealSlot = mealSlot,
             logDateIso = logDateIso
         )

@@ -8,6 +8,7 @@ package com.example.adobongkangkong.ui.recipe
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.data.local.db.entity.RecipeMeasuredYieldEntity
 import com.example.adobongkangkong.domain.model.Food
 import com.example.adobongkangkong.domain.model.RecipeDraft
 import com.example.adobongkangkong.domain.model.RecipeIngredientDraft
@@ -17,7 +18,9 @@ import com.example.adobongkangkong.domain.model.toGrams
 import com.example.adobongkangkong.domain.model.toMilliliters
 import com.example.adobongkangkong.domain.nutrition.gramsPerServingUnitResolved
 import com.example.adobongkangkong.domain.recipes.ComputeRecipeNutritionForSnapshotUseCase
+import com.example.adobongkangkong.domain.recipes.ObserveActiveRecipeMeasuredYieldUseCase
 import com.example.adobongkangkong.domain.recipes.RecipeNutritionWarning
+import com.example.adobongkangkong.domain.recipes.SetActiveRecipeMeasuredYieldUseCase
 import com.example.adobongkangkong.domain.repository.FoodCategoryRepository
 import com.example.adobongkangkong.domain.repository.FoodGoalFlagsRepository
 import com.example.adobongkangkong.domain.repository.FoodRepository
@@ -73,6 +76,8 @@ class RecipeBuilderViewModel @Inject constructor(
     private val computeRecipeNutrition: ComputeRecipeNutritionForSnapshotUseCase,
     private val nutrientRepo: NutrientRepository,
     private val recipeVariantRepository: RecipeVariantRepository,
+    private val observeActiveRecipeMeasuredYield: ObserveActiveRecipeMeasuredYieldUseCase,
+    private val setActiveRecipeMeasuredYield: SetActiveRecipeMeasuredYieldUseCase,
     observePreview: ObserveRecipeMacroPreviewUseCase,
 ) : ViewModel() {
 
@@ -94,6 +99,29 @@ class RecipeBuilderViewModel @Inject constructor(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
                 0
+            )
+
+    private val activeMeasuredYieldFlow: StateFlow<RecipeMeasuredYieldEntity?> =
+        editFoodIdFlow
+            .flatMapLatest { recipeFoodId ->
+                if (recipeFoodId == null) {
+                    flowOf(null)
+                } else {
+                    val recipe = recipeRepo.getRecipeByFoodId(recipeFoodId)
+                    if (recipe == null) {
+                        flowOf(null)
+                    } else {
+                        observeActiveRecipeMeasuredYield.execute(
+                            recipeId = recipe.recipeId,
+                            variantId = null
+                        )
+                    }
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                null
             )
 
     private val hasUnsavedChangesFlow = MutableStateFlow(false)
@@ -186,6 +214,11 @@ class RecipeBuilderViewModel @Inject constructor(
 
     private val isSavingFlow = MutableStateFlow(false)
     private val errorFlow = MutableStateFlow<String?>(null)
+
+    private val isMeasuredYieldDialogOpenFlow = MutableStateFlow(false)
+    private val measuredYieldGramsTextFlow = MutableStateFlow("")
+    private val measuredYieldNoteTextFlow = MutableStateFlow("")
+    private val measuredYieldErrorFlow = MutableStateFlow<String?>(null)
 
     private val blockingSheetFlow = MutableStateFlow<BlockingSheetModel?>(null)
     private val blockedFoodIdFlow = MutableStateFlow<Long?>(null)
@@ -456,6 +489,16 @@ class RecipeBuilderViewModel @Inject constructor(
         val newCategoryName: String,
     )
 
+    private data class MeasuredYieldUi(
+        val activeMeasuredYieldGrams: Double?,
+        val activeMeasuredYieldUpdatedAtEpochMs: Long?,
+        val activeMeasuredYieldNote: String?,
+        val isDialogOpen: Boolean,
+        val gramsText: String,
+        val noteText: String,
+        val errorMessage: String?,
+    )
+
     val state: StateFlow<RecipeBuilderState> =
         run {
             val leftFlow: Flow<Left> =
@@ -606,22 +649,57 @@ class RecipeBuilderViewModel @Inject constructor(
                 )
             }
 
+            val measuredYieldUiFlow = combine(
+                activeMeasuredYieldFlow,
+                isMeasuredYieldDialogOpenFlow,
+                measuredYieldGramsTextFlow,
+                measuredYieldNoteTextFlow,
+                measuredYieldErrorFlow
+            ) { activeYield, isOpen, gramsText, noteText, error ->
+                MeasuredYieldUi(
+                    activeMeasuredYieldGrams = activeYield?.yieldGrams?.takeIf { it > 0.0 },
+                    activeMeasuredYieldUpdatedAtEpochMs = activeYield?.updatedAtEpochMs,
+                    activeMeasuredYieldNote = activeYield?.note,
+                    isDialogOpen = isOpen,
+                    gramsText = gramsText,
+                    noteText = noteText,
+                    errorMessage = error,
+                )
+            }
+
+            val recipeMetaFlow = combine(
+                variantCountFlow,
+                measuredYieldUiFlow
+            ) { variantCount, measuredYield ->
+                variantCount to measuredYield
+            }
+
             combine(
                 leftFlow,
                 rightFlow,
                 overlayFlow,
                 categoryFlow,
-                variantCountFlow,
-            ) { left, right, overlay, categoryState, variantCount ->
+                recipeMetaFlow,
+            ) { left, right, overlay, categoryState, recipeMeta ->
                 val pickedGrams =
                     left.pickedFood
                         ?.gramsPerCurrentServingResolved()
                         ?.let { gramsPerServing -> right.pickedServings * gramsPerServing }
 
+                val variantCount = recipeMeta.first
+                val measuredYield = recipeMeta.second
+
                 RecipeBuilderState(
                     name = left.name,
                     servingsYield = left.servingsYield,
                     totalYieldGrams = left.totalYieldGrams,
+                    activeMeasuredYieldGrams = measuredYield.activeMeasuredYieldGrams,
+                    activeMeasuredYieldUpdatedAtEpochMs = measuredYield.activeMeasuredYieldUpdatedAtEpochMs,
+                    activeMeasuredYieldNote = measuredYield.activeMeasuredYieldNote,
+                    isMeasuredYieldDialogOpen = measuredYield.isDialogOpen,
+                    measuredYieldGramsText = measuredYield.gramsText,
+                    measuredYieldNoteText = measuredYield.noteText,
+                    measuredYieldErrorMessage = measuredYield.errorMessage,
                     categories = categoryState.categories,
                     selectedCategoryIds = categoryState.selectedCategoryIds,
                     newCategoryName = categoryState.newCategoryName,
@@ -894,6 +972,89 @@ class RecipeBuilderViewModel @Inject constructor(
 
     fun clearError() {
         errorFlow.value = null
+    }
+
+    fun openMeasuredYieldDialog() {
+        val recipeFoodId = editFoodId
+        if (recipeFoodId == null) {
+            errorFlow.value = "Save recipe before setting measured yield."
+            return
+        }
+
+        val activeYield = activeMeasuredYieldFlow.value
+        measuredYieldGramsTextFlow.value =
+            activeYield?.yieldGrams?.let(::formatNumberForInput)
+                ?: totalYieldGramsFlow.value?.let(::formatNumberForInput)
+                        ?: ingredientTotalGrams.value
+                    .takeIf { it > 0.0 }
+                    ?.let(::formatNumberForInput)
+                        ?: ""
+
+        measuredYieldNoteTextFlow.value = activeYield?.note.orEmpty()
+        measuredYieldErrorFlow.value = null
+        isMeasuredYieldDialogOpenFlow.value = true
+    }
+
+    fun closeMeasuredYieldDialog() {
+        isMeasuredYieldDialogOpenFlow.value = false
+        measuredYieldErrorFlow.value = null
+    }
+
+    fun onMeasuredYieldGramsTextChange(raw: String) {
+        if (!raw.matches(Regex("""^\d*([.]\d*)?$"""))) return
+
+        measuredYieldGramsTextFlow.value = raw
+        measuredYieldErrorFlow.value = null
+    }
+
+    fun onMeasuredYieldNoteTextChange(value: String) {
+        measuredYieldNoteTextFlow.value = value
+        measuredYieldErrorFlow.value = null
+    }
+
+    fun saveMeasuredYield() {
+        val recipeFoodId = editFoodId
+        if (recipeFoodId == null) {
+            measuredYieldErrorFlow.value = "Save recipe before setting measured yield."
+            return
+        }
+
+        val yieldGrams = measuredYieldGramsTextFlow.value
+            .trim()
+            .toDoubleOrNull()
+
+        if (yieldGrams == null || yieldGrams <= 0.0) {
+            measuredYieldErrorFlow.value = "Measured yield must be greater than 0 g."
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val recipe = recipeRepo.getRecipeByFoodId(recipeFoodId)
+                if (recipe == null) {
+                    measuredYieldErrorFlow.value = "Recipe data missing."
+                    return@launch
+                }
+
+                when (val result = setActiveRecipeMeasuredYield.execute(
+                    recipeId = recipe.recipeId,
+                    variantId = null,
+                    yieldGrams = yieldGrams,
+                    note = measuredYieldNoteTextFlow.value
+                )) {
+                    is SetActiveRecipeMeasuredYieldUseCase.Result.Success -> {
+                        isMeasuredYieldDialogOpenFlow.value = false
+                        measuredYieldErrorFlow.value = null
+                    }
+
+                    is SetActiveRecipeMeasuredYieldUseCase.Result.Blocked -> {
+                        measuredYieldErrorFlow.value = result.message
+                    }
+                }
+            } catch (t: Throwable) {
+                measuredYieldErrorFlow.value = t.message ?: "Failed to save measured yield."
+            }
+        }
     }
 
     private fun syncPickedGramsTextFromServings() {
@@ -1489,6 +1650,10 @@ class RecipeBuilderViewModel @Inject constructor(
         if (foodId == null) {
             editFoodId = null
             editFoodIdFlow.value = null
+            isMeasuredYieldDialogOpenFlow.value = false
+            measuredYieldGramsTextFlow.value = ""
+            measuredYieldNoteTextFlow.value = ""
+            measuredYieldErrorFlow.value = null
             return
         }
 
@@ -1498,6 +1663,11 @@ class RecipeBuilderViewModel @Inject constructor(
 
         didAutoPrefillTotalYieldGrams = false
         didUserEditTotalYieldGrams = false
+
+        isMeasuredYieldDialogOpenFlow.value = false
+        measuredYieldGramsTextFlow.value = ""
+        measuredYieldNoteTextFlow.value = ""
+        measuredYieldErrorFlow.value = null
 
         isEditingGrams = false
         pickedFoodFlow.value = null
