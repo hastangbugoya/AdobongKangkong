@@ -124,5 +124,15 @@ data class QuickAddState(
 
     val isTodayPlanPickerOpen: Boolean = false,
     val todayPlanSections: Map<MealSlot, List<QuickAddPlannedItemCandidate>> = emptyMap(),
-    val isTodayPlanLoading: Boolean = false
+    val isTodayPlanLoading: Boolean = false,
+
+    /**
+     * Shown when the user tries to log a planned meal that has been logged before.
+     *
+     * Planned meals are logging templates. The app does not inspect or reconcile the
+     * current Day Log rows after a planned meal is logged; this dialog only helps the
+     * user avoid accidental double logging.
+     */
+    val isPlannedMealRelogDialogOpen: Boolean = false,
+    val plannedMealRelogMessage: String? = null
 )

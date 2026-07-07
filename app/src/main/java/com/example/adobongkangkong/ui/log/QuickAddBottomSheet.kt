@@ -244,6 +244,39 @@ fun QuickAddBottomSheet(
         )
     }
 
+    if (state.isPlannedMealRelogDialogOpen) {
+        AlertDialog(
+            onDismissRequest = vm::dismissPlannedMealRelogDialog,
+            title = { Text("Log planned meal again?") },
+            text = {
+                Text(
+                    state.plannedMealRelogMessage
+                        ?: "This planned meal was logged before. Log it again only if you ate it again or want another copy in your Day Log."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.confirmLogPlannedMealAgain(
+                            onDone = onDismiss
+                        )
+                    },
+                    enabled = !state.isSaving
+                ) {
+                    Text("Log again")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = vm::dismissPlannedMealRelogDialog,
+                    enabled = !state.isSaving
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Log.d("Meow", "QuickAddBottomSheet> resolveMassOpen=${state.isResolveMassDialogOpen}")
 
     ModalBottomSheet(

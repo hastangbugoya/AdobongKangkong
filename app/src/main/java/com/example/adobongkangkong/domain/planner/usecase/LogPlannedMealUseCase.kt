@@ -51,9 +51,10 @@ import javax.inject.Inject
  * Behavior
  * ----------------------------------------------------------------------------
  *
- * 1) Duplicate logging prevention (atomic)
- *    - Atomically marks the planned meal as logged by setting loggedAtEpochMs.
- *    - If already logged, returns immediately and does not attempt per-item logging.
+ * 1) Repeat logging guard
+ *    - Atomically records first-use history by setting loggedAtEpochMs when it is still null.
+ *    - If already logged and allowRelog=false, returns a confirmation-needed result.
+ *    - If already logged and allowRelog=true, logs the meal again from the same template.
  *
  * 2) Loads all planned items for the meal occurrence.
  *
@@ -97,15 +98,16 @@ import javax.inject.Inject
  * - errorCount: number of items that errored unexpectedly or due to missing dependencies
  * - outcomes: per-item status + optional message (for UI messaging)
  *
- * If the meal was already logged, returns immediately with:
+ * If the meal was already logged and allowRelog=false, returns immediately with:
  * - loggedCount=0, blockedCount=0, errorCount=1
- * - one ERROR outcome indicating duplicate logging prevention
+ * - one ERROR outcome with a soft confirmation-needed message.
  *
  * ----------------------------------------------------------------------------
  * Edge cases handled
  * ----------------------------------------------------------------------------
  *
- * - Meal already logged -> no-op logging, returns early (prevents duplicates).
+ * - Meal already logged and allowRelog=false -> no-op logging, returns early so UI can ask.
+ * - Meal already logged and allowRelog=true -> logs the meal again from the template.
  * - Planned item missing quantity -> SKIPPED (does not crash, does not block rest).
  * - Recipe batch missing -> ERROR for that item.
  * - Recipe header missing -> ERROR for that item.
@@ -122,12 +124,14 @@ import javax.inject.Inject
  * - logDateIso is authoritative for day membership.
  *   Do not derive log day from timestamp windows (Day Log bug prevention).
  *
- * - This use case supports RECIPE logging by servings.
- *   Recipe gram logging still requires RECIPE_BATCH context because grams need a yield basis.
+ * - This use case supports RECIPE logging by servings and by grams.
+ *   Recipe gram logs are delegated to CreateLogEntryUseCase, which decides whether an active
+ *   measured cooked yield exists and blocks with a useful message if it does not.
  *
- * - markLoggedIfNotYet is an atomic write.
- *   If later item logging fails, the meal remains marked logged.
- *   This is intentional: “Log meal” is treated as a single user action guarded once.
+ * - markLoggedIfNotYet is an atomic first-use write.
+ *   If later item logging fails, the meal remains marked as used before.
+ *   This is intentional: planned meals are logging templates, and loggedAtEpochMs is only a
+ *   reuse-warning marker, not a permanent hard lock.
  *
  * ----------------------------------------------------------------------------
  * Architectural rules
@@ -170,24 +174,28 @@ class LogPlannedMealUseCase @Inject constructor(
      * @param logDateIso ISO day string (yyyy-MM-dd) to store on each log entry for day membership.
      * @param mealSlot Optional slot override (breakfast/lunch/dinner/etc).
      *
-     * @return Per-item outcomes and counts. If the meal is already logged, returns immediately with
-     * a single ERROR outcome and no per-item logging.
+     * @param allowRelog When false, an already-used planned meal returns a soft confirmation-needed
+     * result. When true, the use case logs the planned meal again from the template.
+     *
+     * @return Per-item outcomes and counts. If the meal was already logged and [allowRelog] is false,
+     * returns immediately with a single ERROR outcome and no per-item logging.
      */
     suspend fun execute(
         mealId: Long,
         timestamp: Instant,
         logDateIso: String,
-        mealSlot: MealSlot? = null
+        mealSlot: MealSlot? = null,
+        allowRelog: Boolean = false
     ): Result {
 
-        // ---- Duplicate logging guard (atomic) ----
+        // ---- Repeat logging guard (atomic first-use marker) ----
         val nowEpochMs = System.currentTimeMillis()
-        val marked = plannedMeals.markLoggedIfNotYet(
+        val markedFirstUse = plannedMeals.markLoggedIfNotYet(
             plannedMealId = mealId,
             loggedAtEpochMs = nowEpochMs
         )
-        if (!marked) {
-            // Already logged: do not log items again.
+        if (!markedFirstUse && !allowRelog) {
+            // Already logged before: let UI ask the user whether to log this template again.
             return Result(
                 loggedCount = 0,
                 blockedCount = 0,
@@ -196,7 +204,7 @@ class LogPlannedMealUseCase @Inject constructor(
                     ItemOutcome(
                         plannedItemId = mealId,
                         status = ItemOutcome.Status.ERROR,
-                        message = "This planned meal has already been logged."
+                        message = "This planned meal was logged before. Log it again?"
                     )
                 )
             )
@@ -249,16 +257,6 @@ class LogPlannedMealUseCase @Inject constructor(
                 }
 
                 PlannedItemSource.RECIPE -> {
-                    if (amountInput is AmountInput.ByGrams) {
-                        blocked++
-                        outcomes += ItemOutcome(
-                            plannedItemId = it.id,
-                            status = ItemOutcome.Status.BLOCKED,
-                            message = "Recipe grams require a cooked batch to log."
-                        )
-                        continue
-                    }
-
                     val header = recipes.getHeaderByRecipeId(it.refId)
                     if (header == null) {
                         errored++
@@ -387,19 +385,24 @@ class LogPlannedMealUseCase @Inject constructor(
  * =============================================================================
  *
  * Invariants (MUST NOT CHANGE)
- * - Planned meal occurrences must be loggable at most once.
- * - The meal-level guard must remain atomic:
+ * - Planned meals are logging templates, not live mirrors of Day Log rows.
+ * - loggedAtEpochMs means “this template was used before”; it is a reuse-warning marker,
+ *   not a permanent hard lock.
+ * - The first-use marker must remain atomic:
  *   - markLoggedIfNotYet(...) must happen BEFORE iterating items.
  * - Logs are immutable snapshots and must NOT rejoin foods later.
  * - logDateIso (yyyy-MM-dd) is authoritative for day membership.
  *
- * Duplicate logging rule
- * - DO NOT move the duplicate guard into CreateLogEntryUseCase.
- *   That use case runs per-item and would incorrectly block item #2+.
+ * Repeat logging rule
+ * - DO NOT move the repeat guard into CreateLogEntryUseCase.
+ *   That use case runs per-item and would incorrectly affect item #2+.
+ * - If allowRelog=false and the meal was used before, return a soft confirmation-needed message.
+ * - If allowRelog=true, log the planned meal again from the same template.
  *
  * Failure semantics (intentional)
- * - Once marked logged, the meal stays logged even if one or more items error/block/skip.
- * - This encodes the action “user logged this meal” as a one-time event.
+ * - Once marked logged, the meal stays marked as used before even if one or more
+ *   items error/block/skip.
+ * - This encodes that the template was used, not that current Day Log rows are complete.
  * - If you ever want “transactional meal logging”, that requires a separate design:
  *   - transaction across markLogged + all log inserts
  *   - rollback / retry semantics
@@ -407,8 +410,8 @@ class LogPlannedMealUseCase @Inject constructor(
  *
  * Recipe vs recipe batch
  * - RECIPE can be logged by servings because CreateLogEntryUseCase snapshots recipe nutrition.
- * - RECIPE by grams is still blocked unless the item is a RECIPE_BATCH, because grams require
- *   cooked-yield context.
+ * - RECIPE by grams is delegated to CreateLogEntryUseCase, which uses measured yield when
+ *   available and blocks if the recipe has no active measured cooked yield.
  *
  * Performance considerations
  * - This is IO-heavy by nature (iterates items and may resolve batch/header/food).
@@ -421,6 +424,6 @@ class LogPlannedMealUseCase @Inject constructor(
  * Migration / evolution notes
  * - If PlannedItemEntity adds “note” or other fields, consider whether they should be carried
  *   into log entry metadata (still snapshot-based).
- * - If you introduce “log partial meal” flows, do NOT weaken the “log once” invariant without
- *   a replacement mechanism for dedupe.
+ * - If you introduce “log partial meal” flows, keep planned meals as templates unless there is
+ *   an explicit product decision to reconcile them with live Day Log rows.
  */

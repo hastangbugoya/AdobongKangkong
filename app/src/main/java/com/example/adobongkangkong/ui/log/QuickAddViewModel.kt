@@ -171,6 +171,8 @@ class QuickAddViewModel @Inject constructor(
     private val todayPlanSectionsFlow =
         MutableStateFlow<Map<MealSlot, List<QuickAddPlannedItemCandidate>>>(emptyMap())
     private val isTodayPlanLoadingFlow = MutableStateFlow(false)
+    private val isPlannedMealRelogDialogOpenFlow = MutableStateFlow(false)
+    private val plannedMealRelogMessageFlow = MutableStateFlow<String?>(null)
     private var todayPlanJob: Job? = null
     private var todayPlanDateIso: String? = null
 
@@ -187,7 +189,14 @@ class QuickAddViewModel @Inject constructor(
         val mealSlot: MealSlot?
     )
 
+    private data class PendingPlannedMealRelog(
+        val mealId: Long,
+        val logDate: LocalDate,
+        val mealSlot: MealSlot?
+    )
+
     private var pendingResolveMass: PendingResolveMass? = null
+    private var pendingPlannedMealRelog: PendingPlannedMealRelog? = null
 
     private val resultsFlow =
         queryFlow
@@ -310,6 +319,7 @@ class QuickAddViewModel @Inject constructor(
         pendingNutritionChoice = null
         isNutritionChoiceDialogOpenFlow.value = false
         nutritionChoiceMessageFlow.value = null
+        dismissPlannedMealRelogDialog()
         clearSelection()
         queryFlow.value = ""
     }
@@ -332,6 +342,7 @@ class QuickAddViewModel @Inject constructor(
             isNutritionChoiceDialogOpenFlow.value = false
             nutritionChoiceMessageFlow.value = null
             isTodayPlanPickerOpenFlow.value = false
+            dismissPlannedMealRelogDialog()
             stopTodayPlanObservation()
 
             clearEditIdentityState()
@@ -712,7 +723,9 @@ class QuickAddViewModel @Inject constructor(
     private data class TodayPlanUi(
         val isOpen: Boolean,
         val sections: Map<MealSlot, List<QuickAddPlannedItemCandidate>>,
-        val isLoading: Boolean
+        val isLoading: Boolean,
+        val isRelogDialogOpen: Boolean,
+        val relogMessage: String?
     )
 
     val state: StateFlow<QuickAddState> = run {
@@ -933,12 +946,16 @@ class QuickAddViewModel @Inject constructor(
         val todayPlanFlow = combine(
             isTodayPlanPickerOpenFlow,
             todayPlanSectionsFlow,
-            isTodayPlanLoadingFlow
-        ) { isOpen, sections, isLoading ->
+            isTodayPlanLoadingFlow,
+            isPlannedMealRelogDialogOpenFlow,
+            plannedMealRelogMessageFlow
+        ) { isOpen, sections, isLoading, isRelogDialogOpen, relogMessage ->
             TodayPlanUi(
                 isOpen = isOpen,
                 sections = sections,
-                isLoading = isLoading
+                isLoading = isLoading,
+                isRelogDialogOpen = isRelogDialogOpen,
+                relogMessage = relogMessage
             )
         }
 
@@ -1076,6 +1093,8 @@ class QuickAddViewModel @Inject constructor(
                     isTodayPlanPickerOpen = todayPlan.isOpen,
                     todayPlanSections = todayPlan.sections,
                     isTodayPlanLoading = todayPlan.isLoading,
+                    isPlannedMealRelogDialogOpen = todayPlan.isRelogDialogOpen,
+                    plannedMealRelogMessage = todayPlan.relogMessage,
                 )
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), QuickAddState())
@@ -1199,6 +1218,7 @@ class QuickAddViewModel @Inject constructor(
         isTodayPlanPickerOpenFlow.value = false
         todayPlanSectionsFlow.value = emptyMap()
         isTodayPlanLoadingFlow.value = false
+        dismissPlannedMealRelogDialog()
         stopTodayPlanObservation()
 
         errorFlow.value = null
@@ -1255,6 +1275,7 @@ class QuickAddViewModel @Inject constructor(
 
     fun closeTodayPlanPicker() {
         isTodayPlanPickerOpenFlow.value = false
+        dismissPlannedMealRelogDialog()
     }
 
     fun logPlannedMealFromTodayPlan(
@@ -1276,6 +1297,42 @@ class QuickAddViewModel @Inject constructor(
             }
             ?.key
 
+        executePlannedMealLog(
+            mealId = mealId,
+            logDate = logDate,
+            mealSlot = slot,
+            allowRelog = false,
+            onDone = onDone
+        )
+    }
+
+    fun dismissPlannedMealRelogDialog() {
+        isPlannedMealRelogDialogOpenFlow.value = false
+        plannedMealRelogMessageFlow.value = null
+        pendingPlannedMealRelog = null
+    }
+
+    fun confirmLogPlannedMealAgain(onDone: () -> Unit) {
+        val pending = pendingPlannedMealRelog ?: return
+        isPlannedMealRelogDialogOpenFlow.value = false
+        plannedMealRelogMessageFlow.value = null
+
+        executePlannedMealLog(
+            mealId = pending.mealId,
+            logDate = pending.logDate,
+            mealSlot = pending.mealSlot,
+            allowRelog = true,
+            onDone = onDone
+        )
+    }
+
+    private fun executePlannedMealLog(
+        mealId: Long,
+        logDate: LocalDate,
+        mealSlot: MealSlot?,
+        allowRelog: Boolean,
+        onDone: () -> Unit
+    ) {
         viewModelScope.launch {
             isSavingFlow.value = true
             errorFlow.value = null
@@ -1290,20 +1347,20 @@ class QuickAddViewModel @Inject constructor(
                 val result = logPlannedMeal.execute(
                     mealId = mealId,
                     timestamp = timestamp,
-                    mealSlot = slot,
-                    logDateIso = logDate.toString()
+                    mealSlot = mealSlot,
+                    logDateIso = logDate.toString(),
+                    allowRelog = allowRelog
                 )
 
-                val alreadyLogged = result.loggedCount == 0 &&
-                        result.blockedCount == 0 &&
-                        result.errorCount == 1 &&
-                        result.outcomes.size == 1 &&
-                        result.outcomes.firstOrNull()
-                            ?.message
-                            ?.contains("already been logged", ignoreCase = true) == true
-
-                if (alreadyLogged) {
-                    errorFlow.value = "Already logged."
+                if (!allowRelog && result.needsPlannedMealRelogConfirmation()) {
+                    pendingPlannedMealRelog = PendingPlannedMealRelog(
+                        mealId = mealId,
+                        logDate = logDate,
+                        mealSlot = mealSlot
+                    )
+                    plannedMealRelogMessageFlow.value =
+                        "This planned meal was logged before. Log it again only if you ate it again or want another copy in your Day Log."
+                    isPlannedMealRelogDialogOpenFlow.value = true
                     return@launch
                 }
 
@@ -1315,6 +1372,9 @@ class QuickAddViewModel @Inject constructor(
 
                 if (result.errorCount == 0 && result.blockedCount == 0 && result.loggedCount > 0) {
                     requestCaffeineWidgetRefresh()
+                    pendingPlannedMealRelog = null
+                    isPlannedMealRelogDialogOpenFlow.value = false
+                    plannedMealRelogMessageFlow.value = null
                     isTodayPlanPickerOpenFlow.value = false
                     onDone()
                 } else {
@@ -1326,6 +1386,16 @@ class QuickAddViewModel @Inject constructor(
                 isSavingFlow.value = false
             }
         }
+    }
+
+    private fun LogPlannedMealUseCase.Result.needsPlannedMealRelogConfirmation(): Boolean {
+        return loggedCount == 0 &&
+                blockedCount == 0 &&
+                errorCount == 1 &&
+                outcomes.size == 1 &&
+                outcomes.firstOrNull()
+                    ?.message
+                    ?.contains("logged before", ignoreCase = true) == true
     }
 
     private fun stopTodayPlanObservation() {
