@@ -701,11 +701,18 @@ fun QuickAddBottomSheet(
                                         Spacer(Modifier.height(16.dp))
                                         Text("Recipe version", style = MaterialTheme.typography.titleMedium)
                                         Spacer(Modifier.height(8.dp))
-                                        RecipeVariantSelector(
-                                            variants = state.recipeVariants,
-                                            selectedVariantId = state.selectedRecipeVariantId,
-                                            onSelected = vm::onRecipeVariantSelected,
-                                        )
+                                        if (state.mode == QuickAddMode.EDIT) {
+                                            RecipeVariantLockedSummary(
+                                                variants = state.recipeVariants,
+                                                selectedVariantId = state.selectedRecipeVariantId,
+                                            )
+                                        } else {
+                                            RecipeVariantSelector(
+                                                variants = state.recipeVariants,
+                                                selectedVariantId = state.selectedRecipeVariantId,
+                                                onSelected = vm::onRecipeVariantSelected,
+                                            )
+                                        }
 
                                         Spacer(Modifier.height(16.dp))
                                         RecipeMeasuredYieldInfo(
@@ -1039,6 +1046,56 @@ private fun RecipeVariantSelector(
         }
     }
 }
+
+@Composable
+private fun RecipeVariantLockedSummary(
+    variants: List<QuickAddRecipeVariantUi>,
+    selectedVariantId: Long?,
+) {
+    val selectedVariant = variants.firstOrNull { it.id == selectedVariantId }
+
+    val label = when {
+        selectedVariant != null -> "Variant: ${selectedVariant.name}"
+        selectedVariantId != null -> "Variant locked"
+        else -> "Default recipe"
+    }
+
+    Column {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (selectedVariantId != null && selectedVariant == null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "This logged variant is no longer active.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = "Recipe version is locked for logged recipes. To change the variant, delete this log and log the recipe again.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 
 @Composable
 private fun RecipeMeasuredYieldPortionTip(
