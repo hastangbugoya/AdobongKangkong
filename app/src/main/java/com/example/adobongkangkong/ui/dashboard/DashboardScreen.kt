@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -120,6 +121,7 @@ fun DashboardScreen(
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     var showDayNutrients by rememberSaveable { mutableStateOf(false) }
     var showWeightTracker by rememberSaveable { mutableStateOf(false) }
+    var showBackToTodayDialog by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -245,6 +247,29 @@ fun DashboardScreen(
                 Spacer(Modifier.height(2.dp))
             }
         }
+    }
+
+    if (showBackToTodayDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackToTodayDialog = false },
+            title = { Text("Back to today?") },
+            text = { Text("Jump the dashboard back to today?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBackToTodayDialog = false
+                        vm.setDate(currentDate)
+                    }
+                ) {
+                    Text("Today")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackToTodayDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     val settingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -532,7 +557,15 @@ fun DashboardScreen(
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    if (selectedDate != currentDate) {
+                                        showBackToTodayDialog = true
+                                    }
+                                }
+                            )
                         )
 
                         if (selectedDateIsLaxRuleDay) {
