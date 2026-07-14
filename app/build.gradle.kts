@@ -147,6 +147,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.guava:guava:33.3.1-android")
 
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -162,5 +163,8 @@ dependencies {
 
     // Biometrics
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // Health Connect
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha08")
 }
 

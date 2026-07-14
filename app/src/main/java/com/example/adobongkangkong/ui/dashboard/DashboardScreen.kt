@@ -658,6 +658,10 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            item {
+                HealthConnectPermissionSmokeTest()
+            }
         }
     }
 }
