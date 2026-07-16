@@ -22,7 +22,12 @@ data class FoodSortState(
     val direction: SortDirection = SortDirection.ASC,
 ) {
     val showExtraMetricOnRow: Boolean
-        get() = key in setOf(FoodSortKey.PROTEIN, FoodSortKey.CARBS, FoodSortKey.FAT, FoodSortKey.SUGAR)
+        get() = key in setOf(
+            FoodSortKey.PROTEIN,
+            FoodSortKey.CARBS,
+            FoodSortKey.FAT,
+            FoodSortKey.SUGAR
+        )
 }
 
 data class FoodsListState(
@@ -61,6 +66,7 @@ data class FoodsListRowUiModel(
     val foodId: Long,
     val name: String,
     val brandText: String, // must always be visible
+    val servingSummaryText: String? = null, // label-style serving, e.g. "3 pieces = 28g"
     val caloriesPerServingText: String, // must always be visible
     val extraMetricText: String?, // shown only when sorting by macro (not calories)
     val isRecipe: Boolean,

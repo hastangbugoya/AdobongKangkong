@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,25 @@ fun MealEditorItemRow(
     }
 
     val selectedVariantLabel = item.selectedVariantLabel ?: "Base recipe"
+
+    /*
+     * Keep the override TextFields controlled by local draft text.
+     *
+     * The ViewModel stores grams/mL as numeric values, so binding the TextField
+     * directly to item.grams?.toString() or item.milliliters?.toString() can rewrite
+     * the user's in-progress typing as the row recomposes. Example: typing "28"
+     * may bounce through a Double representation such as "28.0".
+     *
+     * The draft values preserve exactly what the user is typing while still sending
+     * each edit back to the contract for macro recomputation and saving.
+     */
+    var gramsDraft by rememberSaveable(item.lineId) {
+        mutableStateOf(item.grams?.toDraftText().orEmpty())
+    }
+
+    var millilitersDraft by rememberSaveable(item.lineId) {
+        mutableStateOf(item.milliliters?.toDraftText().orEmpty())
+    }
 
     Column(
         modifier = Modifier
@@ -210,8 +230,11 @@ fun MealEditorItemRow(
 
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
-                value = item.grams?.toString().orEmpty(),
-                onValueChange = onGramsChanged,
+                value = gramsDraft,
+                onValueChange = { raw ->
+                    gramsDraft = raw
+                    onGramsChanged(raw)
+                },
                 label = { Text("Grams override (optional)") },
                 singleLine = true
             )
@@ -220,11 +243,22 @@ fun MealEditorItemRow(
 
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
-                value = item.milliliters?.toString().orEmpty(),
-                onValueChange = onMillilitersChanged,
+                value = millilitersDraft,
+                onValueChange = { raw ->
+                    millilitersDraft = raw
+                    onMillilitersChanged(raw)
+                },
                 label = { Text("mL override (optional)") },
                 singleLine = true
             )
         }
     }
 }
+
+
+private fun Double.toDraftText(): String =
+    if (this % 1.0 == 0.0) {
+        this.toLong().toString()
+    } else {
+        this.toString()
+    }

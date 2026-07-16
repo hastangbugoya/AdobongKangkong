@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,13 +90,17 @@ import com.example.adobongkangkong.ui.theme.AppIconSize
  *   - and, when needed, grams/mL backing shown in the Serving section
  *
  * Serving bridge visibility rule:
- * - Deterministic units already carry their own conversion basis through [ServingUnit.asG] / [ServingUnit.asMl].
- * - Therefore:
- *   - hide manual grams-per-unit input when the selected serving unit has built-in mass grounding
- *   - hide manual mL-per-unit input when the selected serving unit has built-in volume grounding
- *   - hide BOTH bridge inputs when the selected serving unit is already deterministic
- * - Manual bridge inputs are only shown for units that are not already deterministic.
- * - This prevents the user from entering values the domain layer intentionally ignores for units like lb, oz, g, mL, or L.
+ * - Bridge visibility is basis-aware.
+ * - Built-in mass units are enough for PER_100G foods.
+ * - Built-in volume units are enough for PER_100ML foods.
+ * - Cross-basis serving choices still need an explicit bridge:
+ *   - PER_100G food + volume/container/piece serving requires package serving weight.
+ *     Example: 3 pieces = 28g or 3/4 cup = 170g.
+ *   - PER_100ML food + mass/container/piece serving requires package serving volume.
+ *     Example: 1 piece = 30mL.
+ * - The UI asks for the whole serving value because that matches nutrition labels.
+ * - The ViewModel still stores per-unit bridge values internally.
+ * - Never guess density. Never infer grams from mL or mL from grams.
  *
  * USDA interpretation prompt:
  * - When [state.pendingUsdaInterpretationPrompt] is non-null, the app does not yet assume whether
@@ -1665,6 +1670,7 @@ fun FoodEditorScreen(
                         mlPerServingUnit = state.mlPerServingUnit,
                         onMlPerServingChange = onMlPerServingChange,
                         basisType = state.basisType,
+                        groundingMode = state.groundingMode,
                         onOpenStorePricePeek = if (state.foodId != null) {
                             { showStorePriceSheet = true }
                         } else {
@@ -2374,6 +2380,7 @@ private fun ServingSection(
     onMlPerServingChange: (String) -> Unit,
     onServingsPerPackageChange: (String) -> Unit,
     basisType: BasisType?,
+    groundingMode: GroundingMode,
     isTablet: Boolean,
     onOpenStorePricePeek: (() -> Unit)? = null,
 ) {
@@ -2430,9 +2437,39 @@ private fun ServingSection(
             )
         }
 
-        val isDeterministicUnit = servingUnit.asG != null || servingUnit.asMl != null
-        val showGramsBridge = !isDeterministicUnit
-        val showMlBridge = !isDeterministicUnit
+        /**
+         * Bridge visibility must be basis-aware.
+         *
+         * A deterministic volume unit like cup/mL/tbsp is only deterministic for PER_100ML
+         * foods. If the food's nutrients are stored PER_100G, AK still needs an explicit
+         * gram weight for that volume serving, for example 1 cup = 240 g.
+         *
+         * Likewise, a deterministic mass unit is only deterministic for PER_100G foods.
+         * If a PER_100ML food is edited to a mass serving, AK needs an explicit mL bridge.
+         *
+         * Do not hide both bridge fields just because the serving unit has either a mass
+         * or volume conversion. That would silently remove the user's chance to provide
+         * the missing cross-basis bridge.
+         */
+        val hasBuiltInMassPath = servingUnit.asG != null
+        val hasBuiltInVolumePath = servingUnit.asMl != null
+        val isFlexibleServingUnit = !hasBuiltInMassPath && !hasBuiltInVolumePath
+
+        val showGramsBridge =
+            (basisType == BasisType.PER_100G && !hasBuiltInMassPath) ||
+                    (
+                            basisType == BasisType.USDA_REPORTED_SERVING &&
+                                    isFlexibleServingUnit &&
+                                    groundingMode == GroundingMode.SOLID
+                            )
+
+        val showMlBridge =
+            (basisType == BasisType.PER_100ML && !hasBuiltInVolumePath) ||
+                    (
+                            basisType == BasisType.USDA_REPORTED_SERVING &&
+                                    isFlexibleServingUnit &&
+                                    groundingMode == GroundingMode.LIQUID
+                            )
 
         val servingSizeD = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
         val gramsPerUnitD = gramsPerServingUnit.toDoubleOrNull()?.takeIf { it > 0.0 }
@@ -2443,6 +2480,32 @@ private fun ServingSection(
 
         val mlPerServingComputed: Double? =
             if (servingSizeD != null && mlPerUnitD != null) servingSizeD * mlPerUnitD else null
+
+        var servingWeightDraft by rememberSaveable(
+            servingSize,
+            servingUnit.name,
+            basisType?.name,
+            groundingMode.name
+        ) {
+            mutableStateOf(gramsPerServingComputed?.toUiCompactNumber().orEmpty())
+        }
+
+        var servingVolumeDraft by rememberSaveable(
+            servingSize,
+            servingUnit.name,
+            basisType?.name,
+            groundingMode.name
+        ) {
+            mutableStateOf(mlPerServingComputed?.toUiCompactNumber().orEmpty())
+        }
+
+        LaunchedEffect(showGramsBridge) {
+            if (!showGramsBridge) servingWeightDraft = ""
+        }
+
+        LaunchedEffect(showMlBridge) {
+            if (!showMlBridge) servingVolumeDraft = ""
+        }
 
         @Composable
         fun StableSupportingText(text: String) {
@@ -2457,18 +2520,36 @@ private fun ServingSection(
 
         if (showMlBridge) {
             OutlinedTextField(
-                value = mlPerServingUnit,
-                onValueChange = onMlPerServingChange,
-                label = { Text("mL per 1 ${servingUnit.display}") },
+                value = servingVolumeDraft,
+                onValueChange = { raw ->
+                    servingVolumeDraft = raw
+
+                    val servingAmount = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
+                    val servingVolume = raw.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+
+                    when {
+                        raw.isBlank() -> onMlPerServingChange("")
+                        servingAmount != null && servingVolume != null -> {
+                            val mlPerUnit = servingVolume / servingAmount
+                            onMlPerServingChange(mlPerUnit.toUiCompactNumber())
+                        }
+                    }
+                },
+                label = { Text("Volume of this serving (mL)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = {
                     val helper = when {
-                        servingSizeD != null && mlPerServingComputed != null ->
-                            "Current serving = ${servingSizeD.toUiCompactNumber()} ${servingUnit.display} = ${mlPerServingComputed.toUiCompactNumber()} mL"
+                        servingSizeD != null && servingVolumeDraft.isNotBlank() ->
+                            "${servingSizeD.toUiCompactNumber()} ${servingUnit.display} = $servingVolumeDraft mL"
+
+                        servingSizeD != null ->
+                            "Enter the package volume for ${servingSizeD.toUiCompactNumber()} ${servingUnit.display}."
+
                         else ->
-                            "Used when this serving unit is volume-grounded (PER 100mL)."
+                            "Enter serving size first."
                     }
+
                     StableSupportingText(helper)
                 }
             )
@@ -2476,18 +2557,36 @@ private fun ServingSection(
 
         if (showGramsBridge) {
             OutlinedTextField(
-                value = gramsPerServingUnit,
-                onValueChange = onGramsPerServingChange,
-                label = { Text("Grams per 1 ${servingUnit.display}") },
+                value = servingWeightDraft,
+                onValueChange = { raw ->
+                    servingWeightDraft = raw
+
+                    val servingAmount = servingSize.toDoubleOrNull()?.takeIf { it > 0.0 }
+                    val servingWeight = raw.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+
+                    when {
+                        raw.isBlank() -> onGramsPerServingChange("")
+                        servingAmount != null && servingWeight != null -> {
+                            val gramsPerUnit = servingWeight / servingAmount
+                            onGramsPerServingChange(gramsPerUnit.toUiCompactNumber())
+                        }
+                    }
+                },
+                label = { Text("Weight of this serving (g)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = {
                     val helper = when {
-                        servingSizeD != null && gramsPerServingComputed != null ->
-                            "Current serving = ${servingSizeD.toUiCompactNumber()} ${servingUnit.display} = ${gramsPerServingComputed.toUiCompactNumber()} g"
+                        servingSizeD != null && servingWeightDraft.isNotBlank() ->
+                            "${servingSizeD.toUiCompactNumber()} ${servingUnit.display} = $servingWeightDraft g"
+
+                        servingSizeD != null ->
+                            "Enter the package weight for ${servingSizeD.toUiCompactNumber()} ${servingUnit.display}."
+
                         else ->
-                            "Used when this serving unit is mass-grounded (PER 100g)."
+                            "Enter serving size first."
                     }
+
                     StableSupportingText(helper)
                 }
             )

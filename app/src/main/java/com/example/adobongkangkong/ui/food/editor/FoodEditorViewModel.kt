@@ -442,7 +442,6 @@ class FoodEditorViewModel @Inject constructor(
         }
     }
 
-    // ONLY showing the updated function — everything else remains EXACTLY the same
 
     fun updateStorePrice(
         storeName: String,
@@ -1101,8 +1100,6 @@ class FoodEditorViewModel @Inject constructor(
         )
     }
 
-    // ONLY showing the parts that changed + final computeFixMessage
-// (rest of your file stays exactly the same)
 
     private fun computeFixMessage(s: FoodEditorState): String? {
         if (!s.hasLoaded) return null
@@ -1125,17 +1122,24 @@ class FoodEditorViewModel @Inject constructor(
         val isVolumeGrounded =
             s.servingUnit.canResolveToMlDeterministically() || (ml != null)
 
+        missingBasisBridgeMessage(
+            basisType = s.basisType,
+            servingUnit = s.servingUnit,
+            gramsPerServingUnit = grams,
+            mlPerServingUnit = ml
+        )?.let { return it }
+
         // 🔥 NEW MODEL: only FLEXIBLE units require grounding
         if (s.servingUnit.requiresExplicitGrounding()) {
             return when (s.basisType) {
                 BasisType.PER_100ML ->
                     if (!isVolumeGrounded)
-                        "Food needs mL per 1 ${s.servingUnit.display} when using PER 100mL grounding."
+                        "Enter the package volume for this serving in mL so AK can calculate serving nutrition from PER 100mL data."
                     else null
 
                 BasisType.PER_100G ->
                     if (!isMassGrounded)
-                        "Food needs grams per 1 ${s.servingUnit.display} when using PER 100g grounding."
+                        "Enter the package weight for this serving in grams so AK can calculate serving nutrition from PER 100g data."
                     else null
 
                 BasisType.USDA_REPORTED_SERVING, null ->
@@ -1146,10 +1150,56 @@ class FoodEditorViewModel @Inject constructor(
         val needsBacking = s.servingUnit.requiresGramsPerServing()
 
         if (needsBacking && grams == null && !isVolumeGrounded) {
-            return "Enter grams for 1 ${s.servingUnit.display} so this serving can be saved and used in recipes."
+            return "Enter the package weight for this serving in grams so this serving can be saved and used in recipes."
         }
 
         return null
+    }
+
+    /**
+     * Returns a user-facing validation message when the current serving definition
+     * cannot scale the food's canonical nutrient basis.
+     *
+     * This is stricter than "does the unit have any deterministic conversion?"
+     *
+     * Examples:
+     * - PER_100G + cup still needs grams per cup.
+     * - PER_100G + mL still needs grams per mL.
+     * - PER_100ML + gram still needs mL per gram.
+     *
+     * AK must never infer density or convert grams↔mL without an explicit bridge.
+     */
+    private fun missingBasisBridgeMessage(
+        basisType: BasisType?,
+        servingUnit: ServingUnit,
+        gramsPerServingUnit: Double?,
+        mlPerServingUnit: Double?,
+    ): String? {
+        val hasMassPath =
+            servingUnit.canResolveToGramsDeterministically() ||
+                    gramsPerServingUnit != null
+
+        val hasVolumePath =
+            servingUnit.canResolveToMlDeterministically() ||
+                    mlPerServingUnit != null
+
+        return when (basisType) {
+            BasisType.PER_100G ->
+                if (!hasMassPath) {
+                    "Enter the package weight for this serving in grams so AK can calculate serving nutrition from PER 100g data."
+                } else {
+                    null
+                }
+
+            BasisType.PER_100ML ->
+                if (!hasVolumePath) {
+                    "Enter the package volume for this serving in mL so AK can calculate serving nutrition from PER 100mL data."
+                } else {
+                    null
+                }
+
+            BasisType.USDA_REPORTED_SERVING, null -> null
+        }
     }
 
     fun remapFromCollisionProceedImport() {
@@ -1944,6 +1994,16 @@ class FoodEditorViewModel @Inject constructor(
 
                 val resolvedBasisType = resolveBasisTypeForSave(s)
 
+                missingBasisBridgeMessage(
+                    basisType = resolvedBasisType,
+                    servingUnit = s.servingUnit,
+                    gramsPerServingUnit = gramsInput,
+                    mlPerServingUnit = mlInput
+                )?.let { message ->
+                    update { it.copy(errorMessage = message) }
+                    return@launch
+                }
+
                 // ✅ CRITICAL FIX: DO NOT WIPE OR FORCE BRIDGES
                 val gramsPerServingUnitFinal = gramsInput
                 val mlPerServingUnitFinal = mlInput
@@ -2011,7 +2071,7 @@ class FoodEditorViewModel @Inject constructor(
                                 ApplyEditedNutrientsUseCase.BlockReason.INVALID_SERVING_AMOUNT ->
                                     "Serving amount is invalid for nutrient save."
                                 ApplyEditedNutrientsUseCase.BlockReason.NO_SERVING_GROUNDING_PATH  ->
-                                    "This serving needs a gram or mL bridge before nutrients can be saved. Example: 1 pc = 50 g."
+                                    "This serving needs a package weight or package volume bridge before nutrients can be saved. Example: 3 pieces = 28g."
                             }
 
                             update { it.copy(errorMessage = message) }

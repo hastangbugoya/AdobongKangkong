@@ -343,6 +343,7 @@ class FoodsListViewModel @Inject constructor(
                                 foodId = food.id,
                                 name = food.name,
                                 brandText = food.brand?.takeIf { it.isNotBlank() } ?: "Generic",
+                                servingSummaryText = null,
                                 caloriesPerServingText = kcalText,
                                 extraMetricText = null,
                                 isRecipe = true,
@@ -387,6 +388,10 @@ class FoodsListViewModel @Inject constructor(
                             foodId = food.id,
                             name = food.name,
                             brandText = food.brand?.takeIf { it.isNotBlank() } ?: "Generic",
+                            servingSummaryText = servingSummaryText(
+                                food = food,
+                                basis = macros100?.basis
+                            ),
                             caloriesPerServingText = kcalPerServingText,
                             extraMetricText = extraMetricText,
                             isRecipe = false,
@@ -522,8 +527,8 @@ class FoodsListViewModel @Inject constructor(
 
             BasisType.PER_100G -> {
                 val gramsPerUnit =
-                    food.servingUnit.asG
-                        ?: food.gramsPerServingUnit?.takeIf { it > 0.0 }
+                    food.gramsPerServingUnit?.takeIf { it > 0.0 }
+                        ?: food.servingUnit.asG
 
                 val grams = gramsPerUnit?.let { food.servingSize * it }
 
@@ -537,8 +542,8 @@ class FoodsListViewModel @Inject constructor(
 
             BasisType.PER_100ML -> {
                 val mlPerUnit =
-                    food.servingUnit.asMl
-                        ?: food.mlPerServingUnit?.takeIf { it > 0.0 }
+                    food.mlPerServingUnit?.takeIf { it > 0.0 }
+                        ?: food.servingUnit.asMl
 
                 val ml = mlPerUnit?.let { food.servingSize * it }
 
@@ -553,6 +558,68 @@ class FoodsListViewModel @Inject constructor(
             else -> "— kcal/$label"
         }
     }
+
+    /**
+     * Builds the label-style serving summary shown under the food name.
+     *
+     * Examples:
+     * - 3 pieces = 28g
+     * - 0.75 cup = 170g
+     * - 8 fl oz = 240mL
+     *
+     * Food stores bridge values per selected unit internally, but the list should
+     * show the whole package serving because that is what users copy from labels.
+     *
+     * Explicit package bridges win over deterministic unit conversions so rounded
+     * label values like 8 fl oz = 240mL are preserved in the UI.
+     */
+    private fun servingSummaryText(
+        food: Food,
+        basis: BasisType?
+    ): String? {
+        if (food.isRecipe) return null
+
+        val label = servingLabel(food.servingSize, food.servingUnit)
+
+        return when (basis) {
+            BasisType.PER_100G -> {
+                val gramsPerUnit =
+                    food.gramsPerServingUnit?.takeIf { it > 0.0 }
+                        ?: food.servingUnit.asG
+
+                val grams = gramsPerUnit
+                    ?.let { food.servingSize * it }
+                    ?.takeIf { it > 0.0 }
+                    ?: return null
+
+                "$label = ${grams.formatServingNumber()}g"
+            }
+
+            BasisType.PER_100ML -> {
+                val mlPerUnit =
+                    food.mlPerServingUnit?.takeIf { it > 0.0 }
+                        ?: food.servingUnit.asMl
+
+                val ml = mlPerUnit
+                    ?.let { food.servingSize * it }
+                    ?.takeIf { it > 0.0 }
+                    ?: return null
+
+                "$label = ${ml.formatServingNumber()}mL"
+            }
+
+            BasisType.USDA_REPORTED_SERVING, null -> {
+                "Serving: $label"
+            }
+        }
+    }
+
+    private fun Double.formatServingNumber(): String =
+        if (this == this.roundToInt().toDouble()) {
+            this.roundToInt().toString()
+        } else {
+            "%.2f".format(this).trimEnd('0').trimEnd('.')
+        }
 
     private fun servingLabel(servingSize: Double, servingUnit: ServingUnit): String {
         val sizeText =

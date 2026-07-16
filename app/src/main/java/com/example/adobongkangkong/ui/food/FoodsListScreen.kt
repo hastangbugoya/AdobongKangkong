@@ -61,7 +61,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.adobongkangkong.R
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.feature.camera.FoodImageStorage
-import com.example.adobongkangkong.ui.calendar.MonthHeader
 import com.example.adobongkangkong.ui.camera.generateBlurDerivative
 import com.example.adobongkangkong.ui.food.editor.FoodCategoryUi
 import com.example.adobongkangkong.ui.theme.AppIconSize
@@ -651,6 +650,20 @@ private fun FoodRow(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    row.servingSummaryText
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { servingText ->
+                            Spacer(Modifier.height(2.dp))
+
+                            Text(
+                                text = servingText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
                     Spacer(Modifier.height(6.dp))
 
