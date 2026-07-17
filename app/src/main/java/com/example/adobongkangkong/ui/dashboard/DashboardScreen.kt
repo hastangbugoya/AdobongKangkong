@@ -130,6 +130,15 @@ fun DashboardScreen(
 
     var showDevTransferSheet by remember { mutableStateOf(false) }
 
+    /**
+     * Temporary developer-facing Health Connect calorie debug visibility.
+     *
+     * This is intentionally screen-local for now so the smoke-test UI can be
+     * hidden from the dashboard by default while we continue validating Health
+     * Connect calorie semantics before promoting this to a persisted user setting.
+     */
+    var showHealthConnectCalorieDebug by rememberSaveable { mutableStateOf(false) }
+
     val targetDraft by vm.targetDraft.collectAsState()
     val pinOptions by vm.pinOptions.collectAsState()
 
@@ -379,6 +388,10 @@ fun DashboardScreen(
                 onLaxDayFatLimitGChange = vm::setLaxDayFatLimitG,
                 onLaxDaySodiumLimitMgChange = vm::setLaxDaySodiumLimitMg,
                 onLaxDaySugarLimitGChange = vm::setLaxDaySugarLimitG,
+                healthConnectCalorieDebugEnabled = showHealthConnectCalorieDebug,
+                onHealthConnectCalorieDebugEnabledChange = { enabled ->
+                    showHealthConnectCalorieDebug = enabled
+                },
             )
         }
     }
@@ -659,8 +672,12 @@ fun DashboardScreen(
                 }
             }
 
-            item {
-                HealthConnectPermissionSmokeTest()
+            if (showHealthConnectCalorieDebug) {
+                item(key = "health_connect_calorie_debug") {
+                    HealthConnectPermissionSmokeTest(
+                        targetDate = state.date
+                    )
+                }
             }
         }
     }

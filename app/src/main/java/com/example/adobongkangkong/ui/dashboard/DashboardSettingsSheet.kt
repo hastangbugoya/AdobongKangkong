@@ -160,6 +160,8 @@ fun DashboardSettingsSheet(
     onLaxDayFatLimitGChange: (Double) -> Unit,
     onLaxDaySodiumLimitMgChange: (Double) -> Unit,
     onLaxDaySugarLimitGChange: (Double) -> Unit,
+    healthConnectCalorieDebugEnabled: Boolean = false,
+    onHealthConnectCalorieDebugEnabledChange: (Boolean) -> Unit = {},
 ) {
     var caffeinePickerSlotIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -716,6 +718,24 @@ fun DashboardSettingsSheet(
             Spacer(Modifier.height(16.dp))
 
             Text("Debug Tools", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+
+            ListItem(
+                headlineContent = { Text("Show Health Connect calorie debug") },
+                supportingContent = {
+                    Text(
+                        "Show temporary calorie permission/read buttons at the bottom of the dashboard. " +
+                                "Use this only while validating Health Connect data sources."
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = healthConnectCalorieDebugEnabled,
+                        onCheckedChange = onHealthConnectCalorieDebugEnabledChange
+                    )
+                }
+            )
+            HorizontalDivider()
             Spacer(Modifier.height(12.dp))
 
             Button(
