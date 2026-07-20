@@ -15,6 +15,7 @@
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <application
         android:name=".AdobongKangkongApp"
         android:allowBackup="false"

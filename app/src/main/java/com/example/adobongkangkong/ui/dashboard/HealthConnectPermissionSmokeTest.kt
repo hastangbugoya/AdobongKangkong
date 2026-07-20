@@ -17,6 +17,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -39,6 +40,10 @@ import java.time.ZoneId
  * - ActiveCaloriesBurnedRecord aggregate, selected date elapsed/full-day window.
  * - ActiveCaloriesBurnedRecord aggregate, midnight -> tomorrow midnight.
  * - Raw total and active calorie records grouped by data origin package.
+ * - Latest WeightRecord in a recent lookback window.
+ *
+ * Weight is a point-in-time measurement, so it is read as the latest available
+ * record instead of being tied to the dashboard-selected date.
  *
  * Remove or hide this widget before public release.
  */
@@ -53,11 +58,15 @@ fun HealthConnectPermissionSmokeTest(
     var caloriesStatus by remember(targetDate) {
         mutableStateOf("No calorie query yet for $targetDate")
     }
+    var weightStatus by remember {
+        mutableStateOf("No weight query yet")
+    }
 
     val permissions = remember {
         setOf(
             HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
-            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
+            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+            HealthPermission.getReadPermission(WeightRecord::class)
         )
     }
 
@@ -125,7 +134,7 @@ fun HealthConnectPermissionSmokeTest(
                 }
             }
         ) {
-            Text("Read Today's Calories Used")
+            Text("Read Calories for Dashboard Date")
         }
 
         Text(caloriesStatus)
@@ -142,6 +151,20 @@ fun HealthConnectPermissionSmokeTest(
         ) {
             Text("Debug Calorie Sources")
         }
+
+        Button(
+            onClick = {
+                scope.launch {
+                    weightStatus = readLatestHealthConnectWeight(
+                        context = context
+                    )
+                }
+            }
+        ) {
+            Text("Read Latest Health Connect Weight")
+        }
+
+        Text(weightStatus)
     }
 }
 
@@ -306,6 +329,64 @@ internal suspend fun debugTodayTotalCaloriesBurnedRecords(
     }
 
     return lines.joinToString("\n")
+}
+
+internal suspend fun readLatestHealthConnectWeight(
+    context: Context,
+    afterInstant: Instant? = null,
+    lookbackDays: Long = 30
+): String {
+    val sdkStatus = HealthConnectClient.getSdkStatus(context)
+    if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+        return "Health Connect unavailable: $sdkStatus"
+    }
+
+    val client = HealthConnectClient.getOrCreate(context)
+    val weightPermission = HealthPermission.getReadPermission(WeightRecord::class)
+
+    val granted = client.permissionController.getGrantedPermissions()
+    if (weightPermission !in granted) {
+        return "Weight permission not granted. Tap Test Health Connect Permission and grant Weight access."
+    }
+
+    val zoneId = ZoneId.systemDefault()
+    val now = Instant.now()
+    val start = afterInstant
+        ?: LocalDate.now(zoneId)
+            .minusDays(lookbackDays)
+            .atStartOfDay(zoneId)
+            .toInstant()
+
+    return try {
+        val response = client.readRecords(
+            ReadRecordsRequest(
+                recordType = WeightRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, now)
+            )
+        )
+
+        val latest = response.records.maxByOrNull { it.time }
+            ?: return if (afterInstant != null) {
+                "No new Health Connect weight records found since ${afterInstant.atZone(zoneId).toLocalDateTime()}."
+            } else {
+                "No Health Connect weight records found in the last $lookbackDays days."
+            }
+
+        val pounds = latest.weight.inPounds
+        val source = latest.metadata.dataOrigin.packageName
+        val localTime = latest.time.atZone(zoneId).toLocalDateTime()
+
+        buildString {
+            appendLine("Latest Health Connect weight:")
+            appendLine("%.1f lb".format(pounds))
+            appendLine("Time: $localTime")
+            appendLine("Source: $source")
+            appendLine("Search window: ${start.atZone(zoneId).toLocalDateTime()} -> ${now.atZone(zoneId).toLocalDateTime()}")
+        }
+    } catch (t: Throwable) {
+        MeowLog.e("HealthConnectDebug> readLatestHealthConnectWeight FAILED", t)
+        "Weight query failed: ${t.message ?: t::class.simpleName}"
+    }
 }
 
 private suspend fun appendTotalAggregateDebug(
