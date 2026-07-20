@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.adobongkangkong.data.local.db.NutriDatabase
 import com.example.adobongkangkong.data.local.db.dao.BodyWeightLogDao
+import com.example.adobongkangkong.data.local.db.dao.BodyWeightMeasurementDao
 import com.example.adobongkangkong.data.local.db.dao.CalendarSuccessNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.DebugResetDao
 import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
@@ -69,6 +70,7 @@ object DatabaseModule {
             .addMigrations(NutriDatabase.MIGRATION_9_10)
             .addMigrations(NutriDatabase.MIGRATION_10_11)
             .addMigrations(NutriDatabase.MIGRATION_11_12)
+            .addMigrations(NutriDatabase.MIGRATION_12_13)
             .build()
     }
 
@@ -174,6 +176,10 @@ object DatabaseModule {
     @Provides
     fun provideBodyWeightLogDao(db: NutriDatabase): BodyWeightLogDao =
         db.bodyWeightLogDao()
+
+    @Provides
+    fun provideBodyWeightMeasurementDao(db: NutriDatabase): BodyWeightMeasurementDao =
+        db.bodyWeightMeasurementDao()
 
     @Provides
     fun provideRecipeVariantDao(db: NutriDatabase): RecipeVariantDao =

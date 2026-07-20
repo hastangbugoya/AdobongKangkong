@@ -7,6 +7,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.example.adobongkangkong.domain.weight.BodyWeightTrendSelectionMethod
 
 /**
  * In-memory implementation used during development.
@@ -141,6 +142,21 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override val laxDaySugarLimitG: StateFlow<Double> =
         _laxDaySugarLimitG
 
+    override val weightTrendSelectionMethod =
+        MutableStateFlow(BodyWeightTrendSelectionMethod.CLOSEST_TO_PREFERRED_TIME)
+
+    override val weightTrendPreferredTimeMinutes =
+        MutableStateFlow(7 * 60)
+
+    override val weightImportMinimumGapMinutes =
+        MutableStateFlow(4 * 60)
+
+    override val weightImportDuplicateWindowMinutes =
+        MutableStateFlow(30)
+
+    override val weightImportDuplicateToleranceKg =
+        MutableStateFlow(0.1)
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled
     }
@@ -239,4 +255,25 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override fun setLaxDaySugarLimitG(value: Double) {
         _laxDaySugarLimitG.value = value.coerceAtLeast(0.0)
     }
+
+    override fun setWeightTrendSelectionMethod(method: BodyWeightTrendSelectionMethod) {
+        weightTrendSelectionMethod.value = method
+    }
+
+    override fun setWeightTrendPreferredTimeMinutes(minutes: Int) {
+        weightTrendPreferredTimeMinutes.value = minutes.coerceIn(0, 23 * 60 + 59)
+    }
+
+    override fun setWeightImportMinimumGapMinutes(minutes: Int) {
+        weightImportMinimumGapMinutes.value = minutes.coerceAtLeast(0)
+    }
+
+    override fun setWeightImportDuplicateWindowMinutes(minutes: Int) {
+        weightImportDuplicateWindowMinutes.value = minutes.coerceAtLeast(0)
+    }
+
+    override fun setWeightImportDuplicateToleranceKg(value: Double) {
+        weightImportDuplicateToleranceKg.value = value.coerceAtLeast(0.0)
+    }
+
 }

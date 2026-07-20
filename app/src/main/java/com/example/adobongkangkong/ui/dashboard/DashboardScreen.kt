@@ -74,7 +74,6 @@ import com.example.adobongkangkong.domain.weight.WeightLogReminderRibbonState
 import com.example.adobongkangkong.ui.calendar.DayIconStatus
 import com.example.adobongkangkong.ui.common.bottomsheet.BlockingBottomSheet
 import com.example.adobongkangkong.ui.daynutrients.DayNutrientsScreen
-import com.example.adobongkangkong.ui.weight.BodyWeightTrackerScreen
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import com.example.adobongkangkong.ui.theme.AppIconSize
 import com.example.adobongkangkong.ui.theme.EatMoreGreen
@@ -103,6 +102,7 @@ fun DashboardScreen(
     onCreateFoodWithBarcode: (String) -> Unit,
     onOpenQuickAddFavorites: () -> Unit = {},
     onOpenProductCheck: () -> Unit = {},
+    onOpenWeightTracker: (LocalDate) -> Unit = {},
     pickedQuickAddFoodId: Long? = null,
     onPickedQuickAddFoodConsumed: () -> Unit = {},
     showBackButton: Boolean = false,
@@ -120,7 +120,6 @@ fun DashboardScreen(
 
     var showQuickAdd by rememberSaveable { mutableStateOf(false) }
     var showDayNutrients by rememberSaveable { mutableStateOf(false) }
-    var showWeightTracker by rememberSaveable { mutableStateOf(false) }
     var showBackToTodayDialog by rememberSaveable { mutableStateOf(false) }
     val blockingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -358,7 +357,7 @@ fun DashboardScreen(
                 onWeightLogReminderModeChange = vm::setWeightLogReminderMode,
                 onWeightLogIntervalDaysChange = vm::setWeightLogIntervalDays,
                 onOpenWeightTracker = {
-                    showWeightTracker = true
+                    onOpenWeightTracker(selectedDate)
                 },
                 caffeineWidgetSlot1FoodId = caffeineWidgetSlot1FoodId,
                 caffeineWidgetSlot2FoodId = caffeineWidgetSlot2FoodId,
@@ -417,16 +416,6 @@ fun DashboardScreen(
                 onPickedQuickAddFoodConsumed()
             }
         }
-    }
-
-    if (showWeightTracker) {
-        BodyWeightTrackerScreen(
-            startDate = currentDate,
-            onBack = {
-                showWeightTracker = false
-            }
-        )
-        return
     }
 
     if (showDayNutrients) {
@@ -613,7 +602,7 @@ fun DashboardScreen(
                         item(key = "weight_log_reminder_ribbon") {
                             WeightLogReminderRibbon(
                                 ribbon = ribbon,
-                                onLogWeight = { showWeightTracker = true },
+                                onLogWeight = { onOpenWeightTracker(selectedDate) },
                                 onDismiss = vm::dismissWeightLogReminder
                             )
                         }

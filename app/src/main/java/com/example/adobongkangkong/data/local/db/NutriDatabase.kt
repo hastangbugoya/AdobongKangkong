@@ -7,6 +7,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.adobongkangkong.core.log.MeowLog
 import com.example.adobongkangkong.data.local.db.dao.BodyWeightLogDao
+import com.example.adobongkangkong.data.local.db.dao.BodyWeightMeasurementDao
 import com.example.adobongkangkong.data.local.db.dao.CalendarSuccessNutrientDao
 import com.example.adobongkangkong.data.local.db.dao.DebugResetDao
 import com.example.adobongkangkong.data.local.db.dao.FoodBarcodeDao
@@ -39,6 +40,7 @@ import com.example.adobongkangkong.data.local.db.dao.SummaryDao
 import com.example.adobongkangkong.data.local.db.dao.UserNutrientTargetDao
 import com.example.adobongkangkong.data.local.db.dao.UserPinnedNutrientDao
 import com.example.adobongkangkong.data.local.db.entity.BodyWeightLogEntity
+import com.example.adobongkangkong.data.local.db.entity.BodyWeightMeasurementEntity
 import com.example.adobongkangkong.data.local.db.entity.CalendarSuccessNutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodBarcodeEntity
 import com.example.adobongkangkong.data.local.db.entity.FoodCategoryCrossRefEntity
@@ -131,11 +133,12 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeMeasuredYieldEntit
         StoreEntity::class,
         FoodStorePriceEntity::class,
         BodyWeightLogEntity::class,
+        BodyWeightMeasurementEntity::class,
         RecipeVariantEntity::class,
         RecipeVariantIngredientChangeEntity::class,
         RecipeMeasuredYieldEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -173,6 +176,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun storeDao(): StoreDao
     abstract fun foodStorePriceDao(): FoodStorePriceDao
     abstract fun bodyWeightLogDao(): BodyWeightLogDao
+    abstract fun bodyWeightMeasurementDao(): BodyWeightMeasurementDao
     abstract fun recipeVariantDao(): RecipeVariantDao
     abstract fun recipeMeasuredYieldDao(): RecipeMeasuredYieldDao
 
@@ -747,6 +751,169 @@ abstract class NutriDatabase : RoomDatabase() {
                     MeowLog.d("DB> MIGRATION 11→12 SUCCESS")
                 } catch (t: Throwable) {
                     MeowLog.e("DB> MIGRATION 11→12 FAILED", t)
+                    throw t
+                }
+            }
+        }
+
+        /**
+         * Migration 12 -> 13
+         *
+         * Adds raw body-weight measurement storage while preserving the existing
+         * one-row-per-day body_weight_logs table as AK's official daily trend
+         * weight table.
+         *
+         * Adds:
+         * - body_weight_measurements
+         * - body_weight_logs.selectedMeasurementId
+         * - body_weight_logs.trendSelectionMethod
+         * - body_weight_logs.isTrendUserOverride
+         * - body_weight_logs.trendSelectedAtEpochMs
+         *
+         * Existing daily weight logs are backfilled into raw measurements as
+         * LEGACY_WEIGHT_LOG rows and selected as user-overridden daily trend
+         * values so existing charts/reminders remain stable.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 12→13 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        ALTER TABLE body_weight_logs
+                        ADD COLUMN selectedMeasurementId INTEGER
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        ALTER TABLE body_weight_logs
+                        ADD COLUMN trendSelectionMethod TEXT
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        ALTER TABLE body_weight_logs
+                        ADD COLUMN isTrendUserOverride INTEGER NOT NULL DEFAULT 0
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        ALTER TABLE body_weight_logs
+                        ADD COLUMN trendSelectedAtEpochMs INTEGER
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_body_weight_logs_selectedMeasurementId
+                        ON body_weight_logs(selectedMeasurementId)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS body_weight_measurements (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            dateIso TEXT NOT NULL,
+                            measuredAtEpochMs INTEGER NOT NULL,
+                            weightKg REAL NOT NULL,
+                            source TEXT NOT NULL,
+                            sourcePackage TEXT,
+                            sourceRecordId TEXT,
+                            importedAtEpochMs INTEGER,
+                            note TEXT,
+                            isDeleted INTEGER NOT NULL DEFAULT 0,
+                            createdAtEpochMs INTEGER NOT NULL,
+                            updatedAtEpochMs INTEGER NOT NULL
+                        )
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_body_weight_measurements_dateIso
+                        ON body_weight_measurements(dateIso)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_body_weight_measurements_measuredAtEpochMs
+                        ON body_weight_measurements(measuredAtEpochMs)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_body_weight_measurements_dateIso_measuredAtEpochMs
+                        ON body_weight_measurements(dateIso, measuredAtEpochMs)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_body_weight_measurements_source_sourceRecordId
+                        ON body_weight_measurements(source, sourceRecordId)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        INSERT INTO body_weight_measurements (
+                            dateIso,
+                            measuredAtEpochMs,
+                            weightKg,
+                            source,
+                            sourcePackage,
+                            sourceRecordId,
+                            importedAtEpochMs,
+                            note,
+                            isDeleted,
+                            createdAtEpochMs,
+                            updatedAtEpochMs
+                        )
+                        SELECT
+                            dateIso,
+                            createdAtEpochMs,
+                            CASE
+                                WHEN unit = 'KG' THEN weight
+                                ELSE weight * 0.45359237
+                            END,
+                            'LEGACY_WEIGHT_LOG',
+                            NULL,
+                            'legacy:' || id,
+                            NULL,
+                            note,
+                            0,
+                            createdAtEpochMs,
+                            updatedAtEpochMs
+                        FROM body_weight_logs
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        UPDATE body_weight_logs
+                        SET selectedMeasurementId = (
+                                SELECT body_weight_measurements.id
+                                FROM body_weight_measurements
+                                WHERE body_weight_measurements.source = 'LEGACY_WEIGHT_LOG'
+                                  AND body_weight_measurements.sourceRecordId = 'legacy:' || body_weight_logs.id
+                                LIMIT 1
+                            ),
+                            trendSelectionMethod = 'MANUAL_SELECTED',
+                            isTrendUserOverride = 1,
+                            trendSelectedAtEpochMs = updatedAtEpochMs
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 12→13 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 12→13 FAILED", t)
                     throw t
                 }
             }

@@ -10,16 +10,28 @@ import com.example.adobongkangkong.data.local.db.entity.BodyWeightLogEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
- * DAO for persisted body-weight logs.
+ * DAO for persisted daily body-weight trend logs.
+ *
+ * This table intentionally remains one row per dateIso. Multiple same-day scale
+ * readings belong in BodyWeightMeasurementDao / body_weight_measurements. The
+ * row stored here is the official daily trend value used by existing dashboard,
+ * reminder, and trend logic.
  *
  * MVP rule:
- * - One body-weight log per dateIso.
- * - Repository/use cases should upsert by dateIso rather than creating duplicate rows
- *   for the same day.
+ * - One body-weight trend log per dateIso.
+ * - Repository/use cases should upsert by dateIso rather than creating duplicate
+ *   trend rows for the same day.
+ *
+ * Future multi-read support:
+ * - selectedMeasurementId may point to the raw measurement chosen for the day.
+ * - trendSelectionMethod records how the daily trend value was selected.
+ * - isTrendUserOverride protects an explicit user choice from automatic
+ *   re-selection.
  *
  * Date semantics:
  * - dateIso is yyyy-MM-dd.
- * - Range queries are ISO-date string ranges, matching the existing AK pattern for day data.
+ * - Range queries are ISO-date string ranges, matching the existing AK pattern
+ *   for day data.
  */
 @Dao
 interface BodyWeightLogDao {
@@ -57,6 +69,16 @@ interface BodyWeightLogDao {
         """
         SELECT *
         FROM body_weight_logs
+        WHERE selectedMeasurementId = :measurementId
+        LIMIT 1
+        """
+    )
+    suspend fun getBySelectedMeasurementId(measurementId: Long): BodyWeightLogEntity?
+
+    @Query(
+        """
+        SELECT *
+        FROM body_weight_logs
         WHERE dateIso = :dateIso
         LIMIT 1
         """
@@ -72,6 +94,16 @@ interface BodyWeightLogDao {
         """
     )
     fun observeLatest(): Flow<BodyWeightLogEntity?>
+
+    @Query(
+        """
+        SELECT *
+        FROM body_weight_logs
+        ORDER BY dateIso DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getLatest(): BodyWeightLogEntity?
 
     @Query(
         """
@@ -113,8 +145,12 @@ interface BodyWeightLogDao {
     suspend fun deleteByDate(dateIso: String)
 
     /**
-     * Upserts one body-weight row for a date while preserving the original row id
-     * and createdAtEpochMs if the date already exists.
+     * Upserts one daily trend row while preserving the original row id and
+     * createdAtEpochMs when the date already exists.
+     *
+     * Callers may pass selectedMeasurementId/trendSelectionMethod when a raw
+     * measurement is selected as the daily trend value. Passing null keeps the
+     * row migration-friendly for manual or legacy entries.
      */
     @Transaction
     suspend fun upsertByDate(entity: BodyWeightLogEntity): Long {

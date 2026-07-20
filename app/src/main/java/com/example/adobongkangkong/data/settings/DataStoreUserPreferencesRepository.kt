@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
+import com.example.adobongkangkong.domain.weight.BodyWeightTrendSelectionMethod
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,6 +41,7 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - meal logging reminder settings
  * - caffeine widget quick-log food slots
  * - weight-log dashboard ribbon settings
+ * - body-weight daily trend selection/import settings
  * - nutrition caution thresholds
  *
  * Nutrition threshold defaults:
@@ -61,6 +63,13 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - Interval: 7 days
  * - Last reset anchor: null
  *
+ * Body-weight trend/import defaults:
+ * - Daily trend method: CLOSEST_TO_PREFERRED_TIME
+ * - Preferred weigh-in time: 7:00 AM
+ * - Minimum imported-reading gap: 4 hours
+ * - Duplicate window: 30 minutes
+ * - Duplicate tolerance: 0.1 kg
+ *
  * ============================================================
  * FOR FUTURE DEV
  * ============================================================
@@ -76,8 +85,11 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * Caffeine widget slot settings only store selected food IDs.
  * The widget must still read caffeine totals from normal log/nutrient data.
  *
- * Weight logs themselves are historical records and belong in Room.
- * Only the dashboard reminder/ribbon preference state belongs here.
+ * Weight logs and raw body-weight measurements are historical records and belong in Room.
+ * Dashboard reminder/ribbon preference state belongs here.
+ * Daily trend selection preferences also belong here because they control how AK
+ * chooses one trend value from multiple same-day readings; they are not
+ * historical measurement records.
  *
  * Keep the threshold groups separate. Lax rules day goal values are alternate
  * evaluation preferences for marked days; they do not edit stored logs or normal
@@ -250,6 +262,75 @@ class DataStoreUserPreferencesRepository @Inject constructor(
                 scope = scope,
                 started = SharingStarted.Eagerly,
                 initialValue = null
+            )
+
+    override val weightTrendSelectionMethod: StateFlow<BodyWeightTrendSelectionMethod> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[WEIGHT_TREND_SELECTION_METHOD_KEY]
+                    ?.let { raw ->
+                        runCatching {
+                            BodyWeightTrendSelectionMethod.valueOf(raw)
+                        }.getOrNull()
+                    }
+                    ?: BodyWeightTrendSelectionMethod.CLOSEST_TO_PREFERRED_TIME
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = BodyWeightTrendSelectionMethod.CLOSEST_TO_PREFERRED_TIME
+            )
+
+    override val weightTrendPreferredTimeMinutes: StateFlow<Int> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                (preferences[WEIGHT_TREND_PREFERRED_TIME_MINUTES_KEY]
+                    ?: DEFAULT_WEIGHT_TREND_PREFERRED_TIME_MINUTES)
+                    .coerceIn(0, 23 * 60 + 59)
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_WEIGHT_TREND_PREFERRED_TIME_MINUTES
+            )
+
+    override val weightImportMinimumGapMinutes: StateFlow<Int> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                (preferences[WEIGHT_IMPORT_MINIMUM_GAP_MINUTES_KEY]
+                    ?: DEFAULT_WEIGHT_IMPORT_MINIMUM_GAP_MINUTES)
+                    .coerceAtLeast(0)
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_WEIGHT_IMPORT_MINIMUM_GAP_MINUTES
+            )
+
+    override val weightImportDuplicateWindowMinutes: StateFlow<Int> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                (preferences[WEIGHT_IMPORT_DUPLICATE_WINDOW_MINUTES_KEY]
+                    ?: DEFAULT_WEIGHT_IMPORT_DUPLICATE_WINDOW_MINUTES)
+                    .coerceAtLeast(0)
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_WEIGHT_IMPORT_DUPLICATE_WINDOW_MINUTES
+            )
+
+    override val weightImportDuplicateToleranceKg: StateFlow<Double> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                (preferences[WEIGHT_IMPORT_DUPLICATE_TOLERANCE_KG_KEY]
+                    ?: DEFAULT_WEIGHT_IMPORT_DUPLICATE_TOLERANCE_KG)
+                    .coerceAtLeast(0.0)
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_WEIGHT_IMPORT_DUPLICATE_TOLERANCE_KG
             )
 
     override val productCheckSodiumLimitMg: StateFlow<Double> =
@@ -504,6 +585,50 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    override fun setWeightTrendSelectionMethod(method: BodyWeightTrendSelectionMethod) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_TREND_SELECTION_METHOD_KEY] = method.name
+            }
+        }
+    }
+
+    override fun setWeightTrendPreferredTimeMinutes(minutes: Int) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_TREND_PREFERRED_TIME_MINUTES_KEY] =
+                    minutes.coerceIn(0, 23 * 60 + 59)
+            }
+        }
+    }
+
+    override fun setWeightImportMinimumGapMinutes(minutes: Int) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_IMPORT_MINIMUM_GAP_MINUTES_KEY] =
+                    minutes.coerceAtLeast(0)
+            }
+        }
+    }
+
+    override fun setWeightImportDuplicateWindowMinutes(minutes: Int) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_IMPORT_DUPLICATE_WINDOW_MINUTES_KEY] =
+                    minutes.coerceAtLeast(0)
+            }
+        }
+    }
+
+    override fun setWeightImportDuplicateToleranceKg(value: Double) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[WEIGHT_IMPORT_DUPLICATE_TOLERANCE_KG_KEY] =
+                    value.coerceAtLeast(0.0)
+            }
+        }
+    }
+
     override fun setProductCheckSodiumLimitMg(value: Double) {
         scope.launch {
             context.userPreferencesDataStore.edit { preferences ->
@@ -619,6 +744,11 @@ class DataStoreUserPreferencesRepository @Inject constructor(
 
         const val DEFAULT_WEIGHT_LOG_INTERVAL_DAYS = 7
 
+        const val DEFAULT_WEIGHT_TREND_PREFERRED_TIME_MINUTES = 7 * 60
+        const val DEFAULT_WEIGHT_IMPORT_MINIMUM_GAP_MINUTES = 4 * 60
+        const val DEFAULT_WEIGHT_IMPORT_DUPLICATE_WINDOW_MINUTES = 30
+        const val DEFAULT_WEIGHT_IMPORT_DUPLICATE_TOLERANCE_KG = 0.1
+
         const val DEFAULT_PRODUCT_CHECK_SODIUM_LIMIT_MG = 400.0
         const val DEFAULT_PRODUCT_CHECK_SUGAR_LIMIT_G = 10.0
         const val DEFAULT_QUICK_ADD_SODIUM_CAUTION_MG = 600.0
@@ -657,6 +787,17 @@ class DataStoreUserPreferencesRepository @Inject constructor(
             intPreferencesKey("weight_log_interval_days")
         val WEIGHT_LOG_LAST_PROMPT_RESET_EPOCH_DAY_KEY =
             longPreferencesKey("weight_log_last_prompt_reset_epoch_day")
+
+        val WEIGHT_TREND_SELECTION_METHOD_KEY =
+            stringPreferencesKey("weight_trend_selection_method")
+        val WEIGHT_TREND_PREFERRED_TIME_MINUTES_KEY =
+            intPreferencesKey("weight_trend_preferred_time_minutes")
+        val WEIGHT_IMPORT_MINIMUM_GAP_MINUTES_KEY =
+            intPreferencesKey("weight_import_minimum_gap_minutes")
+        val WEIGHT_IMPORT_DUPLICATE_WINDOW_MINUTES_KEY =
+            intPreferencesKey("weight_import_duplicate_window_minutes")
+        val WEIGHT_IMPORT_DUPLICATE_TOLERANCE_KG_KEY =
+            doublePreferencesKey("weight_import_duplicate_tolerance_kg")
 
         val PRODUCT_CHECK_SODIUM_LIMIT_MG_KEY =
             doublePreferencesKey("product_check_sodium_limit_mg")

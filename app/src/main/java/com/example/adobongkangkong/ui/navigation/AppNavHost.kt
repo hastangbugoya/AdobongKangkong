@@ -37,6 +37,7 @@ import com.example.adobongkangkong.ui.shopping.ShoppingScreen
 import com.example.adobongkangkong.ui.startup.StartupScreen
 import com.example.adobongkangkong.ui.templates.MealTemplateEditorActions
 import com.example.adobongkangkong.ui.usda.UsdaSearchScreen
+import com.example.adobongkangkong.ui.weight.BodyWeightTrackerScreen
 import java.time.LocalDate
 
 private const val KEY_FOOD_PICK_FOOD_ID = "food_pick_food_id"
@@ -198,6 +199,34 @@ fun AppNavHost(
                 onOpenProductCheck = {
                     navController.navigate(NavRoutes.ProductCheck.route)
                 },
+                onOpenWeightTracker = { date ->
+                    navController.navigate(NavRoutes.WeightTracker.weightTracker(date))
+                },
+            )
+        }
+
+
+        composable(
+            route = NavRoutes.WeightTracker.route,
+            arguments = listOf(
+                navArgument("date") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { entry ->
+            val dateIso = entry.arguments?.getString("date").orEmpty()
+            val startDate = runCatching {
+                dateIso
+                    .takeIf { it.isNotBlank() }
+                    ?.let { LocalDate.parse(it) }
+                    ?: LocalDate.now()
+            }.getOrElse { LocalDate.now() }
+
+            BodyWeightTrackerScreen(
+                startDate = startDate,
+                onBack = { navController.popBackStack() }
             )
         }
 

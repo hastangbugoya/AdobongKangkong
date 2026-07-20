@@ -48,13 +48,18 @@ import java.util.Locale
  * Quiet body-weight tracking screen.
  *
  * Intent:
- * - Provide easy entry/edit access for body-weight logs.
- * - Keep body-weight trend data available when explicitly opened.
- * - Do not make weight tracking prominent unless the user opts into dashboard reminders.
+ * - Provide easy entry/edit access for the official daily body-weight trend row.
+ * - Allow an explicit import of the latest Health Connect scale reading.
+ * - Show same-day raw measurements when available without making weight tracking
+ *   prominent on the dashboard.
+ * - Keep future trend-selection behavior understandable to the user by showing
+ *   which raw reading currently backs the day's trend value.
  *
  * Data rules:
- * - One body-weight log per date for MVP.
- * - Saving a date that already has a log updates that date's row.
+ * - BodyWeightLog remains one official trend value per calendar date.
+ * - BodyWeightMeasurement may contain multiple manual/imported readings per day.
+ * - Imported Health Connect readings are kept as raw measurements and only
+ *   become the daily trend when no trend exists for that day yet.
  * - Saving weight resets the dashboard weight-log reminder counter.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,7 +133,14 @@ fun BodyWeightTrackerScreen(
                     onWeightTextChanged = vm::onWeightTextChanged,
                     onNoteTextChanged = vm::onNoteTextChanged,
                     onUnitChanged = vm::onUnitChanged,
-                    onSave = vm::saveWeight
+                    onSave = vm::saveWeight,
+                    onImportLatestScaleWeight = vm::importLatestScaleWeight
+                )
+            }
+
+            item {
+                SameDayMeasurementsSection(
+                    measurements = state.selectedDateMeasurements
                 )
             }
 
@@ -214,17 +226,27 @@ private fun WeightEntrySection(
     onWeightTextChanged: (String) -> Unit,
     onNoteTextChanged: (String) -> Unit,
     onUnitChanged: (BodyWeightUnit) -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onImportLatestScaleWeight: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
         state.selectedDateLog?.let { existing ->
             Text(
-                text = "Existing entry: ${existing.weightText}",
+                text = "Daily trend: ${existing.weightText}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            existing.trendSelectionText?.let { selectionText ->
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "Trend source: $selectionText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Spacer(Modifier.height(8.dp))
         }
@@ -258,11 +280,122 @@ private fun WeightEntrySection(
         Spacer(Modifier.height(12.dp))
 
         Button(
-            enabled = !state.isSaving,
+            enabled = !state.isSaving && !state.isImportingHealthConnectWeight,
             onClick = onSave,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (state.selectedDateLog == null) "Log weight" else "Update weight")
+            Text(if (state.selectedDateLog == null) "Log weight" else "Update trend weight")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedButton(
+            enabled = !state.isSaving && !state.isImportingHealthConnectWeight,
+            onClick = onImportLatestScaleWeight,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                if (state.isImportingHealthConnectWeight) {
+                    "Importing scale weight..."
+                } else {
+                    "Import latest scale weight"
+                }
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = "Imports from Health Connect are saved as raw readings. AK only uses an imported reading as the daily trend when that day has no trend yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun SameDayMeasurementsSection(
+    measurements: List<BodyWeightMeasurementUiModel>
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Readings for this day",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        if (measurements.isEmpty()) {
+            Text(
+                text = "No raw readings saved for this day yet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
+        }
+
+        Text(
+            text = "AK can keep multiple readings per day. One reading is used as the daily trend weight.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        measurements.forEach { measurement ->
+            BodyWeightMeasurementRow(measurement = measurement)
+            HorizontalDivider()
+        }
+    }
+}
+
+@Composable
+private fun BodyWeightMeasurementRow(
+    measurement: BodyWeightMeasurementUiModel
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = measurement.timeText,
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Text(
+                text = measurement.weightText,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+
+        Spacer(Modifier.height(2.dp))
+
+        Text(
+            text = if (measurement.isSelectedTrend) {
+                "Daily trend • ${measurement.sourceText}"
+            } else {
+                measurement.sourceText
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        measurement.note?.takeIf { it.isNotBlank() }?.let { note ->
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -317,6 +450,15 @@ private fun BodyWeightRecentRow(
             Text(
                 text = log.weightText,
                 style = MaterialTheme.typography.bodyLarge
+            )
+        }
+
+        log.trendSelectionText?.let { selectionText ->
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = selectionText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 

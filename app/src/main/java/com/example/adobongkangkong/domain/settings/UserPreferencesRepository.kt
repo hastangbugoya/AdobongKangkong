@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.settings
 
+import com.example.adobongkangkong.domain.weight.BodyWeightTrendSelectionMethod
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -33,7 +34,11 @@ import kotlinx.coroutines.flow.StateFlow
  * 4) Weight Log Reminder Preferences
  *    - dashboard weight-log ribbon behavior
  *
- * 5) Nutrition Thresholds
+ * 5) Body-Weight Trend Selection Preferences
+ *    - how AK chooses one daily trend value from multiple same-day readings
+ *    - Health Connect import duplicate/gap rules
+ *
+ * 6) Nutrition Thresholds
  *    - Product Check thresholds (scan flow)
  *    - Quick Add thresholds (logging flow)
  *    - Planner daily thresholds
@@ -57,6 +62,10 @@ import kotlinx.coroutines.flow.StateFlow
  * Weight logs:
  *   → actual historical body-weight records belong in Room
  *   → reminder mode/interval/reset anchor belong here in preferences
+ *
+ * Body-weight trend selection:
+ *   → raw measurements and daily trend rows belong in Room
+ *   → the user's default selection rule and import filtering preferences belong here
  *
  * ============================================================
  * FOR FUTURE AI / DEV ASSISTANTS
@@ -231,6 +240,66 @@ interface UserPreferencesRepository {
      * - successfully logging weight
      */
     fun setWeightLogLastPromptResetEpochDay(epochDay: Long?)
+
+    // ============================================================
+    // ⚖️ Body-Weight Trend Selection Preferences
+    // ============================================================
+
+    /**
+     * Preferred rule for choosing one daily trend weight from multiple same-day
+     * raw body-weight measurements.
+     *
+     * This is a preference, not a historical record. The measurements and the
+     * per-day selected measurement link belong in Room.
+     */
+    val weightTrendSelectionMethod: StateFlow<BodyWeightTrendSelectionMethod>
+
+    /**
+     * Preferred weigh-in time in minutes from midnight.
+     *
+     * Default should be 7:00 AM. Used when [weightTrendSelectionMethod] is
+     * [BodyWeightTrendSelectionMethod.CLOSEST_TO_PREFERRED_TIME].
+     */
+    val weightTrendPreferredTimeMinutes: StateFlow<Int>
+
+    /**
+     * Minimum time gap required before AK keeps another imported weight reading
+     * on the same local date.
+     *
+     * Default should be 240 minutes, or 4 hours. This gap applies to imported
+     * readings, not intentional manual saves.
+     */
+    val weightImportMinimumGapMinutes: StateFlow<Int>
+
+    /**
+     * Time window for treating an imported weight reading as a near-duplicate.
+     *
+     * Default should be 30 minutes. This is checked with the duplicate weight
+     * tolerance before saving another imported measurement.
+     */
+    val weightImportDuplicateWindowMinutes: StateFlow<Int>
+
+    /**
+     * Weight tolerance in kilograms for near-duplicate import detection.
+     *
+     * Default should be 0.1 kg.
+     */
+    val weightImportDuplicateToleranceKg: StateFlow<Double>
+
+    /** Sets the preferred daily trend selection rule. */
+    fun setWeightTrendSelectionMethod(method: BodyWeightTrendSelectionMethod)
+
+    /** Sets the preferred weigh-in time in minutes from midnight. */
+    fun setWeightTrendPreferredTimeMinutes(minutes: Int)
+
+    /** Sets the minimum same-day gap for keeping imported weight readings. */
+    fun setWeightImportMinimumGapMinutes(minutes: Int)
+
+    /** Sets the near-duplicate detection window for imported weight readings. */
+    fun setWeightImportDuplicateWindowMinutes(minutes: Int)
+
+    /** Sets the near-duplicate weight tolerance in kilograms. */
+    fun setWeightImportDuplicateToleranceKg(value: Double)
 
     // ============================================================
     // 🧂 Nutrition Thresholds

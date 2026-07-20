@@ -28,7 +28,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * Temporary Health Connect debug widget for AK's estimated calories-burned MVP.
+ * Temporary Health Connect debug widget for AK's Health Connect MVP.
  *
  * This intentionally logs both aggregate and raw calorie reads for the dashboard-selected date so we can diagnose
  * whether repeated kcal values are coming from Health Connect data, a
@@ -161,7 +161,7 @@ fun HealthConnectPermissionSmokeTest(
                 }
             }
         ) {
-            Text("Read Latest Health Connect Weight")
+            Text("Debug Latest Health Connect Weight")
         }
 
         Text(weightStatus)

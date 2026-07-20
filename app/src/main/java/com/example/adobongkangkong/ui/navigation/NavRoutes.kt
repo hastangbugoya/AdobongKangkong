@@ -25,6 +25,17 @@ object NavRoutes {
         const val route: String = "calendar"
     }
 
+    object WeightTracker {
+        private const val BASE = "weightTracker"
+        private const val ARG_DATE = "date"
+
+        const val route: String = "$BASE?$ARG_DATE={$ARG_DATE}"
+
+        fun weightTracker(date: LocalDate? = null): String {
+            return if (date == null) BASE else "$BASE?$ARG_DATE=${date}"
+        }
+    }
+
     object DayLog {
         private const val BASE = "dayLog"
         private const val ARG_DATE = "date"
