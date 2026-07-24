@@ -3,6 +3,7 @@ package com.example.adobongkangkong.ui.reports
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.adobongkangkong.domain.reports.ObserveIntakeWeightTrendReportUseCase
 import com.example.adobongkangkong.domain.reports.ObserveMacroReportsUseCase
 import com.example.adobongkangkong.domain.reports.model.ReportRangeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,13 +12,14 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class ReportsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    observeMacroReports: ObserveMacroReportsUseCase
+    observeMacroReports: ObserveMacroReportsUseCase,
+    observeIntakeWeightTrendReport: ObserveIntakeWeightTrendReportUseCase
 ) : ViewModel() {
 
     private val mode: ReportRangeMode =
@@ -37,19 +39,25 @@ class ReportsViewModel @Inject constructor(
         }.getOrDefault(LocalDate.now())
 
     val state: StateFlow<ReportsUiState> =
-        observeMacroReports(
-            mode = mode,
-            anchorDate = anchorDate
-        )
-            .map { data ->
-                ReportsUiState(
-                    mode = mode,
-                    anchorDate = anchorDate,
-                    isLoading = false,
-                    data = data,
-                    errorMessage = null
-                )
-            }
+        combine(
+            observeMacroReports(
+                mode = mode,
+                anchorDate = anchorDate
+            ),
+            observeIntakeWeightTrendReport(
+                mode = mode,
+                anchorDate = anchorDate
+            )
+        ) { macroReports, intakeWeightTrend ->
+            ReportsUiState(
+                mode = mode,
+                anchorDate = anchorDate,
+                isLoading = false,
+                data = macroReports,
+                intakeWeightTrend = intakeWeightTrend,
+                errorMessage = null
+            )
+        }
             .catch { t ->
                 emit(
                     ReportsUiState(
@@ -57,6 +65,7 @@ class ReportsViewModel @Inject constructor(
                         anchorDate = anchorDate,
                         isLoading = false,
                         data = null,
+                        intakeWeightTrend = null,
                         errorMessage = t.message ?: "Failed to load reports."
                     )
                 )

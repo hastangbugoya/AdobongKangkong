@@ -28,6 +28,7 @@ import com.example.adobongkangkong.data.local.db.dao.NutrientAliasDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientCatalogDao
 import com.example.adobongkangkong.data.local.db.dao.NutrientDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedItemDao
+import com.example.adobongkangkong.data.local.db.dao.PinnedGroceryItemDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedMealDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedSeriesDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedSeriesItemDao
@@ -60,6 +61,7 @@ import com.example.adobongkangkong.data.local.db.entity.MealTemplatePrefsEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientAliasEntity
 import com.example.adobongkangkong.data.local.db.entity.NutrientEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedItemEntity
+import com.example.adobongkangkong.data.local.db.entity.PinnedGroceryItemEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedMealEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedSeriesEntity
 import com.example.adobongkangkong.data.local.db.entity.PlannedSeriesItemEntity
@@ -137,8 +139,9 @@ import com.example.adobongkangkong.data.local.db.entity.RecipeMeasuredYieldEntit
         RecipeVariantEntity::class,
         RecipeVariantIngredientChangeEntity::class,
         RecipeMeasuredYieldEntity::class,
+        PinnedGroceryItemEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 @TypeConverters(DbTypeConverters::class)
@@ -179,6 +182,7 @@ abstract class NutriDatabase : RoomDatabase() {
     abstract fun bodyWeightMeasurementDao(): BodyWeightMeasurementDao
     abstract fun recipeVariantDao(): RecipeVariantDao
     abstract fun recipeMeasuredYieldDao(): RecipeMeasuredYieldDao
+    abstract fun pinnedGroceryItemDao(): PinnedGroceryItemDao
 
     companion object {
 
@@ -918,6 +922,62 @@ abstract class NutriDatabase : RoomDatabase() {
                 }
             }
         }
+
+        /**
+         * Migration 13 -> 14
+         *
+         * Adds:
+         * - pinned_grocery_items
+         *
+         * This table is intentionally tiny. It supports AK's simple "Always on list"
+         * grocery add-on for staples like condiments, eggs, rice, coffee, or household
+         * items. It is not intended to turn AK into a full grocery-list app.
+         *
+         * Rows in this table are persistent by definition, so no alwaysOn column is
+         * needed. Generated planner grocery items should continue to be derived from
+         * planner/recipe data rather than copied into this table.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MeowLog.d("DB> MIGRATION 13→14 START")
+
+                try {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS pinned_grocery_items (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            name TEXT NOT NULL,
+                            quantityText TEXT,
+                            isChecked INTEGER NOT NULL DEFAULT 0,
+                            sortOrder INTEGER NOT NULL DEFAULT 0,
+                            createdAtEpochMs INTEGER NOT NULL,
+                            updatedAtEpochMs INTEGER NOT NULL
+                        )
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_pinned_grocery_items_sortOrder
+                        ON pinned_grocery_items(sortOrder)
+                        """.trimIndent()
+                    )
+
+                    db.execSQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS index_pinned_grocery_items_name
+                        ON pinned_grocery_items(name)
+                        """.trimIndent()
+                    )
+
+                    MeowLog.d("DB> MIGRATION 13→14 SUCCESS")
+                } catch (t: Throwable) {
+                    MeowLog.e("DB> MIGRATION 13→14 FAILED", t)
+                    throw t
+                }
+            }
+        }
+
     }
 }
 
@@ -940,6 +1000,11 @@ abstract class NutriDatabase : RoomDatabase() {
  * Builder reminder
  * - Ensure the Room database builder registers all migrations explicitly.
  * - Do not rely on destructive migration for long-term user data.
+ *
+ * Pinned grocery reminder
+ * - pinned_grocery_items is only for simple always-on staples.
+ * - Do not copy generated planner grocery rows into it.
+ * - Do not add store, price, route, aisle, coupon, or inventory behavior here.
  *
  * Normalized pricing reminder
  * - pricePer100g and pricePer100ml are separate concepts and must stay separate in queries.

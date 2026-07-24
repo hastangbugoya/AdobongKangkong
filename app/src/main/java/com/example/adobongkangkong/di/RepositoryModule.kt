@@ -12,6 +12,7 @@ import com.example.adobongkangkong.data.repository.NutrientAliasRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientCatalogBootstrapRepositoryImpl
 import com.example.adobongkangkong.data.repository.NutrientRepositoryImpl
 import com.example.adobongkangkong.data.repository.PlannedSeriesItemRepositoryImpl
+import com.example.adobongkangkong.data.repository.PinnedGroceryItemRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeBatchLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeDraftLookupRepositoryImpl
 import com.example.adobongkangkong.data.repository.RecipeRepositoryImpl
@@ -32,6 +33,7 @@ import com.example.adobongkangkong.domain.repository.NutrientAliasRepository
 import com.example.adobongkangkong.domain.repository.NutrientCatalogBootstrapRepository
 import com.example.adobongkangkong.domain.repository.NutrientRepository
 import com.example.adobongkangkong.domain.repository.PlannedSeriesRepository
+import com.example.adobongkangkong.domain.repository.PinnedGroceryItemRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeDraftLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
@@ -176,6 +178,12 @@ abstract class RepositoryModule {
     abstract fun bindStoreRepository(
         impl: StoreRepositoryImpl
     ): StoreRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPinnedGroceryItemRepository(
+        impl: PinnedGroceryItemRepositoryImpl
+    ): PinnedGroceryItemRepository
 
     @Binds
     @Singleton

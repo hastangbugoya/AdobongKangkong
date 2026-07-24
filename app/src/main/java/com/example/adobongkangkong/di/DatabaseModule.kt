@@ -28,6 +28,7 @@ import com.example.adobongkangkong.data.local.db.dao.PlannedItemDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedMealDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedSeriesDao
 import com.example.adobongkangkong.data.local.db.dao.PlannedSeriesItemDao
+import com.example.adobongkangkong.data.local.db.dao.PinnedGroceryItemDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeBatchDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeDao
 import com.example.adobongkangkong.data.local.db.dao.RecipeIngredientDao
@@ -71,6 +72,7 @@ object DatabaseModule {
             .addMigrations(NutriDatabase.MIGRATION_10_11)
             .addMigrations(NutriDatabase.MIGRATION_11_12)
             .addMigrations(NutriDatabase.MIGRATION_12_13)
+            .addMigrations(NutriDatabase.MIGRATION_13_14)
             .build()
     }
 
@@ -152,6 +154,10 @@ object DatabaseModule {
     @Provides
     fun providePlannedSeriesItemDao(db: NutriDatabase): PlannedSeriesItemDao =
         db.plannedSeriesItemDao()
+
+    @Provides
+    fun providePinnedGroceryItemDao(db: NutriDatabase): PinnedGroceryItemDao =
+        db.pinnedGroceryItemDao()
 
     @Provides
     fun provideIouDao(db: NutriDatabase): IouDao =

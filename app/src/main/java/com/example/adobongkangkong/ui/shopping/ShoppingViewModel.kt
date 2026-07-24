@@ -3,6 +3,12 @@ package com.example.adobongkangkong.ui.shopping
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.R
+import com.example.adobongkangkong.domain.grocery.AddPinnedGroceryItemUseCase
+import com.example.adobongkangkong.domain.grocery.DeletePinnedGroceryItemUseCase
+import com.example.adobongkangkong.domain.grocery.ObservePinnedGroceryItemsUseCase
+import com.example.adobongkangkong.domain.grocery.PinnedGroceryItem
+import com.example.adobongkangkong.domain.grocery.SetPinnedGroceryItemCheckedUseCase
+import com.example.adobongkangkong.domain.grocery.UpdatePinnedGroceryItemUseCase
 import com.example.adobongkangkong.data.local.db.dao.FoodGoalFlagsDao
 import com.example.adobongkangkong.data.local.db.entity.FoodGoalFlagsEntity
 import com.example.adobongkangkong.domain.model.Food
@@ -34,6 +40,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class ShoppingViewModel @Inject constructor(
@@ -41,7 +48,12 @@ class ShoppingViewModel @Inject constructor(
     private val observeNeeds: ObservePlannedFoodNeedsUseCase,
     private val observeRecipeShopping: ObservePlannedRecipeShoppingRequirementsUseCase,
     private val foodGoalFlagsDao: FoodGoalFlagsDao,
-    private val foodRepo: FoodRepository
+    private val foodRepo: FoodRepository,
+    private val observePinnedGroceryItems: ObservePinnedGroceryItemsUseCase,
+    private val addPinnedGroceryItem: AddPinnedGroceryItemUseCase,
+    private val updatePinnedGroceryItem: UpdatePinnedGroceryItemUseCase,
+    private val setPinnedGroceryItemChecked: SetPinnedGroceryItemCheckedUseCase,
+    private val deletePinnedGroceryItem: DeletePinnedGroceryItemUseCase
 ) : ViewModel() {
 
     private val startDateFlow = MutableStateFlow(LocalDate.now())
@@ -49,6 +61,7 @@ class ShoppingViewModel @Inject constructor(
     private val daysTextFlow = MutableStateFlow("7")
     private val checkedFoodIdsFlow = MutableStateFlow<Set<Long>>(emptySet())
     private val unitModeFlow = MutableStateFlow(ShoppingUnitMode.METRIC)
+    private val pinnedEditorFlow = MutableStateFlow(ShoppingPinnedItemEditorUi())
 
     fun setStartDate(d: LocalDate) {
         startDateFlow.value = d
@@ -72,6 +85,92 @@ class ShoppingViewModel @Inject constructor(
 
     fun onShoppingUnitModeChanged(mode: ShoppingUnitMode) {
         unitModeFlow.value = mode
+    }
+
+    fun openAddPinnedItemDialog() {
+        pinnedEditorFlow.value = ShoppingPinnedItemEditorUi(
+            isOpen = true,
+            editingItemId = null,
+            nameText = "",
+            quantityText = "",
+            errorMessage = null
+        )
+    }
+
+    fun openEditPinnedItemDialog(item: ShoppingPinnedItemUi) {
+        pinnedEditorFlow.value = ShoppingPinnedItemEditorUi(
+            isOpen = true,
+            editingItemId = item.id,
+            nameText = item.name,
+            quantityText = item.quantityText.orEmpty(),
+            errorMessage = null
+        )
+    }
+
+    fun dismissPinnedItemDialog() {
+        pinnedEditorFlow.value = ShoppingPinnedItemEditorUi()
+    }
+
+    fun onPinnedItemNameChanged(value: String) {
+        pinnedEditorFlow.value = pinnedEditorFlow.value.copy(
+            nameText = value,
+            errorMessage = null
+        )
+    }
+
+    fun onPinnedItemQuantityChanged(value: String) {
+        pinnedEditorFlow.value = pinnedEditorFlow.value.copy(
+            quantityText = value,
+            errorMessage = null
+        )
+    }
+
+    fun savePinnedItem() {
+        val editor = pinnedEditorFlow.value
+        val cleanName = editor.nameText.trim()
+
+        if (cleanName.isBlank()) {
+            pinnedEditorFlow.value = editor.copy(errorMessage = "Enter an item name.")
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                if (editor.editingItemId == null) {
+                    addPinnedGroceryItem(
+                        name = cleanName,
+                        quantityText = editor.quantityText
+                    )
+                } else {
+                    updatePinnedGroceryItem(
+                        id = editor.editingItemId,
+                        name = cleanName,
+                        quantityText = editor.quantityText
+                    )
+                }
+            }.onSuccess {
+                dismissPinnedItemDialog()
+            }.onFailure { t ->
+                pinnedEditorFlow.value = pinnedEditorFlow.value.copy(
+                    errorMessage = t.message ?: "Could not save item."
+                )
+            }
+        }
+    }
+
+    fun onPinnedItemCheckedChanged(id: Long, isChecked: Boolean) {
+        viewModelScope.launch {
+            setPinnedGroceryItemChecked(
+                id = id,
+                isChecked = isChecked
+            )
+        }
+    }
+
+    fun deletePinnedItem(id: Long) {
+        viewModelScope.launch {
+            deletePinnedGroceryItem(id)
+        }
     }
 
     private val shoppingWindowFlow: Flow<Pair<LocalDate, Int>> =
@@ -327,6 +426,12 @@ class ShoppingViewModel @Inject constructor(
                 simpleItems = simpleItems
             )
         }
+            .combine(observePinnedGroceryItems()) { base, pinnedItems ->
+                base.copy(pinnedItems = pinnedItems.toPinnedUi())
+            }
+            .combine(pinnedEditorFlow) { base, pinnedEditor ->
+                base.copy(pinnedEditor = pinnedEditor)
+            }
             .combine(unitModeFlow) { base, unitMode ->
                 base.copy(unitMode = unitMode)
             }
@@ -345,6 +450,8 @@ class ShoppingViewModel @Inject constructor(
                     recipeNotTotalledGroups = base.recipeNotTotalledGroups,
                     flagsByFoodId = base.flagsByFoodId,
                     simpleItems = base.simpleItems,
+                    pinnedItems = base.pinnedItems,
+                    pinnedEditor = base.pinnedEditor,
                     unitMode = base.unitMode
                 )
             }
@@ -372,6 +479,8 @@ private data class BaseShoppingState(
     val recipeNotTotalledGroups: List<ShoppingRecipeOccurrenceGroupUi> = emptyList(),
     val flagsByFoodId: Map<Long, FoodGoalFlagsEntity>,
     val simpleItems: List<ShoppingListItemUi> = emptyList(),
+    val pinnedItems: List<ShoppingPinnedItemUi> = emptyList(),
+    val pinnedEditor: ShoppingPinnedItemEditorUi = ShoppingPinnedItemEditorUi(),
     val unitMode: ShoppingUnitMode = ShoppingUnitMode.METRIC
 )
 
@@ -383,6 +492,8 @@ data class ShoppingState(
     val recipeNotTotalledGroups: List<ShoppingRecipeOccurrenceGroupUi> = emptyList(),
     val flagsByFoodId: Map<Long, FoodGoalFlagsEntity> = emptyMap(),
     val simpleItems: List<ShoppingListItemUi> = emptyList(),
+    val pinnedItems: List<ShoppingPinnedItemUi> = emptyList(),
+    val pinnedEditor: ShoppingPinnedItemEditorUi = ShoppingPinnedItemEditorUi(),
     val unitMode: ShoppingUnitMode = ShoppingUnitMode.METRIC
 )
 
@@ -394,6 +505,23 @@ data class ShoppingListItemUi(
     val estimatedCostText: String?,
     val isChecked: Boolean
 )
+
+data class ShoppingPinnedItemUi(
+    val id: Long,
+    val name: String,
+    val quantityText: String?,
+    val isChecked: Boolean
+)
+
+data class ShoppingPinnedItemEditorUi(
+    val isOpen: Boolean = false,
+    val editingItemId: Long? = null,
+    val nameText: String = "",
+    val quantityText: String = "",
+    val errorMessage: String? = null
+) {
+    val isEditing: Boolean get() = editingItemId != null
+}
 
 data class ShoppingTotalRowUi(
     val foodId: Long,
@@ -463,6 +591,20 @@ private data class ShoppingListAggregate(
         }
     }
 }
+
+private fun List<PinnedGroceryItem>.toPinnedUi(): List<ShoppingPinnedItemUi> =
+    sortedWith(
+        compareBy<PinnedGroceryItem> { it.sortOrder }
+            .thenBy { it.name.lowercase() }
+            .thenBy { it.id }
+    ).map { item ->
+        ShoppingPinnedItemUi(
+            id = item.id,
+            name = item.name,
+            quantityText = item.quantityText,
+            isChecked = item.isChecked
+        )
+    }
 
 private fun PlannedFoodTotalNeed.toUi(
     avgPricePer100g: Double?,

@@ -298,7 +298,7 @@ fun QuickAddBottomSheet(
                  * not nest the search/results LazyColumn inside another vertical scroller.
                  */
                 .then(
-                    if (state.selectedFood != null) {
+                    if (state.selectedFood != null && !state.isTodayPlanPickerOpen) {
                         Modifier.verticalScroll(selectedContentScrollState)
                     } else {
                         Modifier
@@ -358,6 +358,7 @@ fun QuickAddBottomSheet(
                         sections = state.todayPlanSections,
                         onItemSelected = { candidate ->
                             focus.clearFocus()
+                            vm.closeTodayPlanPicker()
                             vm.onPlannedItemSelected(candidate)
                         },
                         onLogMeal = { mealId ->
