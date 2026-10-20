@@ -9,6 +9,8 @@ import com.example.adobongkangkong.domain.repository.FoodRepository
 import com.example.adobongkangkong.domain.repository.LogRepository
 import com.example.adobongkangkong.domain.repository.RecipeBatchLookupRepository
 import com.example.adobongkangkong.domain.repository.RecipeRepository
+import com.example.adobongkangkong.data.local.db.dao.RecipeDao
+import com.example.adobongkangkong.domain.repository.RecipeVariantRepository
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -23,17 +25,27 @@ import javax.inject.Inject
  * - It uses the app's current food / recipe nutrition logic.
  * - The new entry is dated for "today" and timestamped "now".
  *
- * Resolution rules:
- * - food-backed logs resolve by stableId to the current food
- * - merged foods automatically follow the canonical merge target when resolvable
- * - deleted foods without a resolvable target are blocked
- * - recipe-backed logs resolve from the current backing recipe food
- * - batch-backed recipe logs require explicit confirmation before proceeding
+ * Historical recipe identity compatibility (AK-18):
+ * - Some recipe logs store RecipeEntity.stableId in foodStableId.
+ * - If direct food resolution fails, the recipe stable ID is
+ *   resolved to its backing FoodEntity.
+ * - Deleted recipes remain ineligible for re-logging.
+ * - Historical log snapshots are never modified.
+ * - Recipe variants are re-logged using their original recipeVariantId.
+ * - Variant ownership is validated against the resolved base recipe.
+ * - Variant re-logging delegates to FoodRef.RecipeVariant, preserving
+ *   variant identity and recalculating nutrients from the current definition.
+ * - Re-logging never modifies the original historical snapshot.
+ *
  */
+
+
 class LogAgainTodayUseCase @Inject constructor(
     private val logRepository: LogRepository,
     private val foodRepository: FoodRepository,
     private val recipeRepository: RecipeRepository,
+    private val recipeVariantRepository: RecipeVariantRepository,
+    private val recipeDao: RecipeDao,
     private val recipeBatchLookupRepository: RecipeBatchLookupRepository,
     private val createLogEntryUseCase: CreateLogEntryUseCase,
     private val zoneId: ZoneId
@@ -66,14 +78,24 @@ class LogAgainTodayUseCase @Inject constructor(
             ?: return Result.Blocked("Logged food no longer exists.")
 
         return if (resolvedFood.isRecipe) {
-            logRecipeAgainToday(
-                sourceLog = source,
-                resolvedRecipeFood = resolvedFood,
-                amountInput = amountInput,
-                now = now,
-                todayIso = today,
-                allowBatch = allowBatch
-            )
+            if (source.recipeVariantId != null) {
+                logRecipeVariantAgainToday(
+                    sourceLog = source,
+                    resolvedRecipeFood = resolvedFood,
+                    amountInput = amountInput,
+                    now = now,
+                    todayIso = today
+                )
+            } else {
+                logRecipeAgainToday(
+                    sourceLog = source,
+                    resolvedRecipeFood = resolvedFood,
+                    amountInput = amountInput,
+                    now = now,
+                    todayIso = today,
+                    allowBatch = allowBatch
+                )
+            }
         } else {
             logFoodAgainToday(
                 resolvedFood = resolvedFood,
@@ -157,13 +179,103 @@ class LogAgainTodayUseCase @Inject constructor(
         }
     }
 
+
+    /**
+     * AK-18 addendum: Re-logs a historical recipe variant using its
+     * original variant identity and the current variant definition.
+     *
+     * The original log's nutrient snapshot remains unchanged.
+     * The new log receives a fresh snapshot from CreateLogEntryUseCase.
+     *
+     * The variant must still exist and belong to the resolved base recipe.
+     */
+    private suspend fun logRecipeVariantAgainToday(
+        sourceLog: com.example.adobongkangkong.domain.model.LogEntry,
+        resolvedRecipeFood: Food,
+        amountInput: AmountInput,
+        now: Instant,
+        todayIso: String
+    ): Result {
+        val variantId = sourceLog.recipeVariantId
+            ?: return Result.Blocked("Recipe variant identity is missing.")
+
+        val recipeHeader = recipeRepository.getRecipeByFoodId(
+            resolvedRecipeFood.id
+        ) ?: return Result.Blocked(
+            "Recipe data is missing for this item."
+        )
+
+        val variant = recipeVariantRepository.getVariantById(variantId)
+            ?: return Result.Blocked(
+                "The original recipe variant no longer exists."
+            )
+
+        if (variant.recipeFoodId != resolvedRecipeFood.id) {
+            return Result.Blocked(
+                "The original recipe variant no longer belongs to this recipe."
+            )
+        }
+
+        val recipe = recipeDao.getById(recipeHeader.recipeId)
+            ?: return Result.Blocked(
+                "Recipe data is missing for this item."
+            )
+
+        if (recipe.isDeleted) {
+            return Result.Blocked("Recipe no longer exists.")
+        }
+
+        return when (
+            val result = createLogEntryUseCase.execute(
+                ref = FoodRef.RecipeVariant(
+                    recipeId = recipeHeader.recipeId,
+                    variantId = variant.id,
+                    stableId = recipe.stableId,
+                    displayName = "${resolvedRecipeFood.name} • ${variant.name}",
+                    servingsYieldDefault = variant.servingsYieldOverride
+                        ?: recipeHeader.servingsYield
+                ),
+                timestamp = now,
+                amountInput = amountInput,
+                recipeBatchId = null,
+                mealSlot = sourceLog.mealSlot,
+                logDateIso = todayIso
+            )
+        ) {
+            is CreateLogEntryUseCase.Result.Success ->
+                Result.Success(result.id)
+
+            is CreateLogEntryUseCase.Result.Blocked ->
+                Result.Blocked(result.message)
+
+            is CreateLogEntryUseCase.Result.Error ->
+                Result.Error(result.message)
+        }
+    }
+
+
     private suspend fun resolveCurrentFood(stableId: String): Food? {
+        // First try the ordinary food identity.
         val direct = foodRepository.getByStableId(stableId)
         if (direct != null) {
             return resolveCanonicalFoodIfMerged(direct)
         }
 
-        return null
+        // Historical recipe logs may store RecipeEntity.stableId
+        // instead of the backing FoodEntity.stableId.
+        val recipeId = recipeDao.getIdByStableId(stableId)
+            ?: return null
+
+        val recipe = recipeDao.getById(recipeId)
+            ?: return null
+
+        // A deleted recipe must not be re-logged.
+        if (recipe.isDeleted) return null
+
+        val recipeFood = foodRepository.getById(recipe.foodId)
+            ?: return null
+
+        return resolveCanonicalFoodIfMerged(recipeFood)
     }
 
     private suspend fun resolveCanonicalFoodIfMerged(food: Food): Food? {
