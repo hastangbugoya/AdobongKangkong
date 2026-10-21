@@ -157,6 +157,16 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override val weightImportDuplicateToleranceKg =
         MutableStateFlow(0.1)
 
+    /**
+     * AK-19: In-memory dashboard visibility preference for
+     * Health Connect's aggregated calories burned.
+     *
+     * This implementation does not persist across app restarts.
+     * Production persistence is handled by DataStore.
+     */
+    override val showHealthConnectCaloriesBurned =
+        MutableStateFlow(false)
+
     override fun setPrivacyLockEnabled(enabled: Boolean) {
         _privacyLockEnabled.value = enabled
     }
@@ -275,5 +285,11 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
     override fun setWeightImportDuplicateToleranceKg(value: Double) {
         weightImportDuplicateToleranceKg.value = value.coerceAtLeast(0.0)
     }
+
+    override fun setShowHealthConnectCaloriesBurned(enabled: Boolean) {
+        showHealthConnectCaloriesBurned.value = enabled
+    }
+
+
 
 }

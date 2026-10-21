@@ -43,6 +43,7 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * - weight-log dashboard ribbon settings
  * - body-weight daily trend selection/import settings
  * - nutrition caution thresholds
+ * - Health Connect dashboard calorie display visibility
  *
  * Nutrition threshold defaults:
  * - Product Check sodium: 400 mg per serving
@@ -94,6 +95,15 @@ private val Context.userPreferencesDataStore by preferencesDataStore(
  * Keep the threshold groups separate. Lax rules day goal values are alternate
  * evaluation preferences for marked days; they do not edit stored logs or normal
  * daily nutrient targets.
+ *
+ * Health Connect calorie visibility is a persistent user preference.
+ * Only the visibility Boolean belongs in DataStore.
+ * Daily calorie aggregates are queried from Health Connect and are
+ * not stored by this preference repository.
+ *
+ * Permission controls and raw-record diagnostics remain independent
+ * of the normal dashboard display.
+ *
  * ============================================================
  */
 @Singleton
@@ -737,6 +747,39 @@ class DataStoreUserPreferencesRepository @Inject constructor(
         }
     }
 
+    /**
+     * Updates the persisted Health Connect calorie display preference.
+     *
+     * This only changes dashboard visibility. It does not grant or
+     * revoke Health Connect permissions or modify calorie data.
+     */
+    override fun setShowHealthConnectCaloriesBurned(enabled: Boolean) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[SHOW_HEALTH_CONNECT_CALORIES_BURNED_KEY] = enabled
+            }
+        }
+    }
+
+    /**
+     * AK-19: Persisted dashboard visibility for Health Connect's
+     * aggregated total calories burned.
+     *
+     * This setting is independent of the temporary permission
+     * and raw-record debugging interface.
+     */
+    override val showHealthConnectCaloriesBurned: StateFlow<Boolean> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                preferences[SHOW_HEALTH_CONNECT_CALORIES_BURNED_KEY] ?: false
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = false
+            )
+
+
     private companion object {
         const val DEFAULT_MEAL_REMINDER_START_MINUTES = 8 * 60
         const val DEFAULT_MEAL_REMINDER_INTERVAL_MINUTES = 3 * 60
@@ -825,5 +868,8 @@ class DataStoreUserPreferencesRepository @Inject constructor(
             doublePreferencesKey("lax_day_sodium_limit_mg")
         val LAX_DAY_SUGAR_LIMIT_G_KEY =
             doublePreferencesKey("lax_day_sugar_limit_g")
+
+        val SHOW_HEALTH_CONNECT_CALORIES_BURNED_KEY =
+            booleanPreferencesKey("show_health_connect_calories_burned")
     }
 }

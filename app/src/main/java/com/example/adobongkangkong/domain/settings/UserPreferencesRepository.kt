@@ -44,6 +44,10 @@ import kotlinx.coroutines.flow.StateFlow
  *    - Planner daily thresholds
  *    - Lax rules day alternate goals
  *
+ * 7) Health Connect Dashboard Preferences
+ *    - persistent visibility of daily total calories burned
+ *    - independent of temporary Health Connect diagnostics
+ *
  * IMPORTANT DESIGN DISTINCTION:
  *
  * Product Check:
@@ -408,6 +412,27 @@ interface UserPreferencesRepository {
     fun setLaxDaySodiumLimitMg(value: Double)
 
     fun setLaxDaySugarLimitG(value: Double)
+
+
+    // ============================================================
+    // Health Connect Dashboard Preferences
+    // ============================================================
+
+    /**
+     * Controls visibility of Health Connect's aggregated total calories
+     * burned on the dashboard.
+     *
+     * AK-19 addendum:
+     * - Persist this preference across app restarts.
+     * - Independent of Health Connect permission/debug controls.
+     * - Does not store calorie values or modify nutrition targets.
+     * - False means the dashboard calorie display is hidden.
+     */
+    val showHealthConnectCaloriesBurned: StateFlow<Boolean>
+
+    /** Sets the persistent dashboard calorie display preference. */
+    fun setShowHealthConnectCaloriesBurned(enabled: Boolean)
+
 }
 
 enum class MealReminderIntensity {

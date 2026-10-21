@@ -85,6 +85,15 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.Color
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,6 +119,7 @@ fun DashboardScreen(
 ) {
     val vm: DashboardViewModel = hiltViewModel()
     val state by vm.state.collectAsState()
+    val showHealthConnectCaloriesBurned by vm.showHealthConnectCaloriesBurned.collectAsState()
     val weightLogReminderRibbon by vm.weightLogReminderRibbon.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
@@ -387,6 +397,9 @@ fun DashboardScreen(
                 onLaxDayFatLimitGChange = vm::setLaxDayFatLimitG,
                 onLaxDaySodiumLimitMgChange = vm::setLaxDaySodiumLimitMg,
                 onLaxDaySugarLimitGChange = vm::setLaxDaySugarLimitG,
+                showHealthConnectCaloriesBurned = showHealthConnectCaloriesBurned,
+                onShowHealthConnectCaloriesBurnedChange =
+                    vm::setShowHealthConnectCaloriesBurned,
                 healthConnectCalorieDebugEnabled = showHealthConnectCalorieDebug,
                 onHealthConnectCalorieDebugEnabledChange = { enabled ->
                     showHealthConnectCalorieDebug = enabled
@@ -661,6 +674,14 @@ fun DashboardScreen(
                 }
             }
 
+            if (showHealthConnectCaloriesBurned) {
+                item(key = "health_connect_calories_burned") {
+                    HealthConnectCaloriesBurnedCard(
+                        targetDate = state.date
+                    )
+                }
+            }
+
             if (showHealthConnectCalorieDebug) {
                 item(key = "health_connect_calorie_debug") {
                     HealthConnectPermissionSmokeTest(
@@ -671,6 +692,194 @@ fun DashboardScreen(
         }
     }
 }
+
+
+/**
+ * AK-19: Normal dashboard display for Health Connect's
+ * aggregated total calories burned.
+ *
+ * - Independent of the temporary permission/debug widget.
+ * - Queries the dashboard-selected calendar date.
+ * - Supports an explicit forced re-read.
+ * - Does not modify food targets or nutrition records.
+ */
+@Composable
+private fun HealthConnectCaloriesBurnedCard(
+    targetDate: LocalDate
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var calories by remember(targetDate) {
+        mutableStateOf<Double?>(null)
+    }
+    var isRefreshing by remember(targetDate) {
+        mutableStateOf(false)
+    }
+    var error by remember(targetDate) {
+        mutableStateOf<String?>(null)
+    }
+    var lastUpdated by remember(targetDate) {
+        mutableStateOf<Instant?>(null)
+    }
+    var refreshRequest by remember(targetDate) {
+        mutableStateOf(0)
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshRequest++
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(targetDate, refreshRequest) {
+        if (isRefreshing) return@LaunchedEffect
+
+        isRefreshing = true
+        error = null
+
+        try {
+            val sdkStatus = HealthConnectClient.getSdkStatus(context)
+            if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+                error = "Health Connect unavailable"
+                return@LaunchedEffect
+            }
+
+            val client = HealthConnectClient.getOrCreate(context)
+            val permission = HealthPermission.getReadPermission(
+                TotalCaloriesBurnedRecord::class
+            )
+
+            val granted = client.permissionController.getGrantedPermissions()
+            if (permission !in granted) {
+                error = "Health Connect calorie permission required"
+                return@LaunchedEffect
+            }
+
+            val zone = ZoneId.systemDefault()
+            val start = targetDate.atStartOfDay(zone).toInstant()
+            val endOfDay = targetDate.plusDays(1)
+                .atStartOfDay(zone).toInstant()
+
+            val end = if (targetDate == LocalDate.now(zone)) {
+                Instant.now()
+            } else {
+                endOfDay
+            }
+
+            val response = client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(
+                        TotalCaloriesBurnedRecord.ENERGY_TOTAL
+                    ),
+                    timeRangeFilter = TimeRangeFilter.between(start, end)
+                )
+            )
+
+            val result = response[
+                TotalCaloriesBurnedRecord.ENERGY_TOTAL
+            ]
+
+            if (result != null) {
+                calories = result.inKilocalories
+                lastUpdated = Instant.now()
+            } else {
+                calories = null
+                error = "No calorie data for this date"
+            }
+        } catch (t: Throwable) {
+            error = t.message ?: "Unable to read calories"
+        } finally {
+            isRefreshing = false
+        }
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 2.dp
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "Total calories burned",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        if (calories != null) {
+                            "${calories!!.toInt()} kcal"
+                        } else {
+                            "— kcal"
+                        },
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+
+                IconButton(
+                    enabled = !isRefreshing,
+                    onClick = {
+                        refreshRequest++
+                    }
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(
+                                R.drawable.ms_cycle
+                            ),
+                            contentDescription = "Refresh calories burned"
+                        )
+                    }
+                }
+            }
+
+            Text(
+                "Health Connect",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            lastUpdated?.let { updated ->
+                Text(
+                    "Updated ${formatTime(updated)}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            error?.let { message ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
 
 private fun shareMeowLogs(context: Context) {
     MeowLog.d("DashboardScreen> shareMeowLogs START")

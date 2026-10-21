@@ -77,6 +77,8 @@ import kotlinx.coroutines.flow.flowOf
  *   - Edit pinned nutrients + per-day nutrient targets (min/max/target)
  *   - Import/Export + nutrient catalog sync
  *   - Debug reset actions for logs / recipe batches / planner
+ *   - Exposes the persisted Health Connect calorie display preference
+ *      without coupling it to temporary Health Connect debugging controls.
  *
  * Notes / common pitfall:
  * - The Dashboard layer should NOT construct FoodRef objects or build nutrient snapshots.
@@ -89,6 +91,7 @@ import kotlinx.coroutines.flow.flowOf
  * If the user attempts to log a food that is missing grams-per-serving, the domain returns
  * [CreateLogEntryUseCase.Result.Blocked]. The ViewModel converts that into a blocking sheet with
  * an "Edit food" CTA that navigates to the food editor.
+ *
  */
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -160,6 +163,16 @@ class DashboardViewModel @Inject constructor(
 
     val privacyLockTimeoutMinutes: StateFlow<Int?> =
         userPreferencesRepository.privacyLockTimeoutMinutes
+
+    /**
+     * AK-19: Persistent visibility setting for Health Connect's
+     * aggregated total calories burned on the dashboard.
+     *
+     * This is independent of temporary permission and raw-record
+     * debugging controls.
+     */
+    val showHealthConnectCaloriesBurned: StateFlow<Boolean> =
+        userPreferencesRepository.showHealthConnectCaloriesBurned
 
     val mealRemindersEnabled: StateFlow<Boolean> =
         userPreferencesRepository.mealRemindersEnabled
@@ -433,6 +446,16 @@ class DashboardViewModel @Inject constructor(
 
     fun setPrivacyLockEnabled(enabled: Boolean) {
         userPreferencesRepository.setPrivacyLockEnabled(enabled)
+    }
+
+    /**
+     * Updates the persisted Health Connect calorie display setting.
+     *
+     * Does not alter Health Connect permissions, calorie records,
+     * or the user's nutrition goals.
+     */
+    fun setShowHealthConnectCaloriesBurned(enabled: Boolean) {
+        userPreferencesRepository.setShowHealthConnectCaloriesBurned(enabled)
     }
 
     fun setPrivacyLockTimeoutMinutes(minutes: Int?) {

@@ -82,6 +82,16 @@ private val PrivacyLockTimingOptions = listOf(
     PrivacyLockTimingOption("After 30 minutes", 30)
 )
 
+
+/**
+ * Dashboard settings, including the persistent Health Connect
+ * calorie-display preference.
+ *
+ * AK-19:
+ * - The normal calorie display toggle is independent of debugging.
+ * - Persistence is handled by UserPreferencesRepository.
+ * - Permission tests and raw records remain developer-only.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardSettingsSheet(
@@ -160,6 +170,8 @@ fun DashboardSettingsSheet(
     onLaxDayFatLimitGChange: (Double) -> Unit,
     onLaxDaySodiumLimitMgChange: (Double) -> Unit,
     onLaxDaySugarLimitGChange: (Double) -> Unit,
+    showHealthConnectCaloriesBurned: Boolean = false,
+    onShowHealthConnectCaloriesBurnedChange: (Boolean) -> Unit = {},
     healthConnectCalorieDebugEnabled: Boolean = false,
     onHealthConnectCalorieDebugEnabledChange: (Boolean) -> Unit = {},
 ) {
@@ -255,6 +267,39 @@ fun DashboardSettingsSheet(
                 onSelect = onMealReminderIntensityChange
             )
         }
+
+
+        // ============================================================
+        // Health Connect — normal dashboard display
+        // ============================================================
+
+        Text(
+            "Health Connect",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Spacer(Modifier.height(8.dp))
+
+        ListItem(
+            headlineContent = {
+                Text("Show calories burned")
+            },
+            supportingContent = {
+                Text(
+                    "Display Health Connect's aggregated daily calories " +
+                            "burned on the dashboard. This preference is " +
+                            "remembered when the app restarts."
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = showHealthConnectCaloriesBurned,
+                    onCheckedChange =
+                        onShowHealthConnectCaloriesBurnedChange
+                )
+            }
+        )
+        HorizontalDivider()
+//        Spacer(Modifier.height(20.dp))
 
         Spacer(Modifier.height(20.dp))
 
