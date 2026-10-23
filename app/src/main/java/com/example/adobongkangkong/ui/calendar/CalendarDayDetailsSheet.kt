@@ -105,10 +105,17 @@ private fun plannedSummary(plannedDay: PlannedDay): Pair<Int, String> {
     return mealCount to slotsText
 }
 
+
 private fun slotShort(slot: MealSlot): String = when (slot) {
     MealSlot.BREAKFAST -> "B"
+    MealSlot.AM_SNACK -> "AM"
     MealSlot.LUNCH -> "L"
+    MealSlot.PM_SNACK -> "PM"
     MealSlot.DINNER -> "D"
+    MealSlot.BEDTIME -> "BT"
+    MealSlot.PRE_WORKOUT -> "Pre-WO"
+    MealSlot.INTRA_WORKOUT -> "Intra-WO"
+    MealSlot.POST_WORKOUT -> "Post-WO"
     MealSlot.SNACK -> "S"
     MealSlot.CUSTOM -> "C"
 }

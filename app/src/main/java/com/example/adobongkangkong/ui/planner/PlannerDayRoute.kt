@@ -201,11 +201,20 @@ private fun shareMealInvite(
     }
 }
 
+
 private fun defaultTime(slot: MealSlot): LocalTime {
     return when (slot) {
         MealSlot.BREAKFAST -> LocalTime.of(8, 0)
+        MealSlot.AM_SNACK -> LocalTime.of(10, 0)
         MealSlot.LUNCH -> LocalTime.of(12, 0)
+        MealSlot.PM_SNACK -> LocalTime.of(15, 0)
         MealSlot.DINNER -> LocalTime.of(18, 0)
+        MealSlot.BEDTIME -> LocalTime.of(21, 0)
+
+        MealSlot.PRE_WORKOUT -> LocalTime.of(12, 0)
+        MealSlot.INTRA_WORKOUT -> LocalTime.of(12, 0)
+        MealSlot.POST_WORKOUT -> LocalTime.of(12, 0)
+
         MealSlot.SNACK -> LocalTime.of(15, 0)
         MealSlot.CUSTOM -> LocalTime.of(12, 0)
     }

@@ -52,11 +52,23 @@ enum class PlannedOccurrenceStatus {
 }
 
 enum class MealSlot(
-    val display: String
-){
-    BREAKFAST("Breakast"),
-    LUNCH("Lunch"),
-    DINNER(display = "Dinner"),
-    SNACK("Snack"),
-    CUSTOM("Custom")
+    val display: String,
+    val sortOrder: Int
+) {
+    BREAKFAST("Breakfast", 10),
+    AM_SNACK("AM Snack", 20),
+    LUNCH("Lunch", 30),
+    PM_SNACK("PM Snack", 40),
+    DINNER("Dinner", 50),
+    BEDTIME("Bedtime", 60),
+    PRE_WORKOUT("Pre-Workout", 70),
+    SNACK("Snack", 80),
+    INTRA_WORKOUT("Intra-Workout", 90),
+    POST_WORKOUT("Post-Workout", 100),
+    CUSTOM("Custom", 110);
+
+    companion object {
+        fun sortedEntries(): List<MealSlot> =
+            entries.sortedBy { it.sortOrder }
+    }
 }
