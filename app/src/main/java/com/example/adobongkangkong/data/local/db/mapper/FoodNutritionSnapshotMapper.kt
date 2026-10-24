@@ -57,21 +57,27 @@ fun toFoodNutritionSnapshot(
         }
 
         hasUsdaReportedServing -> {
-            val servingSizePositive = servingSize.takeIf { it > 0.0 }
+//            val servingSizePositive = servingSize.takeIf { it > 0.0 }
+
+//            val gramsPerReportedServing =
+//                if (servingSizePositive != null && gramsPerServingUnit != null && gramsPerServingUnit > 0.0) {
+//                    servingSizePositive * gramsPerServingUnit
+//                } else {
+//                    null
+//                }
+//
+//            val mlPerReportedServing =
+//                if (servingSizePositive != null && mlPerServingUnit != null && mlPerServingUnit > 0.0) {
+//                    servingSizePositive * mlPerServingUnit
+//                } else {
+//                    null
+//                }
 
             val gramsPerReportedServing =
-                if (servingSizePositive != null && gramsPerServingUnit != null && gramsPerServingUnit > 0.0) {
-                    servingSizePositive * gramsPerServingUnit
-                } else {
-                    null
-                }
+                gramsPerServingUnit?.takeIf { it > 0.0 }
 
             val mlPerReportedServing =
-                if (servingSizePositive != null && mlPerServingUnit != null && mlPerServingUnit > 0.0) {
-                    servingSizePositive * mlPerServingUnit
-                } else {
-                    null
-                }
+                mlPerServingUnit?.takeIf { it > 0.0 }
 
             for (row in rows) {
                 if (row.basisType != BasisType.USDA_REPORTED_SERVING) continue
