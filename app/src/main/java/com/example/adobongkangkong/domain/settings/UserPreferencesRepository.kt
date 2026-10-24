@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.domain.settings
 
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.weight.BodyWeightTrendSelectionMethod
 import kotlinx.coroutines.flow.StateFlow
 
@@ -432,6 +433,17 @@ interface UserPreferencesRepository {
 
     /** Sets the persistent dashboard calorie display preference. */
     fun setShowHealthConnectCaloriesBurned(enabled: Boolean)
+
+    /**
+     * Meal slots offered for new logging and planning selections.
+     *
+     * Hiding a slot must never delete, modify, or suppress
+     * existing logs, planned meals, templates, or series.
+     */
+    val visibleMealSlots: StateFlow<Set<MealSlot>>
+
+    /** Persists the user's preferred selectable meal slots. */
+    fun setVisibleMealSlots(slots: Set<MealSlot>)
 
 }
 

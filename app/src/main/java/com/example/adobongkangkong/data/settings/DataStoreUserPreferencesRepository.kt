@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
@@ -780,6 +782,50 @@ class DataStoreUserPreferencesRepository @Inject constructor(
             )
 
 
+    /**
+     * Meal slots shown in new logging and planning selections.
+     *
+     * Hidden slots remain valid for historical logs,
+     * planned meals, recurring series, and templates.
+     *
+     * An absent preference uses defaults.
+     * An explicitly saved empty set remains empty.
+     */
+    override val visibleMealSlots: StateFlow<Set<MealSlot>> =
+        context.userPreferencesDataStore.data
+            .map { preferences ->
+                val storedNames = preferences[VISIBLE_MEAL_SLOTS_KEY]
+
+                if (storedNames == null) {
+                    DEFAULT_VISIBLE_MEAL_SLOTS
+                } else {
+                    storedNames.mapNotNull { name ->
+                        enumValues<MealSlot>()
+                            .firstOrNull { it.name == name }
+                    }.toSet()
+                }
+            }
+            .stateIn(
+                scope = scope,
+                started = SharingStarted.Eagerly,
+                initialValue = DEFAULT_VISIBLE_MEAL_SLOTS
+            )
+
+    /**
+     * Persists which meal slots are offered for selection.
+     *
+     * This does not modify existing meal or food log records.
+     */
+    override fun setVisibleMealSlots(slots: Set<MealSlot>) {
+        scope.launch {
+            context.userPreferencesDataStore.edit { preferences ->
+                preferences[VISIBLE_MEAL_SLOTS_KEY] =
+                    slots.map { it.name }.toSet()
+            }
+        }
+    }
+
+
     private companion object {
         const val DEFAULT_MEAL_REMINDER_START_MINUTES = 8 * 60
         const val DEFAULT_MEAL_REMINDER_INTERVAL_MINUTES = 3 * 60
@@ -871,5 +917,18 @@ class DataStoreUserPreferencesRepository @Inject constructor(
 
         val SHOW_HEALTH_CONNECT_CALORIES_BURNED_KEY =
             booleanPreferencesKey("show_health_connect_calories_burned")
+
+
+        private val VISIBLE_MEAL_SLOTS_KEY =
+            stringSetPreferencesKey("visible_meal_slots")
+
+        private val DEFAULT_VISIBLE_MEAL_SLOTS: Set<MealSlot> =
+            setOf(
+                MealSlot.BREAKFAST,
+                MealSlot.LUNCH,
+                MealSlot.DINNER,
+                MealSlot.SNACK
+            )
+
     }
 }

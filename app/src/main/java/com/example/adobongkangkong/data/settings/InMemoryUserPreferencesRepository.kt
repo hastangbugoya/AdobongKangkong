@@ -1,5 +1,6 @@
 package com.example.adobongkangkong.data.settings
 
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
@@ -290,6 +291,33 @@ class InMemoryUserPreferencesRepository @Inject constructor() :
         showHealthConnectCaloriesBurned.value = enabled
     }
 
+
+    /**
+     * In-memory meal slot visibility preference.
+     *
+     * Defaults to the original four selectable meal slots.
+     * Hidden slots remain valid for existing logs and planned meals.
+     *
+     * Unlike DataStore, this value is not persisted across restarts.
+     */
+    override val visibleMealSlots: MutableStateFlow<Set<MealSlot>> =
+        MutableStateFlow(
+            setOf(
+                MealSlot.BREAKFAST,
+                MealSlot.LUNCH,
+                MealSlot.DINNER,
+                MealSlot.SNACK
+            )
+        )
+
+    /**
+     * Updates the meal slots offered for new selections.
+     *
+     * An empty set is valid and must be preserved.
+     */
+    override fun setVisibleMealSlots(slots: Set<MealSlot>) {
+        visibleMealSlots.value = slots.toSet()
+    }
 
 
 }
