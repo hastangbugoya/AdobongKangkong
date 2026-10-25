@@ -299,6 +299,8 @@ fun DashboardScreen(
             val privacyLockEnabled by vm.privacyLockEnabled.collectAsState()
             val privacyLockTimeoutMinutes by vm.privacyLockTimeoutMinutes.collectAsState()
 
+            val visibleMealSlots by vm.visibleMealSlots.collectAsState()
+
             val mealRemindersEnabled by vm.mealRemindersEnabled.collectAsState()
             val mealReminderStartMinutes by vm.mealReminderStartMinutes.collectAsState()
             val mealReminderIntervalMinutes by vm.mealReminderIntervalMinutes.collectAsState()
@@ -352,6 +354,8 @@ fun DashboardScreen(
                 onPrivacyLockEnabledChange = vm::setPrivacyLockEnabled,
                 privacyLockTimeoutMinutes = privacyLockTimeoutMinutes,
                 onPrivacyLockTimeoutMinutesChange = vm::setPrivacyLockTimeoutMinutes,
+                visibleMealSlots = visibleMealSlots,
+                onVisibleMealSlotsChange = vm::setVisibleMealSlots,
                 mealRemindersEnabled = mealRemindersEnabled,
                 mealReminderStartMinutes = mealReminderStartMinutes,
                 mealReminderIntervalMinutes = mealReminderIntervalMinutes,

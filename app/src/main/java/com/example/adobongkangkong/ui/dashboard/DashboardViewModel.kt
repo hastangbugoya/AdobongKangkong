@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adobongkangkong.data.local.db.dao.LaxRuleDayDao
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 import com.example.adobongkangkong.domain.debug.DebugResetUseCase
 import com.example.adobongkangkong.domain.export.ExportFoodsAndRecipesUseCase
 import com.example.adobongkangkong.domain.export.ImportFoodsAndRecipesUseCase
@@ -173,6 +174,13 @@ class DashboardViewModel @Inject constructor(
      */
     val showHealthConnectCaloriesBurned: StateFlow<Boolean> =
         userPreferencesRepository.showHealthConnectCaloriesBurned
+
+    val visibleMealSlots: StateFlow<Set<MealSlot>> =
+        userPreferencesRepository.visibleMealSlots
+
+    fun setVisibleMealSlots(slots: Set<MealSlot>) {
+        userPreferencesRepository.setVisibleMealSlots(slots)
+    }
 
     val mealRemindersEnabled: StateFlow<Boolean> =
         userPreferencesRepository.mealRemindersEnabled

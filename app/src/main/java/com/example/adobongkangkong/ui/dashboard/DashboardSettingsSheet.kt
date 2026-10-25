@@ -51,6 +51,7 @@ import com.example.adobongkangkong.domain.settings.MealReminderIntensity
 import com.example.adobongkangkong.domain.settings.WeightLogReminderMode
 import com.example.adobongkangkong.domain.trend.model.DashboardNutrientCard
 import com.example.adobongkangkong.ui.dashboard.pinned.model.DashboardPinOption
+import com.example.adobongkangkong.data.local.db.entity.MealSlot
 
 enum class DashboardDebugResetDomain(
     val displayName: String
@@ -174,6 +175,8 @@ fun DashboardSettingsSheet(
     onShowHealthConnectCaloriesBurnedChange: (Boolean) -> Unit = {},
     healthConnectCalorieDebugEnabled: Boolean = false,
     onHealthConnectCalorieDebugEnabledChange: (Boolean) -> Unit = {},
+    visibleMealSlots: Set<MealSlot>,
+    onVisibleMealSlotsChange: (Set<MealSlot>) -> Unit,
 ) {
     var caffeinePickerSlotIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -210,6 +213,47 @@ fun DashboardSettingsSheet(
             )
             HorizontalDivider()
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+            "Visible meal slots",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            "Choose which meal slots appear when logging or planning food.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        MealSlot.sortedEntries().forEach { slot ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = slot in visibleMealSlots,
+                    onCheckedChange = { checked ->
+                        val updatedSlots =
+                            if (checked) {
+                                visibleMealSlots + slot
+                            } else {
+                                visibleMealSlots - slot
+                            }
+
+                        onVisibleMealSlotsChange(updatedSlots)
+                    }
+                )
+
+                Text(slot.display)
+            }
+        }
+
+        HorizontalDivider()
+
 
         Spacer(Modifier.height(20.dp))
 
