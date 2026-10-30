@@ -72,12 +72,14 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.StateFlow
+import androidx.compose.material3.Checkbox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlannerDayScreen(
     state: StateFlow<PlannerDayUiState>,
-    onEvent: (PlannerDayEvent) -> Unit
+    onEvent: (PlannerDayEvent) -> Unit,
+    visibleMealSlots: Set<MealSlot> = MealSlot.entries.toSet()
 ) {
     val s by state.collectAsState()
     val dateText = s.date.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
@@ -198,7 +200,13 @@ fun PlannerDayScreen(
                 }
             }
 
-            MealSlot.entries.forEach { slot ->
+            MealSlot.sortedEntries()
+                .filter { slot ->
+                    slot in visibleMealSlots ||
+                            s.mealsBySlot[slot].orEmpty().isNotEmpty() ||
+                            s.loggedNamesBySlot[slot].orEmpty().isNotEmpty()
+                }
+                .forEach { slot ->
                 val meals = s.mealsBySlot[slot].orEmpty()
                 val loggedNames = s.loggedNamesBySlot[slot].orEmpty()
 
@@ -269,7 +277,8 @@ fun PlannerDayScreen(
         DuplicateMealBottomSheet(
             sheet = dupSheet,
             currentDate = s.date,
-            onEvent = onEvent
+            onEvent = onEvent,
+            visibleMealSlots = visibleMealSlots
         )
     }
 
@@ -277,7 +286,8 @@ fun PlannerDayScreen(
     if (recurringSheet != null) {
         RecurringMealBottomSheet(
             sheet = recurringSheet,
-            onEvent = onEvent
+            onEvent = onEvent,
+            visibleMealSlots = visibleMealSlots
         )
     }
 }
@@ -420,6 +430,7 @@ private fun AddMealChoiceBottomSheet(
 private fun RecurringMealBottomSheet(
     sheet: RecurringEditorState,
     onEvent: (PlannerDayEvent) -> Unit,
+    visibleMealSlots: Set<MealSlot>,
 ) {
     var showEndDatePicker by remember(sheet.mealId, sheet.endDate) { mutableStateOf(false) }
 
@@ -489,11 +500,22 @@ private fun RecurringMealBottomSheet(
                         rule = rule,
                         anchorWeekday = sheet.anchorWeekday,
                         frequency = sheet.frequency,
+                        visibleMealSlots = visibleMealSlots,
                         onToggle = { enabled ->
-                            onEvent(PlannerDayEvent.ToggleRecurringWeekday(rule.weekday, enabled))
+                            onEvent(
+                                PlannerDayEvent.ToggleRecurringWeekday(
+                                    rule.weekday,
+                                    enabled
+                                )
+                            )
                         },
                         onSlotSelected = { slot ->
-                            onEvent(PlannerDayEvent.UpdateRecurringWeekdaySlot(rule.weekday, slot))
+                            onEvent(
+                                PlannerDayEvent.UpdateRecurringWeekdaySlot(
+                                    rule.weekday,
+                                    slot
+                                )
+                            )
                         }
                     )
                 }
@@ -711,6 +733,7 @@ private fun RecurringDayRuleRow(
     frequency: RecurrenceFrequencyUi,
     onToggle: (Boolean) -> Unit,
     onSlotSelected: (MealSlot) -> Unit,
+    visibleMealSlots: Set<MealSlot>,
 ) {
     val enabled = if (frequency == RecurrenceFrequencyUi.DAILY) true else rule.isEnabled
     val isAnchor = rule.weekday == anchorWeekday
@@ -802,20 +825,14 @@ private fun RecurringDayRuleRow(
                     Text(rule.slot.display)
                 }
 
-                DropdownMenu(
+                PlannerMealSlotDropdown(
                     expanded = showSlotMenu,
-                    onDismissRequest = { showSlotMenu = false }
-                ) {
-                    MealSlot.entries.forEach { slot ->
-                        DropdownMenuItem(
-                            text = { Text(slot.display) },
-                            onClick = {
-                                showSlotMenu = false
-                                onSlotSelected(slot)
-                            }
-                        )
-                    }
-                }
+                    onDismiss = { showSlotMenu = false },
+                    selectedSlot = rule.slot,
+                    visibleMealSlots = visibleMealSlots,
+                    onSelected = onSlotSelected
+                )
+
             }
         }
     }
@@ -1058,7 +1075,8 @@ private fun formatNumber(value: Double): String {
 private fun DuplicateMealBottomSheet(
     sheet: DuplicateSheetState,
     currentDate: LocalDate,
-    onEvent: (PlannerDayEvent) -> Unit
+    onEvent: (PlannerDayEvent) -> Unit,
+    visibleMealSlots: Set<MealSlot>,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     var showSlotMenu by remember(sheet.targetSlot) { mutableStateOf(false) }
@@ -1135,24 +1153,20 @@ private fun DuplicateMealBottomSheet(
                         Text(sheet.targetSlot.display)
                     }
 
-                    DropdownMenu(
+
+                    PlannerMealSlotDropdown(
                         expanded = showSlotMenu,
-                        onDismissRequest = { showSlotMenu = false }
-                    ) {
-                        MealSlot.entries.forEach { slot ->
-                            DropdownMenuItem(
-                                text = { Text(slot.display) },
-                                onClick = {
-                                    showSlotMenu = false
-                                    onEvent(
-                                        PlannerDayEvent.UpdateDuplicateTargetSlot(
-                                            slot = slot
-                                        )
-                                    )
-                                }
+                        onDismiss = { showSlotMenu = false },
+                        selectedSlot = sheet.targetSlot,
+                        visibleMealSlots = visibleMealSlots,
+                        onSelected = { slot ->
+                            onEvent(
+                                PlannerDayEvent.UpdateDuplicateTargetSlot(
+                                    slot = slot
+                                )
                             )
                         }
-                    }
+                    )
                 }
             }
 
@@ -1215,6 +1229,59 @@ private fun DuplicateMealBottomSheet(
             }
         ) {
             DatePicker(state = pickerState)
+        }
+    }
+}
+
+
+@Composable
+private fun PlannerMealSlotDropdown(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    selectedSlot: MealSlot,
+    visibleMealSlots: Set<MealSlot>,
+    onSelected: (MealSlot) -> Unit
+) {
+    var showAllSlots by remember { mutableStateOf(false) }
+
+    val selectableSlots = MealSlot.sortedEntries()
+        .filter { slot ->
+            showAllSlots ||
+                    slot in visibleMealSlots ||
+                    slot == selectedSlot
+        }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    showAllSlots = !showAllSlots
+                }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = showAllSlots,
+                onCheckedChange = { showAllSlots = it }
+            )
+
+            Text("Show all meal slots")
+        }
+
+        androidx.compose.material3.HorizontalDivider()
+
+        selectableSlots.forEach { slot ->
+            DropdownMenuItem(
+                text = { Text(slot.display) },
+                onClick = {
+                    onSelected(slot)
+                    onDismiss()
+                }
+            )
         }
     }
 }

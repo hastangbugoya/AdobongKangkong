@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -125,6 +126,9 @@ fun QuickAddBottomSheet(
 ) {
     val focus = LocalFocusManager.current
     val state by vm.state.collectAsState()
+
+    val visibleMealSlots by vm.visibleMealSlots.collectAsState()
+
     val selectedContentScrollState = rememberScrollState()
 
     val sheetState = rememberModalBottomSheetState(
@@ -549,8 +553,10 @@ fun QuickAddBottomSheet(
 
                     MealSlotPicker(
                         selected = state.mealSlot,
+                        visibleMealSlots = visibleMealSlots,
                         onSelected = vm::onMealSlotChanged
                     )
+
 
                     Spacer(Modifier.height(12.dp))
 
@@ -936,13 +942,23 @@ private fun FoodSearchResults(
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MealSlotPicker(
     selected: MealSlot?,
+    visibleMealSlots: Set<MealSlot>,
     onSelected: (MealSlot?) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showAllSlots by remember { mutableStateOf(false) }
+
+    val selectableSlots = MealSlot.sortedEntries()
+        .filter { slot ->
+            showAllSlots ||
+                    slot in visibleMealSlots ||
+                    slot == selected
+        }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -953,7 +969,11 @@ private fun MealSlotPicker(
             onValueChange = {},
             readOnly = true,
             label = { Text("Meal slot (optional)") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(
+                    expanded = expanded
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor()
@@ -970,7 +990,28 @@ private fun MealSlotPicker(
                     expanded = false
                 }
             )
-            MealSlot.entries.forEach { slot ->
+
+            // Temporary override; does not modify DataStore.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showAllSlots = !showAllSlots }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = showAllSlots,
+                    onCheckedChange = { checked ->
+                        showAllSlots = checked
+                    }
+                )
+
+                Text("Show all meal slots")
+            }
+
+            HorizontalDivider()
+
+            selectableSlots.forEach { slot ->
                 DropdownMenuItem(
                     text = { Text(slot.display) },
                     onClick = {
@@ -982,6 +1023,7 @@ private fun MealSlotPicker(
         }
     }
 }
+
 
 @Composable
 private fun RecipeVariantSelector(

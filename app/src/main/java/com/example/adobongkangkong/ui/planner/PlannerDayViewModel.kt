@@ -84,6 +84,15 @@ class PlannerDayViewModel @Inject constructor(
     private val _state = MutableStateFlow(PlannerDayUiState(date = LocalDate.now()))
     val state: StateFlow<PlannerDayUiState> = _state.asStateFlow()
 
+    /**
+     * Meal slots enabled in Dashboard Settings.
+     *
+     * Used only to filter available slot selections.
+     * Existing planned meals retain their assigned slots.
+     */
+    val visibleMealSlots: StateFlow<Set<MealSlot>> =
+        userPrefs.visibleMealSlots
+
     sealed interface PlannerDayUiEvent {
         data class ShowToast(val message: String) : PlannerDayUiEvent
 

@@ -18,6 +18,7 @@ import com.example.adobongkangkong.domain.usecase.share.CreatePlannedMealIcsFile
 import com.example.adobongkangkong.ui.log.QuickAddBottomSheet
 import java.time.LocalDate
 import java.time.LocalTime
+import androidx.compose.runtime.collectAsState
 
 @Composable
 fun PlannerDayRoute(
@@ -76,8 +77,10 @@ fun PlannerDayRoute(
         }
     }
 
+    val visibleMealSlots by viewModel.visibleMealSlots.collectAsState()
     PlannerDayScreen(
         state = viewModel.state,
+        visibleMealSlots = visibleMealSlots,
         onEvent = { event ->
             when (event) {
                 PlannerDayEvent.Back -> onBack()

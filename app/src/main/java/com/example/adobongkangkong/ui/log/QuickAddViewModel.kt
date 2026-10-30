@@ -59,6 +59,7 @@ import com.example.adobongkangkong.domain.recipes.FoodNutritionSnapshot
 import com.example.adobongkangkong.domain.recipes.ObserveActiveRecipeMeasuredYieldUseCase
 import kotlinx.coroutines.flow.flow
 import com.example.adobongkangkong.domain.planner.usecase.LogPlannedMealUseCase
+import com.example.adobongkangkong.domain.settings.UserPreferencesRepository
 
 /**
  * Quick Add view model for both creating and editing log entries.
@@ -106,6 +107,8 @@ class QuickAddViewModel @Inject constructor(
     // From Day Planner
     private val observeTodayPlannedItemsForQuickAddUseCase: ObserveTodayPlannedItemsForQuickAddUseCase,
     private val logPlannedMeal: LogPlannedMealUseCase,
+
+    private val userPreferencesRepository: UserPreferencesRepository,
 
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -312,6 +315,15 @@ class QuickAddViewModel @Inject constructor(
     private val isSavingIouFlow = MutableStateFlow(false)
     private val iouErrorFlow = MutableStateFlow<String?>(null)
 
+    /**
+     * Meal slots enabled by the user for new logging selections.
+     *
+     * Hidden slots remain valid for existing log entries.
+     * The Quick Add UI may temporarily show all slots.
+     */
+    val visibleMealSlots: StateFlow<Set<MealSlot>> =
+        userPreferencesRepository.visibleMealSlots
+    
     fun startCreate() {
         modeFlow.value = QuickAddMode.CREATE
         editingLogIdFlow.value = null
